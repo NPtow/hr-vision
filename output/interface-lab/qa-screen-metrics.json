@@ -1,0 +1,591 @@
+{
+  "note": "All19 stories rendered at1440x1000 and900x900 with no horizontal overflow. One H03 error occurred during live editing; final stable targeted recheck H03/H04/C03/E04 at both widths passed with no console or page errors. Hidden role panels intentionally remain mounted.",
+  "rows": [
+    {
+      "id": "E01",
+      "width": 1440,
+      "title": "Компании и сигналы",
+      "bodyWidth": 1440,
+      "viewport": 1440,
+      "contentWidth": 1230,
+      "contentScrollWidth": 1230,
+      "contentText": 3544,
+      "overflowing": [],
+      "errors": []
+    },
+    {
+      "id": "E02",
+      "width": 1440,
+      "title": "Компании и сигналы",
+      "bodyWidth": 1440,
+      "viewport": 1440,
+      "contentWidth": 1230,
+      "contentScrollWidth": 1230,
+      "contentText": 3738,
+      "overflowing": [],
+      "errors": []
+    },
+    {
+      "id": "E03",
+      "width": 1440,
+      "title": "Компании и сигналы",
+      "bodyWidth": 1440,
+      "viewport": 1440,
+      "contentWidth": 1230,
+      "contentScrollWidth": 1230,
+      "contentText": 3668,
+      "overflowing": [],
+      "errors": []
+    },
+    {
+      "id": "E04",
+      "width": 1440,
+      "title": "Компании и сигналы",
+      "bodyWidth": 1440,
+      "viewport": 1440,
+      "contentWidth": 1230,
+      "contentScrollWidth": 1230,
+      "contentText": 4076,
+      "overflowing": [],
+      "errors": [],
+      "screenshot": "/Users/NIKITA/Documents/ChatGPT/HR Vision/output/interface-lab/qa-e04-1440.png"
+    },
+    {
+      "id": "E05",
+      "width": 1440,
+      "title": "Компании и сигналы",
+      "bodyWidth": 1440,
+      "viewport": 1440,
+      "contentWidth": 1230,
+      "contentScrollWidth": 1230,
+      "contentText": 3457,
+      "overflowing": [],
+      "errors": []
+    },
+    {
+      "id": "H01",
+      "width": 1440,
+      "title": "Компании и сигналы",
+      "bodyWidth": 1440,
+      "viewport": 1440,
+      "contentWidth": 1230,
+      "contentScrollWidth": 1230,
+      "contentText": 4070,
+      "overflowing": [],
+      "errors": []
+    },
+    {
+      "id": "H02",
+      "width": 1440,
+      "title": "Компании и сигналы",
+      "bodyWidth": 1440,
+      "viewport": 1440,
+      "contentWidth": 1230,
+      "contentScrollWidth": 1230,
+      "contentText": 3845,
+      "overflowing": [],
+      "errors": [],
+      "screenshot": "/Users/NIKITA/Documents/ChatGPT/HR Vision/output/interface-lab/qa-h02-1440.png"
+    },
+    {
+      "id": "H03",
+      "width": 1440,
+      "title": "Компании и сигналы",
+      "bodyWidth": 1440,
+      "viewport": 1440,
+      "contentWidth": 1230,
+      "contentScrollWidth": 1230,
+      "contentText": 4191,
+      "overflowing": [],
+      "errors": [
+        {
+          "type": "console",
+          "message": "%o\n\n%s\n\n%s\n ReferenceError: clarificationSent is not defined\n    at HRViews (http://127.0.0.1:6006/src/scenes/hr-vision/PeopleViews.tsx?t=1790910982937:768:19)\n    at Object.react_stack_bottom_frame (http://127.0.0.1:6006/node_modules/.cache/storybook/10.6.1/b025481b08afe51700d41f2fe9ba04c0e6143174e6697e4353eed226fe10cbed/sb-vite/deps/client-EzyHfEUU.js?v=0f6573ea:14142:12)\n    at renderWithHooks (http://127.0.0.1:6006/node_modules/.cache/storybook/10.6.1/b025481b08afe51700d41f2fe9ba04c0e6143174e6697e4353eed226fe10cbed/sb-vite/deps/client-EzyHfEUU.js?v=0f6573ea:4400:19)\n    at updateFunctionComponent (http://127.0.0.1:6006/node_modules/.cache/storybook/10.6.1/b025481b08afe51700d41f2fe9ba04c0e6143174e6697e4353eed226fe10cbed/sb-vite/deps/client-EzyHfEUU.js?v=0f6573ea:5775:16)\n    at beginWork (http://127.0.0.1:6006/node_modules/.cache/storybook/10.6.1/b025481b08afe51700d41f2fe9ba04c0e6143174e6697e4353eed226fe10cbed/sb-vite/deps/client-EzyHfEUU.js?v=0f6573ea:6391:20)\n    at runWithFiberInDEV (http://127.0.0.1:6006/node_modules/.cache/storybook/10.6.1/b025481b08afe51700d41f2fe9ba04c0e6143174e6697e4353eed226fe10cbed/sb-vite/deps/client-EzyHfEUU.js?v=0f6573ea:944:66)\n    at performUnitOfWork (http://127.0.0.1:6006/node_modules/.cache/storybook/10.6.1/b025481b08afe51700d41f2fe9ba04c0e6143174e6697e4353eed226fe10cbed/sb-vite/deps/client-EzyHfEUU.js?v=0f6573ea:9148:92)\n    at workLoopSync (http://127.0.0.1:6006/node_modules/.cache/storybook/10.6.1/b025481b08afe51700d41f2fe9ba04c0e6143174e6697e4353eed226fe10cbed/sb-vite/deps/client-EzyHfEUU.js?v=0f6573ea:9044:37)\n    at renderRootSync (http://127.0.0.1:6006/node_modules/.cache/storybook/10.6.1/b025481b08afe51700d41f2fe9ba04c0e6143174e6697e4353eed226fe10cbed/sb-vite/deps/client-EzyHfEUU.js?v=0f6573ea:9028:6)\n    at performWorkOnRoot (http://127.0.0.1:6006/node_modules/.cache/storybook/10.6.1/b025481b08afe51700d41f2fe9ba04c0e6143174e6697e4353eed226fe10cbed/sb-vite/deps/client-EzyHfEUU.js?v=0f6573ea:8715:27) The above error occurred in the <HRViews> component. React will try to recreate this component tree from scratch using the error boundary you provided, ErrorBoundary."
+        },
+        {
+          "type": "console",
+          "message": "Error rendering story 'hr-vision-agency--h-03':"
+        },
+        {
+          "type": "console",
+          "message": "ReferenceError: clarificationSent is not defined\n    at HRViews (http://127.0.0.1:6006/src/scenes/hr-vision/PeopleViews.tsx?t=1790910982937:768:19)\n    at Object.react_stack_bottom_frame (http://127.0.0.1:6006/node_modules/.cache/storybook/10.6.1/b025481b08afe51700d41f2fe9ba04c0e6143174e6697e4353eed226fe10cbed/sb-vite/deps/client-EzyHfEUU.js?v=0f6573ea:14142:12)\n    at renderWithHooks (http://127.0.0.1:6006/node_modules/.cache/storybook/10.6.1/b025481b08afe51700d41f2fe9ba04c0e6143174e6697e4353eed226fe10cbed/sb-vite/deps/client-EzyHfEUU.js?v=0f6573ea:4400:19)\n    at updateFunctionComponent (http://127.0.0.1:6006/node_modules/.cache/storybook/10.6.1/b025481b08afe51700d41f2fe9ba04c0e6143174e6697e4353eed226fe10cbed/sb-vite/deps/client-EzyHfEUU.js?v=0f6573ea:5775:16)\n    at beginWork (http://127.0.0.1:6006/node_modules/.cache/storybook/10.6.1/b025481b08afe51700d41f2fe9ba04c0e6143174e6697e4353eed226fe10cbed/sb-vite/deps/client-EzyHfEUU.js?v=0f6573ea:6391:20)\n    at runWithFiberInDEV (http://127.0.0.1:6006/node_modules/.cache/storybook/10.6.1/b025481b08afe51700d41f2fe9ba04c0e6143174e6697e4353eed226fe10cbed/sb-vite/deps/client-EzyHfEUU.js?v=0f6573ea:944:66)\n    at performUnitOfWork (http://127.0.0.1:6006/node_modules/.cache/storybook/10.6.1/b025481b08afe51700d41f2fe9ba04c0e6143174e6697e4353eed226fe10cbed/sb-vite/deps/client-EzyHfEUU.js?v=0f6573ea:9148:92)\n    at workLoopSync (http://127.0.0.1:6006/node_modules/.cache/storybook/10.6.1/b025481b08afe51700d41f2fe9ba04c0e6143174e6697e4353eed226fe10cbed/sb-vite/deps/client-EzyHfEUU.js?v=0f6573ea:9044:37)\n    at renderRootSync (http://127.0.0.1:6006/node_modules/.cache/storybook/10.6.1/b025481b08afe51700d41f2fe9ba04c0e6143174e6697e4353eed226fe10cbed/sb-vite/deps/client-EzyHfEUU.js?v=0f6573ea:9028:6)\n    at performWorkOnRoot (http://127.0.0.1:6006/node_modules/.cache/storybook/10.6.1/b025481b08afe51700d41f2fe9ba04c0e6143174e6697e4353eed226fe10cbed/sb-vite/deps/client-EzyHfEUU.js?v=0f6573ea:8715:27)"
+        }
+      ],
+      "screenshot": "/Users/NIKITA/Documents/ChatGPT/HR Vision/output/interface-lab/qa-h03-1440.png"
+    },
+    {
+      "id": "H04",
+      "width": 1440,
+      "title": "Компании и сигналы",
+      "bodyWidth": 1440,
+      "viewport": 1440,
+      "contentWidth": 1230,
+      "contentScrollWidth": 1230,
+      "contentText": 4190,
+      "overflowing": [],
+      "errors": []
+    },
+    {
+      "id": "A01",
+      "width": 1440,
+      "title": "Компании и сигналы",
+      "bodyWidth": 1440,
+      "viewport": 1440,
+      "contentWidth": 1230,
+      "contentScrollWidth": 1230,
+      "contentText": 3053,
+      "overflowing": [],
+      "errors": [],
+      "screenshot": "/Users/NIKITA/Documents/ChatGPT/HR Vision/output/interface-lab/qa-a01-1440.png"
+    },
+    {
+      "id": "A02",
+      "width": 1440,
+      "title": "Заказы и команда",
+      "bodyWidth": 1440,
+      "viewport": 1440,
+      "contentWidth": 1230,
+      "contentScrollWidth": 1230,
+      "contentText": 3428,
+      "overflowing": [],
+      "errors": []
+    },
+    {
+      "id": "A03",
+      "width": 1440,
+      "title": "Кандидаты",
+      "bodyWidth": 1440,
+      "viewport": 1440,
+      "contentWidth": 1230,
+      "contentScrollWidth": 1230,
+      "contentText": 3133,
+      "overflowing": [],
+      "errors": []
+    },
+    {
+      "id": "A04",
+      "width": 1440,
+      "title": "Интервью и оценка",
+      "bodyWidth": 1440,
+      "viewport": 1440,
+      "contentWidth": 1230,
+      "contentScrollWidth": 1230,
+      "contentText": 3686,
+      "overflowing": [],
+      "errors": []
+    },
+    {
+      "id": "A05",
+      "width": 1440,
+      "title": "Подборка для клиента",
+      "bodyWidth": 1440,
+      "viewport": 1440,
+      "contentWidth": 1230,
+      "contentScrollWidth": 1230,
+      "contentText": 3780,
+      "overflowing": [],
+      "errors": []
+    },
+    {
+      "id": "A06",
+      "width": 1440,
+      "title": "Сопровождение до результата",
+      "bodyWidth": 1440,
+      "viewport": 1440,
+      "contentWidth": 1230,
+      "contentScrollWidth": 1230,
+      "contentText": 4848,
+      "overflowing": [],
+      "errors": []
+    },
+    {
+      "id": "C01",
+      "width": 1440,
+      "title": "Компании и сигналы",
+      "bodyWidth": 1440,
+      "viewport": 1440,
+      "contentWidth": 1230,
+      "contentScrollWidth": 1230,
+      "contentText": 3055,
+      "overflowing": [],
+      "errors": []
+    },
+    {
+      "id": "C02",
+      "width": 1440,
+      "title": "Компании и сигналы",
+      "bodyWidth": 1440,
+      "viewport": 1440,
+      "contentWidth": 1230,
+      "contentScrollWidth": 1230,
+      "contentText": 2900,
+      "overflowing": [],
+      "errors": [],
+      "screenshot": "/Users/NIKITA/Documents/ChatGPT/HR Vision/output/interface-lab/qa-c02-1440.png"
+    },
+    {
+      "id": "C03",
+      "width": 1440,
+      "title": "Компании и сигналы",
+      "bodyWidth": 1440,
+      "viewport": 1440,
+      "contentWidth": 1230,
+      "contentScrollWidth": 1230,
+      "contentText": 4072,
+      "overflowing": [],
+      "errors": []
+    },
+    {
+      "id": "C04",
+      "width": 1440,
+      "title": "Компании и сигналы",
+      "bodyWidth": 1440,
+      "viewport": 1440,
+      "contentWidth": 1230,
+      "contentScrollWidth": 1230,
+      "contentText": 3951,
+      "overflowing": [],
+      "errors": []
+    },
+    {
+      "id": "E01",
+      "width": 900,
+      "title": "Компании и сигналы",
+      "bodyWidth": 900,
+      "viewport": 900,
+      "contentWidth": 735,
+      "contentScrollWidth": 735,
+      "contentText": 3562,
+      "overflowing": [],
+      "errors": []
+    },
+    {
+      "id": "E02",
+      "width": 900,
+      "title": "Компании и сигналы",
+      "bodyWidth": 900,
+      "viewport": 900,
+      "contentWidth": 735,
+      "contentScrollWidth": 735,
+      "contentText": 3756,
+      "overflowing": [],
+      "errors": []
+    },
+    {
+      "id": "E03",
+      "width": 900,
+      "title": "Компании и сигналы",
+      "bodyWidth": 900,
+      "viewport": 900,
+      "contentWidth": 735,
+      "contentScrollWidth": 735,
+      "contentText": 3686,
+      "overflowing": [],
+      "errors": []
+    },
+    {
+      "id": "E04",
+      "width": 900,
+      "title": "Компании и сигналы",
+      "bodyWidth": 900,
+      "viewport": 900,
+      "contentWidth": 735,
+      "contentScrollWidth": 735,
+      "contentText": 4094,
+      "overflowing": [],
+      "errors": [],
+      "screenshot": "/Users/NIKITA/Documents/ChatGPT/HR Vision/output/interface-lab/qa-e04-900.png"
+    },
+    {
+      "id": "E05",
+      "width": 900,
+      "title": "Компании и сигналы",
+      "bodyWidth": 900,
+      "viewport": 900,
+      "contentWidth": 735,
+      "contentScrollWidth": 735,
+      "contentText": 3475,
+      "overflowing": [],
+      "errors": []
+    },
+    {
+      "id": "H01",
+      "width": 900,
+      "title": "Компании и сигналы",
+      "bodyWidth": 900,
+      "viewport": 900,
+      "contentWidth": 735,
+      "contentScrollWidth": 735,
+      "contentText": 4088,
+      "overflowing": [],
+      "errors": []
+    },
+    {
+      "id": "H02",
+      "width": 900,
+      "title": "Компании и сигналы",
+      "bodyWidth": 900,
+      "viewport": 900,
+      "contentWidth": 735,
+      "contentScrollWidth": 735,
+      "contentText": 3863,
+      "overflowing": [],
+      "errors": [],
+      "screenshot": "/Users/NIKITA/Documents/ChatGPT/HR Vision/output/interface-lab/qa-h02-900.png"
+    },
+    {
+      "id": "H03",
+      "width": 900,
+      "title": "Компании и сигналы",
+      "bodyWidth": 900,
+      "viewport": 900,
+      "contentWidth": 735,
+      "contentScrollWidth": 735,
+      "contentText": 4191,
+      "overflowing": [],
+      "errors": []
+    },
+    {
+      "id": "H04",
+      "width": 900,
+      "title": "Компании и сигналы",
+      "bodyWidth": 900,
+      "viewport": 900,
+      "contentWidth": 735,
+      "contentScrollWidth": 735,
+      "contentText": 4190,
+      "overflowing": [],
+      "errors": []
+    },
+    {
+      "id": "A01",
+      "width": 900,
+      "title": "Компании и сигналы",
+      "bodyWidth": 900,
+      "viewport": 900,
+      "contentWidth": 735,
+      "contentScrollWidth": 735,
+      "contentText": 3053,
+      "overflowing": [],
+      "errors": [],
+      "screenshot": "/Users/NIKITA/Documents/ChatGPT/HR Vision/output/interface-lab/qa-a01-900.png"
+    },
+    {
+      "id": "A02",
+      "width": 900,
+      "title": "Заказы и команда",
+      "bodyWidth": 900,
+      "viewport": 900,
+      "contentWidth": 735,
+      "contentScrollWidth": 735,
+      "contentText": 3428,
+      "overflowing": [],
+      "errors": []
+    },
+    {
+      "id": "A03",
+      "width": 900,
+      "title": "Кандидаты",
+      "bodyWidth": 900,
+      "viewport": 900,
+      "contentWidth": 735,
+      "contentScrollWidth": 735,
+      "contentText": 3133,
+      "overflowing": [],
+      "errors": []
+    },
+    {
+      "id": "A04",
+      "width": 900,
+      "title": "Интервью и оценка",
+      "bodyWidth": 900,
+      "viewport": 900,
+      "contentWidth": 735,
+      "contentScrollWidth": 735,
+      "contentText": 3686,
+      "overflowing": [],
+      "errors": []
+    },
+    {
+      "id": "A05",
+      "width": 900,
+      "title": "Подборка для клиента",
+      "bodyWidth": 900,
+      "viewport": 900,
+      "contentWidth": 735,
+      "contentScrollWidth": 735,
+      "contentText": 3780,
+      "overflowing": [],
+      "errors": []
+    },
+    {
+      "id": "A06",
+      "width": 900,
+      "title": "Сопровождение до результата",
+      "bodyWidth": 900,
+      "viewport": 900,
+      "contentWidth": 735,
+      "contentScrollWidth": 735,
+      "contentText": 4848,
+      "overflowing": [],
+      "errors": []
+    },
+    {
+      "id": "C01",
+      "width": 900,
+      "title": "Компании и сигналы",
+      "bodyWidth": 900,
+      "viewport": 900,
+      "contentWidth": 735,
+      "contentScrollWidth": 735,
+      "contentText": 3055,
+      "overflowing": [],
+      "errors": []
+    },
+    {
+      "id": "C02",
+      "width": 900,
+      "title": "Компании и сигналы",
+      "bodyWidth": 900,
+      "viewport": 900,
+      "contentWidth": 735,
+      "contentScrollWidth": 735,
+      "contentText": 2900,
+      "overflowing": [],
+      "errors": [],
+      "screenshot": "/Users/NIKITA/Documents/ChatGPT/HR Vision/output/interface-lab/qa-c02-900.png"
+    },
+    {
+      "id": "C03",
+      "width": 900,
+      "title": "Компании и сигналы",
+      "bodyWidth": 900,
+      "viewport": 900,
+      "contentWidth": 735,
+      "contentScrollWidth": 735,
+      "contentText": 4072,
+      "overflowing": [],
+      "errors": []
+    },
+    {
+      "id": "C04",
+      "width": 900,
+      "title": "Компании и сигналы",
+      "bodyWidth": 900,
+      "viewport": 900,
+      "contentWidth": 735,
+      "contentScrollWidth": 735,
+      "contentText": 3951,
+      "overflowing": [],
+      "errors": []
+    }
+  ],
+  "finalStableRecheck": [
+    {
+      "id": "H03",
+      "width": 1440,
+      "visibleTitle": [
+        "Понять опыт. Уточнить пробелы."
+      ],
+      "bodyWidth": 1440,
+      "contentWidth": 1230,
+      "contentScrollWidth": 1230,
+      "errors": [],
+      "screenshot": "/Users/NIKITA/Documents/ChatGPT/HR Vision/output/interface-lab/qa-final-h03-1440.png"
+    },
+    {
+      "id": "H04",
+      "width": 1440,
+      "visibleTitle": [
+        "Следующий шаг: Анна Миронова"
+      ],
+      "bodyWidth": 1440,
+      "contentWidth": 1230,
+      "contentScrollWidth": 1230,
+      "errors": [],
+      "screenshot": "/Users/NIKITA/Documents/ChatGPT/HR Vision/output/interface-lab/qa-final-h04-1440.png"
+    },
+    {
+      "id": "C03",
+      "width": 1440,
+      "visibleTitle": [
+        "Менеджер по работе с клиентами"
+      ],
+      "bodyWidth": 1440,
+      "contentWidth": 1230,
+      "contentScrollWidth": 1230,
+      "errors": [],
+      "screenshot": "/Users/NIKITA/Documents/ChatGPT/HR Vision/output/interface-lab/qa-final-c03-1440.png"
+    },
+    {
+      "id": "E04",
+      "width": 1440,
+      "visibleTitle": [
+        "Рассмотрение кандидата"
+      ],
+      "bodyWidth": 1440,
+      "contentWidth": 1230,
+      "contentScrollWidth": 1230,
+      "errors": [],
+      "screenshot": "/Users/NIKITA/Documents/ChatGPT/HR Vision/output/interface-lab/qa-final-e04-1440.png"
+    },
+    {
+      "id": "H03",
+      "width": 900,
+      "visibleTitle": [
+        "Понять опыт. Уточнить пробелы."
+      ],
+      "bodyWidth": 900,
+      "contentWidth": 735,
+      "contentScrollWidth": 735,
+      "errors": [],
+      "screenshot": "/Users/NIKITA/Documents/ChatGPT/HR Vision/output/interface-lab/qa-final-h03-900.png"
+    },
+    {
+      "id": "H04",
+      "width": 900,
+      "visibleTitle": [
+        "Следующий шаг: Анна Миронова"
+      ],
+      "bodyWidth": 900,
+      "contentWidth": 735,
+      "contentScrollWidth": 735,
+      "errors": [],
+      "screenshot": "/Users/NIKITA/Documents/ChatGPT/HR Vision/output/interface-lab/qa-final-h04-900.png"
+    },
+    {
+      "id": "C03",
+      "width": 900,
+      "visibleTitle": [
+        "Менеджер по работе с клиентами"
+      ],
+      "bodyWidth": 900,
+      "contentWidth": 735,
+      "contentScrollWidth": 735,
+      "errors": [],
+      "screenshot": "/Users/NIKITA/Documents/ChatGPT/HR Vision/output/interface-lab/qa-final-c03-900.png"
+    },
+    {
+      "id": "E04",
+      "width": 900,
+      "visibleTitle": [
+        "Рассмотрение кандидата"
+      ],
+      "bodyWidth": 900,
+      "contentWidth": 735,
+      "contentScrollWidth": 735,
+      "errors": [],
+      "screenshot": "/Users/NIKITA/Documents/ChatGPT/HR Vision/output/interface-lab/qa-final-e04-900.png"
+    }
+  ],
+  "gallerySmoke": {
+    "sourceStory": "proteus-00-галерея--overview",
+    "linkLabel": "Открыть макеты →",
+    "destination": "http://127.0.0.1:6006/?path=/story/hr-vision-agency--overview",
+    "visibleDestinationHeading": "Рассмотрение кандидата",
+    "consoleErrors": 0,
+    "storybookManagerWarning": "PopoverProvider ariaLabel will become mandatory in Storybook 11",
+    "screenMapCards": 19,
+    "screenMapScreenshot": "/Users/NIKITA/Documents/ChatGPT/HR Vision/output/interface-lab/hrvision-screen-map.png"
+  }
+}

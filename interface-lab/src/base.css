@@ -1,0 +1,2 @@
+*{box-sizing:border-box}body{margin:0}button,input,a{-webkit-tap-highlight-color:transparent}button,input{font-family:inherit}button,a{touch-action:manipulation}button{font-size:inherit}button:focus-visible,a:focus-visible{outline:2px solid var(--accent,#17775c);outline-offset:4px}button:disabled{cursor:default}svg{flex-shrink:0}a{color:inherit;text-decoration:none}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;transition-duration:.01ms!important;animation-duration:.01ms!important;animation-iteration-count:1!important}}

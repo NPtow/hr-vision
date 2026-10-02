@@ -1,0 +1,307 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="3240" height="2860" viewBox="0 0 3240 2860">
+<title>05 / 19 экранов и представлений из общих блоков</title>
+<rect width="3240" height="2860" fill="#f4f1e8"/>
+<text x="32" y="28" fill="#20211f" font-size="36" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="32" y="62.56">05 / 19 экранов и представлений из общих блоков</tspan>
+</text>
+<text x="32" y="90" fill="#696b65" font-size="20" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="32" y="109.2">E + H: один кабинет компании с разными задачами · A: наша команда · C: адресные действия и будущий кабинет кандидата</tspan>
+</text>
+<rect x="80" y="200" width="680" height="360" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="98" y="218" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="241.04">E01 / Обзор найма</tspan>
+</text>
+<text x="98" y="256.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="274.08">B01 · B02 · B17 · B20 · B23 · B25 · B27</tspan>
+<tspan x="98" y="297.48">Представление нанимающего в общем кабинете компании; с H01 общая</tspan>
+<tspan x="98" y="320.88">основа и разные приоритеты. Здесь видны решения и можно сообщить</tspan>
+<tspan x="98" y="344.28">исход найма. В базе B25 означает только сообщенный результат, без</tspan>
+<tspan x="98" y="367.68">нашей ответственности за выход; KPI как отдельный модуль позже.</tspan>
+</text>
+<text x="98" y="383.8" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="397.24">НМ</tspan>
+<tspan x="98" y="414.74">Контакты · Агентство · ATS</tspan>
+</text>
+<rect x="880" y="200" width="680" height="360" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="898" y="218" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="898" y="241.04">E02 / Задача и вакансия</tspan>
+</text>
+<text x="898" y="256.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="898" y="274.08">B01 · B03 · B10 · B23</tspan>
+<tspan x="898" y="297.48">Связывает проблему бизнеса с ролью и проверками. В агентской версии</tspan>
+<tspan x="898" y="320.88">клиент согласует бриф, а редактирование может делать команда. B23</tspan>
+<tspan x="898" y="344.28">является следующим продуктовым объемом; пилот хранит ожидаемый</tspan>
+<tspan x="898" y="367.68">результат в брифе.</tspan>
+</text>
+<text x="898" y="383.8" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="898" y="397.24">НМ</tspan>
+<tspan x="898" y="414.74">Контакты · Агентство · ATS</tspan>
+</text>
+<rect x="1680" y="200" width="680" height="360" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="1698" y="218" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1698" y="241.04">E03 / Подборка и сравнение</tspan>
+</text>
+<text x="1698" y="256.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1698" y="274.08">B15 · B16 · B17 · B19 · B20 · B26</tspan>
+<tspan x="1698" y="297.48">В базе кандидаты с условиями доступа, в агентстве батч, в ATS свой и</tspan>
+<tspan x="1698" y="320.88">внешний поток. Решение учитывает сообщенные сроки и интерес B19;</tspan>
+<tspan x="1698" y="344.28">причины идут в B20. Пилот: карточки и ручные решения, статус доступа</tspan>
+<tspan x="1698" y="367.68">B26; B16 как сравнительный режим позже, оплата внешняя.</tspan>
+</text>
+<text x="1698" y="383.8" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1698" y="397.24">НМ</tspan>
+<tspan x="1698" y="414.74">Контакты · Агентство · ATS</tspan>
+</text>
+<rect x="2480" y="200" width="680" height="360" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="2498" y="218" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2498" y="241.04">E04 / Карточка рассмотрения кандидата</tspan>
+</text>
+<text x="2498" y="256.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2498" y="274.08">B08 · B12 · B13 · B14 · B17 · B18 · B19 · B20</tspan>
+<tspan x="2498" y="297.48">Одна композиция переиспользует профиль, доказательства и состояние</tspan>
+<tspan x="2498" y="320.88">конкретной вакансии. У нанимающего решения, уточнения и встреча;</tspan>
+<tspan x="2498" y="344.28">закрытые заметки HR не раскрываются автоматически. Добор B14 пока</tspan>
+<tspan x="2498" y="367.68">может происходить вне платформы.</tspan>
+</text>
+<text x="2498" y="383.8" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2498" y="397.24">НМ</tspan>
+<tspan x="2498" y="414.74">Контакты · Агентство · ATS</tspan>
+</text>
+<rect x="80" y="640" width="680" height="360" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="98" y="658" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="681.04">E05 / Оффер и выход</tspan>
+</text>
+<text x="98" y="696.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="714.08">B17 · B19 · B22 · B23 · B24 · B25</tspan>
+<tspan x="98" y="737.48">Целевое представление, не обязательный экран первого запуска. В</tspan>
+<tspan x="98" y="760.88">пилоте предложение, KPI и оформление ведет компания своими</tspan>
+<tspan x="98" y="784.28">средствами. В CJM базы контактов эти работы продолжаются у клиента</tspan>
+<tspan x="98" y="807.68">вне сервиса.</tspan>
+</text>
+<text x="98" y="823.8" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="837.24">НМ</tspan>
+<tspan x="98" y="854.74">Агентство · ATS</tspan>
+</text>
+<rect x="880" y="640" width="680" height="360" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="898" y="658" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="898" y="681.04">H01 / Вакансии и очередь HR</tspan>
+</text>
+<text x="898" y="696.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="898" y="714.08">B01 · B02 · B03 · B07 · B17 · B20 · B25 · B27</tspan>
+<tspan x="898" y="737.48">Рабочее представление общего кабинета компании. HR уточняет бриф,</tspan>
+<tspan x="898" y="760.88">ведет вакансии и ожидающие действия; в ATS также добавляет поток. В</tspan>
+<tspan x="898" y="784.28">базе на этом экране возвращается только сообщенный исход найма.</tspan>
+<tspan x="898" y="807.68">Внутренняя очередь агентства клиенту не открывается автоматически.</tspan>
+</text>
+<text x="898" y="823.8" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="898" y="837.24">HR компании</tspan>
+<tspan x="898" y="854.74">Контакты · Агентство · ATS</tspan>
+</text>
+<rect x="1680" y="640" width="680" height="360" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="1698" y="658" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1698" y="681.04">H02 / Поток кандидатов</tspan>
+</text>
+<text x="1698" y="696.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1698" y="714.08">B03 · B07 · B08 · B09 · B15 · B17 · B19 · B26</tspan>
+<tspan x="1698" y="737.48">В ATS HR добавляет своих кандидатов и ведет пары; в агентстве</tspan>
+<tspan x="1698" y="760.88">получает готовые подборки без обязательной загрузки. В базе уточняет</tspan>
+<tspan x="1698" y="784.28">запрос, интерес и разрешенный доступ перед получением контакта. Все</tspan>
+<tspan x="1698" y="807.68">указанные модули не обязаны быть активны одновременно во всех GTM.</tspan>
+</text>
+<text x="1698" y="823.8" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1698" y="837.24">HR компании</tspan>
+<tspan x="1698" y="854.74">Контакты · Агентство · ATS</tspan>
+</text>
+<rect x="2480" y="640" width="680" height="360" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="2498" y="658" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2498" y="681.04">H03 / Рабочее место скрининга</tspan>
+</text>
+<text x="2498" y="696.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2498" y="714.08">B08 · B09 · B10 · B11 · B12 · B13 · B14 · B17 · B18</tspan>
+<tspan x="2498" y="737.48">Профессиональное представление карточки кандидата для HR. Готовый</tspan>
+<tspan x="2498" y="760.88">профиль позволяет не повторять собранные проверки. В агентском</tspan>
+<tspan x="2498" y="784.28">сценарии многие действия выполняются внутренней командой на A04, а</tspan>
+<tspan x="2498" y="807.68">HR клиента видит переданный результат.</tspan>
+</text>
+<text x="2498" y="823.8" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2498" y="837.24">HR компании</tspan>
+<tspan x="2498" y="854.74">Контакты · Агентство · ATS</tspan>
+</text>
+<rect x="80" y="1080" width="680" height="360" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="98" y="1098" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="1121.04">H04 / Координация найма</tspan>
+</text>
+<text x="98" y="1136.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="1154.08">B09 · B16 · B17 · B18 · B19 · B20 · B22 · B23 · B24 · B25 · B27</tspan>
+<tspan x="98" y="1177.48">Сводит решения, причины, встречи и следующий контакт. В пилоте</tspan>
+<tspan x="98" y="1200.88">данные и действия могут вестись вручную; сравнительный режим,</tspan>
+<tspan x="98" y="1224.28">оффер, KPI, документы и выход являются целевым развитием.</tspan>
+<tspan x="98" y="1247.68">Разрешение B09 проверяется отдельно от итогового статуса, свой поток</tspan>
+<tspan x="98" y="1271.08">ATS не пополняет общую базу автоматически.</tspan>
+</text>
+<text x="98" y="1287.2" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="1300.64">HR компании</tspan>
+<tspan x="98" y="1318.14">Агентство · ATS</tspan>
+</text>
+<rect x="880" y="1080" width="680" height="360" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="898" y="1098" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="898" y="1121.04">A01 / Продажи агентства</tspan>
+</text>
+<text x="898" y="1136.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="898" y="1154.08">B04 · B05 · B06</tspan>
+<tspan x="898" y="1177.48">Внутренняя сторона собственной команды HR Vision для всех трех</tspan>
+<tspan x="898" y="1200.88">входов. B05 и B06 в пилоте представляют внешние инструменты; это не</tspan>
+<tspan x="898" y="1224.28">новый CRM-интерфейс и не кабинет партнерского агентства.</tspan>
+</text>
+<text x="898" y="1240.4" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="898" y="1253.84">Наша команда</tspan>
+<tspan x="898" y="1271.34">Контакты · Агентство · ATS</tspan>
+</text>
+<rect x="1680" y="1080" width="680" height="360" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="1698" y="1098" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1698" y="1121.04">A02 / Заказы и работа команды</tspan>
+</text>
+<text x="1698" y="1136.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1698" y="1154.08">B01 · B02 · B03 · B26 · B27</tspan>
+<tspan x="1698" y="1177.48">В агентском входе ведется заказ до выхода; в базе и ATS контекст</tspan>
+<tspan x="1698" y="1200.88">запроса нужен для поставки внешней ценности. Первую очередь может</tspan>
+<tspan x="1698" y="1224.28">обеспечивать текущая внутренняя ATS. Состав доступа внешних</tspan>
+<tspan x="1698" y="1247.68">партнеров сюда не включен.</tspan>
+</text>
+<text x="1698" y="1263.8" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1698" y="1277.24">Наша команда</tspan>
+<tspan x="1698" y="1294.74">Контакты · Агентство · ATS</tspan>
+</text>
+<rect x="2480" y="1080" width="680" height="360" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="2498" y="1098" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2498" y="1121.04">A03 / Общая база кандидатов</tspan>
+</text>
+<text x="2498" y="1136.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2498" y="1154.08">B07 · B08 · B09 · B15 · B19 · B20 · B26</tspan>
+<tspan x="2498" y="1177.48">Общая база для трех входов: источник, разрешения, актуальность и</tspan>
+<tspan x="2498" y="1200.88">сообщенный интерес. Обратная связь уточняет профиль и выдачу.</tspan>
+<tspan x="2498" y="1224.28">Покупка контакта не открывает клиенту любые записи и внутренние</tspan>
+<tspan x="2498" y="1247.68">заметки; клиентский исход может остаться неизвестным.</tspan>
+</text>
+<text x="2498" y="1263.8" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2498" y="1277.24">Наша команда</tspan>
+<tspan x="2498" y="1294.74">Контакты · Агентство · ATS</tspan>
+</text>
+<rect x="80" y="1520" width="680" height="360" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="98" y="1538" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="1561.04">A04 / Интервью и оценка</tspan>
+</text>
+<text x="98" y="1576.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="1594.08">B08 · B09 · B10 · B11 · B12 · B13 · B14 · B17 · B26 · B27</tspan>
+<tspan x="98" y="1617.48">Внутренняя роль использует те же оценочные модули, что H03, с</tspan>
+<tspan x="98" y="1640.88">назначением исполнителя и проверкой результата. AI внешний,</tspan>
+<tspan x="98" y="1664.28">материалы в пилоте переносятся вручную. Собственное ядро оценки и</tspan>
+<tspan x="98" y="1687.68">конструктор тестов не являются условием пилота.</tspan>
+</text>
+<text x="98" y="1703.8" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="1717.24">Наша команда</tspan>
+<tspan x="98" y="1734.74">Контакты · Агентство · ATS</tspan>
+</text>
+<rect x="880" y="1520" width="680" height="360" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="898" y="1538" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="898" y="1561.04">A05 / Подборки для клиентов</tspan>
+</text>
+<text x="898" y="1576.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="898" y="1594.08">B09 · B15 · B16 · B17 · B18 · B19 · B20</tspan>
+<tspan x="898" y="1617.48">Общая подготовка выдачи с разным объемом сопровождения. В</tspan>
+<tspan x="898" y="1640.88">агентстве команда ведет обратную связь и следующий батч; при продаже</tspan>
+<tspan x="898" y="1664.28">контакта ответственность за дальнейший найм у клиента. Сравнительный</tspan>
+<tspan x="898" y="1687.68">режим B16 относится к следующей итерации.</tspan>
+</text>
+<text x="898" y="1703.8" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="898" y="1717.24">Наша команда</tspan>
+<tspan x="898" y="1734.74">Контакты · Агентство · ATS</tspan>
+</text>
+<rect x="1680" y="1520" width="680" height="360" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="1698" y="1538" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1698" y="1561.04">A06 / Сопровождение и расчеты</tspan>
+</text>
+<text x="1698" y="1576.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1698" y="1594.08">B09 · B17 · B19 · B20 · B22 · B23 · B24 · B25 · B26 · B27</tspan>
+<tspan x="1698" y="1617.48">Состав по стратегии: contacts и ATS прежде всего разрешение, заказ,</tspan>
+<tspan x="1698" y="1640.88">доступ и сообщенный исход; сопровождение переговоров и выхода</tspan>
+<tspan x="1698" y="1664.28">относится к агентству. Оплата и юридическая подготовка внешние; B24</tspan>
+<tspan x="1698" y="1687.68">как следующий UI хранит версию/ссылку/статус. Команда не утверждает</tspan>
+<tspan x="1698" y="1711.08">условия вместо работодателя.</tspan>
+</text>
+<text x="1698" y="1727.2" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1698" y="1740.64">Наша команда</tspan>
+<tspan x="1698" y="1758.14">Контакты · Агентство · ATS</tspan>
+</text>
+<rect x="2480" y="1520" width="680" height="360" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="2498" y="1538" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2498" y="1561.04">C01 / Приглашение и согласие</tspan>
+</text>
+<text x="2498" y="1576.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2498" y="1594.08">B07 · B08 · B09 · B10 · B19</tspan>
+<tspan x="2498" y="1617.48">Первый запуск: адресная ссылка без обязательного кабинета. Кандидат</tspan>
+<tspan x="2498" y="1640.88">предоставляет собственный отклик/опыт, уточняет ожидания и отдельно</tspan>
+<tspan x="2498" y="1664.28">решает вопрос доступа. Передача материала в ATS компании не</tspan>
+<tspan x="2498" y="1687.68">означает разрешение общей сети.</tspan>
+</text>
+<text x="2498" y="1703.8" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2498" y="1717.24">Кандидат</tspan>
+<tspan x="2498" y="1734.74">Контакты · Агентство · ATS</tspan>
+</text>
+<rect x="80" y="1960" width="680" height="360" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="98" y="1978" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="2001.04">C02 / Интервью и задания</tspan>
+</text>
+<text x="98" y="2016.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="2034.08">B10 · B11 · B12 · B13 · B14</tspan>
+<tspan x="98" y="2057.48">В пилоте это ссылка с понятным маршрутом к HR либо внешнему AI и</tspan>
+<tspan x="98" y="2080.88">передачей результата. Разбор предоставляется в доступной форме;</tspan>
+<tspan x="98" y="2104.28">собственный видеосервис не требуется. Тестовые и самостоятельный</tspan>
+<tspan x="98" y="2127.68">просмотр всех оценок относятся к последующему развитию.</tspan>
+</text>
+<text x="98" y="2143.8" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="2157.24">Кандидат</tspan>
+<tspan x="98" y="2174.74">Контакты · Агентство · ATS</tspan>
+</text>
+<rect x="880" y="1960" width="680" height="360" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="898" y="1978" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="898" y="2001.04">C03 / Предложение вакансии и следующий шаг</tspan>
+</text>
+<text x="898" y="2016.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="898" y="2034.08">B17 · B18 · B19 · B20 · B21 · B22 · B23 · B24 · B25</tspan>
+<tspan x="898" y="2057.48">Адресная страница конкретной вакансии: интерес, вопросы, встреча,</tspan>
+<tspan x="898" y="2080.88">следующий шаг и причина решения. Целевое развитие включает</tspan>
+<tspan x="898" y="2104.28">согласованные условия, ответ на оффер и факт оформления/выхода; B21</tspan>
+<tspan x="898" y="2127.68">здесь лишь сообщенные сроки альтернатив, общий список остается C04.</tspan>
+<tspan x="898" y="2151.08">В базе после контакта найм ведет клиент внешне.</tspan>
+</text>
+<text x="898" y="2167.2" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="898" y="2180.64">Кандидат</tspan>
+<tspan x="898" y="2198.14">Контакты · Агентство · ATS</tspan>
+</text>
+<rect x="1680" y="1960" width="680" height="360" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="1698" y="1978" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1698" y="2001.04">C04 / Кабинет поиска и предложений</tspan>
+</text>
+<text x="1698" y="2016.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1698" y="2034.08">B08 · B19 · B20 · B21 · B22 · B23 · B24 · B25</tspan>
+<tspan x="1698" y="2057.48">Кабинет появляется позже: параллельные варианты, сообщенные</tspan>
+<tspan x="1698" y="2080.88">альтернативы, обратная связь и доступность. Компаниям не</tspan>
+<tspan x="1698" y="2104.28">раскрывается весь список альтернатив. В базе это добровольное</tspan>
+<tspan x="1698" y="2127.68">обновление результата; офферы/документы могут оставаться внешними</tspan>
+<tspan x="1698" y="2151.08">со статусом в кабинете.</tspan>
+</text>
+<text x="1698" y="2167.2" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1698" y="2180.64">Кандидат</tspan>
+<tspan x="1698" y="2198.14">Контакты · Агентство · ATS</tspan>
+</text>
+<text x="80" y="2510" fill="#696b65" font-size="20" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="80" y="2529.2">Одинаковый экран может встречаться на нескольких участках CJM: повтор ID означает возвращение в тот же экран. Разные роли не получают автоматически одинаковые данные и действия.</tspan>
+</text>
+<text x="80" y="2590" fill="#696b65" font-size="20" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="80" y="2609.2">Контуры CJM показывают, где экран помогает выполнить работу. Состав блоков уточняет, чем именно: решение, информация, действие, статус или передача результата.</tspan>
+</text>
+<text x="80" y="2670" fill="#696b65" font-size="20" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="80" y="2689.2">Рабочие допущения: клиент агентства видит подготовленные подборки; постоянный кабинет кандидата позже; внешние агентства как самостоятельные партнёры требуют отдельного варианта доступа.</tspan>
+</text>
+</svg>

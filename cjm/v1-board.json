@@ -1,0 +1,3927 @@
+{
+  "title": "HR Vision · CJM v1",
+  "version": "1.0",
+  "status": "Working hypothesis, expanded after user approval of demo concept",
+  "evidence_sources": {
+    "Д": "sources/GTM-дека 2.9.pdf; physical PDF pages",
+    "В": "sources/Встреча с Мишей 29 сентября.txt; line numbers",
+    "Т": "sources/тачка на прокачку версия 1.0.pdf; physical PDF pages",
+    "У": "User corrections in this conversation, 2026-10-01"
+  },
+  "open_questions": [
+    "Meaning of Hair screening",
+    "Which checks required by role",
+    "SLA and hold/response rules",
+    "Who prepares and approves employment documents",
+    "Payment and replacement triggers"
+  ],
+  "boards": [
+    {
+      "id": "01-overview",
+      "title": "01 / HR Vision: граф работ четырёх участников",
+      "subtitle": "CJM v1 · 01.10.2026 · от проблемы бизнеса до результата · подробные развилки на листах 02–05",
+      "x": 0,
+      "y": 0,
+      "width": 5000,
+      "height": 1740,
+      "nodes": [
+        {
+          "id": "m0",
+          "x": 220,
+          "y": 300,
+          "w": 440,
+          "h": 210,
+          "title": "Понять проблему бизнеса",
+          "body": "Какого результата не хватает и в чём причина. Нужен ли найм? См. 05.",
+          "refs": "У; В66",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {
+            "actor": "Нанимающий менеджер",
+            "phase": "Проблема",
+            "before": "Триггер процесса",
+            "parallel": [
+              "Уточнить потребность",
+              "Найти и проверить потребность",
+              "Понять, зачем менять работу"
+            ],
+            "evidence": "user/deck/meeting/inference as specified in refs",
+            "status": "CJM proposal; software readiness unverified"
+          }
+        },
+        {
+          "id": "m1",
+          "x": 740,
+          "y": 300,
+          "w": 440,
+          "h": 210,
+          "title": "Понять кого",
+          "body": "Определить результат роли, навыки, полномочия и условия",
+          "refs": "У; Д4,8; В66",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {
+            "actor": "Нанимающий менеджер",
+            "phase": "Кого и зачем",
+            "before": "m0",
+            "parallel": [
+              "Подготовить вакансию",
+              "Договориться об услуге",
+              "Определить приоритеты"
+            ],
+            "evidence": "user/deck/meeting/inference as specified in refs",
+            "status": "CJM proposal; software readiness unverified"
+          }
+        },
+        {
+          "id": "m2",
+          "x": 1260,
+          "y": 300,
+          "w": 440,
+          "h": 210,
+          "title": "Задать критерии успеха",
+          "body": "Согласовать планку отбора и предварительные KPI роли",
+          "refs": "У; В11–19; вывод",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {
+            "actor": "Нанимающий менеджер",
+            "phase": "Поток кандидатов",
+            "before": "m1",
+            "parallel": [
+              "Получить кандидатов",
+              "Организовать поток",
+              "Найти варианты"
+            ],
+            "evidence": "user/deck/meeting/inference as specified in refs",
+            "status": "CJM proposal; software readiness unverified"
+          }
+        },
+        {
+          "id": "m3",
+          "x": 1780,
+          "y": 300,
+          "w": 440,
+          "h": 210,
+          "title": "Проверить в работе",
+          "body": "Вопросы по роли, кейс и Hiring-скрининг*",
+          "refs": "У; Д4,50; В78 · см. 02",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {
+            "actor": "Нанимающий менеджер",
+            "phase": "Проверки",
+            "before": "m2",
+            "parallel": [
+              "Организовать проверки",
+              "Организовать оценку",
+              "Показать опыт и навыки"
+            ],
+            "evidence": "user/deck/meeting/inference as specified in refs",
+            "status": "CJM proposal; software readiness unverified"
+          }
+        },
+        {
+          "id": "m4",
+          "x": 2300,
+          "y": 300,
+          "w": 440,
+          "h": 210,
+          "title": "Сравнить и выбрать",
+          "body": "Кандидаты сравниваются по задаче; можно запросить уточнение",
+          "refs": "Д15,58; В41,51 · см. 03",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {
+            "actor": "Нанимающий менеджер",
+            "phase": "Взаимный выбор",
+            "before": "m3",
+            "parallel": [
+              "Свести оценку и обратную связь",
+              "Показать первый батч",
+              "Продолжать поиск альтернатив"
+            ],
+            "evidence": "user/deck/meeting/inference as specified in refs",
+            "status": "CJM proposal; software readiness unverified"
+          }
+        },
+        {
+          "id": "m5",
+          "x": 2820,
+          "y": 300,
+          "w": 440,
+          "h": 210,
+          "title": "Подготовить KPI и условия",
+          "body": "Утвердить ожидаемый результат, деньги и дату выхода",
+          "refs": "У; вывод · см. 04",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {
+            "actor": "Нанимающий менеджер",
+            "phase": "Подготовка оффера",
+            "before": "m4",
+            "parallel": [
+              "Подготовить оффер и договор",
+              "Не потерять взаимный интерес",
+              "Получить ясность"
+            ],
+            "evidence": "user/deck/meeting/inference as specified in refs",
+            "status": "CJM proposal; software readiness unverified"
+          }
+        },
+        {
+          "id": "m6",
+          "x": 3340,
+          "y": 300,
+          "w": 440,
+          "h": 210,
+          "title": "Договориться с кандидатом",
+          "body": "Обсудить важные условия и принять решение по изменениям",
+          "refs": "У; Д17",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {
+            "actor": "Нанимающий менеджер",
+            "phase": "Оффер и переговоры",
+            "before": "m5",
+            "parallel": [
+              "Сделать оффер",
+              "Сопроводить переговоры",
+              "Сравнить офферы и решить"
+            ],
+            "evidence": "user/deck/meeting/inference as specified in refs",
+            "status": "CJM proposal; software readiness unverified"
+          }
+        },
+        {
+          "id": "m7",
+          "x": 3860,
+          "y": 300,
+          "w": 440,
+          "h": 210,
+          "title": "Подготовить начало работы",
+          "body": "Задачи, ресурсы и понятные ожидания на старте",
+          "refs": "Д54; У; гипотеза",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {
+            "actor": "Нанимающий менеджер",
+            "phase": "Договор и выход",
+            "before": "m6",
+            "parallel": [
+              "Оформить и довести до выхода",
+              "Довести услугу до выхода",
+              "Согласовать договор и выйти"
+            ],
+            "evidence": "user/deck/meeting/inference as specified in refs",
+            "status": "CJM proposal; software readiness unverified"
+          }
+        },
+        {
+          "id": "m8",
+          "x": 4380,
+          "y": 300,
+          "w": 440,
+          "h": 210,
+          "title": "Проверить решение проблемы",
+          "body": "Сопоставить результат с KPI; помочь, скорректировать или искать заново",
+          "refs": "У; Д14,19,34; вывод · см. 04",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {
+            "actor": "Нанимающий менеджер",
+            "phase": "Результат",
+            "before": "m7",
+            "parallel": [
+              "Получить обратную связь",
+              "Закрыть результат услуги",
+              "Проверить ожидания"
+            ],
+            "evidence": "user/deck/meeting/inference as specified in refs",
+            "status": "CJM proposal; software readiness unverified"
+          }
+        },
+        {
+          "id": "h0",
+          "x": 220,
+          "y": 610,
+          "w": 440,
+          "h": 210,
+          "title": "Уточнить потребность",
+          "body": "Разобрать задачу с менеджером; не начинать с шаблона вакансии",
+          "refs": "В66; вывод",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {
+            "actor": "HR / рекрутер",
+            "phase": "Проблема",
+            "before": "Триггер процесса",
+            "parallel": [
+              "Понять проблему бизнеса",
+              "Найти и проверить потребность",
+              "Понять, зачем менять работу"
+            ],
+            "evidence": "user/deck/meeting/inference as specified in refs",
+            "status": "CJM proposal; software readiness unverified"
+          }
+        },
+        {
+          "id": "h1",
+          "x": 740,
+          "y": 610,
+          "w": 440,
+          "h": 210,
+          "title": "Подготовить вакансию",
+          "body": "Бриф, требования, условия и вопросы для проверки",
+          "refs": "Д4,8; В9–19",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {
+            "actor": "HR / рекрутер",
+            "phase": "Кого и зачем",
+            "before": "h0",
+            "parallel": [
+              "Понять кого",
+              "Договориться об услуге",
+              "Определить приоритеты"
+            ],
+            "evidence": "user/deck/meeting/inference as specified in refs",
+            "status": "CJM proposal; software readiness unverified"
+          }
+        },
+        {
+          "id": "h2",
+          "x": 1260,
+          "y": 610,
+          "w": 440,
+          "h": 210,
+          "title": "Получить кандидатов",
+          "body": "Отклики, поиск, база или подборка агентства",
+          "refs": "У; Д7,10,43",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {
+            "actor": "HR / рекрутер",
+            "phase": "Поток кандидатов",
+            "before": "h1",
+            "parallel": [
+              "Задать критерии успеха",
+              "Организовать поток",
+              "Найти варианты"
+            ],
+            "evidence": "user/deck/meeting/inference as specified in refs",
+            "status": "CJM proposal; software readiness unverified"
+          }
+        },
+        {
+          "id": "h3",
+          "x": 1780,
+          "y": 610,
+          "w": 440,
+          "h": 210,
+          "title": "Организовать проверки",
+          "body": "CV → HR → тестовое → Hiring*. Порядок и пропуски зависят от данных",
+          "refs": "У; Д4; В26,78 · см. 02",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {
+            "actor": "HR / рекрутер",
+            "phase": "Проверки",
+            "before": "h2",
+            "parallel": [
+              "Проверить в работе",
+              "Организовать оценку",
+              "Показать опыт и навыки"
+            ],
+            "evidence": "user/deck/meeting/inference as specified in refs",
+            "status": "CJM proposal; software readiness unverified"
+          }
+        },
+        {
+          "id": "h4",
+          "x": 2300,
+          "y": 610,
+          "w": 440,
+          "h": 210,
+          "title": "Свести оценку и обратную связь",
+          "body": "Показать доказательства, сравнить, зафиксировать решение и причину",
+          "refs": "Д15,17; В41,51",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {
+            "actor": "HR / рекрутер",
+            "phase": "Взаимный выбор",
+            "before": "h3",
+            "parallel": [
+              "Сравнить и выбрать",
+              "Показать первый батч",
+              "Продолжать поиск альтернатив"
+            ],
+            "evidence": "user/deck/meeting/inference as specified in refs",
+            "status": "CJM proposal; software readiness unverified"
+          }
+        },
+        {
+          "id": "h5",
+          "x": 2820,
+          "y": 610,
+          "w": 440,
+          "h": 210,
+          "title": "Подготовить оффер и договор",
+          "body": "Собрать и согласовать предложение; подготовить условия оформления",
+          "refs": "У; Д54; вывод · см. 04",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {
+            "actor": "HR / рекрутер",
+            "phase": "Подготовка оффера",
+            "before": "h4",
+            "parallel": [
+              "Подготовить KPI и условия",
+              "Не потерять взаимный интерес",
+              "Получить ясность"
+            ],
+            "evidence": "user/deck/meeting/inference as specified in refs",
+            "status": "CJM proposal; software readiness unverified"
+          }
+        },
+        {
+          "id": "h6",
+          "x": 3340,
+          "y": 610,
+          "w": 440,
+          "h": 210,
+          "title": "Сделать оффер",
+          "body": "Отправить предложение, получить ответ, провести переговоры",
+          "refs": "У; Д17 · см. 04",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {
+            "actor": "HR / рекрутер",
+            "phase": "Оффер и переговоры",
+            "before": "h5",
+            "parallel": [
+              "Договориться с кандидатом",
+              "Сопроводить переговоры",
+              "Сравнить офферы и решить"
+            ],
+            "evidence": "user/deck/meeting/inference as specified in refs",
+            "status": "CJM proposal; software readiness unverified"
+          }
+        },
+        {
+          "id": "h7",
+          "x": 3860,
+          "y": 610,
+          "w": 440,
+          "h": 210,
+          "title": "Оформить и довести до выхода",
+          "body": "Согласовать договор, подписать с кандидатом, подтвердить первый день",
+          "refs": "У; Д54; вывод · см. 04",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {
+            "actor": "HR / рекрутер",
+            "phase": "Договор и выход",
+            "before": "h6",
+            "parallel": [
+              "Подготовить начало работы",
+              "Довести услугу до выхода",
+              "Согласовать договор и выйти"
+            ],
+            "evidence": "user/deck/meeting/inference as specified in refs",
+            "status": "CJM proposal; software readiness unverified"
+          }
+        },
+        {
+          "id": "h8",
+          "x": 4380,
+          "y": 610,
+          "w": 440,
+          "h": 210,
+          "title": "Получить обратную связь",
+          "body": "Зафиксировать фактический выход и причины успеха или ухода",
+          "refs": "Д14,19,60; вывод",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {
+            "actor": "HR / рекрутер",
+            "phase": "Результат",
+            "before": "h7",
+            "parallel": [
+              "Проверить решение проблемы",
+              "Закрыть результат услуги",
+              "Проверить ожидания"
+            ],
+            "evidence": "user/deck/meeting/inference as specified in refs",
+            "status": "CJM proposal; software readiness unverified"
+          }
+        },
+        {
+          "id": "a0",
+          "x": 220,
+          "y": 920,
+          "w": 440,
+          "h": 210,
+          "title": "Найти и проверить потребность",
+          "body": "Сигнал компании → контакт → разговор о бизнес-проблеме",
+          "refs": "Д6,8; Т2,5; У",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {
+            "actor": "HR-агентство · если выбрана услуга",
+            "phase": "Проблема",
+            "before": "Триггер процесса",
+            "parallel": [
+              "Понять проблему бизнеса",
+              "Уточнить потребность",
+              "Понять, зачем менять работу"
+            ],
+            "evidence": "user/deck/meeting/inference as specified in refs",
+            "status": "CJM proposal; software readiness unverified"
+          }
+        },
+        {
+          "id": "a1",
+          "x": 740,
+          "y": 920,
+          "w": 440,
+          "h": 210,
+          "title": "Договориться об услуге",
+          "body": "Снять ТЗ, согласовать объём подбора и условия услуги",
+          "refs": "Д8,60; вывод",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {
+            "actor": "HR-агентство · если выбрана услуга",
+            "phase": "Кого и зачем",
+            "before": "a0",
+            "parallel": [
+              "Понять кого",
+              "Подготовить вакансию",
+              "Определить приоритеты"
+            ],
+            "evidence": "user/deck/meeting/inference as specified in refs",
+            "status": "CJM proposal; software readiness unverified"
+          }
+        },
+        {
+          "id": "a2",
+          "x": 1260,
+          "y": 920,
+          "w": 440,
+          "h": 210,
+          "title": "Организовать поток",
+          "body": "Найти, актуализировать и пригласить подходящих людей",
+          "refs": "Д10,24,25",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {
+            "actor": "HR-агентство · если выбрана услуга",
+            "phase": "Поток кандидатов",
+            "before": "a1",
+            "parallel": [
+              "Задать критерии успеха",
+              "Получить кандидатов",
+              "Найти варианты"
+            ],
+            "evidence": "user/deck/meeting/inference as specified in refs",
+            "status": "CJM proposal; software readiness unverified"
+          }
+        },
+        {
+          "id": "a3",
+          "x": 1780,
+          "y": 920,
+          "w": 440,
+          "h": 210,
+          "title": "Организовать оценку",
+          "body": "Назначить исполнителей, собрать профиль и материалы",
+          "refs": "Д25–27; В6",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {
+            "actor": "HR-агентство · если выбрана услуга",
+            "phase": "Проверки",
+            "before": "a2",
+            "parallel": [
+              "Проверить в работе",
+              "Организовать проверки",
+              "Показать опыт и навыки"
+            ],
+            "evidence": "user/deck/meeting/inference as specified in refs",
+            "status": "CJM proposal; software readiness unverified"
+          }
+        },
+        {
+          "id": "a4",
+          "x": 2300,
+          "y": 920,
+          "w": 440,
+          "h": 210,
+          "title": "Показать первый батч",
+          "body": "Получить реакцию клиента и уточнить следующий подбор",
+          "refs": "Д15; В41",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {
+            "actor": "HR-агентство · если выбрана услуга",
+            "phase": "Взаимный выбор",
+            "before": "a3",
+            "parallel": [
+              "Сравнить и выбрать",
+              "Свести оценку и обратную связь",
+              "Продолжать поиск альтернатив"
+            ],
+            "evidence": "user/deck/meeting/inference as specified in refs",
+            "status": "CJM proposal; software readiness unverified"
+          }
+        },
+        {
+          "id": "a5",
+          "x": 2820,
+          "y": 920,
+          "w": 440,
+          "h": 210,
+          "title": "Не потерять взаимный интерес",
+          "body": "Снять зависшие вопросы и согласовать скорость решения",
+          "refs": "У; Д17,57; вывод · см. 03",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {
+            "actor": "HR-агентство · если выбрана услуга",
+            "phase": "Подготовка оффера",
+            "before": "a4",
+            "parallel": [
+              "Подготовить KPI и условия",
+              "Подготовить оффер и договор",
+              "Получить ясность"
+            ],
+            "evidence": "user/deck/meeting/inference as specified in refs",
+            "status": "CJM proposal; software readiness unverified"
+          }
+        },
+        {
+          "id": "a6",
+          "x": 3340,
+          "y": 920,
+          "w": 440,
+          "h": 210,
+          "title": "Сопроводить переговоры",
+          "body": "Передать условия и обратную связь между сторонами",
+          "refs": "Д17,60; вывод",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {
+            "actor": "HR-агентство · если выбрана услуга",
+            "phase": "Оффер и переговоры",
+            "before": "a5",
+            "parallel": [
+              "Договориться с кандидатом",
+              "Сделать оффер",
+              "Сравнить офферы и решить"
+            ],
+            "evidence": "user/deck/meeting/inference as specified in refs",
+            "status": "CJM proposal; software readiness unverified"
+          }
+        },
+        {
+          "id": "a7",
+          "x": 3860,
+          "y": 920,
+          "w": 440,
+          "h": 210,
+          "title": "Довести услугу до выхода",
+          "body": "Сверить готовность сторон; подтвердить факт выхода",
+          "refs": "Д8,54,60",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {
+            "actor": "HR-агентство · если выбрана услуга",
+            "phase": "Договор и выход",
+            "before": "a6",
+            "parallel": [
+              "Подготовить начало работы",
+              "Оформить и довести до выхода",
+              "Согласовать договор и выйти"
+            ],
+            "evidence": "user/deck/meeting/inference as specified in refs",
+            "status": "CJM proposal; software readiness unverified"
+          }
+        },
+        {
+          "id": "a8",
+          "x": 4380,
+          "y": 920,
+          "w": 440,
+          "h": 210,
+          "title": "Закрыть результат услуги",
+          "body": "Расчёт по договорённости; замена при согласованном основании",
+          "refs": "Д60; условия неизвестны · см. 04",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {
+            "actor": "HR-агентство · если выбрана услуга",
+            "phase": "Результат",
+            "before": "a7",
+            "parallel": [
+              "Проверить решение проблемы",
+              "Получить обратную связь",
+              "Проверить ожидания"
+            ],
+            "evidence": "user/deck/meeting/inference as specified in refs",
+            "status": "CJM proposal; software readiness unverified"
+          }
+        },
+        {
+          "id": "c0",
+          "x": 220,
+          "y": 1230,
+          "w": 440,
+          "h": 210,
+          "title": "Понять, зачем менять работу",
+          "body": "Сформулировать проблему текущей ситуации и желаемый результат",
+          "refs": "вывод; гипотеза",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {
+            "actor": "Кандидат",
+            "phase": "Проблема",
+            "before": "Триггер процесса",
+            "parallel": [
+              "Понять проблему бизнеса",
+              "Уточнить потребность",
+              "Найти и проверить потребность"
+            ],
+            "evidence": "user/deck/meeting/inference as specified in refs",
+            "status": "CJM proposal; software readiness unverified"
+          }
+        },
+        {
+          "id": "c1",
+          "x": 740,
+          "y": 1230,
+          "w": 440,
+          "h": 210,
+          "title": "Определить приоритеты",
+          "body": "Какая работа, условия и ограничения подходят",
+          "refs": "В26; вывод",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {
+            "actor": "Кандидат",
+            "phase": "Кого и зачем",
+            "before": "c0",
+            "parallel": [
+              "Понять кого",
+              "Подготовить вакансию",
+              "Договориться об услуге"
+            ],
+            "evidence": "user/deck/meeting/inference as specified in refs",
+            "status": "CJM proposal; software readiness unverified"
+          }
+        },
+        {
+          "id": "c2",
+          "x": 1260,
+          "y": 1230,
+          "w": 440,
+          "h": 210,
+          "title": "Найти варианты",
+          "body": "Откликнуться или получить приглашение; проверить интерес",
+          "refs": "Д10,17,36",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {
+            "actor": "Кандидат",
+            "phase": "Поток кандидатов",
+            "before": "c1",
+            "parallel": [
+              "Задать критерии успеха",
+              "Получить кандидатов",
+              "Организовать поток"
+            ],
+            "evidence": "user/deck/meeting/inference as specified in refs",
+            "status": "CJM proposal; software readiness unverified"
+          }
+        },
+        {
+          "id": "c3",
+          "x": 1780,
+          "y": 1230,
+          "w": 440,
+          "h": 210,
+          "title": "Показать опыт и навыки",
+          "body": "CV, интервью, нужный кейс и встреча с нанимающим",
+          "refs": "У; Д4,10; В78 · см. 02",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {
+            "actor": "Кандидат",
+            "phase": "Проверки",
+            "before": "c2",
+            "parallel": [
+              "Проверить в работе",
+              "Организовать проверки",
+              "Организовать оценку"
+            ],
+            "evidence": "user/deck/meeting/inference as specified in refs",
+            "status": "CJM proposal; software readiness unverified"
+          }
+        },
+        {
+          "id": "c4",
+          "x": 2300,
+          "y": 1230,
+          "w": 440,
+          "h": 210,
+          "title": "Продолжать поиск альтернатив",
+          "body": "Другие встречи и предложения идут параллельно с решением компании",
+          "refs": "У; Д16–17,58 · см. 03",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {
+            "actor": "Кандидат",
+            "phase": "Взаимный выбор",
+            "before": "c3",
+            "parallel": [
+              "Сравнить и выбрать",
+              "Свести оценку и обратную связь",
+              "Показать первый батч"
+            ],
+            "evidence": "user/deck/meeting/inference as specified in refs",
+            "status": "CJM proposal; software readiness unverified"
+          }
+        },
+        {
+          "id": "c5",
+          "x": 2820,
+          "y": 1230,
+          "w": 440,
+          "h": 210,
+          "title": "Получить ясность",
+          "body": "Задача, KPI, условия, следующий шаг и срок решения",
+          "refs": "У; вывод",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {
+            "actor": "Кандидат",
+            "phase": "Подготовка оффера",
+            "before": "c4",
+            "parallel": [
+              "Подготовить KPI и условия",
+              "Подготовить оффер и договор",
+              "Не потерять взаимный интерес"
+            ],
+            "evidence": "user/deck/meeting/inference as specified in refs",
+            "status": "CJM proposal; software readiness unverified"
+          }
+        },
+        {
+          "id": "c6",
+          "x": 3340,
+          "y": 1230,
+          "w": 440,
+          "h": 210,
+          "title": "Сравнить офферы и решить",
+          "body": "Согласиться, обсудить условия или выбрать другой вариант",
+          "refs": "Д17; У · см. 04",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {
+            "actor": "Кандидат",
+            "phase": "Оффер и переговоры",
+            "before": "c5",
+            "parallel": [
+              "Договориться с кандидатом",
+              "Сделать оффер",
+              "Сопроводить переговоры"
+            ],
+            "evidence": "user/deck/meeting/inference as specified in refs",
+            "status": "CJM proposal; software readiness unverified"
+          }
+        },
+        {
+          "id": "c7",
+          "x": 3860,
+          "y": 1230,
+          "w": 440,
+          "h": 210,
+          "title": "Согласовать договор и выйти",
+          "body": "Проверить договорённости, оформить отношения, начать работу",
+          "refs": "У; Д54 · см. 04",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {
+            "actor": "Кандидат",
+            "phase": "Договор и выход",
+            "before": "c6",
+            "parallel": [
+              "Подготовить начало работы",
+              "Оформить и довести до выхода",
+              "Довести услугу до выхода"
+            ],
+            "evidence": "user/deck/meeting/inference as specified in refs",
+            "status": "CJM proposal; software readiness unverified"
+          }
+        },
+        {
+          "id": "c8",
+          "x": 4380,
+          "y": 1230,
+          "w": 440,
+          "h": 210,
+          "title": "Проверить ожидания",
+          "body": "Подходит ли реальная работа; продолжить, договориться об изменениях или уйти",
+          "refs": "Д14,19; вывод",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {
+            "actor": "Кандидат",
+            "phase": "Результат",
+            "before": "c7",
+            "parallel": [
+              "Проверить решение проблемы",
+              "Получить обратную связь",
+              "Закрыть результат услуги"
+            ],
+            "evidence": "user/deck/meeting/inference as specified in refs",
+            "status": "CJM proposal; software readiness unverified"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "01-overview-e1",
+          "source": "m0",
+          "target": "m1",
+          "points": [
+            [
+              660,
+              405.0
+            ],
+            [
+              740,
+              405.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "01-overview-e2",
+          "source": "m1",
+          "target": "m2",
+          "points": [
+            [
+              1180,
+              405.0
+            ],
+            [
+              1260,
+              405.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "01-overview-e3",
+          "source": "m2",
+          "target": "m3",
+          "points": [
+            [
+              1700,
+              405.0
+            ],
+            [
+              1780,
+              405.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "01-overview-e4",
+          "source": "m3",
+          "target": "m4",
+          "points": [
+            [
+              2220,
+              405.0
+            ],
+            [
+              2300,
+              405.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "01-overview-e5",
+          "source": "m4",
+          "target": "m5",
+          "points": [
+            [
+              2740,
+              405.0
+            ],
+            [
+              2820,
+              405.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "01-overview-e6",
+          "source": "m5",
+          "target": "m6",
+          "points": [
+            [
+              3260,
+              405.0
+            ],
+            [
+              3340,
+              405.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "01-overview-e7",
+          "source": "m6",
+          "target": "m7",
+          "points": [
+            [
+              3780,
+              405.0
+            ],
+            [
+              3860,
+              405.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "01-overview-e8",
+          "source": "m7",
+          "target": "m8",
+          "points": [
+            [
+              4300,
+              405.0
+            ],
+            [
+              4380,
+              405.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "01-overview-e9",
+          "source": "h0",
+          "target": "h1",
+          "points": [
+            [
+              660,
+              715.0
+            ],
+            [
+              740,
+              715.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "01-overview-e10",
+          "source": "h1",
+          "target": "h2",
+          "points": [
+            [
+              1180,
+              715.0
+            ],
+            [
+              1260,
+              715.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "01-overview-e11",
+          "source": "h2",
+          "target": "h3",
+          "points": [
+            [
+              1700,
+              715.0
+            ],
+            [
+              1780,
+              715.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "01-overview-e12",
+          "source": "h3",
+          "target": "h4",
+          "points": [
+            [
+              2220,
+              715.0
+            ],
+            [
+              2300,
+              715.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "01-overview-e13",
+          "source": "h4",
+          "target": "h5",
+          "points": [
+            [
+              2740,
+              715.0
+            ],
+            [
+              2820,
+              715.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "01-overview-e14",
+          "source": "h5",
+          "target": "h6",
+          "points": [
+            [
+              3260,
+              715.0
+            ],
+            [
+              3340,
+              715.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "01-overview-e15",
+          "source": "h6",
+          "target": "h7",
+          "points": [
+            [
+              3780,
+              715.0
+            ],
+            [
+              3860,
+              715.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "01-overview-e16",
+          "source": "h7",
+          "target": "h8",
+          "points": [
+            [
+              4300,
+              715.0
+            ],
+            [
+              4380,
+              715.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "01-overview-e17",
+          "source": "a0",
+          "target": "a1",
+          "points": [
+            [
+              660,
+              1025.0
+            ],
+            [
+              740,
+              1025.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "01-overview-e18",
+          "source": "a1",
+          "target": "a2",
+          "points": [
+            [
+              1180,
+              1025.0
+            ],
+            [
+              1260,
+              1025.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "01-overview-e19",
+          "source": "a2",
+          "target": "a3",
+          "points": [
+            [
+              1700,
+              1025.0
+            ],
+            [
+              1780,
+              1025.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "01-overview-e20",
+          "source": "a3",
+          "target": "a4",
+          "points": [
+            [
+              2220,
+              1025.0
+            ],
+            [
+              2300,
+              1025.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "01-overview-e21",
+          "source": "a4",
+          "target": "a5",
+          "points": [
+            [
+              2740,
+              1025.0
+            ],
+            [
+              2820,
+              1025.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "01-overview-e22",
+          "source": "a5",
+          "target": "a6",
+          "points": [
+            [
+              3260,
+              1025.0
+            ],
+            [
+              3340,
+              1025.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "01-overview-e23",
+          "source": "a6",
+          "target": "a7",
+          "points": [
+            [
+              3780,
+              1025.0
+            ],
+            [
+              3860,
+              1025.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "01-overview-e24",
+          "source": "a7",
+          "target": "a8",
+          "points": [
+            [
+              4300,
+              1025.0
+            ],
+            [
+              4380,
+              1025.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "01-overview-e25",
+          "source": "c0",
+          "target": "c1",
+          "points": [
+            [
+              660,
+              1335.0
+            ],
+            [
+              740,
+              1335.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "01-overview-e26",
+          "source": "c1",
+          "target": "c2",
+          "points": [
+            [
+              1180,
+              1335.0
+            ],
+            [
+              1260,
+              1335.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "01-overview-e27",
+          "source": "c2",
+          "target": "c3",
+          "points": [
+            [
+              1700,
+              1335.0
+            ],
+            [
+              1780,
+              1335.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "01-overview-e28",
+          "source": "c3",
+          "target": "c4",
+          "points": [
+            [
+              2220,
+              1335.0
+            ],
+            [
+              2300,
+              1335.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "01-overview-e29",
+          "source": "c4",
+          "target": "c5",
+          "points": [
+            [
+              2740,
+              1335.0
+            ],
+            [
+              2820,
+              1335.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "01-overview-e30",
+          "source": "c5",
+          "target": "c6",
+          "points": [
+            [
+              3260,
+              1335.0
+            ],
+            [
+              3340,
+              1335.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "01-overview-e31",
+          "source": "c6",
+          "target": "c7",
+          "points": [
+            [
+              3780,
+              1335.0
+            ],
+            [
+              3860,
+              1335.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "01-overview-e32",
+          "source": "c7",
+          "target": "c8",
+          "points": [
+            [
+              4300,
+              1335.0
+            ],
+            [
+              4380,
+              1335.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "01-overview-e33",
+          "source": "m0",
+          "target": "h0",
+          "points": [
+            [
+              440.0,
+              510
+            ],
+            [
+              440.0,
+              610
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "01-overview-e34",
+          "source": "m1",
+          "target": "h1",
+          "points": [
+            [
+              960.0,
+              510
+            ],
+            [
+              960.0,
+              610
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "01-overview-e35",
+          "source": "a2",
+          "target": "h2",
+          "points": [
+            [
+              1480.0,
+              920
+            ],
+            [
+              1480.0,
+              820
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "01-overview-e36",
+          "source": "a3",
+          "target": "h3",
+          "points": [
+            [
+              2000.0,
+              920
+            ],
+            [
+              2000.0,
+              820
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "01-overview-e37",
+          "source": "a4",
+          "target": "h4",
+          "points": [
+            [
+              2520.0,
+              920
+            ],
+            [
+              2520.0,
+              820
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "01-overview-e38",
+          "source": "h4",
+          "target": "m4",
+          "points": [
+            [
+              2520.0,
+              610
+            ],
+            [
+              2520.0,
+              510
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "01-overview-e39",
+          "source": "m5",
+          "target": "h5",
+          "points": [
+            [
+              3040.0,
+              510
+            ],
+            [
+              3040.0,
+              610
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "01-overview-e40",
+          "source": "m6",
+          "target": "h6",
+          "points": [
+            [
+              3560.0,
+              510
+            ],
+            [
+              3560.0,
+              610
+            ]
+          ],
+          "returning": false
+        }
+      ],
+      "notes": [
+        {
+          "x": 220,
+          "y": 1515,
+          "text": "Колонки показывают, что происходит у остальных в этот момент. Процессы не ждут завершения всей колонки: первые батчи идут в работу сразу.",
+          "width": 4550,
+          "size": 22
+        },
+        {
+          "x": 220,
+          "y": 1560,
+          "text": "Сквозная работа HR и агентства: поддерживать интерес, давать ясный следующий шаг и узнавать сроки других процессов. Отказы возвращаются в подбор и условия.",
+          "width": 4550,
+          "size": 22
+        },
+        {
+          "x": 220,
+          "y": 1605,
+          "text": "У = правка Никиты · Д = страницы GTM-деки · В = строки встречи · Т = спринт. «Вывод/гипотеза» требуют проверки. * Hair пока трактуем как встречу с нанимающим.",
+          "width": 4550,
+          "size": 18
+        }
+      ],
+      "columns": [
+        {
+          "x": 220,
+          "label": "01  Проблема",
+          "width": 450
+        },
+        {
+          "x": 740,
+          "label": "02  Кого и зачем",
+          "width": 450
+        },
+        {
+          "x": 1260,
+          "label": "03  Поток кандидатов",
+          "width": 450
+        },
+        {
+          "x": 1780,
+          "label": "04  Проверки",
+          "width": 450
+        },
+        {
+          "x": 2300,
+          "label": "05  Взаимный выбор",
+          "width": 450
+        },
+        {
+          "x": 2820,
+          "label": "06  Подготовка оффера",
+          "width": 450
+        },
+        {
+          "x": 3340,
+          "label": "07  Оффер и переговоры",
+          "width": 450
+        },
+        {
+          "x": 3860,
+          "label": "08  Договор и выход",
+          "width": 450
+        },
+        {
+          "x": 4380,
+          "label": "09  Результат",
+          "width": 450
+        }
+      ],
+      "lanes": [
+        {
+          "label": "Нанимающий менеджер",
+          "y": 245,
+          "width": 4820
+        },
+        {
+          "label": "HR / рекрутер",
+          "y": 555,
+          "width": 4820
+        },
+        {
+          "label": "HR-агентство · если выбрана услуга",
+          "y": 865,
+          "width": 4820
+        },
+        {
+          "label": "Кандидат",
+          "y": 1175,
+          "width": 4820
+        }
+      ]
+    },
+    {
+      "id": "02-screening",
+      "title": "02 / Получить кандидатов и проверить соответствие",
+      "subtitle": "Проверки раздельны. Готовые доказательства переиспользуются; порядок и обязательность уточняются для роли.",
+      "x": 0,
+      "y": 1990,
+      "width": 2450,
+      "height": 1800,
+      "nodes": [
+        {
+          "id": "s0",
+          "x": 80,
+          "y": 270,
+          "w": 340,
+          "h": 230,
+          "title": "HR · Получить кандидата",
+          "body": "Резюме / контакт / профиль. До этого: бриф и критерии роли.",
+          "refs": "У; Д4,7,43",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "s1",
+          "x": 470,
+          "y": 270,
+          "w": 340,
+          "h": 230,
+          "title": "HR · CV-скрининг",
+          "body": "Опыт и базовые требования: достаточно данных, уточнить или отказать.",
+          "refs": "У; Д4,50",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "s2",
+          "x": 860,
+          "y": 270,
+          "w": 340,
+          "h": 230,
+          "title": "HR · HR-скрининг",
+          "body": "Мотивация, опыт, условия и вопросы работодателя. Разобрать ответы.",
+          "refs": "У; Д4,10; В11–26",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "s3",
+          "x": 1250,
+          "y": 270,
+          "w": 340,
+          "h": 230,
+          "title": "НМ · Тестовая проверка",
+          "body": "Проверить недоказанный навык на задаче. Если данных хватает, пропустить.",
+          "refs": "У; В78; вывод",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "s4",
+          "x": 1640,
+          "y": 270,
+          "w": 340,
+          "h": 230,
+          "title": "НМ · Hiring-скрининг*",
+          "body": "Проверить соответствие задаче и руководителю; ответить кандидату.",
+          "refs": "У; Д4,50",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "s5",
+          "x": 2030,
+          "y": 270,
+          "w": 340,
+          "h": 230,
+          "title": "HR / НМ · Решение",
+          "body": "Свести доказательства: дальше, дозапрос или отказ с причиной.",
+          "refs": "Д15,17; В41,51",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "s6",
+          "x": 80,
+          "y": 730,
+          "w": 340,
+          "h": 230,
+          "title": "Кандидат · Подтвердить интерес",
+          "body": "Понять задачу и условия; сообщить, подходит ли вакансия. Это не согласие на показ записи всей сети.",
+          "refs": "Д36; вывод",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "s7",
+          "x": 470,
+          "y": 730,
+          "w": 340,
+          "h": 230,
+          "title": "Живой HR · Интервью",
+          "body": "Кандидат отвечает; HR собирает запись и проверяет недостающие сведения.",
+          "refs": "Д10,25; У",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "s8",
+          "x": 860,
+          "y": 730,
+          "w": 340,
+          "h": 230,
+          "title": "Кандидат · Внешний AI",
+          "body": "Пройти сессию выбранного сервиса; получить материал для разбора.",
+          "refs": "Д10–11,26–28; У",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "s9",
+          "x": 1250,
+          "y": 730,
+          "w": 340,
+          "h": 230,
+          "title": "HR · Готовая запись",
+          "body": "Есть разрешение и актуальный материал: использовать без полного повтора.",
+          "refs": "Д17,43; В26",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "s10",
+          "x": 1640,
+          "y": 730,
+          "w": 340,
+          "h": 230,
+          "title": "Кандидат · Выполнить кейс",
+          "body": "Сначала понятны задача и критерии. Дополнительная проверка, если нужна.",
+          "refs": "У; В78; вывод",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "s11",
+          "x": 2030,
+          "y": 730,
+          "w": 340,
+          "h": 230,
+          "title": "Кандидат · Встретиться с НМ",
+          "body": "Проверить задачи и ожидания; самому решить, подходит ли возможность.",
+          "refs": "Д4,17; вывод",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "s12",
+          "x": 80,
+          "y": 1200,
+          "w": 500,
+          "h": 260,
+          "title": "Данных мало / противоречие",
+          "body": "Дозадать вопрос, проверить конкретный эпизод или предложить кейс. Не приравнивать неизвестность к слабому навыку.",
+          "refs": "В26,66–78; вывод",
+          "kind": "decision",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "s13",
+          "x": 670,
+          "y": 1200,
+          "w": 500,
+          "h": 260,
+          "title": "Не закончил / не пришёл",
+          "body": "Выяснить причину: продолжить, перенести или сменить канал. Это не готовая оценка навыков.",
+          "refs": "Д51–52; маршруты — гипотеза",
+          "kind": "decision",
+          "hypothesis": true,
+          "meta": {}
+        },
+        {
+          "id": "s14",
+          "x": 1260,
+          "y": 1200,
+          "w": 500,
+          "h": 260,
+          "title": "Отказ по вакансии",
+          "body": "Причина → обратная связь кандидату → другие вакансии. У работодателя: новый батч или пересмотр требований.",
+          "refs": "Д3,15,17,58",
+          "kind": "decision",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "s15",
+          "x": 1850,
+          "y": 1200,
+          "w": 500,
+          "h": 260,
+          "title": "Кандидат · Разрешить показ",
+          "body": "После интервью отдельно решить, кому можно показать запись. HR / агентство проверяет разрешение перед отправкой другим работодателям.",
+          "refs": "Д10–11; В6",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        }
+      ],
+      "edges": [
+        {
+          "id": "02-screening-e1",
+          "source": "s0",
+          "target": "s1",
+          "points": [
+            [
+              420,
+              385.0
+            ],
+            [
+              470,
+              385.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "02-screening-e2",
+          "source": "s1",
+          "target": "s2",
+          "points": [
+            [
+              810,
+              385.0
+            ],
+            [
+              860,
+              385.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "02-screening-e3",
+          "source": "s2",
+          "target": "s3",
+          "points": [
+            [
+              1200,
+              385.0
+            ],
+            [
+              1250,
+              385.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "02-screening-e4",
+          "source": "s3",
+          "target": "s4",
+          "points": [
+            [
+              1590,
+              385.0
+            ],
+            [
+              1640,
+              385.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "02-screening-e5",
+          "source": "s4",
+          "target": "s5",
+          "points": [
+            [
+              1980,
+              385.0
+            ],
+            [
+              2030,
+              385.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "02-screening-e6",
+          "source": "s0",
+          "target": "s6",
+          "points": [
+            [
+              250.0,
+              500
+            ],
+            [
+              250.0,
+              730
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "02-screening-e7",
+          "source": "s7",
+          "target": "s2",
+          "points": [
+            [
+              640,
+              730
+            ],
+            [
+              640,
+              610
+            ],
+            [
+              910,
+              610
+            ],
+            [
+              910,
+              500
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "02-screening-e8",
+          "source": "s8",
+          "target": "s2",
+          "points": [
+            [
+              1030,
+              730
+            ],
+            [
+              1030,
+              500
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "02-screening-e9",
+          "source": "s9",
+          "target": "s2",
+          "points": [
+            [
+              1420,
+              730
+            ],
+            [
+              1420,
+              640
+            ],
+            [
+              1150,
+              640
+            ],
+            [
+              1150,
+              500
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "02-screening-e10",
+          "source": "s10",
+          "target": "s3",
+          "points": [
+            [
+              1810,
+              730
+            ],
+            [
+              1810,
+              585
+            ],
+            [
+              1420,
+              585
+            ],
+            [
+              1420,
+              500
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "02-screening-e11",
+          "source": "s11",
+          "target": "s4",
+          "points": [
+            [
+              2200,
+              730
+            ],
+            [
+              2200,
+              550
+            ],
+            [
+              1810,
+              550
+            ],
+            [
+              1810,
+              500
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "02-screening-e12",
+          "source": "s2",
+          "target": "s4",
+          "points": [
+            [
+              1100,
+              270
+            ],
+            [
+              1100,
+              220
+            ],
+            [
+              1810,
+              220
+            ],
+            [
+              1810,
+              270
+            ]
+          ],
+          "returning": false,
+          "label": "Тест не нужен",
+          "labelX": 1220,
+          "labelY": 178,
+          "labelWidth": 310
+        },
+        {
+          "id": "02-screening-e13",
+          "source": "s5",
+          "target": "s12",
+          "points": [
+            [
+              2370,
+              335
+            ],
+            [
+              2400,
+              335
+            ],
+            [
+              2400,
+              1070
+            ],
+            [
+              330,
+              1070
+            ],
+            [
+              330,
+              1200
+            ]
+          ],
+          "returning": true,
+          "label": "Данных мало",
+          "labelX": 380,
+          "labelY": 1015,
+          "labelWidth": 310
+        },
+        {
+          "id": "02-screening-e14",
+          "source": "s5",
+          "target": "s14",
+          "points": [
+            [
+              2370,
+              435
+            ],
+            [
+              2420,
+              435
+            ],
+            [
+              2420,
+              1130
+            ],
+            [
+              1510,
+              1130
+            ],
+            [
+              1510,
+              1200
+            ]
+          ],
+          "returning": true,
+          "label": "Отказ",
+          "labelX": 1570,
+          "labelY": 1080,
+          "labelWidth": 310
+        },
+        {
+          "id": "02-screening-e15",
+          "source": "s8",
+          "target": "s13",
+          "points": [
+            [
+              980,
+              960
+            ],
+            [
+              980,
+              1005
+            ],
+            [
+              920,
+              1005
+            ],
+            [
+              920,
+              1200
+            ]
+          ],
+          "returning": true,
+          "label": "Не завершил",
+          "labelX": 1010,
+          "labelY": 974,
+          "labelWidth": 310
+        },
+        {
+          "id": "02-screening-e16",
+          "source": "s12",
+          "target": "s2",
+          "points": [
+            [
+              230,
+              1200
+            ],
+            [
+              230,
+              1100
+            ],
+            [
+              835,
+              1100
+            ],
+            [
+              835,
+              560
+            ],
+            [
+              960,
+              560
+            ],
+            [
+              960,
+              500
+            ]
+          ],
+          "returning": true
+        },
+        {
+          "id": "02-screening-e17",
+          "source": "s13",
+          "target": "s8",
+          "points": [
+            [
+              770,
+              1200
+            ],
+            [
+              770,
+              1170
+            ],
+            [
+              1160,
+              1170
+            ],
+            [
+              1160,
+              960
+            ]
+          ],
+          "returning": true
+        },
+        {
+          "id": "02-screening-e18",
+          "source": "s9",
+          "target": "s15",
+          "points": [
+            [
+              1540,
+              960
+            ],
+            [
+              1540,
+              1015
+            ],
+            [
+              2100,
+              1015
+            ],
+            [
+              2100,
+              1200
+            ]
+          ],
+          "returning": false,
+          "label": "Для нового показа",
+          "labelX": 1660,
+          "labelY": 967,
+          "labelWidth": 310
+        }
+      ],
+      "notes": [
+        {
+          "x": 80,
+          "y": 1590,
+          "text": "Три источника HR-проверки: живое интервью, внешнее AI или готовая запись. Это варианты сбора данных, а не три обязательных интервью.",
+          "width": 2290,
+          "size": 22
+        },
+        {
+          "x": 80,
+          "y": 1660,
+          "text": "* «Hair» пока прочитан как Hiring-скрининг с нанимающим менеджером. Отдельный технический этап и правила пропуска проверок остаются вопросами.",
+          "width": 2290,
+          "size": 18
+        }
+      ]
+    },
+    {
+      "id": "03-parallel",
+      "title": "03 / Пока компания выбирает, кандидат тоже выбирает",
+      "subtitle": "Одна вакансия сравнивает много кандидатов; один кандидат ведёт несколько вакансий. Не потерять взаимный интерес.",
+      "x": 2550,
+      "y": 1990,
+      "width": 2450,
+      "height": 1800,
+      "nodes": [
+        {
+          "id": "p0",
+          "x": 80,
+          "y": 270,
+          "w": 390,
+          "h": 230,
+          "title": "Сравнивать нескольких",
+          "body": "Вакансия A: кандидаты 07, 12, 31. Решение по каждому ещё открыто.",
+          "refs": "Д58",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "p1",
+          "x": 555,
+          "y": 270,
+          "w": 390,
+          "h": 230,
+          "title": "Есть сильный кандидат",
+          "body": "Интерес есть, но сравнение и согласование ещё продолжаются.",
+          "refs": "У; Д17,58",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "p2",
+          "x": 1030,
+          "y": 270,
+          "w": 390,
+          "h": 230,
+          "title": "Когда готовы решить?",
+          "body": "Понять оставшиеся вопросы и реальный срок своего решения.",
+          "refs": "У; вывод",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "p3",
+          "x": 1505,
+          "y": 270,
+          "w": 390,
+          "h": 230,
+          "title": "Снять риск потери",
+          "body": "Ускорить проверку/согласование, прояснить ценность и важные условия.",
+          "refs": "У; действия — гипотеза",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "p4",
+          "x": 1980,
+          "y": 270,
+          "w": 390,
+          "h": 230,
+          "title": "Сделать следующий шаг",
+          "body": "Решение, оффер или честный отказ. Не оставлять человека без ясности.",
+          "refs": "У; Д17; вывод",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "p5",
+          "x": 555,
+          "y": 720,
+          "w": 390,
+          "h": 230,
+          "title": "Уточнять интерес и сроки",
+          "body": "Что важно кандидату; какие другие процессы и дедлайны он готов сообщить.",
+          "refs": "У; Д17,57; вывод",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "p6",
+          "x": 1030,
+          "y": 720,
+          "w": 390,
+          "h": 230,
+          "title": "Сопоставить сроки",
+          "body": "Есть конкурирующий оффер или задержка: согласовать следующий контакт и решение.",
+          "refs": "У; механизм — гипотеза",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "p7",
+          "x": 1505,
+          "y": 720,
+          "w": 390,
+          "h": 230,
+          "title": "Поддержать ясность",
+          "body": "Ответить на вопросы, подтвердить встречу и срок. Держать обе стороны в курсе.",
+          "refs": "У; В45; вывод",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "p8",
+          "x": 80,
+          "y": 1170,
+          "w": 390,
+          "h": 230,
+          "title": "Продолжать поиск",
+          "body": "Не прекращать другие заявки и встречи только из-за интереса компании.",
+          "refs": "У; Д16–17",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "p9",
+          "x": 555,
+          "y": 1170,
+          "w": 390,
+          "h": 230,
+          "title": "Идти по A / B / C",
+          "body": "Один профиль и запись; решения и обратная связь отдельны по вакансиям.",
+          "refs": "Д17,58",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "p10",
+          "x": 1030,
+          "y": 1170,
+          "w": 390,
+          "h": 230,
+          "title": "Сравнивать предложения",
+          "body": "Несколько офферов дают выбор и возможность переговоров.",
+          "refs": "Д17",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "p11",
+          "x": 1505,
+          "y": 1170,
+          "w": 390,
+          "h": 230,
+          "title": "Обновлять своё решение",
+          "body": "Другой оффер или новые условия меняют интерес и доступность.",
+          "refs": "У; Д57; вывод",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "p12",
+          "x": 1980,
+          "y": 1170,
+          "w": 390,
+          "h": 230,
+          "title": "Продолжить или уйти",
+          "body": "Выбрать эту работу / другую / продолжить поиск. Сообщить причину, если готов.",
+          "refs": "Д3,17; вывод",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        }
+      ],
+      "edges": [
+        {
+          "id": "03-parallel-e1",
+          "source": "p0",
+          "target": "p1",
+          "points": [
+            [
+              470,
+              385.0
+            ],
+            [
+              555,
+              385.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "03-parallel-e2",
+          "source": "p1",
+          "target": "p2",
+          "points": [
+            [
+              945,
+              385.0
+            ],
+            [
+              1030,
+              385.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "03-parallel-e3",
+          "source": "p2",
+          "target": "p3",
+          "points": [
+            [
+              1420,
+              385.0
+            ],
+            [
+              1505,
+              385.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "03-parallel-e4",
+          "source": "p3",
+          "target": "p4",
+          "points": [
+            [
+              1895,
+              385.0
+            ],
+            [
+              1980,
+              385.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "03-parallel-e5",
+          "source": "p5",
+          "target": "p6",
+          "points": [
+            [
+              945,
+              835.0
+            ],
+            [
+              1030,
+              835.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "03-parallel-e6",
+          "source": "p6",
+          "target": "p7",
+          "points": [
+            [
+              1420,
+              835.0
+            ],
+            [
+              1505,
+              835.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "03-parallel-e7",
+          "source": "p1",
+          "target": "p5",
+          "points": [
+            [
+              750.0,
+              500
+            ],
+            [
+              750.0,
+              720
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "03-parallel-e8",
+          "source": "p6",
+          "target": "p2",
+          "points": [
+            [
+              1225.0,
+              720
+            ],
+            [
+              1225.0,
+              500
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "03-parallel-e9",
+          "source": "p3",
+          "target": "p7",
+          "points": [
+            [
+              1700.0,
+              500
+            ],
+            [
+              1700.0,
+              720
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "03-parallel-e10",
+          "source": "p8",
+          "target": "p9",
+          "points": [
+            [
+              470,
+              1285.0
+            ],
+            [
+              555,
+              1285.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "03-parallel-e11",
+          "source": "p9",
+          "target": "p10",
+          "points": [
+            [
+              945,
+              1285.0
+            ],
+            [
+              1030,
+              1285.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "03-parallel-e12",
+          "source": "p10",
+          "target": "p11",
+          "points": [
+            [
+              1420,
+              1285.0
+            ],
+            [
+              1505,
+              1285.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "03-parallel-e13",
+          "source": "p11",
+          "target": "p12",
+          "points": [
+            [
+              1895,
+              1285.0
+            ],
+            [
+              1980,
+              1285.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "03-parallel-e14",
+          "source": "p9",
+          "target": "p5",
+          "points": [
+            [
+              750.0,
+              1170
+            ],
+            [
+              750.0,
+              950
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "03-parallel-e15",
+          "source": "p10",
+          "target": "p6",
+          "points": [
+            [
+              1225.0,
+              1170
+            ],
+            [
+              1225.0,
+              950
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "03-parallel-e16",
+          "source": "p7",
+          "target": "p11",
+          "points": [
+            [
+              1700.0,
+              950
+            ],
+            [
+              1700.0,
+              1170
+            ]
+          ],
+          "returning": false
+        }
+      ],
+      "notes": [
+        {
+          "x": 80,
+          "y": 1510,
+          "text": "Если кандидат ушёл: причина → условия работодателя / другой кандидат. Если отказала компания: причина → следующие вакансии кандидата. Это разные петли.",
+          "width": 2290,
+          "size": 22
+        },
+        {
+          "x": 80,
+          "y": 1600,
+          "text": "Профиль человека ≠ статус пары «кандидат × вакансия» ≠ общая доступность. Отказ по A не закрывает B. Один найм не означает автоматически, что человек доступен всем.",
+          "width": 2290,
+          "size": 20
+        },
+        {
+          "x": 80,
+          "y": 1690,
+          "text": "Не подтверждено: конкретный SLA ответа, правила резерва и способ измерять риск потери. В v1 это вопросы для процесса, не готовые функции.",
+          "width": 2290,
+          "size": 18
+        }
+      ],
+      "lanes": [
+        {
+          "label": "Нанимающий менеджер",
+          "y": 215
+        },
+        {
+          "label": "HR / агентство",
+          "y": 665
+        },
+        {
+          "label": "Кандидат",
+          "y": 1115
+        }
+      ]
+    },
+    {
+      "id": "04-offer",
+      "title": "04 / Подготовить оффер, договориться и довести до результата",
+      "subtitle": "Выбор кандидата → подготовка → выдача → решение → оформление → фактический выход. Эти события не равны.",
+      "x": 0,
+      "y": 4040,
+      "width": 2450,
+      "height": 2080,
+      "nodes": [
+        {
+          "id": "o0",
+          "x": 80,
+          "y": 260,
+          "w": 340,
+          "h": 230,
+          "title": "НМ · Результат роли",
+          "body": "До обещания условий понятно, какую бизнес-задачу решит человек.",
+          "refs": "У; В66",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "o1",
+          "x": 470,
+          "y": 260,
+          "w": 340,
+          "h": 230,
+          "title": "НМ · Подготовить KPI",
+          "body": "Согласовать ожидаемые результаты, критерии и горизонт проверки.",
+          "refs": "У; детали — вывод",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "o2",
+          "x": 860,
+          "y": 260,
+          "w": 340,
+          "h": 230,
+          "title": "НМ · Утвердить условия",
+          "body": "Компенсация, полномочия, ресурсы и дата выхода.",
+          "refs": "У; вывод",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "o3",
+          "x": 1250,
+          "y": 260,
+          "w": 340,
+          "h": 230,
+          "title": "HR · Подготовить оффер",
+          "body": "Собрать ясное предложение из согласованных условий и KPI.",
+          "refs": "У",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "o4",
+          "x": 1640,
+          "y": 260,
+          "w": 340,
+          "h": 230,
+          "title": "Работодатель · Договор",
+          "body": "Подготовить проект и условия оформления; исполнитель ещё уточняется.",
+          "refs": "У; Д54",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "o5",
+          "x": 2030,
+          "y": 260,
+          "w": 340,
+          "h": 230,
+          "title": "НМ · Согласовать оффер",
+          "body": "Проверить полномочия и обязательства до отправки кандидату.",
+          "refs": "У; порядок — гипотеза",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "o6",
+          "x": 80,
+          "y": 740,
+          "w": 340,
+          "h": 230,
+          "title": "HR · Сделать оффер",
+          "body": "Передать согласованное предложение и договориться о следующем контакте.",
+          "refs": "У; Д17",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "o7",
+          "x": 470,
+          "y": 740,
+          "w": 340,
+          "h": 230,
+          "title": "Кандидат · Сравнить",
+          "body": "Понять KPI и условия; сопоставить с другими предложениями.",
+          "refs": "У; Д17",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "o8",
+          "x": 860,
+          "y": 740,
+          "w": 340,
+          "h": 230,
+          "title": "Кандидат · Решить",
+          "body": "Принять / обсудить / отказаться / запросить уточнение.",
+          "refs": "Д17; У",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "o9",
+          "x": 1250,
+          "y": 740,
+          "w": 340,
+          "h": 230,
+          "title": "HR · Подтвердить решение",
+          "body": "Зафиксировать ответ и согласованные условия; перейти к оформлению.",
+          "refs": "Д54; вывод",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "o10",
+          "x": 1640,
+          "y": 740,
+          "w": 340,
+          "h": 230,
+          "title": "Обе стороны · Договор",
+          "body": "Сверить документ с договорённостями и подписать.",
+          "refs": "У; Д54",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "o11",
+          "x": 2030,
+          "y": 740,
+          "w": 340,
+          "h": 230,
+          "title": "Кандидат · Выйти",
+          "body": "Фактический первый день. HR и агентство подтверждают событие.",
+          "refs": "Д8,54,60",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "o12",
+          "x": 80,
+          "y": 1220,
+          "w": 340,
+          "h": 260,
+          "title": "HR · Разобрать отказ",
+          "body": "Причина → работодателю. Новый кандидат, новые условия или возврат в подбор.",
+          "refs": "Д17,58",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "o13",
+          "x": 470,
+          "y": 1220,
+          "w": 340,
+          "h": 260,
+          "title": "HR / НМ · Переговоры",
+          "body": "Что мешает согласиться? Какие изменения допустимы?",
+          "refs": "Д17; вывод",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "o14",
+          "x": 860,
+          "y": 1220,
+          "w": 340,
+          "h": 260,
+          "title": "HR · Обновить условия",
+          "body": "Синхронизировать оффер, KPI, договор и дату; повторно согласовать.",
+          "refs": "У; механизм — вывод",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "o15",
+          "x": 1250,
+          "y": 1220,
+          "w": 340,
+          "h": 260,
+          "title": "Агентство · Сопроводить",
+          "body": "Снять зависшие вопросы и проверить готовность обеих сторон.",
+          "refs": "Д8,60; вывод",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "o16",
+          "x": 1640,
+          "y": 1220,
+          "w": 340,
+          "h": 260,
+          "title": "НМ / HR · Подготовить старт",
+          "body": "Первые задачи, ресурсы, договорённости и контакт до первого дня.",
+          "refs": "Д54; детали — гипотеза",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "o17",
+          "x": 2030,
+          "y": 1220,
+          "w": 340,
+          "h": 260,
+          "title": "НМ + кандидат · Результат",
+          "body": "Работа соответствует ожиданиям? KPI достигаются? Помощь / корректировка / повторный подбор.",
+          "refs": "У; Д14,19,34,60",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "o18",
+          "x": 80,
+          "y": 1690,
+          "w": 690,
+          "h": 255,
+          "title": "Принял, но не вышел",
+          "body": "Выяснить причину: новая дата / восстановить интерес / вернуться к подбору. Принятие не закрывает вакансию фактом выхода.",
+          "refs": "Д54; маршрут — гипотеза",
+          "kind": "decision",
+          "hypothesis": true,
+          "meta": {}
+        },
+        {
+          "id": "o19",
+          "x": 860,
+          "y": 1690,
+          "w": 690,
+          "h": 255,
+          "title": "Вышел, но проблема осталась",
+          "body": "Разобрать ожидания и условия работы; помочь адаптироваться или скорректировать роль. При ошибке найма: повторный подбор / замена по пакету.",
+          "refs": "Д14,19,34,60; детали — гипотеза",
+          "kind": "decision",
+          "hypothesis": true,
+          "meta": {}
+        },
+        {
+          "id": "o20",
+          "x": 1640,
+          "y": 1690,
+          "w": 690,
+          "h": 255,
+          "title": "Граница продукта",
+          "body": "Дека относит оформление к стороне клиента. Оффер, KPI и договор есть в CJM; готовые инструменты HR Vision для них не подтверждены.",
+          "refs": "Д54; У",
+          "kind": "note",
+          "hypothesis": false,
+          "meta": {}
+        }
+      ],
+      "edges": [
+        {
+          "id": "04-offer-e1",
+          "source": "o0",
+          "target": "o1",
+          "points": [
+            [
+              420,
+              375.0
+            ],
+            [
+              470,
+              375.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "04-offer-e2",
+          "source": "o1",
+          "target": "o2",
+          "points": [
+            [
+              810,
+              375.0
+            ],
+            [
+              860,
+              375.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "04-offer-e3",
+          "source": "o2",
+          "target": "o3",
+          "points": [
+            [
+              1200,
+              375.0
+            ],
+            [
+              1250,
+              375.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "04-offer-e4",
+          "source": "o3",
+          "target": "o5",
+          "points": [
+            [
+              1490,
+              260
+            ],
+            [
+              1490,
+              205
+            ],
+            [
+              2200,
+              205
+            ],
+            [
+              2200,
+              260
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "04-offer-e5",
+          "source": "o2",
+          "target": "o4",
+          "points": [
+            [
+              1030,
+              260
+            ],
+            [
+              1030,
+              175
+            ],
+            [
+              1810,
+              175
+            ],
+            [
+              1810,
+              260
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "04-offer-e6",
+          "source": "o6",
+          "target": "o7",
+          "points": [
+            [
+              420,
+              855.0
+            ],
+            [
+              470,
+              855.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "04-offer-e7",
+          "source": "o7",
+          "target": "o8",
+          "points": [
+            [
+              810,
+              855.0
+            ],
+            [
+              860,
+              855.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "04-offer-e8",
+          "source": "o8",
+          "target": "o9",
+          "points": [
+            [
+              1200,
+              855.0
+            ],
+            [
+              1250,
+              855.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "04-offer-e9",
+          "source": "o9",
+          "target": "o10",
+          "points": [
+            [
+              1590,
+              855.0
+            ],
+            [
+              1640,
+              855.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "04-offer-e10",
+          "source": "o10",
+          "target": "o11",
+          "points": [
+            [
+              1980,
+              855.0
+            ],
+            [
+              2030,
+              855.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "04-offer-e11",
+          "source": "o5",
+          "target": "o6",
+          "points": [
+            [
+              2200,
+              490
+            ],
+            [
+              2200,
+              600
+            ],
+            [
+              250,
+              600
+            ],
+            [
+              250,
+              740
+            ]
+          ],
+          "returning": false,
+          "label": "Готово к отправке",
+          "labelX": 1000,
+          "labelY": 550,
+          "labelWidth": 310
+        },
+        {
+          "id": "04-offer-e12",
+          "source": "o8",
+          "target": "o13",
+          "points": [
+            [
+              910,
+              970
+            ],
+            [
+              910,
+              1090
+            ],
+            [
+              640,
+              1090
+            ],
+            [
+              640,
+              1220
+            ]
+          ],
+          "returning": false,
+          "label": "Обсудить",
+          "labelX": 630,
+          "labelY": 1040,
+          "labelWidth": 310
+        },
+        {
+          "id": "04-offer-e13",
+          "source": "o8",
+          "target": "o12",
+          "points": [
+            [
+              960,
+              970
+            ],
+            [
+              960,
+              1140
+            ],
+            [
+              250,
+              1140
+            ],
+            [
+              250,
+              1220
+            ]
+          ],
+          "returning": true,
+          "label": "Отказ",
+          "labelX": 170,
+          "labelY": 1090,
+          "labelWidth": 310
+        },
+        {
+          "id": "04-offer-e14",
+          "source": "o13",
+          "target": "o14",
+          "points": [
+            [
+              810,
+              1350.0
+            ],
+            [
+              860,
+              1350.0
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "04-offer-e15",
+          "source": "o14",
+          "target": "o3",
+          "points": [
+            [
+              1030,
+              1220
+            ],
+            [
+              1030,
+              1180
+            ],
+            [
+              1220,
+              1180
+            ],
+            [
+              1220,
+              540
+            ],
+            [
+              1420,
+              540
+            ],
+            [
+              1420,
+              490
+            ]
+          ],
+          "returning": true
+        },
+        {
+          "id": "04-offer-e16",
+          "source": "o16",
+          "target": "o10",
+          "points": [
+            [
+              1810,
+              1220
+            ],
+            [
+              1810,
+              970
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "04-offer-e17",
+          "source": "o4",
+          "target": "o10",
+          "points": [
+            [
+              1860,
+              490
+            ],
+            [
+              1860,
+              740
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "04-offer-e18",
+          "source": "o11",
+          "target": "o17",
+          "points": [
+            [
+              2200,
+              970
+            ],
+            [
+              2200,
+              1220
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "04-offer-e19",
+          "source": "o10",
+          "target": "o18",
+          "points": [
+            [
+              1750,
+              970
+            ],
+            [
+              1750,
+              1155
+            ],
+            [
+              1610,
+              1155
+            ],
+            [
+              1610,
+              1540
+            ],
+            [
+              425,
+              1540
+            ],
+            [
+              425,
+              1690
+            ]
+          ],
+          "returning": true,
+          "label": "Не вышел",
+          "labelX": 540,
+          "labelY": 1490,
+          "labelWidth": 310
+        },
+        {
+          "id": "04-offer-e20",
+          "source": "o17",
+          "target": "o19",
+          "points": [
+            [
+              2200,
+              1480
+            ],
+            [
+              2200,
+              1595
+            ],
+            [
+              1205,
+              1595
+            ],
+            [
+              1205,
+              1690
+            ]
+          ],
+          "returning": true,
+          "label": "Нет нужного результата",
+          "labelX": 1520,
+          "labelY": 1550,
+          "labelWidth": 310
+        },
+        {
+          "id": "04-offer-e21",
+          "source": "o18",
+          "target": "o12",
+          "points": [
+            [
+              300,
+              1690
+            ],
+            [
+              300,
+              1480
+            ]
+          ],
+          "returning": true,
+          "label": "Вернуть подбор",
+          "labelX": 345,
+          "labelY": 1590,
+          "labelWidth": 310
+        }
+      ],
+      "notes": [
+        {
+          "x": 80,
+          "y": 2005,
+          "text": "Договор готовится параллельно и должен быть согласован к оформлению. Он не поставлен обязательной предпосылкой отправки оффера. Исполнитель и порядок согласований требуют уточнения.",
+          "width": 2290,
+          "size": 18
+        }
+      ]
+    },
+    {
+      "id": "05-entry",
+      "title": "05 / Три входа и работа, которая начинается до кандидата",
+      "subtitle": "Стратегии являются альтернативными маршрутами. Агентство не владеет всем наймом в каждом маршруте.",
+      "x": 2550,
+      "y": 4040,
+      "width": 2450,
+      "height": 2080,
+      "nodes": [
+        {
+          "id": "g10",
+          "x": 80,
+          "y": 260,
+          "w": 690,
+          "h": 250,
+          "title": "Работодатель уже нанимает",
+          "body": "Сигнал: открытая вакансия; свои отклики уже разбирает.",
+          "refs": "Д6–7",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "g11",
+          "x": 80,
+          "y": 610,
+          "w": 690,
+          "h": 250,
+          "title": "Получить готового кандидата",
+          "body": "Профиль, интервью и оценка рядом с собственным потоком. Актуальность и интерес ещё важны.",
+          "refs": "Д7,36,57",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "g12",
+          "x": 80,
+          "y": 960,
+          "w": 690,
+          "h": 250,
+          "title": "Купить контакт и нанимать",
+          "body": "Оплата за контакт / пакет. Дальнейшие проверки, оффер и оформление ведёт клиент.",
+          "refs": "Д7,60",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "g20",
+          "x": 865,
+          "y": 260,
+          "w": 690,
+          "h": 250,
+          "title": "Выявить бизнес-потребность",
+          "body": "Вакансии может не быть. Сигнал компании → разговор → определить проблему.",
+          "refs": "Д6,8; Т2; У",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "g21",
+          "x": 865,
+          "y": 610,
+          "w": 690,
+          "h": 250,
+          "title": "Снять ТЗ и согласовать услугу",
+          "body": "Кого и зачем, условия, критерии, объём и границы подбора.",
+          "refs": "Д8,60; В66",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "g22",
+          "x": 865,
+          "y": 960,
+          "w": 690,
+          "h": 250,
+          "title": "Вести подбор до выхода",
+          "body": "Поток → проверки → батчи → переговоры → выход. Цена за найм; замена по договорённости.",
+          "refs": "Д8,60",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "g30",
+          "x": 1650,
+          "y": 260,
+          "w": 690,
+          "h": 250,
+          "title": "У клиента свой поток",
+          "body": "Сигнал: новая вакансия. Нужно организовать своих кандидатов и материалы.",
+          "refs": "Д6,9,43",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "g31",
+          "x": 1650,
+          "y": 610,
+          "w": 690,
+          "h": 250,
+          "title": "Вести работу в ATS",
+          "body": "Вакансии, записи, таймкоды, оценка, поиск, встречи и статусы.",
+          "refs": "Д43",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "g32",
+          "x": 1650,
+          "y": 960,
+          "w": 690,
+          "h": 250,
+          "title": "Рассмотреть внешнюю ценность",
+          "body": "Внешний кандидат / интервью / полный подбор. Это платные ветки; не автоматическая передача всего найма.",
+          "refs": "Д9,43,60",
+          "kind": "job",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "g40",
+          "x": 80,
+          "y": 1380,
+          "w": 1085,
+          "h": 275,
+          "title": "Внутренняя работа HR Vision",
+          "body": "Сигналы компаний → парсинг / обогащение → обращение → Битрикс → ответственный → разговор о потребности. Это источник входа в CJM.",
+          "refs": "У; Т5",
+          "kind": "solution",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "g41",
+          "x": 1250,
+          "y": 1380,
+          "w": 1085,
+          "h": 275,
+          "title": "База интервью готовится заранее",
+          "body": "Привлечение кандидатов → HR или AI → оценка → отдельное разрешение на показ → профиль. Отказ по вакансии не означает согласие на сеть.",
+          "refs": "Д10–11,24,54",
+          "kind": "solution",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "g42",
+          "x": 80,
+          "y": 1770,
+          "w": 1085,
+          "h": 225,
+          "title": "Если новый человек не решает проблему?",
+          "body": "Уточнить причину разрыва → изменить процесс / перераспределить работу / другой способ. Найм пока не запускать. Эта ветка выведена из ранней бизнес-job.",
+          "refs": "У; альтернатива — гипотеза",
+          "kind": "decision",
+          "hypothesis": true,
+          "meta": {}
+        },
+        {
+          "id": "g43",
+          "x": 1250,
+          "y": 1770,
+          "w": 1085,
+          "h": 225,
+          "title": "Роли и условия требуют уточнения",
+          "body": "HR — исполнитель проверок; агентство — владелец услуги. Момент оплаты найма, SLA ответа и основания/срок замены пока не установлены.",
+          "refs": "Д25,54,60; вопросы",
+          "kind": "note",
+          "hypothesis": false,
+          "meta": {}
+        }
+      ],
+      "edges": [
+        {
+          "id": "05-entry-e1",
+          "source": "g10",
+          "target": "g11",
+          "points": [
+            [
+              425.0,
+              510
+            ],
+            [
+              425.0,
+              610
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "05-entry-e2",
+          "source": "g11",
+          "target": "g12",
+          "points": [
+            [
+              425.0,
+              860
+            ],
+            [
+              425.0,
+              960
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "05-entry-e3",
+          "source": "g20",
+          "target": "g21",
+          "points": [
+            [
+              1210.0,
+              510
+            ],
+            [
+              1210.0,
+              610
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "05-entry-e4",
+          "source": "g21",
+          "target": "g22",
+          "points": [
+            [
+              1210.0,
+              860
+            ],
+            [
+              1210.0,
+              960
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "05-entry-e5",
+          "source": "g30",
+          "target": "g31",
+          "points": [
+            [
+              1995.0,
+              510
+            ],
+            [
+              1995.0,
+              610
+            ]
+          ],
+          "returning": false
+        },
+        {
+          "id": "05-entry-e6",
+          "source": "g31",
+          "target": "g32",
+          "points": [
+            [
+              1995.0,
+              860
+            ],
+            [
+              1995.0,
+              960
+            ]
+          ],
+          "returning": false
+        }
+      ],
+      "notes": [
+        {
+          "x": 80,
+          "y": 180,
+          "text": "База контактов",
+          "width": 700,
+          "size": 28
+        },
+        {
+          "x": 865,
+          "y": 180,
+          "text": "HR-агентство",
+          "width": 700,
+          "size": 28
+        },
+        {
+          "x": 1650,
+          "y": 180,
+          "text": "Бесплатная ATS",
+          "width": 700,
+          "size": 28
+        }
+      ]
+    },
+    {
+      "id": "06-solutions",
+      "title": "06 / Какие работы закрывают решения HR Vision",
+      "subtitle": "Покрытие по материалам, а не аудит готовности. Для каждого блока видны решение и оставшийся пробел.",
+      "x": 0,
+      "y": 6370,
+      "width": 2450,
+      "height": 1670,
+      "nodes": [
+        {
+          "id": "f1",
+          "x": 80,
+          "y": 235,
+          "w": 690,
+          "h": 350,
+          "title": "01 · Понять задачу и роль",
+          "body": "Решение: бриф, анализ вакансии и роли, требования и вопросы.\nПробел: метод диагностики бизнес-проблемы и альтернатива найму.",
+          "refs": "Д4,8; В11–19,66",
+          "kind": "solution",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "f2",
+          "x": 865,
+          "y": 235,
+          "w": 690,
+          "h": 350,
+          "title": "02 · Получить кандидатов",
+          "body": "Решение: общая база интервью, отклики, агентские батчи и внешний кандидат в ATS.\nПробел: актуальность и достаточность потока.",
+          "refs": "Д7–11,15,24,43,54",
+          "kind": "solution",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "f3",
+          "x": 1650,
+          "y": 235,
+          "w": 690,
+          "h": 350,
+          "title": "03 · Проверить опыт",
+          "body": "Решение: CV, HR / AI, запись, профиль, оценки и адресные вопросы.\nПробел: когда нужен тест и Hiring-этап, правила пропуска.",
+          "refs": "Д4,10,17,26–28; В26,78",
+          "kind": "solution",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "f4",
+          "x": 80,
+          "y": 660,
+          "w": 690,
+          "h": 350,
+          "title": "04 · Сравнить и выбрать",
+          "body": "Решение: доказательства, видео с таймкодами, отчёт, сравнение и причины решения.\nПробел: не выдавать нехватку данных за низкий навык.",
+          "refs": "Д4,43; В41,51,66–78; схема",
+          "kind": "solution",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "f5",
+          "x": 865,
+          "y": 660,
+          "w": 690,
+          "h": 350,
+          "title": "05 · Получить обратную связь",
+          "body": "Решение: отказ уточняет профиль/подбор; следующий батч; перенос инсайта в другую вакансию.\nПробел: причина может остаться неизвестной.",
+          "refs": "Д3,15,17–19,58",
+          "kind": "solution",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "f6",
+          "x": 1650,
+          "y": 660,
+          "w": 690,
+          "h": 350,
+          "title": "06 · Не потерять кандидата",
+          "body": "Решение требуется: видимость сроков, следующий контакт, снятие вопросов и быстрые согласования.\nГотовый механизм в материалах не подтверждён.",
+          "refs": "У; Д17,57–58; гипотеза",
+          "kind": "solution",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "f7",
+          "x": 80,
+          "y": 1085,
+          "w": 690,
+          "h": 350,
+          "title": "07 · Подготовить предложение",
+          "body": "Нужные jobs: KPI → согласованные условия → оффер → договор.\nОписанного полного решения нет. Оформление у клиента.",
+          "refs": "У; Д17,54",
+          "kind": "solution",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "f8",
+          "x": 865,
+          "y": 1085,
+          "w": 690,
+          "h": 350,
+          "title": "08 · Довести до результата",
+          "body": "Решение: агентский пакет до выхода, замена; накопление обратной связи.\nПробел: правила адаптации, гарантий и проверки KPI.",
+          "refs": "Д8,14,19,54,60; У",
+          "kind": "solution",
+          "hypothesis": false,
+          "meta": {}
+        },
+        {
+          "id": "f9",
+          "x": 1650,
+          "y": 1085,
+          "w": 690,
+          "h": 350,
+          "title": "09 · Привести работодателя",
+          "body": "Решение в плане: сигналы → парсинг → контакт → рассылка → Битрикс → человек на ответах.\nГотовность и владельцы проверяются отдельно.",
+          "refs": "Т5; У; planning/Запуск 5 октября.md",
+          "kind": "solution",
+          "hypothesis": false,
+          "meta": {}
+        }
+      ],
+      "edges": [],
+      "notes": [
+        {
+          "x": 80,
+          "y": 1545,
+          "text": "Описано в деке ≠ внедрено. «Автогенерация офферов» на схеме привлечения не доказывает наличие генератора трудовых офферов. Номера GTM не используем: в приложении деки они меняются.",
+          "width": 2290,
+          "size": 21
+        }
+      ]
+    }
+  ]
+}

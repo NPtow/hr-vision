@@ -1,0 +1,536 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="5000" height="1740" viewBox="0 0 5000 1740">
+<title>01 / HR Vision: граф работ четырёх участников</title>
+<rect width="5000" height="1740" fill="#f4f1e8"/>
+<text x="32" y="28" fill="#20211f" font-size="36" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="32" y="62.56">01 / HR Vision: граф работ четырёх участников</tspan>
+</text>
+<text x="32" y="90" fill="#696b65" font-size="20" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="32" y="109.2">CJM v1 · 01.10.2026 · от проблемы бизнеса до результата · подробные развилки на листах 02–05</tspan>
+</text>
+<text x="220" y="150" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="220" y="167.28">01 Проблема</tspan>
+</text>
+<text x="740" y="150" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="740" y="167.28">02 Кого и зачем</tspan>
+</text>
+<text x="1260" y="150" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1260" y="167.28">03 Поток кандидатов</tspan>
+</text>
+<text x="1780" y="150" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1780" y="167.28">04 Проверки</tspan>
+</text>
+<text x="2300" y="150" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2300" y="167.28">05 Взаимный выбор</tspan>
+</text>
+<text x="2820" y="150" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2820" y="167.28">06 Подготовка оффера</tspan>
+</text>
+<text x="3340" y="150" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="3340" y="167.28">07 Оффер и переговоры</tspan>
+</text>
+<text x="3860" y="150" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="3860" y="167.28">08 Договор и выход</tspan>
+</text>
+<text x="4380" y="150" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="4380" y="167.28">09 Результат</tspan>
+</text>
+<polyline points="24,245 4976,245" fill="none" stroke="#d6d4cc" stroke-width="1.5" stroke-linejoin="miter"/>
+<text x="32" y="257" fill="#20211f" font-size="21" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="32" y="277.16">Нанимающий менеджер</tspan>
+</text>
+<polyline points="24,555 4976,555" fill="none" stroke="#d6d4cc" stroke-width="1.5" stroke-linejoin="miter"/>
+<text x="32" y="567" fill="#20211f" font-size="21" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="32" y="587.16">HR / рекрутер</tspan>
+</text>
+<polyline points="24,865 4976,865" fill="none" stroke="#d6d4cc" stroke-width="1.5" stroke-linejoin="miter"/>
+<text x="32" y="877" fill="#20211f" font-size="21" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="32" y="897.16">HR-агентство · если выбрана услуга</tspan>
+</text>
+<polyline points="24,1175 4976,1175" fill="none" stroke="#d6d4cc" stroke-width="1.5" stroke-linejoin="miter"/>
+<text x="32" y="1187" fill="#20211f" font-size="21" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="32" y="1207.16">Кандидат</tspan>
+</text>
+<polyline points="660,405 740,405" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M729,410.25 L740,405 L729,399.75" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="1180,405 1260,405" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M1249,410.25 L1260,405 L1249,399.75" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="1700,405 1780,405" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M1769,410.25 L1780,405 L1769,399.75" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="2220,405 2300,405" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M2289,410.25 L2300,405 L2289,399.75" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="2740,405 2820,405" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M2809,410.25 L2820,405 L2809,399.75" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="3260,405 3340,405" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M3329,410.25 L3340,405 L3329,399.75" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="3780,405 3860,405" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M3849,410.25 L3860,405 L3849,399.75" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="4300,405 4380,405" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M4369,410.25 L4380,405 L4369,399.75" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="660,715 740,715" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M729,720.25 L740,715 L729,709.75" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="1180,715 1260,715" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M1249,720.25 L1260,715 L1249,709.75" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="1700,715 1780,715" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M1769,720.25 L1780,715 L1769,709.75" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="2220,715 2300,715" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M2289,720.25 L2300,715 L2289,709.75" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="2740,715 2820,715" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M2809,720.25 L2820,715 L2809,709.75" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="3260,715 3340,715" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M3329,720.25 L3340,715 L3329,709.75" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="3780,715 3860,715" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M3849,720.25 L3860,715 L3849,709.75" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="4300,715 4380,715" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M4369,720.25 L4380,715 L4369,709.75" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="660,1025 740,1025" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M729,1030.25 L740,1025 L729,1019.75" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="1180,1025 1260,1025" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M1249,1030.25 L1260,1025 L1249,1019.75" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="1700,1025 1780,1025" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M1769,1030.25 L1780,1025 L1769,1019.75" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="2220,1025 2300,1025" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M2289,1030.25 L2300,1025 L2289,1019.75" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="2740,1025 2820,1025" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M2809,1030.25 L2820,1025 L2809,1019.75" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="3260,1025 3340,1025" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M3329,1030.25 L3340,1025 L3329,1019.75" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="3780,1025 3860,1025" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M3849,1030.25 L3860,1025 L3849,1019.75" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="4300,1025 4380,1025" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M4369,1030.25 L4380,1025 L4369,1019.75" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="660,1335 740,1335" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M729,1340.25 L740,1335 L729,1329.75" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="1180,1335 1260,1335" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M1249,1340.25 L1260,1335 L1249,1329.75" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="1700,1335 1780,1335" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M1769,1340.25 L1780,1335 L1769,1329.75" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="2220,1335 2300,1335" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M2289,1340.25 L2300,1335 L2289,1329.75" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="2740,1335 2820,1335" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M2809,1340.25 L2820,1335 L2809,1329.75" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="3260,1335 3340,1335" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M3329,1340.25 L3340,1335 L3329,1329.75" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="3780,1335 3860,1335" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M3849,1340.25 L3860,1335 L3849,1329.75" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="4300,1335 4380,1335" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M4369,1340.25 L4380,1335 L4369,1329.75" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="440,510 440,610" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M434.75,599 L440,610 L445.25,599" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="960,510 960,610" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M954.75,599 L960,610 L965.25,599" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="1480,920 1480,820" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M1485.25,831 L1480,820 L1474.75,831" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="2000,920 2000,820" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M2005.25,831 L2000,820 L1994.75,831" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="2520,920 2520,820" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M2525.25,831 L2520,820 L2514.75,831" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="2520,610 2520,510" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M2525.25,521 L2520,510 L2514.75,521" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="3040,510 3040,610" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M3034.75,599 L3040,610 L3045.25,599" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="3560,510 3560,610" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M3554.75,599 L3560,610 L3565.25,599" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<rect x="220" y="300" width="440" height="210" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="238" y="318" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="238" y="341.04">Понять проблему бизнеса</tspan>
+</text>
+<text x="238" y="356.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="238" y="374.08">Какого результата не хватает и в чём</tspan>
+<tspan x="238" y="397.48">причина. Нужен ли найм? См. 05.</tspan>
+</text>
+<text x="238" y="413.6" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="238" y="427.04">У; В66</tspan>
+</text>
+<rect x="740" y="300" width="440" height="210" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="758" y="318" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="758" y="341.04">Понять кого</tspan>
+</text>
+<text x="758" y="356.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="758" y="374.08">Определить результат роли, навыки,</tspan>
+<tspan x="758" y="397.48">полномочия и условия</tspan>
+</text>
+<text x="758" y="413.6" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="758" y="427.04">У; Д4,8; В66</tspan>
+</text>
+<rect x="1260" y="300" width="440" height="210" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="1278" y="318" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1278" y="341.04">Задать критерии успеха</tspan>
+</text>
+<text x="1278" y="356.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1278" y="374.08">Согласовать планку отбора и</tspan>
+<tspan x="1278" y="397.48">предварительные KPI роли</tspan>
+</text>
+<text x="1278" y="413.6" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1278" y="427.04">У; В11–19; вывод</tspan>
+</text>
+<rect x="1780" y="300" width="440" height="210" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="1798" y="318" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1798" y="341.04">Проверить в работе</tspan>
+</text>
+<text x="1798" y="356.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1798" y="374.08">Вопросы по роли, кейс и Hiring-скрининг*</tspan>
+</text>
+<text x="1798" y="390.2" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1798" y="403.64">У; Д4,50; В78 · см. 02</tspan>
+</text>
+<rect x="2300" y="300" width="440" height="210" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="2318" y="318" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2318" y="341.04">Сравнить и выбрать</tspan>
+</text>
+<text x="2318" y="356.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2318" y="374.08">Кандидаты сравниваются по задаче; можно</tspan>
+<tspan x="2318" y="397.48">запросить уточнение</tspan>
+</text>
+<text x="2318" y="413.6" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2318" y="427.04">Д15,58; В41,51 · см. 03</tspan>
+</text>
+<rect x="2820" y="300" width="440" height="210" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="2838" y="318" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2838" y="341.04">Подготовить KPI и условия</tspan>
+</text>
+<text x="2838" y="356.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2838" y="374.08">Утвердить ожидаемый результат, деньги и</tspan>
+<tspan x="2838" y="397.48">дату выхода</tspan>
+</text>
+<text x="2838" y="413.6" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2838" y="427.04">У; вывод · см. 04</tspan>
+</text>
+<rect x="3340" y="300" width="440" height="210" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="3358" y="318" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="3358" y="341.04">Договориться с кандидатом</tspan>
+</text>
+<text x="3358" y="356.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="3358" y="374.08">Обсудить важные условия и принять решение</tspan>
+<tspan x="3358" y="397.48">по изменениям</tspan>
+</text>
+<text x="3358" y="413.6" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="3358" y="427.04">У; Д17</tspan>
+</text>
+<rect x="3860" y="300" width="440" height="210" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="3878" y="318" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="3878" y="341.04">Подготовить начало работы</tspan>
+</text>
+<text x="3878" y="356.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="3878" y="374.08">Задачи, ресурсы и понятные ожидания на</tspan>
+<tspan x="3878" y="397.48">старте</tspan>
+</text>
+<text x="3878" y="413.6" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="3878" y="427.04">Д54; У; гипотеза</tspan>
+</text>
+<rect x="4380" y="300" width="440" height="210" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="4398" y="318" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="4398" y="341.04">Проверить решение проблемы</tspan>
+</text>
+<text x="4398" y="356.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="4398" y="374.08">Сопоставить результат с KPI; помочь,</tspan>
+<tspan x="4398" y="397.48">скорректировать или искать заново</tspan>
+</text>
+<text x="4398" y="413.6" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="4398" y="427.04">У; Д14,19,34; вывод · см. 04</tspan>
+</text>
+<rect x="220" y="610" width="440" height="210" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="238" y="628" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="238" y="651.04">Уточнить потребность</tspan>
+</text>
+<text x="238" y="666.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="238" y="684.08">Разобрать задачу с менеджером; не начинать</tspan>
+<tspan x="238" y="707.48">с шаблона вакансии</tspan>
+</text>
+<text x="238" y="723.6" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="238" y="737.04">В66; вывод</tspan>
+</text>
+<rect x="740" y="610" width="440" height="210" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="758" y="628" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="758" y="651.04">Подготовить вакансию</tspan>
+</text>
+<text x="758" y="666.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="758" y="684.08">Бриф, требования, условия и вопросы для</tspan>
+<tspan x="758" y="707.48">проверки</tspan>
+</text>
+<text x="758" y="723.6" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="758" y="737.04">Д4,8; В9–19</tspan>
+</text>
+<rect x="1260" y="610" width="440" height="210" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="1278" y="628" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1278" y="651.04">Получить кандидатов</tspan>
+</text>
+<text x="1278" y="666.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1278" y="684.08">Отклики, поиск, база или подборка агентства</tspan>
+</text>
+<text x="1278" y="700.2" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1278" y="713.64">У; Д7,10,43</tspan>
+</text>
+<rect x="1780" y="610" width="440" height="210" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="1798" y="628" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1798" y="651.04">Организовать проверки</tspan>
+</text>
+<text x="1798" y="666.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1798" y="684.08">CV → HR → тестовое → Hiring*. Порядок и</tspan>
+<tspan x="1798" y="707.48">пропуски зависят от данных</tspan>
+</text>
+<text x="1798" y="723.6" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1798" y="737.04">У; Д4; В26,78 · см. 02</tspan>
+</text>
+<rect x="2300" y="610" width="440" height="210" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="2318" y="628" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2318" y="651.04">Свести оценку и обратную связь</tspan>
+</text>
+<text x="2318" y="666.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2318" y="684.08">Показать доказательства, сравнить,</tspan>
+<tspan x="2318" y="707.48">зафиксировать решение и причину</tspan>
+</text>
+<text x="2318" y="723.6" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2318" y="737.04">Д15,17; В41,51</tspan>
+</text>
+<rect x="2820" y="610" width="440" height="210" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="2838" y="628" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2838" y="651.04">Подготовить оффер и договор</tspan>
+</text>
+<text x="2838" y="666.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2838" y="684.08">Собрать и согласовать предложение;</tspan>
+<tspan x="2838" y="707.48">подготовить условия оформления</tspan>
+</text>
+<text x="2838" y="723.6" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2838" y="737.04">У; Д54; вывод · см. 04</tspan>
+</text>
+<rect x="3340" y="610" width="440" height="210" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="3358" y="628" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="3358" y="651.04">Сделать оффер</tspan>
+</text>
+<text x="3358" y="666.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="3358" y="684.08">Отправить предложение, получить ответ,</tspan>
+<tspan x="3358" y="707.48">провести переговоры</tspan>
+</text>
+<text x="3358" y="723.6" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="3358" y="737.04">У; Д17 · см. 04</tspan>
+</text>
+<rect x="3860" y="610" width="440" height="210" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="3878" y="628" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="3878" y="651.04">Оформить и довести до выхода</tspan>
+</text>
+<text x="3878" y="666.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="3878" y="684.08">Согласовать договор, подписать с</tspan>
+<tspan x="3878" y="707.48">кандидатом, подтвердить первый день</tspan>
+</text>
+<text x="3878" y="723.6" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="3878" y="737.04">У; Д54; вывод · см. 04</tspan>
+</text>
+<rect x="4380" y="610" width="440" height="210" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="4398" y="628" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="4398" y="651.04">Получить обратную связь</tspan>
+</text>
+<text x="4398" y="666.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="4398" y="684.08">Зафиксировать фактический выход и причины</tspan>
+<tspan x="4398" y="707.48">успеха или ухода</tspan>
+</text>
+<text x="4398" y="723.6" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="4398" y="737.04">Д14,19,60; вывод</tspan>
+</text>
+<rect x="220" y="920" width="440" height="210" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="238" y="938" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="238" y="961.04">Найти и проверить потребность</tspan>
+</text>
+<text x="238" y="976.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="238" y="994.08">Сигнал компании → контакт → разговор о</tspan>
+<tspan x="238" y="1017.48">бизнес-проблеме</tspan>
+</text>
+<text x="238" y="1033.6" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="238" y="1047.04">Д6,8; Т2,5; У</tspan>
+</text>
+<rect x="740" y="920" width="440" height="210" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="758" y="938" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="758" y="961.04">Договориться об услуге</tspan>
+</text>
+<text x="758" y="976.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="758" y="994.08">Снять ТЗ, согласовать объём подбора и</tspan>
+<tspan x="758" y="1017.48">условия услуги</tspan>
+</text>
+<text x="758" y="1033.6" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="758" y="1047.04">Д8,60; вывод</tspan>
+</text>
+<rect x="1260" y="920" width="440" height="210" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="1278" y="938" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1278" y="961.04">Организовать поток</tspan>
+</text>
+<text x="1278" y="976.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1278" y="994.08">Найти, актуализировать и пригласить</tspan>
+<tspan x="1278" y="1017.48">подходящих людей</tspan>
+</text>
+<text x="1278" y="1033.6" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1278" y="1047.04">Д10,24,25</tspan>
+</text>
+<rect x="1780" y="920" width="440" height="210" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="1798" y="938" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1798" y="961.04">Организовать оценку</tspan>
+</text>
+<text x="1798" y="976.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1798" y="994.08">Назначить исполнителей, собрать профиль и</tspan>
+<tspan x="1798" y="1017.48">материалы</tspan>
+</text>
+<text x="1798" y="1033.6" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1798" y="1047.04">Д25–27; В6</tspan>
+</text>
+<rect x="2300" y="920" width="440" height="210" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="2318" y="938" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2318" y="961.04">Показать первый батч</tspan>
+</text>
+<text x="2318" y="976.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2318" y="994.08">Получить реакцию клиента и уточнить</tspan>
+<tspan x="2318" y="1017.48">следующий подбор</tspan>
+</text>
+<text x="2318" y="1033.6" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2318" y="1047.04">Д15; В41</tspan>
+</text>
+<rect x="2820" y="920" width="440" height="210" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="2838" y="938" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2838" y="961.04">Не потерять взаимный интерес</tspan>
+</text>
+<text x="2838" y="976.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2838" y="994.08">Снять зависшие вопросы и согласовать</tspan>
+<tspan x="2838" y="1017.48">скорость решения</tspan>
+</text>
+<text x="2838" y="1033.6" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2838" y="1047.04">У; Д17,57; вывод · см. 03</tspan>
+</text>
+<rect x="3340" y="920" width="440" height="210" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="3358" y="938" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="3358" y="961.04">Сопроводить переговоры</tspan>
+</text>
+<text x="3358" y="976.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="3358" y="994.08">Передать условия и обратную связь между</tspan>
+<tspan x="3358" y="1017.48">сторонами</tspan>
+</text>
+<text x="3358" y="1033.6" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="3358" y="1047.04">Д17,60; вывод</tspan>
+</text>
+<rect x="3860" y="920" width="440" height="210" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="3878" y="938" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="3878" y="961.04">Довести услугу до выхода</tspan>
+</text>
+<text x="3878" y="976.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="3878" y="994.08">Сверить готовность сторон; подтвердить факт</tspan>
+<tspan x="3878" y="1017.48">выхода</tspan>
+</text>
+<text x="3878" y="1033.6" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="3878" y="1047.04">Д8,54,60</tspan>
+</text>
+<rect x="4380" y="920" width="440" height="210" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="4398" y="938" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="4398" y="961.04">Закрыть результат услуги</tspan>
+</text>
+<text x="4398" y="976.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="4398" y="994.08">Расчёт по договорённости; замена при</tspan>
+<tspan x="4398" y="1017.48">согласованном основании</tspan>
+</text>
+<text x="4398" y="1033.6" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="4398" y="1047.04">Д60; условия неизвестны · см. 04</tspan>
+</text>
+<rect x="220" y="1230" width="440" height="210" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="238" y="1248" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="238" y="1271.04">Понять, зачем менять работу</tspan>
+</text>
+<text x="238" y="1286.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="238" y="1304.08">Сформулировать проблему текущей ситуации</tspan>
+<tspan x="238" y="1327.48">и желаемый результат</tspan>
+</text>
+<text x="238" y="1343.6" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="238" y="1357.04">вывод; гипотеза</tspan>
+</text>
+<rect x="740" y="1230" width="440" height="210" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="758" y="1248" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="758" y="1271.04">Определить приоритеты</tspan>
+</text>
+<text x="758" y="1286.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="758" y="1304.08">Какая работа, условия и ограничения</tspan>
+<tspan x="758" y="1327.48">подходят</tspan>
+</text>
+<text x="758" y="1343.6" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="758" y="1357.04">В26; вывод</tspan>
+</text>
+<rect x="1260" y="1230" width="440" height="210" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="1278" y="1248" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1278" y="1271.04">Найти варианты</tspan>
+</text>
+<text x="1278" y="1286.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1278" y="1304.08">Откликнуться или получить приглашение;</tspan>
+<tspan x="1278" y="1327.48">проверить интерес</tspan>
+</text>
+<text x="1278" y="1343.6" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1278" y="1357.04">Д10,17,36</tspan>
+</text>
+<rect x="1780" y="1230" width="440" height="210" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="1798" y="1248" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1798" y="1271.04">Показать опыт и навыки</tspan>
+</text>
+<text x="1798" y="1286.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1798" y="1304.08">CV, интервью, нужный кейс и встреча с</tspan>
+<tspan x="1798" y="1327.48">нанимающим</tspan>
+</text>
+<text x="1798" y="1343.6" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1798" y="1357.04">У; Д4,10; В78 · см. 02</tspan>
+</text>
+<rect x="2300" y="1230" width="440" height="210" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="2318" y="1248" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2318" y="1271.04">Продолжать поиск альтернатив</tspan>
+</text>
+<text x="2318" y="1286.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2318" y="1304.08">Другие встречи и предложения идут</tspan>
+<tspan x="2318" y="1327.48">параллельно с решением компании</tspan>
+</text>
+<text x="2318" y="1343.6" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2318" y="1357.04">У; Д16–17,58 · см. 03</tspan>
+</text>
+<rect x="2820" y="1230" width="440" height="210" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="2838" y="1248" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2838" y="1271.04">Получить ясность</tspan>
+</text>
+<text x="2838" y="1286.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2838" y="1304.08">Задача, KPI, условия, следующий шаг и срок</tspan>
+<tspan x="2838" y="1327.48">решения</tspan>
+</text>
+<text x="2838" y="1343.6" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2838" y="1357.04">У; вывод</tspan>
+</text>
+<rect x="3340" y="1230" width="440" height="210" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="3358" y="1248" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="3358" y="1271.04">Сравнить офферы и решить</tspan>
+</text>
+<text x="3358" y="1286.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="3358" y="1304.08">Согласиться, обсудить условия или выбрать</tspan>
+<tspan x="3358" y="1327.48">другой вариант</tspan>
+</text>
+<text x="3358" y="1343.6" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="3358" y="1357.04">Д17; У · см. 04</tspan>
+</text>
+<rect x="3860" y="1230" width="440" height="210" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="3878" y="1248" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="3878" y="1271.04">Согласовать договор и выйти</tspan>
+</text>
+<text x="3878" y="1286.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="3878" y="1304.08">Проверить договорённости, оформить</tspan>
+<tspan x="3878" y="1327.48">отношения, начать работу</tspan>
+</text>
+<text x="3878" y="1343.6" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="3878" y="1357.04">У; Д54 · см. 04</tspan>
+</text>
+<rect x="4380" y="1230" width="440" height="210" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="4398" y="1248" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="4398" y="1271.04">Проверить ожидания</tspan>
+</text>
+<text x="4398" y="1286.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="4398" y="1304.08">Подходит ли реальная работа; продолжить,</tspan>
+<tspan x="4398" y="1327.48">договориться об изменениях или уйти</tspan>
+</text>
+<text x="4398" y="1343.6" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="4398" y="1357.04">Д14,19; вывод</tspan>
+</text>
+<text x="220" y="1515" fill="#696b65" font-size="22" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="220" y="1536.12">Колонки показывают, что происходит у остальных в этот момент. Процессы не ждут завершения всей колонки: первые батчи идут в работу сразу.</tspan>
+</text>
+<text x="220" y="1560" fill="#696b65" font-size="22" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="220" y="1581.12">Сквозная работа HR и агентства: поддерживать интерес, давать ясный следующий шаг и узнавать сроки других процессов. Отказы возвращаются в подбор и условия.</tspan>
+</text>
+<text x="220" y="1605" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="220" y="1622.28">У = правка Никиты · Д = страницы GTM-деки · В = строки встречи · Т = спринт. «Вывод/гипотеза» требуют проверки. * Hair пока трактуем как встречу с нанимающим.</tspan>
+</text>
+</svg>

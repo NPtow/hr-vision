@@ -1,0 +1,278 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2450" height="1800" viewBox="0 0 2450 1800">
+<title>02 / Получить кандидатов и проверить соответствие</title>
+<rect width="2450" height="1800" fill="#f4f1e8"/>
+<text x="32" y="28" fill="#20211f" font-size="36" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="32" y="62.56">02 / Получить кандидатов и проверить соответствие</tspan>
+</text>
+<text x="32" y="90" fill="#696b65" font-size="20" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="32" y="109.2">Проверки раздельны. Готовые доказательства переиспользуются; порядок и обязательность уточняются для роли.</tspan>
+</text>
+<polyline points="420,385 470,385" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M459,390.25 L470,385 L459,379.75" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="810,385 860,385" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M849,390.25 L860,385 L849,379.75" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="1200,385 1250,385" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M1239,390.25 L1250,385 L1239,379.75" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="1590,385 1640,385" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M1629,390.25 L1640,385 L1629,379.75" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="1980,385 2030,385" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M2019,390.25 L2030,385 L2019,379.75" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="250,500 250,730" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M244.75,719 L250,730 L255.25,719" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="640,730 640,610 910,610 910,500" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M915.25,511 L910,500 L904.75,511" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="1030,730 1030,500" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M1035.25,511 L1030,500 L1024.75,511" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="1420,730 1420,640 1150,640 1150,500" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M1155.25,511 L1150,500 L1144.75,511" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="1810,730 1810,585 1420,585 1420,500" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M1425.25,511 L1420,500 L1414.75,511" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="2200,730 2200,550 1810,550 1810,500" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M1815.25,511 L1810,500 L1804.75,511" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="1100,270 1100,220 1810,220 1810,270" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M1804.75,259 L1810,270 L1815.25,259" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<path d="M2370,335 L2378,335 M2384,335 L2392,335 M2398,335 L2400,335 M2400,335 L2400,341 M2400,347 L2400,355 M2400,361 L2400,369 M2400,375 L2400,383 M2400,389 L2400,397 M2400,403 L2400,411 M2400,417 L2400,425 M2400,431 L2400,439 M2400,445 L2400,453 M2400,459 L2400,467 M2400,473 L2400,481 M2400,487 L2400,495 M2400,501 L2400,509 M2400,515 L2400,523 M2400,529 L2400,537 M2400,543 L2400,551 M2400,557 L2400,565 M2400,571 L2400,579 M2400,585 L2400,593 M2400,599 L2400,607 M2400,613 L2400,621 M2400,627 L2400,635 M2400,641 L2400,649 M2400,655 L2400,663 M2400,669 L2400,677 M2400,683 L2400,691 M2400,697 L2400,705 M2400,711 L2400,719 M2400,725 L2400,733 M2400,739 L2400,747 M2400,753 L2400,761 M2400,767 L2400,775 M2400,781 L2400,789 M2400,795 L2400,803 M2400,809 L2400,817 M2400,823 L2400,831 M2400,837 L2400,845 M2400,851 L2400,859 M2400,865 L2400,873 M2400,879 L2400,887 M2400,893 L2400,901 M2400,907 L2400,915 M2400,921 L2400,929 M2400,935 L2400,943 M2400,949 L2400,957 M2400,963 L2400,971 M2400,977 L2400,985 M2400,991 L2400,999 M2400,1005 L2400,1013 M2400,1019 L2400,1027 M2400,1033 L2400,1041 M2400,1047 L2400,1055 M2400,1061 L2400,1069 M2395,1070 L2387,1070 M2381,1070 L2373,1070 M2367,1070 L2359,1070 M2353,1070 L2345,1070 M2339,1070 L2331,1070 M2325,1070 L2317,1070 M2311,1070 L2303,1070 M2297,1070 L2289,1070 M2283,1070 L2275,1070 M2269,1070 L2261,1070 M2255,1070 L2247,1070 M2241,1070 L2233,1070 M2227,1070 L2219,1070 M2213,1070 L2205,1070 M2199,1070 L2191,1070 M2185,1070 L2177,1070 M2171,1070 L2163,1070 M2157,1070 L2149,1070 M2143,1070 L2135,1070 M2129,1070 L2121,1070 M2115,1070 L2107,1070 M2101,1070 L2093,1070 M2087,1070 L2079,1070 M2073,1070 L2065,1070 M2059,1070 L2051,1070 M2045,1070 L2037,1070 M2031,1070 L2023,1070 M2017,1070 L2009,1070 M2003,1070 L1995,1070 M1989,1070 L1981,1070 M1975,1070 L1967,1070 M1961,1070 L1953,1070 M1947,1070 L1939,1070 M1933,1070 L1925,1070 M1919,1070 L1911,1070 M1905,1070 L1897,1070 M1891,1070 L1883,1070 M1877,1070 L1869,1070 M1863,1070 L1855,1070 M1849,1070 L1841,1070 M1835,1070 L1827,1070 M1821,1070 L1813,1070 M1807,1070 L1799,1070 M1793,1070 L1785,1070 M1779,1070 L1771,1070 M1765,1070 L1757,1070 M1751,1070 L1743,1070 M1737,1070 L1729,1070 M1723,1070 L1715,1070 M1709,1070 L1701,1070 M1695,1070 L1687,1070 M1681,1070 L1673,1070 M1667,1070 L1659,1070 M1653,1070 L1645,1070 M1639,1070 L1631,1070 M1625,1070 L1617,1070 M1611,1070 L1603,1070 M1597,1070 L1589,1070 M1583,1070 L1575,1070 M1569,1070 L1561,1070 M1555,1070 L1547,1070 M1541,1070 L1533,1070 M1527,1070 L1519,1070 M1513,1070 L1505,1070 M1499,1070 L1491,1070 M1485,1070 L1477,1070 M1471,1070 L1463,1070 M1457,1070 L1449,1070 M1443,1070 L1435,1070 M1429,1070 L1421,1070 M1415,1070 L1407,1070 M1401,1070 L1393,1070 M1387,1070 L1379,1070 M1373,1070 L1365,1070 M1359,1070 L1351,1070 M1345,1070 L1337,1070 M1331,1070 L1323,1070 M1317,1070 L1309,1070 M1303,1070 L1295,1070 M1289,1070 L1281,1070 M1275,1070 L1267,1070 M1261,1070 L1253,1070 M1247,1070 L1239,1070 M1233,1070 L1225,1070 M1219,1070 L1211,1070 M1205,1070 L1197,1070 M1191,1070 L1183,1070 M1177,1070 L1169,1070 M1163,1070 L1155,1070 M1149,1070 L1141,1070 M1135,1070 L1127,1070 M1121,1070 L1113,1070 M1107,1070 L1099,1070 M1093,1070 L1085,1070 M1079,1070 L1071,1070 M1065,1070 L1057,1070 M1051,1070 L1043,1070 M1037,1070 L1029,1070 M1023,1070 L1015,1070 M1009,1070 L1001,1070 M995,1070 L987,1070 M981,1070 L973,1070 M967,1070 L959,1070 M953,1070 L945,1070 M939,1070 L931,1070 M925,1070 L917,1070 M911,1070 L903,1070 M897,1070 L889,1070 M883,1070 L875,1070 M869,1070 L861,1070 M855,1070 L847,1070 M841,1070 L833,1070 M827,1070 L819,1070 M813,1070 L805,1070 M799,1070 L791,1070 M785,1070 L777,1070 M771,1070 L763,1070 M757,1070 L749,1070 M743,1070 L735,1070 M729,1070 L721,1070 M715,1070 L707,1070 M701,1070 L693,1070 M687,1070 L679,1070 M673,1070 L665,1070 M659,1070 L651,1070 M645,1070 L637,1070 M631,1070 L623,1070 M617,1070 L609,1070 M603,1070 L595,1070 M589,1070 L581,1070 M575,1070 L567,1070 M561,1070 L553,1070 M547,1070 L539,1070 M533,1070 L525,1070 M519,1070 L511,1070 M505,1070 L497,1070 M491,1070 L483,1070 M477,1070 L469,1070 M463,1070 L455,1070 M449,1070 L441,1070 M435,1070 L427,1070 M421,1070 L413,1070 M407,1070 L399,1070 M393,1070 L385,1070 M379,1070 L371,1070 M365,1070 L357,1070 M351,1070 L343,1070 M337,1070 L330,1070 M330,1070 L330,1071 M330,1077 L330,1085 M330,1091 L330,1099 M330,1105 L330,1113 M330,1119 L330,1127 M330,1133 L330,1141 M330,1147 L330,1155 M330,1161 L330,1169 M330,1175 L330,1183 M330,1189 L330,1197" fill="none" stroke="#696b65" stroke-width="1.5"/>
+<path d="M324.75,1189 L330,1200 L335.25,1189" fill="none" stroke="#696b65" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<path d="M2370,435 L2378,435 M2384,435 L2392,435 M2398,435 L2406,435 M2412,435 L2420,435 M2420,441 L2420,449 M2420,455 L2420,463 M2420,469 L2420,477 M2420,483 L2420,491 M2420,497 L2420,505 M2420,511 L2420,519 M2420,525 L2420,533 M2420,539 L2420,547 M2420,553 L2420,561 M2420,567 L2420,575 M2420,581 L2420,589 M2420,595 L2420,603 M2420,609 L2420,617 M2420,623 L2420,631 M2420,637 L2420,645 M2420,651 L2420,659 M2420,665 L2420,673 M2420,679 L2420,687 M2420,693 L2420,701 M2420,707 L2420,715 M2420,721 L2420,729 M2420,735 L2420,743 M2420,749 L2420,757 M2420,763 L2420,771 M2420,777 L2420,785 M2420,791 L2420,799 M2420,805 L2420,813 M2420,819 L2420,827 M2420,833 L2420,841 M2420,847 L2420,855 M2420,861 L2420,869 M2420,875 L2420,883 M2420,889 L2420,897 M2420,903 L2420,911 M2420,917 L2420,925 M2420,931 L2420,939 M2420,945 L2420,953 M2420,959 L2420,967 M2420,973 L2420,981 M2420,987 L2420,995 M2420,1001 L2420,1009 M2420,1015 L2420,1023 M2420,1029 L2420,1037 M2420,1043 L2420,1051 M2420,1057 L2420,1065 M2420,1071 L2420,1079 M2420,1085 L2420,1093 M2420,1099 L2420,1107 M2420,1113 L2420,1121 M2420,1127 L2420,1130 M2420,1130 L2415,1130 M2409,1130 L2401,1130 M2395,1130 L2387,1130 M2381,1130 L2373,1130 M2367,1130 L2359,1130 M2353,1130 L2345,1130 M2339,1130 L2331,1130 M2325,1130 L2317,1130 M2311,1130 L2303,1130 M2297,1130 L2289,1130 M2283,1130 L2275,1130 M2269,1130 L2261,1130 M2255,1130 L2247,1130 M2241,1130 L2233,1130 M2227,1130 L2219,1130 M2213,1130 L2205,1130 M2199,1130 L2191,1130 M2185,1130 L2177,1130 M2171,1130 L2163,1130 M2157,1130 L2149,1130 M2143,1130 L2135,1130 M2129,1130 L2121,1130 M2115,1130 L2107,1130 M2101,1130 L2093,1130 M2087,1130 L2079,1130 M2073,1130 L2065,1130 M2059,1130 L2051,1130 M2045,1130 L2037,1130 M2031,1130 L2023,1130 M2017,1130 L2009,1130 M2003,1130 L1995,1130 M1989,1130 L1981,1130 M1975,1130 L1967,1130 M1961,1130 L1953,1130 M1947,1130 L1939,1130 M1933,1130 L1925,1130 M1919,1130 L1911,1130 M1905,1130 L1897,1130 M1891,1130 L1883,1130 M1877,1130 L1869,1130 M1863,1130 L1855,1130 M1849,1130 L1841,1130 M1835,1130 L1827,1130 M1821,1130 L1813,1130 M1807,1130 L1799,1130 M1793,1130 L1785,1130 M1779,1130 L1771,1130 M1765,1130 L1757,1130 M1751,1130 L1743,1130 M1737,1130 L1729,1130 M1723,1130 L1715,1130 M1709,1130 L1701,1130 M1695,1130 L1687,1130 M1681,1130 L1673,1130 M1667,1130 L1659,1130 M1653,1130 L1645,1130 M1639,1130 L1631,1130 M1625,1130 L1617,1130 M1611,1130 L1603,1130 M1597,1130 L1589,1130 M1583,1130 L1575,1130 M1569,1130 L1561,1130 M1555,1130 L1547,1130 M1541,1130 L1533,1130 M1527,1130 L1519,1130 M1513,1130 L1510,1130 M1510,1130 L1510,1135 M1510,1141 L1510,1149 M1510,1155 L1510,1163 M1510,1169 L1510,1177 M1510,1183 L1510,1191 M1510,1197 L1510,1200" fill="none" stroke="#696b65" stroke-width="1.5"/>
+<path d="M1504.75,1189 L1510,1200 L1515.25,1189" fill="none" stroke="#696b65" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<path d="M980,960 L980,968 M980,974 L980,982 M980,988 L980,996 M980,1002 L980,1005 M980,1005 L975,1005 M969,1005 L961,1005 M955,1005 L947,1005 M941,1005 L933,1005 M927,1005 L920,1005 M920,1005 L920,1006 M920,1012 L920,1020 M920,1026 L920,1034 M920,1040 L920,1048 M920,1054 L920,1062 M920,1068 L920,1076 M920,1082 L920,1090 M920,1096 L920,1104 M920,1110 L920,1118 M920,1124 L920,1132 M920,1138 L920,1146 M920,1152 L920,1160 M920,1166 L920,1174 M920,1180 L920,1188 M920,1194 L920,1200" fill="none" stroke="#696b65" stroke-width="1.5"/>
+<path d="M914.75,1189 L920,1200 L925.25,1189" fill="none" stroke="#696b65" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<path d="M230,1200 L230,1192 M230,1186 L230,1178 M230,1172 L230,1164 M230,1158 L230,1150 M230,1144 L230,1136 M230,1130 L230,1122 M230,1116 L230,1108 M230,1102 L230,1100 M230,1100 L236,1100 M242,1100 L250,1100 M256,1100 L264,1100 M270,1100 L278,1100 M284,1100 L292,1100 M298,1100 L306,1100 M312,1100 L320,1100 M326,1100 L334,1100 M340,1100 L348,1100 M354,1100 L362,1100 M368,1100 L376,1100 M382,1100 L390,1100 M396,1100 L404,1100 M410,1100 L418,1100 M424,1100 L432,1100 M438,1100 L446,1100 M452,1100 L460,1100 M466,1100 L474,1100 M480,1100 L488,1100 M494,1100 L502,1100 M508,1100 L516,1100 M522,1100 L530,1100 M536,1100 L544,1100 M550,1100 L558,1100 M564,1100 L572,1100 M578,1100 L586,1100 M592,1100 L600,1100 M606,1100 L614,1100 M620,1100 L628,1100 M634,1100 L642,1100 M648,1100 L656,1100 M662,1100 L670,1100 M676,1100 L684,1100 M690,1100 L698,1100 M704,1100 L712,1100 M718,1100 L726,1100 M732,1100 L740,1100 M746,1100 L754,1100 M760,1100 L768,1100 M774,1100 L782,1100 M788,1100 L796,1100 M802,1100 L810,1100 M816,1100 L824,1100 M830,1100 L835,1100 M835,1100 L835,1097 M835,1091 L835,1083 M835,1077 L835,1069 M835,1063 L835,1055 M835,1049 L835,1041 M835,1035 L835,1027 M835,1021 L835,1013 M835,1007 L835,999 M835,993 L835,985 M835,979 L835,971 M835,965 L835,957 M835,951 L835,943 M835,937 L835,929 M835,923 L835,915 M835,909 L835,901 M835,895 L835,887 M835,881 L835,873 M835,867 L835,859 M835,853 L835,845 M835,839 L835,831 M835,825 L835,817 M835,811 L835,803 M835,797 L835,789 M835,783 L835,775 M835,769 L835,761 M835,755 L835,747 M835,741 L835,733 M835,727 L835,719 M835,713 L835,705 M835,699 L835,691 M835,685 L835,677 M835,671 L835,663 M835,657 L835,649 M835,643 L835,635 M835,629 L835,621 M835,615 L835,607 M835,601 L835,593 M835,587 L835,579 M835,573 L835,565 M836,560 L844,560 M850,560 L858,560 M864,560 L872,560 M878,560 L886,560 M892,560 L900,560 M906,560 L914,560 M920,560 L928,560 M934,560 L942,560 M948,560 L956,560 M960,558 L960,550 M960,544 L960,536 M960,530 L960,522 M960,516 L960,508 M960,502 L960,500" fill="none" stroke="#696b65" stroke-width="1.5"/>
+<path d="M965.25,511 L960,500 L954.75,511" fill="none" stroke="#696b65" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<path d="M770,1200 L770,1192 M770,1186 L770,1178 M770,1172 L770,1170 M770,1170 L776,1170 M782,1170 L790,1170 M796,1170 L804,1170 M810,1170 L818,1170 M824,1170 L832,1170 M838,1170 L846,1170 M852,1170 L860,1170 M866,1170 L874,1170 M880,1170 L888,1170 M894,1170 L902,1170 M908,1170 L916,1170 M922,1170 L930,1170 M936,1170 L944,1170 M950,1170 L958,1170 M964,1170 L972,1170 M978,1170 L986,1170 M992,1170 L1000,1170 M1006,1170 L1014,1170 M1020,1170 L1028,1170 M1034,1170 L1042,1170 M1048,1170 L1056,1170 M1062,1170 L1070,1170 M1076,1170 L1084,1170 M1090,1170 L1098,1170 M1104,1170 L1112,1170 M1118,1170 L1126,1170 M1132,1170 L1140,1170 M1146,1170 L1154,1170 M1160,1170 L1160,1162 M1160,1156 L1160,1148 M1160,1142 L1160,1134 M1160,1128 L1160,1120 M1160,1114 L1160,1106 M1160,1100 L1160,1092 M1160,1086 L1160,1078 M1160,1072 L1160,1064 M1160,1058 L1160,1050 M1160,1044 L1160,1036 M1160,1030 L1160,1022 M1160,1016 L1160,1008 M1160,1002 L1160,994 M1160,988 L1160,980 M1160,974 L1160,966" fill="none" stroke="#696b65" stroke-width="1.5"/>
+<path d="M1165.25,971 L1160,960 L1154.75,971" fill="none" stroke="#696b65" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<polyline points="1540,960 1540,1015 2100,1015 2100,1200" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter"/>
+<path d="M2094.75,1189 L2100,1200 L2105.25,1189" fill="none" stroke="#20211f" stroke-width="1.5" stroke-linejoin="miter" data-arrowhead="true"/>
+<rect x="910" y="1061" width="20" height="18" fill="#f4f1e8"/>
+<polyline points="909,1070 912,1065 916,1063 924,1063 928,1065 931,1070" fill="none" stroke="#696b65" stroke-width="1.5" stroke-linejoin="miter"/>
+<rect x="1150" y="1061" width="20" height="18" fill="#f4f1e8"/>
+<polyline points="1149,1070 1152,1065 1156,1063 1164,1063 1168,1065 1171,1070" fill="none" stroke="#696b65" stroke-width="1.5" stroke-linejoin="miter"/>
+<rect x="2090" y="1061" width="20" height="18" fill="#f4f1e8"/>
+<polyline points="2089,1070 2092,1065 2096,1063 2104,1063 2108,1065 2111,1070" fill="none" stroke="#696b65" stroke-width="1.5" stroke-linejoin="miter"/>
+<rect x="2090" y="1121" width="20" height="18" fill="#f4f1e8"/>
+<polyline points="2089,1130 2092,1125 2096,1123 2104,1123 2108,1125 2111,1130" fill="none" stroke="#696b65" stroke-width="1.5" stroke-linejoin="miter"/>
+<rect x="80" y="270" width="340" height="230" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="98" y="288" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="311.04">HR · Получить кандидата</tspan>
+</text>
+<text x="98" y="326.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="344.08">Резюме / контакт / профиль. До</tspan>
+<tspan x="98" y="367.48">этого: бриф и критерии роли.</tspan>
+</text>
+<text x="98" y="383.6" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="397.04">У; Д4,7,43</tspan>
+</text>
+<rect x="470" y="270" width="340" height="230" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="488" y="288" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="488" y="311.04">HR · CV-скрининг</tspan>
+</text>
+<text x="488" y="326.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="488" y="344.08">Опыт и базовые требования:</tspan>
+<tspan x="488" y="367.48">достаточно данных, уточнить или</tspan>
+<tspan x="488" y="390.88">отказать.</tspan>
+</text>
+<text x="488" y="407" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="488" y="420.44">У; Д4,50</tspan>
+</text>
+<rect x="860" y="270" width="340" height="230" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="878" y="288" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="878" y="311.04">HR · HR-скрининг</tspan>
+</text>
+<text x="878" y="326.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="878" y="344.08">Мотивация, опыт, условия и</tspan>
+<tspan x="878" y="367.48">вопросы работодателя. Разобрать</tspan>
+<tspan x="878" y="390.88">ответы.</tspan>
+</text>
+<text x="878" y="407" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="878" y="420.44">У; Д4,10; В11–26</tspan>
+</text>
+<rect x="1250" y="270" width="340" height="230" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="1268" y="288" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1268" y="311.04">НМ · Тестовая проверка</tspan>
+</text>
+<text x="1268" y="326.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1268" y="344.08">Проверить недоказанный навык на</tspan>
+<tspan x="1268" y="367.48">задаче. Если данных хватает,</tspan>
+<tspan x="1268" y="390.88">пропустить.</tspan>
+</text>
+<text x="1268" y="407" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1268" y="420.44">У; В78; вывод</tspan>
+</text>
+<rect x="1640" y="270" width="340" height="230" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="1658" y="288" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1658" y="311.04">НМ · Hiring-скрининг*</tspan>
+</text>
+<text x="1658" y="326.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1658" y="344.08">Проверить соответствие задаче и</tspan>
+<tspan x="1658" y="367.48">руководителю; ответить</tspan>
+<tspan x="1658" y="390.88">кандидату.</tspan>
+</text>
+<text x="1658" y="407" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1658" y="420.44">У; Д4,50</tspan>
+</text>
+<rect x="2030" y="270" width="340" height="230" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="2048" y="288" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2048" y="311.04">HR / НМ · Решение</tspan>
+</text>
+<text x="2048" y="326.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2048" y="344.08">Свести доказательства: дальше,</tspan>
+<tspan x="2048" y="367.48">дозапрос или отказ с причиной.</tspan>
+</text>
+<text x="2048" y="383.6" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2048" y="397.04">Д15,17; В41,51</tspan>
+</text>
+<rect x="80" y="730" width="340" height="230" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="98" y="748" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="771.04">Кандидат · Подтвердить</tspan>
+<tspan x="98" y="799.84">интерес</tspan>
+</text>
+<text x="98" y="815.6" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="832.88">Понять задачу и условия;</tspan>
+<tspan x="98" y="856.28">сообщить, подходит ли вакансия.</tspan>
+<tspan x="98" y="879.68">Это не согласие на показ записи</tspan>
+<tspan x="98" y="903.08">всей сети.</tspan>
+</text>
+<text x="98" y="919.2" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="932.64">Д36; вывод</tspan>
+</text>
+<rect x="470" y="730" width="340" height="230" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="488" y="748" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="488" y="771.04">Живой HR · Интервью</tspan>
+</text>
+<text x="488" y="786.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="488" y="804.08">Кандидат отвечает; HR собирает</tspan>
+<tspan x="488" y="827.48">запись и проверяет недостающие</tspan>
+<tspan x="488" y="850.88">сведения.</tspan>
+</text>
+<text x="488" y="867" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="488" y="880.44">Д10,25; У</tspan>
+</text>
+<rect x="860" y="730" width="340" height="230" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="878" y="748" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="878" y="771.04">Кандидат · Внешний AI</tspan>
+</text>
+<text x="878" y="786.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="878" y="804.08">Пройти сессию выбранного</tspan>
+<tspan x="878" y="827.48">сервиса; получить материал для</tspan>
+<tspan x="878" y="850.88">разбора.</tspan>
+</text>
+<text x="878" y="867" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="878" y="880.44">Д10–11,26–28; У</tspan>
+</text>
+<rect x="1250" y="730" width="340" height="230" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="1268" y="748" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1268" y="771.04">HR · Готовая запись</tspan>
+</text>
+<text x="1268" y="786.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1268" y="804.08">Есть разрешение и актуальный</tspan>
+<tspan x="1268" y="827.48">материал: использовать без</tspan>
+<tspan x="1268" y="850.88">полного повтора.</tspan>
+</text>
+<text x="1268" y="867" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1268" y="880.44">Д17,43; В26</tspan>
+</text>
+<rect x="1640" y="730" width="340" height="230" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="1658" y="748" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1658" y="771.04">Кандидат · Выполнить</tspan>
+<tspan x="1658" y="799.84">кейс</tspan>
+</text>
+<text x="1658" y="815.6" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1658" y="832.88">Сначала понятны задача и</tspan>
+<tspan x="1658" y="856.28">критерии. Дополнительная</tspan>
+<tspan x="1658" y="879.68">проверка, если нужна.</tspan>
+</text>
+<text x="1658" y="895.8" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1658" y="909.24">У; В78; вывод</tspan>
+</text>
+<rect x="2030" y="730" width="340" height="230" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="2048" y="748" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2048" y="771.04">Кандидат · Встретиться с</tspan>
+<tspan x="2048" y="799.84">НМ</tspan>
+</text>
+<text x="2048" y="815.6" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2048" y="832.88">Проверить задачи и ожидания;</tspan>
+<tspan x="2048" y="856.28">самому решить, подходит ли</tspan>
+<tspan x="2048" y="879.68">возможность.</tspan>
+</text>
+<text x="2048" y="895.8" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2048" y="909.24">Д4,17; вывод</tspan>
+</text>
+<rect x="80" y="1200" width="500" height="260" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="98" y="1218" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="1231.44">РЕШЕНИЕ</tspan>
+</text>
+<text x="98" y="1243.5" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="1266.54">Данных мало / противоречие</tspan>
+</text>
+<text x="98" y="1282.3" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="1299.58">Дозадать вопрос, проверить конкретный эпизод или</tspan>
+<tspan x="98" y="1322.98">предложить кейс. Не приравнивать неизвестность к</tspan>
+<tspan x="98" y="1346.38">слабому навыку.</tspan>
+</text>
+<text x="98" y="1362.5" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="1375.94">В26,66–78; вывод</tspan>
+</text>
+<rect x="670" y="1200" width="500" height="260" rx="12" fill="#f4f1e8" stroke="none" stroke-width="1.5"/>
+<path d="M1158,1200 L1161.11,1200.41 M1161.11,1200.41 L1164,1201.61 M1164,1201.61 L1165.38,1202.66 M1168.95,1207.36 L1169.59,1208.89 M1169.59,1208.89 L1170,1212 M1170,1212 L1170,1215.2 M1170,1221.2 L1170,1229.2 M1170,1235.2 L1170,1243.2 M1170,1249.2 L1170,1257.2 M1170,1263.2 L1170,1271.2 M1170,1277.2 L1170,1285.2 M1170,1291.2 L1170,1299.2 M1170,1305.2 L1170,1313.2 M1170,1319.2 L1170,1327.2 M1170,1333.2 L1170,1341.2 M1170,1347.2 L1170,1355.2 M1170,1361.2 L1170,1369.2 M1170,1375.2 L1170,1383.2 M1170,1389.2 L1170,1397.2 M1170,1403.2 L1170,1411.2 M1170,1417.2 L1170,1425.2 M1170,1431.2 L1170,1439.2 M1170,1445.2 L1170,1448 M1170,1448 L1169.59,1451.11 M1169.59,1451.11 L1168.8,1453.02 M1165.05,1457.58 L1164,1458.39 M1164,1458.39 L1161.11,1459.59 M1161.11,1459.59 L1158,1460 M1158,1460 L1157.59,1460 M1151.59,1460 L1143.59,1460 M1137.59,1460 L1129.59,1460 M1123.59,1460 L1115.59,1460 M1109.59,1460 L1101.59,1460 M1095.59,1460 L1087.59,1460 M1081.59,1460 L1073.59,1460 M1067.59,1460 L1059.59,1460 M1053.59,1460 L1045.59,1460 M1039.59,1460 L1031.59,1460 M1025.59,1460 L1017.59,1460 M1011.59,1460 L1003.59,1460 M997.592,1460 L989.592,1460 M983.592,1460 L975.592,1460 M969.592,1460 L961.592,1460 M955.592,1460 L947.592,1460 M941.592,1460 L933.592,1460 M927.592,1460 L919.592,1460 M913.592,1460 L905.592,1460 M899.592,1460 L891.592,1460 M885.592,1460 L877.592,1460 M871.592,1460 L863.592,1460 M857.592,1460 L849.592,1460 M843.592,1460 L835.592,1460 M829.592,1460 L821.592,1460 M815.592,1460 L807.592,1460 M801.592,1460 L793.592,1460 M787.592,1460 L779.592,1460 M773.592,1460 L765.592,1460 M759.592,1460 L751.592,1460 M745.592,1460 L737.592,1460 M731.592,1460 L723.592,1460 M717.592,1460 L709.592,1460 M703.592,1460 L695.592,1460 M689.592,1460 L682,1460 M682,1460 L681.595,1459.95 M675.886,1458.31 L673.515,1456.49 M673.515,1456.49 L671.608,1454 M671.608,1454 L670.889,1452.27 M670,1446.39 L670,1438.39 M670,1432.39 L670,1424.39 M670,1418.39 L670,1410.39 M670,1404.39 L670,1396.39 M670,1390.39 L670,1382.39 M670,1376.39 L670,1368.39 M670,1362.39 L670,1354.39 M670,1348.39 L670,1340.39 M670,1334.39 L670,1326.39 M670,1320.39 L670,1312.39 M670,1306.39 L670,1298.39 M670,1292.39 L670,1284.39 M670,1278.39 L670,1270.39 M670,1264.39 L670,1256.39 M670,1250.39 L670,1242.39 M670,1236.39 L670,1228.39 M670,1222.39 L670,1214.39 M670.593,1208.45 L671.608,1206 M671.608,1206 L673.515,1203.51 M673.515,1203.51 L675.272,1202.17 M680.827,1200.15 L682,1200 M682,1200 L688.817,1200 M694.817,1200 L702.817,1200 M708.817,1200 L716.817,1200 M722.817,1200 L730.817,1200 M736.817,1200 L744.817,1200 M750.817,1200 L758.817,1200 M764.817,1200 L772.817,1200 M778.817,1200 L786.817,1200 M792.817,1200 L800.817,1200 M806.817,1200 L814.817,1200 M820.817,1200 L828.817,1200 M834.817,1200 L842.817,1200 M848.817,1200 L856.817,1200 M862.817,1200 L870.817,1200 M876.817,1200 L884.817,1200 M890.817,1200 L898.817,1200 M904.817,1200 L912.817,1200 M918.817,1200 L926.817,1200 M932.817,1200 L940.817,1200 M946.817,1200 L954.817,1200 M960.817,1200 L968.817,1200 M974.817,1200 L982.817,1200 M988.817,1200 L996.817,1200 M1002.82,1200 L1010.82,1200 M1016.82,1200 L1024.82,1200 M1030.82,1200 L1038.82,1200 M1044.82,1200 L1052.82,1200 M1058.82,1200 L1066.82,1200 M1072.82,1200 L1080.82,1200 M1086.82,1200 L1094.82,1200 M1100.82,1200 L1108.82,1200 M1114.82,1200 L1122.82,1200 M1128.82,1200 L1136.82,1200 M1142.82,1200 L1150.82,1200 M1156.82,1200 L1158,1200" fill="none" stroke="#20211f" stroke-width="1.5"/>
+<text x="688" y="1218" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="688" y="1231.44">РЕШЕНИЕ · ГИПОТЕЗА</tspan>
+</text>
+<text x="688" y="1243.5" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="688" y="1266.54">Не закончил / не пришёл</tspan>
+</text>
+<text x="688" y="1282.3" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="688" y="1299.58">Выяснить причину: продолжить, перенести или</tspan>
+<tspan x="688" y="1322.98">сменить канал. Это не готовая оценка навыков.</tspan>
+</text>
+<text x="688" y="1339.1" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="688" y="1352.54">Д51–52; маршруты — гипотеза</tspan>
+</text>
+<rect x="1260" y="1200" width="500" height="260" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="1278" y="1218" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1278" y="1231.44">РЕШЕНИЕ</tspan>
+</text>
+<text x="1278" y="1243.5" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1278" y="1266.54">Отказ по вакансии</tspan>
+</text>
+<text x="1278" y="1282.3" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1278" y="1299.58">Причина → обратная связь кандидату → другие</tspan>
+<tspan x="1278" y="1322.98">вакансии. У работодателя: новый батч или</tspan>
+<tspan x="1278" y="1346.38">пересмотр требований.</tspan>
+</text>
+<text x="1278" y="1362.5" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1278" y="1375.94">Д3,15,17,58</tspan>
+</text>
+<rect x="1850" y="1200" width="500" height="260" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="1868" y="1218" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1868" y="1241.04">Кандидат · Разрешить показ</tspan>
+</text>
+<text x="1868" y="1256.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1868" y="1274.08">После интервью отдельно решить, кому можно</tspan>
+<tspan x="1868" y="1297.48">показать запись. HR / агентство проверяет</tspan>
+<tspan x="1868" y="1320.88">разрешение перед отправкой другим работодателям.</tspan>
+</text>
+<text x="1868" y="1337" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1868" y="1350.44">Д10–11; В6</tspan>
+</text>
+<text x="1220" y="178" fill="#696b65" font-size="16" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1220" y="193.36">Тест не нужен</tspan>
+</text>
+<text x="380" y="1015" fill="#696b65" font-size="16" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="380" y="1030.36">Данных мало</tspan>
+</text>
+<text x="1570" y="1080" fill="#696b65" font-size="16" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1570" y="1095.36">Отказ</tspan>
+</text>
+<text x="1010" y="974" fill="#696b65" font-size="16" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1010" y="989.36">Не завершил</tspan>
+</text>
+<text x="1660" y="967" fill="#696b65" font-size="16" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1660" y="982.36">Для нового показа</tspan>
+</text>
+<text x="80" y="1590" fill="#696b65" font-size="22" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="80" y="1611.12">Три источника HR-проверки: живое интервью, внешнее AI или готовая запись. Это варианты сбора данных, а не три обязательных интервью.</tspan>
+</text>
+<text x="80" y="1660" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="80" y="1677.28">* «Hair» пока прочитан как Hiring-скрининг с нанимающим менеджером. Отдельный технический этап и правила пропуска проверок остаются вопросами.</tspan>
+</text>
+</svg>

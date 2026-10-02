@@ -1,0 +1,16 @@
+/tmp/
+.DS_Store
+/.playwright-cli/
+**/.playwright-cli/
+**/node_modules/
+**/storybook-static/
+**/dist/
+**/.cache/
+**/__pycache__/
+*.pyc
+*.log
+.env
+.env.*
+!.env.example
+*.pem
+*.key

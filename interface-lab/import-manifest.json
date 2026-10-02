@@ -1,0 +1,104 @@
+{
+  "date": "2026-10-02",
+  "sourceRelease": "20261002T115519Z-26110",
+  "sourceSite": "https://proteus-lab.158-160-179-53.sslip.io",
+  "files": [
+    {
+      "path": "src/ATSJobExample.stories.tsx",
+      "publishedSourceSha256": "c92bc9929e3679dd5273c91db27d1d0ee7ec21019921b348c4697fc582883354"
+    },
+    {
+      "path": "src/HRVision.stories.tsx",
+      "publishedSourceSha256": "939804663e309365c903105e34eaebf37377d19b109dcf33efd7ab2307c36baa"
+    },
+    {
+      "path": "src/HRVisionCJM.stories.tsx",
+      "publishedSourceSha256": "28ea750a150d50ba1898d3c5801ce7c157901aea5e8370b4effe3faec7fe9fba"
+    },
+    {
+      "path": "src/HRVisionCandidateCJM.stories.tsx",
+      "publishedSourceSha256": "110c4a000f158d33cfc043f61c013ff90c315855e107a452104c184406b11585"
+    },
+    {
+      "path": "src/scenes/ats-job-example/ATSJobExample.tsx",
+      "publishedSourceSha256": "166b27e676e594bc972acbb4ad5868b4ba8188e06fd819728439c202c4aca991"
+    },
+    {
+      "path": "src/scenes/ats-job-example/ats-job-example.css",
+      "publishedSourceSha256": "cf03d430c8a93bf0bef6b9f3ebd0cc4010a1e69ec92ce4f593ff5dd29c7b881b"
+    },
+    {
+      "path": "src/scenes/hr-vision/AgencyViews.css",
+      "publishedSourceSha256": "6f0758c728cf0549e1c60b136c6f2714fb6928170d4e1c32f9eccc863f8a7b5b"
+    },
+    {
+      "path": "src/scenes/hr-vision/AgencyViews.tsx",
+      "publishedSourceSha256": "08f2a3d98a79c21c9498291924913a0975ef178b13c15cc6b00f31a48e14dd96"
+    },
+    {
+      "path": "src/scenes/hr-vision/HRVisionLab.tsx",
+      "publishedSourceSha256": "f753034230950cc4e1e3c8e277699ba9e92eeecc55b8c39f20eae22d194c133d"
+    },
+    {
+      "path": "src/scenes/hr-vision/ManagerViews.tsx",
+      "publishedSourceSha256": "5c935c941356e46fbc8c958cbbc0f57060f898345ef643f8b21bc9a9f4729d4e"
+    },
+    {
+      "path": "src/scenes/hr-vision/PeopleViews.css",
+      "publishedSourceSha256": "7cfa9ce7dbc6c250711da40b3e62ecf0005c75dfd241d0b556a8d7fa5475e5ce"
+    },
+    {
+      "path": "src/scenes/hr-vision/PeopleViews.tsx",
+      "publishedSourceSha256": "a6a0ec4f37dc7a4a6ed8a361ba1e86c46c3c3e9de92ef884a13745537d41b915"
+    },
+    {
+      "path": "src/scenes/hr-vision/hr-vision.css",
+      "publishedSourceSha256": "f040492354abf2d739e0536e225742378ed11e1bb206dd2377d025dcf7ee0eef"
+    },
+    {
+      "path": "src/scenes/hr-vision/model.ts",
+      "publishedSourceSha256": "2437ae752e2a30497a701ff3a3192a1f974fe6ec64ab3b3ff960f4e4e4805ba8"
+    },
+    {
+      "path": "src/scenes/hr-vision/ui.tsx",
+      "publishedSourceSha256": "e3cd9db4446563a91b4d494f9e4830a9328c8e3304bef0d756474733a137631b"
+    },
+    {
+      "path": "src/scenes/job-journeys/JobJourney.tsx",
+      "publishedSourceSha256": "a35e5e555ff7f0b22237d4941af8e6569b3b47de6bc68920bfabe5e0220daba3"
+    },
+    {
+      "path": "src/scenes/job-journeys/JourneyNav.tsx",
+      "publishedSourceSha256": "a3ddf8004dccf6f14bd173f943f28829380092ed2a3a726a8c75800e0de79139"
+    },
+    {
+      "path": "src/scenes/job-journeys/agency.ts",
+      "publishedSourceSha256": "57dcc2fcb902e0dedd356107e3b382f3e802e8922d07f3c9f75f43c49546b595"
+    },
+    {
+      "path": "src/scenes/job-journeys/candidates.ts",
+      "publishedSourceSha256": "34e3cb2ef3283f35c0f80d5a2e52ddd07cff23f19247f0ec66bb64c3a7c6a00b"
+    },
+    {
+      "path": "src/scenes/job-journeys/contacts.ts",
+      "publishedSourceSha256": "dcd6de7400d8bb28f5c1c56e9722e01c4e7393d3d3173b5f5c0983e8ba5d4c00"
+    },
+    {
+      "path": "src/scenes/job-journeys/job-journey.css",
+      "publishedSourceSha256": "eb7ae97f008b0f0d488898f296c04d893e6c380652aa0027e970cb4f668fb048"
+    },
+    {
+      "path": "src/scenes/job-journeys/journey-nav.css",
+      "publishedSourceSha256": "00d61c7a920bc5580594ed3f54f0e6e96ec399f3afe4c4c26cd39b66d26a5674"
+    },
+    {
+      "path": "src/scenes/job-journeys/model.ts",
+      "publishedSourceSha256": "ff657eb96277acbd247a546bbe971c9c4adfe268142684611c16e97ce85ff0e3"
+    }
+  ],
+  "adaptations": [
+    "Standalone Storybook configuration and base CSS only.",
+    "HRVisionLab interface lab link points to HR overview, not Proteus gallery.",
+    "Published business content and screen behavior preserved."
+  ]
+}

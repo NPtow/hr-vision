@@ -1,0 +1,394 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="3240" height="3420" viewBox="0 0 3240 3420">
+<title>04 / 25 наших блоков + 2 внешние поверхности</title>
+<rect width="3240" height="3420" fill="#f4f1e8"/>
+<text x="32" y="28" fill="#20211f" font-size="36" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="32" y="62.56">04 / 25 наших блоков + 2 внешние поверхности</tspan>
+</text>
+<text x="32" y="90" fill="#696b65" font-size="20" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="32" y="109.2">27 позиций: 25 наших UI-блоков + Bitrix и рассылки · один ID сохраняется в разных экранах · отметка пилота описывает план, не готовность</tspan>
+</text>
+<rect x="80" y="200" width="680" height="340" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="98" y="218" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="241.04">B01 / Бизнес-задача и профиль роли</tspan>
+</text>
+<text x="98" y="256.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="274.08">Описать проблему бизнеса; Определить нужный результат;</tspan>
+<tspan x="98" y="297.48">Зафиксировать требования к роли</tspan>
+<tspan x="98" y="320.88">Роли: НМ / HR компании / Наша команда</tspan>
+</text>
+<text x="98" y="337" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="350.44">ПИЛОТ: предложено, не проверено</tspan>
+<tspan x="98" y="367.94">Контакты · Агентство · ATS</tspan>
+<tspan x="98" y="385.44">Д4,8,15; В63–66; А: вертикаль работодателя; У01.10: проблема бизнеса до найма</tspan>
+</text>
+<rect x="880" y="200" width="680" height="340" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="898" y="218" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="898" y="241.04">B02 / Реестр вакансий</tspan>
+</text>
+<text x="898" y="256.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="898" y="274.08">Найти вакансию; Увидеть состояние найма; Открыть нужную работу</tspan>
+<tspan x="898" y="297.48">Роли: НМ / HR компании / Наша команда</tspan>
+</text>
+<text x="898" y="313.6" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="898" y="327.04">ПИЛОТ: предложено, не проверено</tspan>
+<tspan x="898" y="344.54">Контакты · Агентство · ATS</tspan>
+<tspan x="898" y="362.04">Д43; В6,9,57; А: платформа</tspan>
+</text>
+<rect x="1680" y="200" width="680" height="340" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="1698" y="218" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1698" y="241.04">B03 / Редактор и импорт вакансии</tspan>
+</text>
+<text x="1698" y="256.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1698" y="274.08">Создать или импортировать вакансию; Уточнить условия и требования;</tspan>
+<tspan x="1698" y="297.48">Согласовать актуальную версию</tspan>
+<tspan x="1698" y="320.88">Роли: НМ / HR компании / Наша команда</tspan>
+</text>
+<text x="1698" y="337" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1698" y="350.44">ПИЛОТ: предложено, не проверено</tspan>
+<tspan x="1698" y="367.94">Контакты · Агентство · ATS</tspan>
+<tspan x="1698" y="385.44">В6,9–19,33,57; Д43</tspan>
+</text>
+<rect x="2480" y="200" width="680" height="340" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="2498" y="218" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2498" y="241.04">B04 / Компании и сигналы</tspan>
+</text>
+<text x="2498" y="256.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2498" y="274.08">Получить компании и вакансии; Проверить сигнал потребности;</tspan>
+<tspan x="2498" y="297.48">Подготовить контакт для обращения</tspan>
+<tspan x="2498" y="320.88">Роли: Наша команда</tspan>
+</text>
+<text x="2498" y="337" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2498" y="350.44">ПИЛОТ: предложено, не проверено</tspan>
+<tspan x="2498" y="367.94">Контакты · Агентство · ATS</tspan>
+<tspan x="2498" y="385.44">Д6–9,61; С2,5; А: инструменты привлечения; У01.10: сигналы и парсинг</tspan>
+</text>
+<rect x="80" y="620" width="680" height="340" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="98" y="638" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="661.04">B05 / Воронка продаж</tspan>
+</text>
+<text x="98" y="676.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="694.08">Завести компанию и контакт; Назначить ответственного; Зафиксировать</tspan>
+<tspan x="98" y="717.48">следующий шаг сделки</tspan>
+<tspan x="98" y="740.88">Роли: Наша команда</tspan>
+</text>
+<text x="98" y="757" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="770.44">ВНЕШНИЙ ИНСТРУМЕНТ / связь</tspan>
+<tspan x="98" y="787.94">Контакты · Агентство · ATS</tspan>
+<tspan x="98" y="805.44">С5; У01.10: Битрикс и ответственный за ответы</tspan>
+</text>
+<rect x="880" y="620" width="680" height="340" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="898" y="638" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="898" y="661.04">B06 / Исходящие кампании и коммерческое</tspan>
+<tspan x="898" y="689.84">предложение</tspan>
+</text>
+<text x="898" y="705.6" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="898" y="722.88">Подготовить обращение компании; Выполнить исходящую кампанию;</tspan>
+<tspan x="898" y="746.28">Передать ответ ответственному</tspan>
+<tspan x="898" y="769.68">Роли: Наша команда</tspan>
+</text>
+<text x="898" y="785.8" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="898" y="799.24">ВНЕШНИЙ ИНСТРУМЕНТ / связь</tspan>
+<tspan x="898" y="816.74">Контакты · Агентство · ATS</tspan>
+<tspan x="898" y="834.24">А: инструменты привлечения; У01.10: 200 отправок, аккаунты и почты</tspan>
+</text>
+<rect x="1680" y="620" width="680" height="340" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="1698" y="638" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1698" y="661.04">B07 / Прием кандидатов</tspan>
+</text>
+<text x="1698" y="676.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1698" y="694.08">Добавить отклик или кандидата; Указать источник и запрос; Передать на</tspan>
+<tspan x="1698" y="717.48">нужную проверку</tspan>
+<tspan x="1698" y="740.88">Роли: HR компании / Наша команда / Кандидат</tspan>
+</text>
+<text x="1698" y="757" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1698" y="770.44">ПИЛОТ: предложено, не проверено</tspan>
+<tspan x="1698" y="787.94">Контакты · Агентство · ATS</tspan>
+<tspan x="1698" y="805.44">Д7–10,43; В6,39–41,49; А: наполнение базы</tspan>
+</text>
+<rect x="2480" y="620" width="680" height="340" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="2498" y="638" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2498" y="661.04">B08 / Профиль кандидата</tspan>
+</text>
+<text x="2498" y="676.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2498" y="694.08">Собрать опыт и цели; Уточнить условия и доступность; Связать</tspan>
+<tspan x="2498" y="717.48">материалы о человеке</tspan>
+<tspan x="2498" y="740.88">Роли: НМ / HR компании / Наша команда / Кандидат</tspan>
+</text>
+<text x="2498" y="757" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2498" y="770.44">ПИЛОТ: предложено, не проверено</tspan>
+<tspan x="2498" y="787.94">Контакты · Агентство · ATS</tspan>
+<tspan x="2498" y="805.44">Д4,10–11,18,24,57; В22–28,57–68; А: вертикаль кандидата</tspan>
+</text>
+<rect x="80" y="1040" width="680" height="340" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="98" y="1058" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="1081.04">B09 / Согласие и доступ</tspan>
+</text>
+<text x="98" y="1096.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="1114.08">Объяснить цель записи и показа; Зафиксировать выбор кандидата;</tspan>
+<tspan x="98" y="1137.48">Проверить допустимость доступа</tspan>
+<tspan x="98" y="1160.88">Роли: HR компании / Наша команда / Кандидат</tspan>
+</text>
+<text x="98" y="1177" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="1190.44">ПИЛОТ: предложено, не проверено</tspan>
+<tspan x="98" y="1207.94">Контакты · Агентство · ATS</tspan>
+<tspan x="98" y="1225.44">Д10–11,36; А: наполнение базы</tspan>
+</text>
+<rect x="880" y="1040" width="680" height="340" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="898" y="1058" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="898" y="1081.04">B10 / План и маршрут интервью</tspan>
+</text>
+<text x="898" y="1096.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="898" y="1114.08">Выбрать HR или внешний AI; Определить обязательные вопросы;</tspan>
+<tspan x="898" y="1137.48">Показать следующий шаг участнику</tspan>
+<tspan x="898" y="1160.88">Роли: НМ / HR компании / Наша команда / Кандидат</tspan>
+</text>
+<text x="898" y="1177" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="898" y="1190.44">ПИЛОТ: предложено, не проверено</tspan>
+<tspan x="898" y="1207.94">Контакты · Агентство · ATS</tspan>
+<tspan x="898" y="1225.44">Д10–11,25–28; В11–28; У01.10: внешний AI и HR на реальном процессе</tspan>
+</text>
+<rect x="1680" y="1040" width="680" height="340" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="1698" y="1058" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1698" y="1081.04">B11 / Материалы интервью</tspan>
+</text>
+<text x="1698" y="1096.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1698" y="1114.08">Приложить запись или ссылку; Связать текст и источник; Проверить</tspan>
+<tspan x="1698" y="1137.48">полноту материала</tspan>
+<tspan x="1698" y="1160.88">Роли: HR компании / Наша команда / Кандидат</tspan>
+</text>
+<text x="1698" y="1177" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1698" y="1190.44">ПИЛОТ: предложено, не проверено</tspan>
+<tspan x="1698" y="1207.94">Контакты · Агентство · ATS</tspan>
+<tspan x="1698" y="1225.44">Д10,43; В11,39–49</tspan>
+</text>
+<rect x="2480" y="1040" width="680" height="340" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="2498" y="1058" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2498" y="1081.04">B12 / Просмотр доказательств</tspan>
+</text>
+<text x="2498" y="1096.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2498" y="1114.08">Открыть нужный фрагмент; Увидеть цитату и источник; Проверить</tspan>
+<tspan x="2498" y="1137.48">основание вывода</tspan>
+<tspan x="2498" y="1160.88">Роли: НМ / HR компании / Наша команда / Кандидат</tspan>
+</text>
+<text x="2498" y="1177" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2498" y="1190.44">ПИЛОТ: предложено, не проверено</tspan>
+<tspan x="2498" y="1207.94">Контакты · Агентство · ATS</tspan>
+<tspan x="2498" y="1225.44">Д11,43; В41–49,57–68; А: пайплайн доказательств</tspan>
+</text>
+<rect x="80" y="1460" width="680" height="340" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="98" y="1478" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="1501.04">B13 / Оценка навыков</tspan>
+</text>
+<text x="98" y="1516.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="1534.08">Применить критерии оценки; Отметить данные и пробелы; Связать вывод</tspan>
+<tspan x="98" y="1557.48">с доказательством</tspan>
+<tspan x="98" y="1580.88">Роли: НМ / HR компании / Наша команда / Кандидат</tspan>
+</text>
+<text x="98" y="1597" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="1610.44">ПИЛОТ: предложено, не проверено</tspan>
+<tspan x="98" y="1627.94">Контакты · Агентство · ATS</tspan>
+<tspan x="98" y="1645.44">Д4,36,49; В63–78; С7–8; А: матрица скиллов; У01.10: панель оценок</tspan>
+</text>
+<rect x="880" y="1460" width="680" height="340" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="898" y="1478" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="898" y="1501.04">B14 / Добор данных и тестовые</tspan>
+</text>
+<text x="898" y="1516.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="898" y="1534.08">Определить недостающую проверку; Выдать вопрос или задание;</tspan>
+<tspan x="898" y="1557.48">Приложить и оценить ответ</tspan>
+<tspan x="898" y="1580.88">Роли: НМ / HR компании / Наша команда / Кандидат</tspan>
+</text>
+<text x="898" y="1597" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="898" y="1610.44">ПОЗЖЕ / целевой продукт</tspan>
+<tspan x="898" y="1627.94">Контакты · Агентство · ATS</tspan>
+<tspan x="898" y="1645.44">Д26–28,44; В15–19,26,78; У01.10: тестовые как отдельная проверка</tspan>
+</text>
+<rect x="1680" y="1460" width="680" height="340" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="1698" y="1478" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1698" y="1501.04">B15 / Подбор и батчи</tspan>
+</text>
+<text x="1698" y="1516.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1698" y="1534.08">Собрать подборку под требования; Проверить доступность кандидатов;</tspan>
+<tspan x="1698" y="1557.48">Уточнить следующий батч по обратной связи</tspan>
+<tspan x="1698" y="1580.88">Роли: НМ / HR компании / Наша команда</tspan>
+</text>
+<text x="1698" y="1597" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1698" y="1610.44">ПИЛОТ: предложено, не проверено</tspan>
+<tspan x="1698" y="1627.94">Контакты · Агентство · ATS</tspan>
+<tspan x="1698" y="1645.44">Д7–9,15,17–19,54,57–58; В66–78; А: горизонталь матча</tspan>
+</text>
+<rect x="2480" y="1460" width="680" height="340" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="2498" y="1478" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2498" y="1501.04">B16 / Сравнение и shortlist</tspan>
+</text>
+<text x="2498" y="1516.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2498" y="1534.08">Сравнить по важным критериям; Увидеть пробелы и компромиссы;</tspan>
+<tspan x="2498" y="1557.48">Собрать короткий список</tspan>
+<tspan x="2498" y="1580.88">Роли: НМ / HR компании / Наша команда</tspan>
+</text>
+<text x="2498" y="1597" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2498" y="1610.44">ПОЗЖЕ / целевой продукт</tspan>
+<tspan x="2498" y="1627.94">Контакты · Агентство · ATS</tspan>
+<tspan x="2498" y="1645.44">Д4,9,43; В49–51,63–68; А: матрица скиллов; вывод J11</tspan>
+</text>
+<rect x="80" y="1880" width="680" height="340" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="98" y="1898" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="1921.04">B17 / Кандидат × вакансия</tspan>
+</text>
+<text x="98" y="1936.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="1954.08">Показать этап конкретной пары; Проверить соответствие роли;</tspan>
+<tspan x="98" y="1977.48">Зафиксировать решение и следующий шаг</tspan>
+<tspan x="98" y="2000.88">Роли: НМ / HR компании / Наша команда / Кандидат</tspan>
+</text>
+<text x="98" y="2017" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="2030.44">ПИЛОТ: предложено, не проверено</tspan>
+<tspan x="98" y="2047.94">Контакты · Агентство · ATS</tspan>
+<tspan x="98" y="2065.44">Д3,17,43,58; В41–51,66–78; У01.10: параллельные пути</tspan>
+</text>
+<rect x="880" y="1880" width="680" height="340" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="898" y="1898" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="898" y="1921.04">B18 / Встречи</tspan>
+</text>
+<text x="898" y="1936.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="898" y="1954.08">Предложить время; Зафиксировать подтверждение; Перенести или</tspan>
+<tspan x="898" y="1977.48">отметить результат</tspan>
+<tspan x="898" y="2000.88">Роли: НМ / HR компании / Наша команда / Кандидат</tspan>
+</text>
+<text x="898" y="2017" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="898" y="2030.44">ПИЛОТ: предложено, не проверено</tspan>
+<tspan x="898" y="2047.94">Контакты · Агентство · ATS</tspan>
+<tspan x="898" y="2065.44">Д3,8,43; В45</tspan>
+</text>
+<rect x="1680" y="1880" width="680" height="340" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="1698" y="1898" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1698" y="1921.04">B19 / Контакт и интерес кандидата</tspan>
+</text>
+<text x="1698" y="1936.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1698" y="1954.08">Уточнить интерес и сроки; Назначить следующий контакт; Зафиксировать</tspan>
+<tspan x="1698" y="1977.48">риск потери</tspan>
+<tspan x="1698" y="2000.88">Роли: НМ / HR компании / Наша команда / Кандидат</tspan>
+</text>
+<text x="1698" y="2017" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1698" y="2030.44">ПИЛОТ: предложено, не проверено</tspan>
+<tspan x="1698" y="2047.94">Контакты · Агентство · ATS</tspan>
+<tspan x="1698" y="2065.44">У01.10: как не потерять понравившегося кандидата; Д17,57–58; вывод J20</tspan>
+</text>
+<rect x="2480" y="1880" width="680" height="340" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="2498" y="1898" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2498" y="1921.04">B20 / Отказы и обратная связь</tspan>
+</text>
+<text x="2498" y="1936.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2498" y="1954.08">Зафиксировать причину решения; Передать согласованный разбор;</tspan>
+<tspan x="2498" y="1977.48">Уточнить требования или подбор</tspan>
+<tspan x="2498" y="2000.88">Роли: НМ / HR компании / Наша команда / Кандидат</tspan>
+</text>
+<text x="2498" y="2017" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2498" y="2030.44">ПИЛОТ: предложено, не проверено</tspan>
+<tspan x="2498" y="2047.94">Контакты · Агентство · ATS</tspan>
+<tspan x="2498" y="2065.44">Д3,17–19,58; В45,66–78; А: feedback</tspan>
+</text>
+<rect x="80" y="2300" width="680" height="340" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="98" y="2318" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="2341.04">B21 / Альтернативы кандидата</tspan>
+</text>
+<text x="98" y="2356.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="2374.08">Увидеть параллельные варианты; Сопоставить условия и сроки;</tspan>
+<tspan x="98" y="2397.48">Обновить приоритет и доступность</tspan>
+<tspan x="98" y="2420.88">Роли: Кандидат / HR компании / Наша команда</tspan>
+</text>
+<text x="98" y="2437" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="2450.44">ПОЗЖЕ / целевой продукт</tspan>
+<tspan x="98" y="2467.94">Контакты · Агентство · ATS</tspan>
+<tspan x="98" y="2485.44">Д16–17,57–58; У01.10: кандидат продолжает поиск; У02.10: кабинет кандидата позже</tspan>
+</text>
+<rect x="880" y="2300" width="680" height="340" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="898" y="2318" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="898" y="2341.04">B22 / Трудовой оффер и переговоры</tspan>
+</text>
+<text x="898" y="2356.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="898" y="2374.08">Собрать условия предложения; Согласовать и передать оффер;</tspan>
+<tspan x="898" y="2397.48">Зафиксировать ответ или изменения</tspan>
+<tspan x="898" y="2420.88">Роли: НМ / HR компании / Наша команда / Кандидат</tspan>
+</text>
+<text x="898" y="2437" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="898" y="2450.44">ПОЗЖЕ / целевой продукт</tspan>
+<tspan x="898" y="2467.94">Контакты · Агентство · ATS</tspan>
+<tspan x="898" y="2485.44">Д3,17,58,60; У01.10: подготовка оффера</tspan>
+</text>
+<rect x="1680" y="2300" width="680" height="340" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="1698" y="2318" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1698" y="2341.04">B23 / KPI и ожидаемый результат</tspan>
+</text>
+<text x="1698" y="2356.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1698" y="2374.08">Определить ожидаемый результат роли; Уточнить критерии и период;</tspan>
+<tspan x="1698" y="2397.48">Зафиксировать согласованную версию</tspan>
+<tspan x="1698" y="2420.88">Роли: НМ / HR компании / Наша команда / Кандидат</tspan>
+</text>
+<text x="1698" y="2437" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1698" y="2450.44">ПОЗЖЕ / целевой продукт</tspan>
+<tspan x="1698" y="2467.94">Контакты · Агентство · ATS</tspan>
+<tspan x="1698" y="2485.44">У01.10: подготовить KPI; В66; Д33–34</tspan>
+</text>
+<rect x="2480" y="2300" width="680" height="340" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="2498" y="2318" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2498" y="2341.04">B24 / Документы и статус оформления</tspan>
+</text>
+<text x="2498" y="2356.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2498" y="2374.08">Сохранить версию или ссылку; Отметить согласование и вопросы;</tspan>
+<tspan x="2498" y="2397.48">Зафиксировать факт оформления</tspan>
+<tspan x="2498" y="2420.88">Роли: НМ / HR компании / Наша команда / Кандидат</tspan>
+</text>
+<text x="2498" y="2437" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="2498" y="2450.44">ПОЗЖЕ / целевой продукт</tspan>
+<tspan x="2498" y="2467.94">Контакты · Агентство · ATS</tspan>
+<tspan x="2498" y="2485.44">Д54; У01.10: сделать договор</tspan>
+</text>
+<rect x="80" y="2720" width="680" height="340" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="98" y="2738" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="2761.04">B25 / Выход и замена</tspan>
+</text>
+<text x="98" y="2776.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="2794.08">Согласовать и подтвердить выход; Получить обратную связь о</tspan>
+<tspan x="98" y="2817.48">результате; Открыть повторный подбор при необходимости</tspan>
+<tspan x="98" y="2840.88">Роли: НМ / HR компании / Наша команда / Кандидат</tspan>
+</text>
+<text x="98" y="2857" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="98" y="2870.44">ПОЗЖЕ / целевой продукт</tspan>
+<tspan x="98" y="2887.94">Контакты · Агентство · ATS</tspan>
+<tspan x="98" y="2905.44">Д8,14,30–35,54,60; С2</tspan>
+</text>
+<rect x="880" y="2720" width="680" height="340" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="898" y="2738" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="898" y="2761.04">B26 / Доступ к контакту и расчеты</tspan>
+</text>
+<text x="898" y="2776.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="898" y="2794.08">Показать услугу и условия доступа; Отметить заказ и статус оплаты;</tspan>
+<tspan x="898" y="2817.48">Выдать разрешенный контакт или результат</tspan>
+<tspan x="898" y="2840.88">Роли: НМ / HR компании / Наша команда</tspan>
+</text>
+<text x="898" y="2857" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="898" y="2870.44">ПИЛОТ: предложено, не проверено</tspan>
+<tspan x="898" y="2887.94">Контакты · Агентство · ATS</tspan>
+<tspan x="898" y="2905.44">Д7–9,43,59–60</tspan>
+</text>
+<rect x="1680" y="2720" width="680" height="340" rx="12" fill="#f4f1e8" stroke="#20211f" stroke-width="1.5"/>
+<text x="1698" y="2738" fill="#20211f" font-size="24" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1698" y="2761.04">B27 / Очередь работ команды</tspan>
+</text>
+<text x="1698" y="2776.8" fill="#696b65" font-size="18" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1698" y="2794.08">Назначить исполнителя; Увидеть ожидающее действие; Передать работу</tspan>
+<tspan x="1698" y="2817.48">и срок</tspan>
+<tspan x="1698" y="2840.88">Роли: НМ / HR компании / Наша команда</tspan>
+</text>
+<text x="1698" y="2857" fill="#696b65" font-size="14" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="1698" y="2870.44">ПИЛОТ: предложено, не проверено</tspan>
+<tspan x="1698" y="2887.94">Контакты · Агентство · ATS</tspan>
+<tspan x="1698" y="2905.44">В6,41,55,96; С5,8; У01.10: ответственный за процесс; У02.10: собственная команда агентства</tspan>
+</text>
+<text x="80" y="3190" fill="#696b65" font-size="20" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="80" y="3209.2">Статус «пилот» не требует полной автоматизации: действия могут выполняться человеком, внешним AI или во внешнем сервисе. B05/B06 связывают работу с Bitrix и рассылкой; CRM заново не строим.</tspan>
+</text>
+<text x="80" y="3270" fill="#696b65" font-size="20" text-anchor="start" font-family="Arial, Helvetica, sans-serif">
+<tspan x="80" y="3289.2">B22 = трудовое предложение кандидату. B06 = исходящее коммерческое предложение компании. B24 хранит документы и состояние оформления, без обещания генерации договора или электронной подписи.</tspan>
+</text>
+</svg>

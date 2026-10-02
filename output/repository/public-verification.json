@@ -1,0 +1,27 @@
+{
+  "date": "2026-10-02",
+  "release": "20261002T115519Z-26110",
+  "indexMatchesStaging": true,
+  "storyIds": [
+    "hr-vision-agency--overview",
+    "hr-vision-ats-example--overview",
+    "hr-vision-cjm--agency",
+    "hr-vision-cjm--contacts",
+    "hr-vision-cjm--ats",
+    "hr-vision-candidate-cjm--agency",
+    "hr-vision-candidate-cjm--other"
+  ],
+  "matchingAssets": [
+    "ATSJobExample-Cg1S6XME.css",
+    "ATSJobExample-K9ypaNmV.js",
+    "ATSJobExample.stories-DyS7Nbe0.js",
+    "HRVision-DyZmO3SC.css",
+    "HRVision.stories-CrvB3HOx.js",
+    "HRVisionCJM.stories-DY2aMVg0.js",
+    "HRVisionCandidateCJM.stories-C0LyGSIu.js",
+    "JobJourney-BBCV_kXL.css",
+    "JobJourney-Dyv2qyXS.js",
+    "JourneyNav-CRUavCMI.css",
+    "JourneyNav-DoTvQUEA.js"
+  ]
+}
