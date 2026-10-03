@@ -7,5 +7,5 @@ export function JourneyNav({ active }: { active: 'ats' | 'contacts' | 'agency' |
     ['candidate-agency','Кандидат · агентство','hr-vision-candidate-cjm--agency'],
     ['candidate-other','Кандидат · остальные модели','hr-vision-candidate-cjm--other'],
   ];
-  return <nav className="jnav" aria-label="Карты HR Vision">{entries.map(([id,label,story]) => <a key={id} href={`?id=${story}&viewMode=story`} aria-current={active===id?'page':undefined}>{label}</a>)}</nav>;
+  return <nav className="jnav" aria-label="Карты HR Vision"><a href="?id=hr-vision-xpm--overview&viewMode=story">Карта XPM ↗</a>{entries.map(([id,label,story]) => <a key={id} href={`?id=${story}&viewMode=story`} aria-current={active===id?'page':undefined}>{label}</a>)}</nav>;
 }
