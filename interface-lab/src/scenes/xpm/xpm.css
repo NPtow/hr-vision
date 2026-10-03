@@ -12,3 +12,4 @@
 .xpm-edge-label--start{transform:translate(0,-100%)}
 .xpm-edge-label.is-active{color:#51504d}
 .xpm-edge-label.is-muted{color:#aaa9a5}
+@media(max-width:520px){.xpm-header{height:auto;min-height:55px;flex-wrap:wrap;gap:8px;padding-top:12px;padding-bottom:12px}.xpm-header-links{gap:14px;flex-wrap:wrap}}

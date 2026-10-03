@@ -131,7 +131,7 @@ export function XpmMap({ strategies, initialStrategy }: { strategies: XpmStrateg
   function changeStrategy(id: XpmStrategyId) { setStrategyId(id); setChapterIndex(0); setSelected(null); if (scrollRef.current) scrollRef.current.scrollLeft = 0; }
   function changeChapter(index: number) { setChapterIndex(index); setSelected(null); }
   return <main className="xpm-app">
-    <header className="xpm-header"><a className="xpm-brand" href="?id=hr-vision-agency--overview&viewMode=story">HR Vision<span>/</span><span>Карта опыта и процесса</span></a><nav className="xpm-header-links" aria-label="Материалы HR Vision"><a className="xpm-return" href="?id=hr-vision-agency--overview&viewMode=story">Экраны</a><a className="xpm-return" href={`?id=${cjmStory}&viewMode=story`}>Предыдущая CJM<ArrowRight size={14} aria-hidden="true" /></a></nav></header>
+    <header className="xpm-header"><a className="xpm-brand" href="?id=hr-vision-agency--overview&viewMode=story">HR Vision<span>/</span><span>Карта опыта и процесса</span></a><nav className="xpm-header-links" aria-label="Материалы HR Vision"><a className="xpm-return" href="?id=hr-vision-product--manager&viewMode=story">Новый интерфейс<ArrowRight size={14} aria-hidden="true" /></a><a className="xpm-return" href="?id=hr-vision-agency--overview&viewMode=story">Прежние экраны</a><a className="xpm-return" href={`?id=${cjmStory}&viewMode=story`}>Предыдущая CJM<ArrowRight size={14} aria-hidden="true" /></a></nav></header>
     <div className="xpm-shell">
       <div className="xpm-topline"><span className="xpm-eyebrow">XPM · Целевой процесс · рабочая модель</span><span className="xpm-date">03 октября 2026</span></div>
       <div className="xpm-intro"><h1>{strategy.title}</h1><p>{strategy.subtitle}</p></div>

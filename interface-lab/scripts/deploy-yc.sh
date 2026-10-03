@@ -93,6 +93,7 @@ for (const id of [
   'hr-vision-ats-example--overview', 'hr-vision-cjm--contacts',
   'hr-vision-cjm--agency', 'hr-vision-candidate-cjm--agency',
   'hr-vision-candidate-cjm--other',
+  'hr-vision-product--manager', 'hr-vision-product--candidate',
 ]) if (!entries[id]) throw new Error(`Missing required story: ${id}`);
 function inspect(dir, prefix = '', publicOnly = false) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
