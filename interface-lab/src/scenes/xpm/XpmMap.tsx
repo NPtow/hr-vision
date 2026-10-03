@@ -3,7 +3,8 @@ import { ArrowDownRight, ArrowRight, ChevronDown, ExternalLink, X } from 'lucide
 import type { XpmActor, XpmChapter, XpmEdge, XpmNode, XpmSource, XpmStrategy, XpmStrategyId } from './model';
 import './xpm.css';
 
-const GEOMETRY = { left: 230, column: 244, row: 138, top: 48, right: 125 };
+// The final column needs room for right-aligned synchronous names and captions.
+const GEOMETRY = { left: 230, column: 244, row: 138, top: 48, right: 200 };
 
 function coordinates(node: XpmNode, actors: XpmActor[]) {
   return { x: GEOMETRY.left + node.column * GEOMETRY.column, y: GEOMETRY.top + actors.findIndex(actor => actor.id === node.actorId) * GEOMETRY.row };
@@ -65,14 +66,24 @@ function Fragment({ chapter, actors, selected, onSelect, diagramId }: { chapter:
           if (!geometry) return null;
           const active = selected === edge.from || selected === edge.to;
           const fullLabel = edge.label ?? '';
-          const label = fullLabel.length > 32 ? `${fullLabel.slice(0, 30).trim()}…` : fullLabel;
           return <g key={edge.id ?? `${edge.from}-${edge.to}-${index}`} className={`xpm-edge xpm-edge--${edge.kind ?? 'sequence'}${active ? ' is-active' : ''}${selected && !active ? ' is-muted' : ''}`}>
             <title>{[fullLabel, edge.delay].filter(Boolean).join('. ')}</title>
             <path d={geometry.path} markerEnd={edge.kind === 'sync' ? undefined : `url(#${diagramId}-arrow)`} />
-            {label && <text x={geometry.x} y={geometry.y} textAnchor={geometry.anchor}>{label}</text>}
           </g>;
         })}
       </svg>
+      {/* Ordinary text above every connector avoids SVG glyph-stroke artifacts.
+          Keep the paper backing opaque even when an unrelated label is muted. */}
+      <div className="xpm-edge-labels" aria-hidden="true">
+        {chapter.edges.map((edge, index) => {
+          const geometry = edgeGeometry(edge, chapter.nodes, visibleActors);
+          if (!geometry || !edge.label) return null;
+          const active = selected === edge.from || selected === edge.to;
+          return <span key={edge.id ?? `${edge.from}-${edge.to}-${index}`} className={`xpm-edge-label xpm-edge-label--${geometry.anchor}${active ? ' is-active' : ''}${selected && !active ? ' is-muted' : ''}`} style={{ left: geometry.x, top: geometry.y }}>
+            {edge.label}
+          </span>;
+        })}
+      </div>
       {chapter.nodes.map(node => {
         const position = coordinates(node, visibleActors);
         const isSelected = selected === node.id;
