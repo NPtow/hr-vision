@@ -179,3 +179,88 @@
 @media(max-width:850px) { .ag-header-context { display:none; }.ag-sidebar { display:none; }.ag-manager-main { padding:24px; }.ag-heading { flex-direction:row; align-items:flex-end; }.ag-heading p { max-width:420px; }.ag-shortlist { grid-template-columns:265px minmax(0,1fr); }.ag-manager { min-height:calc(100dvh - 157px); } }
 @media(max-width:660px) { .ag-preview-bar { padding:7px 12px; gap:8px; }.ag-preview-note { display:none; }.ag-role-switch button { padding:4px 9px; }.ag-product-header { height:65px; padding:0 18px; }.ag-wordmark { font-size:21px; }.ag-header-person>span:last-child { display:none; }.ag-manager-main { padding:21px 16px 26px; }.ag-breadcrumb { font-size:10px; margin-bottom:14px; }.ag-heading { display:block; margin-bottom:25px; }.ag-heading h1 { font-size:25px; letter-spacing:-.8px; }.ag-title-break { display:initial; }.ag-heading p { font-size:12px; line-height:1.6; margin-top:12px; }.ag-brief-link { margin-top:10px; }.ag-section-heading>span { display:none; }.ag-shortlist { display:block; overflow:visible; background:white; }.ag-list { border:0; border-radius:14px; padding:16px; }.ag-person-detail { display:none; }.ag-shortlist.detail-open .ag-list { display:none; }.ag-shortlist.detail-open .ag-person-detail { display:flex; border-radius:14px; padding:18px 17px 0; }.ag-mobile-back { display:flex; align-items:center; gap:6px; font-size:12px!important; color:#6554e8; margin:0 0 23px; padding:0; }.ag-person { padding:16px; }.ag-person-top strong { font-size:14px; }.ag-person-top .ag-avatar { width:42px; height:42px; font-size:12px; }.ag-person-top>div>span { font-size:11px; }.ag-person p { font-size:12px; }.ag-person-bottom { font-size:11px; }.ag-mini-status { font-size:10px; }.ag-list-filters { gap:18px; }.ag-list-filters button { font-size:11px; }.ag-list-foot { padding-top:22px; }.ag-detail-name h2 { font-size:21px; }.ag-detail-intro { gap:12px; }.ag-detail-intro p { font-size:11px; }.ag-detail-intro { align-items:flex-start; }.ag-evidence p { font-size:12px; }.ag-evidence strong { font-size:12px; }.ag-evidence>button>div>span { font-size:10px; }.ag-why h3 { font-size:16px; }.ag-unknown { font-size:12px; }.ag-unknown strong { font-size:12px; }.ag-tags span { font-size:10px; }.ag-subheading h3 { font-size:12px; }.ag-decision-bar { gap:9px; }.ag-decision-bar [data-slot=button] { font-size:12px; height:40px; }.ag-decision-bar [data-slot=button]:first-child { flex:1 1 100%; margin:0; }.ag-decision-bar [data-slot=button]:not(:first-child) { flex:1; }.ag-lab-footer { padding:16px; flex-wrap:wrap; gap:10px 18px; }.ag-lab-footer>span { width:100%; }.ag-full-section { padding:22px 18px; }.ag-full-section h2 { font-size:20px; }.ag-brief-columns { grid-template-columns:1fr; gap:22px; }.ag-meeting-person h3 { font-size:15px; }.ag-full-section .ag-subheading { display:block; }.ag-full-section .ag-subheading>span { display:block; margin-top:6px; }.agency-dialog { padding:24px 20px; }.ag-toast { font-size:11px; bottom:12px; }.ag-toast span { max-width:260px; } }
 @media(max-width:850px) { .ag-mobile-nav { display:flex; gap:20px; border-bottom:1px solid var(--border); margin:0 0 23px; }.ag-mobile-nav button { padding:10px 0; font-size:12px; color:#686584; border-bottom:2px solid transparent; }.ag-mobile-nav button[aria-current=page] { color:#6554e8; border-bottom-color:#7566fd; } }
+/* Task-first entry, agreed 04.10.2026. Independent from candidate styles. */
+.ag-manager-task-first { background:#fff; }
+.ag-manager-task-first .ag-manager-main { width:100%; max-width:1236px; padding:32px 40px 56px; }
+.ag-task-home { max-width:1040px; margin:38px auto 120px; }
+.ag-task-home-heading { margin-bottom:42px; }
+.ag-task-home-heading .ag-kicker { font-size:11px; letter-spacing:.08em; }
+.ag-task-home-heading h1 { font-size:36px; line-height:1.17; font-weight:600; letter-spacing:-1.2px; margin:15px 0 12px; }
+.ag-task-home-heading p { color:var(--muted-foreground); font-size:15px; }
+.ag-hiring-task { display:flex; align-items:center; gap:24px; border-top:1px solid var(--border); border-bottom:1px solid var(--border); padding:32px 0; }
+.ag-task-index { width:46px; height:46px; display:grid; place-items:center; align-self:flex-start; border-radius:13px; background:var(--secondary); color:var(--primary); font-size:14px; font-weight:600; flex-shrink:0; }
+.ag-task-description { flex:1; }
+.ag-task-description .ag-kicker { font-size:10px; margin-bottom:11px; }
+.ag-task-description h2 { font-size:25px; font-weight:560; line-height:1.32; letter-spacing:-.65px; }
+.ag-task-description>p { color:var(--muted-foreground); font-size:14px; margin:10px 0 22px; }
+.ag-task-progress { font-size:12px; color:#686584; }
+.ag-hiring-task [data-slot=button] { min-height:44px; padding-inline:20px; }
+.ag-task-breadcrumb { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--muted-foreground); margin-bottom:24px; flex-wrap:wrap; }
+.ag-task-breadcrumb button { padding:6px 0; color:var(--muted-foreground); }
+.ag-task-breadcrumb button:hover { color:var(--primary); }
+.ag-task-breadcrumb [aria-current] { color:var(--foreground); }
+.ag-manager-task-first h1:focus { outline:none; }
+.ag-manager-task-first .ag-heading { margin-bottom:18px; }
+.ag-manager-task-first .ag-heading h1 { font-size:30px; }
+.ag-manager-task-first .ag-heading p { font-size:14px; margin-top:10px; }
+.ag-inline-brief { margin:0 0 28px; font-size:13px; }
+.ag-inline-brief summary { width:fit-content; cursor:pointer; color:var(--primary); padding:7px 0; }
+.ag-inline-brief summary:focus-visible { outline:2px solid var(--ring); outline-offset:4px; border-radius:3px; }
+.ag-inline-brief>div { margin-top:12px; background:var(--muted); padding:22px 24px; border-radius:12px; max-width:780px; color:var(--muted-foreground); }
+.ag-inline-brief p { line-height:1.65; }
+.ag-inline-brief dl { margin:16px 0 0; }
+.ag-inline-brief dl>div { display:grid; grid-template-columns:120px 1fr; gap:16px; padding:9px 0; }
+.ag-inline-brief dd { margin:0; color:var(--foreground); }
+.ag-confirmed-meeting { display:flex; align-items:center; gap:15px; padding:18px 20px; border:1px solid #ded8fc; border-radius:12px; margin:0 0 24px; background:#faf9ff; }
+.ag-confirmed-meeting>svg { color:var(--primary); }
+.ag-confirmed-meeting strong { font-size:14px; font-weight:550; }
+.ag-confirmed-meeting p { font-size:12px; color:var(--muted-foreground); margin-top:3px; }
+.ag-confirmed-meeting [data-slot=button] { margin-left:auto; }
+.ag-manager-task-first .ag-section-heading>span { font-size:11px; }
+.ag-manager-task-first .ag-shortlist { grid-template-columns:minmax(280px,.78fr) minmax(420px,1.3fr); box-shadow:none; }
+.ag-manager-task-first .ag-person-top strong { font-size:14px; }
+.ag-manager-task-first .ag-person-top>div>span { font-size:11px; }
+.ag-manager-task-first .ag-person p { font-size:12px; }
+.ag-manager-task-first .ag-person-bottom { font-size:11px; }
+.ag-manager-task-first .ag-detail-intro p { font-size:13px; }
+.ag-manager-task-first .ag-detail-meta { font-size:11px; }
+.ag-manager-task-first .ag-detail-tabs [data-slot=tabs-trigger] { font-size:12px; min-height:36px; }
+.ag-manager-task-first .ag-detail-tabs [data-slot=tabs-list] { height:auto; }
+.ag-manager-task-first .ag-why h3 { font-size:16px; }
+.ag-manager-task-first .ag-subheading h3 { font-size:14px; }
+.ag-manager-task-first .ag-evidence strong { font-size:13px; }
+.ag-manager-task-first .ag-evidence p { font-size:12px; }
+.ag-manager-task-first .ag-evidence>button>div>span { font-size:11px; }
+.ag-manager-task-first .ag-unknown, .ag-manager-task-first .ag-unknown strong { font-size:12px; }
+.ag-manager-task-first .ag-decision-bar [data-slot=button] { font-size:12px; min-height:42px; }
+.ag-manager-task-first .ag-decision { font-size:12px; }
+.ag-meeting-not-connected { color:var(--muted-foreground); font-size:12px; margin:12px 0 22px!important; }
+@media(max-width:1000px) {
+  .ag-manager-task-first .ag-manager-main { padding:24px; }
+  .ag-manager-task-first .ag-shortlist { grid-template-columns:minmax(245px,.75fr) minmax(360px,1.25fr); }
+}
+@media(max-width:760px) {
+  .ag-manager-task-first .ag-manager-main { padding:22px 18px 40px; }
+  .ag-task-home { margin:22px 0 70px; }
+  .ag-task-home-heading { margin-bottom:30px; }
+  .ag-task-home-heading h1 { font-size:29px; }
+  .ag-task-home-heading p { font-size:14px; }
+  .ag-hiring-task { display:grid; grid-template-columns:36px 1fr; gap:18px 14px; padding:24px 0; }
+  .ag-task-index { width:36px; height:36px; border-radius:10px; }
+  .ag-task-description h2 { font-size:22px; }
+  .ag-task-description>p { font-size:13px; line-height:1.5; }
+  .ag-hiring-task [data-slot=button] { grid-column:2; width:100%; margin-top:8px; }
+  .ag-task-progress { display:block; font-size:11px; }
+  .ag-manager-task-first .ag-heading h1 { font-size:25px; }
+  .ag-manager-task-first .ag-heading p { font-size:13px; }
+  .ag-manager-task-first .ag-shortlist { grid-template-columns:1fr; }
+  .ag-manager-task-first .ag-shortlist:not(.detail-open) .ag-person-detail { display:none; }
+  .ag-manager-task-first .ag-shortlist.detail-open .ag-list { display:none; }
+  .ag-manager-task-first .ag-list { border-right:0; }
+  .ag-manager-task-first .ag-mobile-back { display:flex; }
+  .ag-inline-brief>div { padding:18px; }
+  .ag-inline-brief dl>div { grid-template-columns:1fr; gap:4px; }
+  .ag-confirmed-meeting { flex-wrap:wrap; gap:10px; }
+  .ag-confirmed-meeting [data-slot=button] { width:100%; margin:6px 0 0; }
+  .ag-manager-task-first .ag-section-heading>span { display:none; }
+}

@@ -5,12 +5,24 @@ async (page) => {
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
   const checks = [];
   const assert = (value, message) => { if (!value) throw new Error(message); checks.push(message); };
-  const role = name => page.getByRole('group', { name: 'Посмотреть интерфейс' }).getByRole('button', { name, exact: true }).click();
+  const openShortlist = async () => {
+    const entry = page.getByRole('button', { name: 'Открыть подборку', exact: true });
+    if (await entry.isVisible()) await entry.click();
+  };
+  const role = async name => {
+    await page.getByRole('group', { name: 'Посмотреть интерфейс' }).getByRole('button', { name, exact: true }).click();
+    if (name === 'Нанимающий') await openShortlist();
+  };
   const stored = () => page.evaluate(() => JSON.parse(localStorage.getItem('hr-vision-agency-preview-v1')).state);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await role('Нанимающий');
   await page.getByRole('button', { name: 'Сбросить пример', exact: true }).click();
+  assert(await page.getByRole('heading', { name: 'Задачи найма', exact: true }).isVisible(), 'Manager starts from hiring tasks');
+  assert(await page.locator('main button').count() === 1, 'Task entry has one primary action');
+  assert(await page.locator('.ag-sidebar').count() === 0, 'No permanent workspace sidebar');
+  await openShortlist();
   await page.getByRole('heading', { name: 'Первая подборка 3' }).waitFor();
+  assert(await page.getByRole('button', { name: 'Открыть встречу', exact: true }).count() === 0, 'Meeting entry hidden before scheduling');
   assert(await page.getByRole('button', { name: /^Открыть:/ }).count() === 3, 'Three prepared candidates');
   await page.getByRole('textbox', { name: 'Найти кандидата' }).fill('Неизвестный');
   assert(await page.getByText('Нет кандидатов', { exact: true }).isVisible(), 'Empty search explains recovery');
@@ -27,10 +39,7 @@ async (page) => {
   await page.getByRole('button', { name: 'Сохранить решение', exact: true }).click();
   assert((await stored()).decisions.anna.kind === 'decline', 'Manager decline saved');
   await page.getByRole('button', { name: 'Вернуть к рассмотрению', exact: true }).click();
-  await page.getByRole('button', { name: 'Задать вопрос', exact: true }).click();
-  await page.getByLabel('Ваш вопрос', { exact: true }).fill('Когда согласуем KPI роли?');
-  await page.getByRole('button', { name: 'Сохранить вопрос', exact: true }).click();
-  assert((await stored()).coordinatorQuestion === 'Когда согласуем KPI роли?' && !(await stored()).decisions.anna.question, 'Coordinator question is separate from person');
+  assert(await page.getByRole('button', { name: /Задать вопрос|Уточнить/ }).count() === 0, 'Manager coordinator question removed');
 
   await role('Кандидат');
   await page.getByRole('button', { name: 'Мне интересно', exact: true }).click();
@@ -58,6 +67,7 @@ async (page) => {
   assert((await page.locator('.ag-facts').innerText()).includes('175 000'), 'Consented profile update visible to manager');
   await page.getByRole('button', { name: 'Пригласить на встречу', exact: true }).click();
   assert((await stored()).candidateReply === 'pending', 'Invitation does not confirm a meeting');
+  assert(await page.getByRole('button', { name: 'Открыть встречу', exact: true }).count() === 0, 'Invitation alone does not reveal meeting screen');
   await role('Кандидат');
   await page.getByRole('tab', { name: 'Следующий шаг' }).click();
   assert(await page.getByRole('radio').count() === 3, 'Slots visible after mutual interest');
@@ -69,7 +79,12 @@ async (page) => {
   assert((await stored()).candidateReply === 'confirmed', 'Candidate independently confirms offered slot');
   await role('Нанимающий');
   assert((await page.locator('.ag-decision').innerText()).includes('Встреча согласована'), 'Manager sees reciprocal confirmation');
+  await page.getByRole('button', { name: 'Открыть встречу', exact: true }).first().click();
+  assert(await page.getByRole('heading', { name: 'Назначенная встреча', exact: true }).isVisible(), 'Confirmed meeting has contextual screen');
+  await page.getByRole('button', { name: 'Вернуться к кандидату', exact: true }).click();
   await page.reload();
+  await page.getByRole('heading', { name: 'Задачи найма', exact: true }).waitFor();
+  await openShortlist();
   await page.locator('.ag-decision').waitFor();
   assert((await page.locator('.ag-decision').innerText()).includes('Встреча согласована'), 'State survives reload');
   await role('Кандидат');

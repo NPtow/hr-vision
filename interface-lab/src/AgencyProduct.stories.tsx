@@ -6,5 +6,5 @@ const meta = {
 } satisfies Meta<typeof AgencyProduct>;
 export default meta;
 type Story = StoryObj<typeof meta>;
-export const Manager: Story = { name: '01 Нанимающий · первая подборка', args: { initialRole: 'manager' } };
+export const Manager: Story = { name: '01 Нанимающий · задачи найма', args: { initialRole: 'manager' } };
 export const Candidate: Story = { name: '02 Кандидат · предложение и процесс', args: { initialRole: 'candidate' } };

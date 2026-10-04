@@ -2,15 +2,15 @@
 
 Stories: `hr-vision-product--manager`, `hr-vision-product--candidate`.
 
-The first manager entry is a prepared shortlist. The candidate enters a concrete role invitation with materials from an earlier interview. This is a proposed scenario for review, not a released multi-user application.
+As of 2026-10-04 the manager starts with hiring tasks and opens the shortlist for one task. A meeting entry appears only after a confirmed appointment. The candidate enters a concrete role invitation with materials from an earlier interview. This is a proposed scenario for review, not a released multi-user application.
 
 ## Included
 
-- Manager: shortlist, search/filter, candidate evidence, experience/conditions, independent invite/decline/reason, questions, meetings, agreed hiring brief.
+- Manager: task entry, shortlist, search/filter, candidate evidence, experience/conditions, independent invite/decline/reason, contextual confirmed meeting, and an inline hiring brief. No permanent workspace sidebar or coordinator-question feature.
 - Candidate: role/conditions, interest/decline, editable profile with explicit permission to share updates with this company, human interview request, proposed meeting times, confirmation/reschedule.
 - Shared local browser state. Manager interest, candidate interest, and meeting confirmation remain separate. Decline cancels the booking. Reset restores all example data.
 - A profile edit without sharing permission is not shown to the manager. Self-reported updates do not automatically rewrite interview evidence.
-- Coordinator questions, per-person manager questions, candidate questions, rescheduling preferences, and decline reasons have separate fields.
+- Legacy manager question fields remain readable for storage compatibility but are no longer displayed. Candidate questions, rescheduling preferences, and decline reasons remain separate.
 
 ## UI foundation
 
@@ -24,7 +24,7 @@ Tailwind 4 Vite plugin builds component utility classes. Preflight is deliberate
 
 All people, quotes, companies, slots, and assessments in this slice are fictional. State is stored in `localStorage` under `hr-vision-agency-preview-v1`; it is not a database or an access-control boundary. Role switch is a review control, not authentication. No actual notification, email, AI/video interview, offer, or calendar integration is performed. Brandpad account/book is not created by this change.
 
-The next production step needs actual users/permissions, company-scoped server state, real evidence and review workflow, coordinator handling, invitation links, and a chosen interview/calendar integration. No claim of production readiness follows from this UI preview.
+Unresolved production architecture, meeting provider, mandatory post-interview feedback, assessment, pool transitions and offer mechanics require the user's approval of concrete proposals before implementation. The offer pool is unlimited and offers proceed sequentially. Video explanations of refusal are not the requested feature; the user clarified feedback after the interview and the interview assessment. No claim of production readiness follows from this UI preview.
 
 ## Verification
 

@@ -1,0 +1,6 @@
+ключ: НЕТ — бюджет $0.10/день вместо $1
+осталось на сегодня: $0.0938 (938 кредитов)
+сброс: в полночь UTC
+
+заведи бесплатный ключ: https://openalex.org/settings/api
+и положи: echo 'OPENALEX_API_KEY=твой_ключ' > /Users/NIKITA/.config/openalex/openalex.env
