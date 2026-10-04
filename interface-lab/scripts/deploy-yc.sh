@@ -1,12 +1,21 @@
 #!/usr/bin/env bash
-# Install deploy/Caddyfile once before running this script. No server build,
-# application daemon, shared-lab change, or automatic release cleanup is needed.
+# Install the isolated HR Vision Caddy service on outreach before running this
+# script. DSA only terminates TLS and proxies to outreach:8381. No server build,
+# shared-lab change, or automatic release cleanup is performed here.
 set -euo pipefail
 
 project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 site_url='https://hr-vision.158-160-179-53.sslip.io'
-remote_host='nikita@158.160.179.53'
-ssh_args=(-o BatchMode=yes -o ConnectTimeout=15 -o ProxyCommand=none -o ProxyJump=none -i "$HOME/.ssh/yandex_ebitrix")
+remote_host='nikita@10.130.0.18'
+origin_host='hr-vision.158-160-179-53.sslip.io'
+origin_url='http://127.0.0.1:8381'
+origin_only="${HR_VISION_ORIGIN_ONLY:-0}"
+if [[ "$origin_only" != 0 && "$origin_only" != 1 ]]; then
+  echo 'HR_VISION_ORIGIN_ONLY must be 0 or 1.' >&2
+  exit 1
+fi
+printf -v proxy_command 'ssh -o BatchMode=yes -o ConnectTimeout=15 -o ProxyCommand=none -o ProxyJump=none -i %q -W %%h:%%p nikita@158.160.179.53' "$HOME/.ssh/yandex_ebitrix"
+ssh_args=(-o BatchMode=yes -o ConnectTimeout=15 -o "ProxyCommand=$proxy_command" -o ProxyJump=none -i "$HOME/.ssh/yandex_ebitrix")
 release="$(date -u +%Y%m%dT%H%M%SZ)-$RANDOM"
 temp_dir="$(mktemp -d -t hr-vision-deploy)"
 archive="$temp_dir/site.tgz"
@@ -94,6 +103,7 @@ for (const id of [
   'hr-vision-cjm--agency', 'hr-vision-candidate-cjm--agency',
   'hr-vision-candidate-cjm--other',
   'hr-vision-product--manager', 'hr-vision-product--candidate',
+  'hr-vision-panel-alternatives--gallery',
 ]) if (!entries[id]) throw new Error(`Missing required story: ${id}`);
 function inspect(dir, prefix = '', publicOnly = false) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -141,6 +151,8 @@ MANIFEST
 COPYFILE_DISABLE=1 tar --no-xattrs -czf "$archive" -C "$build_dir" .
 archive_hash="$(shasum -a 256 "$archive" | awk '{print $1}')"
 index_hash="$(shasum -a 256 "$build_dir/index.json" | awk '{print $1}')"
+iframe_hash="$(shasum -a 256 "$build_dir/iframe.html" | awk '{print $1}')"
+deployment_hash="$(shasum -a 256 "$build_dir/deployment.json" | awk '{print $1}')"
 archive_kib="$(du -k "$archive" | awk '{print $1}')"
 build_kib="$(du -sk "$build_dir" | awk '{print $1}')"
 required_kib=$((524288 + archive_kib + build_kib))
@@ -204,14 +216,43 @@ fi
 printf 'Activated release: %s\n' "$release"
 PUBLISH
 
+# Always verify the outreach origin before checking the public TLS proxy. The
+# origin-only mode is for the initial migration and must never report live.
+origin_fetch() {
+  local request_path="$1"
+  local remote_command
+  printf -v remote_command 'curl --fail --silent --show-error --retry 5 --retry-delay 2 --retry-all-errors --max-time 12 -H %q %q' "Host: $origin_host" "$origin_url/$request_path"
+  ssh "${ssh_args[@]}" "$remote_host" "$remote_command"
+}
+origin_fetch index.json > "$temp_dir/origin-index.json"
+test "$(shasum -a 256 "$temp_dir/origin-index.json" | awk '{print $1}')" = "$index_hash"
+origin_fetch deployment.json > "$temp_dir/origin-deployment.json"
+test "$(shasum -a 256 "$temp_dir/origin-deployment.json" | awk '{print $1}')" = "$deployment_hash"
+node --input-type=module - "$temp_dir/origin-deployment.json" "$release" <<'VERIFY_ORIGIN_RELEASE'
+import { readFileSync } from 'node:fs';
+if (JSON.parse(readFileSync(process.argv[2], 'utf8')).release !== process.argv[3]) throw new Error('Outreach origin release does not match deployment.');
+VERIFY_ORIGIN_RELEASE
+for story in hr-vision-xpm--overview hr-vision-product--manager hr-vision-panel-alternatives--gallery; do
+  origin_fetch "iframe.html?id=$story&viewMode=story" > "$temp_dir/origin-iframe.html"
+  test "$(shasum -a 256 "$temp_dir/origin-iframe.html" | awk '{print $1}')" = "$iframe_hash"
+done
+if [ "$origin_only" -eq 1 ]; then
+  printf '\nHR Vision origin ready (not live): outreach %s\nRelease: %s\nPrevious: %s\nPublic verification was explicitly skipped; configure and verify the TLS proxy before sharing the URL.\n' "$origin_url" "$release" "$expected_current"
+  exit 0
+fi
+
 curl --fail --silent --show-error --retry 5 --retry-delay 2 --retry-all-errors --max-time 12 "$site_url/index.json" -o "$temp_dir/public-index.json"
 test "$(shasum -a 256 "$temp_dir/public-index.json" | awk '{print $1}')" = "$index_hash"
-curl --fail --silent --show-error --max-time 12 "$site_url/deployment.json" -o "$temp_dir/deployment.json"
-node --input-type=module - "$temp_dir/deployment.json" "$release" <<'VERIFY_RELEASE'
+curl --fail --silent --show-error --max-time 12 "$site_url/deployment.json" -o "$temp_dir/public-deployment.json"
+test "$(shasum -a 256 "$temp_dir/public-deployment.json" | awk '{print $1}')" = "$deployment_hash"
+node --input-type=module - "$temp_dir/public-deployment.json" "$release" <<'VERIFY_RELEASE'
 import { readFileSync } from 'node:fs';
 if (JSON.parse(readFileSync(process.argv[2], 'utf8')).release !== process.argv[3]) throw new Error('Public release does not match deployment.');
 VERIFY_RELEASE
-curl --fail --silent --show-error --max-time 12 "$site_url/iframe.html?id=hr-vision-xpm--overview&viewMode=story" -o /dev/null
+for story in hr-vision-xpm--overview hr-vision-product--manager hr-vision-panel-alternatives--gallery; do
+  curl --fail --silent --show-error --max-time 12 "$site_url/iframe.html?id=$story&viewMode=story" -o "$temp_dir/public-iframe.html"
+  test "$(shasum -a 256 "$temp_dir/public-iframe.html" | awk '{print $1}')" = "$iframe_hash"
+done
 landing="$(curl --fail --silent --show-error --max-time 12 --output /dev/null --write-out '%{redirect_url}' "$site_url/")"
 test "$landing" = "$site_url/iframe.html?id=hr-vision-xpm--overview&viewMode=story"
-printf '\nHR Vision is live: %s\nRelease: %s\nPrevious: %s\n' "$site_url" "$release" "$expected_current"
+printf '\nHR Vision is live on outreach: %s\nRelease: %s\nPrevious: %s\nGallery: %s/iframe.html?id=hr-vision-panel-alternatives--gallery&viewMode=story&variant=1\nManager: %s/iframe.html?id=hr-vision-product--manager&viewMode=story\n' "$site_url" "$release" "$expected_current" "$site_url" "$site_url"

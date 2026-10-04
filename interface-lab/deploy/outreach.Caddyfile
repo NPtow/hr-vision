@@ -1,0 +1,25 @@
+# Dedicated static origin; no shared outreach Caddy restart required.
+{
+	auto_https off
+	admin 127.0.0.1:2139
+}
+
+http://:8381 {
+	bind 127.0.0.1 10.130.0.18
+	@trusted {
+		remote_ip 127.0.0.1 10.130.0.28
+		host hr-vision.158-160-179-53.sslip.io
+	}
+	handle @trusted {
+		root * /srv/hr-vision/current
+		encode zstd gzip
+		header Cache-Control "no-cache"
+		header X-Robots-Tag "noindex, nofollow"
+		@landing expression `{http.request.uri.path} == "/" && {http.request.uri.query} == ""`
+		redir @landing "/iframe.html?id=hr-vision-xpm--overview&viewMode=story" 302
+		file_server
+	}
+	handle {
+		respond "Forbidden" 403
+	}
+}

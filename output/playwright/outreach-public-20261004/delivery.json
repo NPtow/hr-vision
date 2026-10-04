@@ -1,0 +1,13 @@
+{
+  "release": "20261004T174834Z-17891",
+  "stories": 35,
+  "verified_files": [
+    "iframe.html",
+    "deployment.json",
+    "assets/AgencyProduct-CzxcgJ0t.css",
+    "assets/AgencyProduct.stories-BkygtEjw.js",
+    "assets/PanelAlternatives-Ctk5XWwy.css",
+    "assets/PanelAlternatives.stories-DMqzt0Xq.js"
+  ],
+  "manifest_sha256": "e72175a2934a5dc7052ad80c93ccf44118aebb62bea8dca4cbd6cc1e5906cd97"
+}

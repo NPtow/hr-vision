@@ -1,0 +1,34 @@
+[Unit]
+Description=HR Vision static site on outreach
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+User=caddy
+Group=caddy
+Environment=XDG_CONFIG_HOME=/var/lib/hr-vision-web
+Environment=XDG_DATA_HOME=/var/lib/hr-vision-web
+ExecStart=/usr/bin/caddy run --config /etc/hr-vision/Caddyfile
+ExecReload=/usr/bin/caddy reload --config /etc/hr-vision/Caddyfile --address 127.0.0.1:2139 --force
+Restart=on-failure
+RestartSec=5
+MemoryHigh=96M
+MemoryMax=128M
+TasksMax=128
+StateDirectory=hr-vision-web
+StateDirectoryMode=0750
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+ReadWritePaths=/var/lib/hr-vision-web
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+AmbientCapabilities=
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
