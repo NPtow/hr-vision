@@ -1,6 +1,6 @@
 # Связанный тест HR Vision
 
-Публичная статика и API размещены на outreach. API: `hr-vision-api`, loopback 8391, проксируется только отдельным `hr-vision-web` (8381); TLS вход остаётся на dsa. Сборка UI локальная, просмотр/проверка только по публичному HTTPS. Локальный web-сервер не нужен.
+Публичная статика и API размещены на outreach. API: `hr-vision-api`, loopback 8391, проксируется только отдельным `hr-vision-web` (8381); TLS вход остаётся на dsa. Сборка UI выполняется в GitHub Actions, просмотр/проверка только по публичному HTTPS. Локальный web-сервер не нужен.
 
 ## Состояние и доступ
 
@@ -14,9 +14,9 @@ SQLite `/var/lib/hr-vision-api/journey.sqlite3`, режим WAL, все кома
 
 ## Выкладка
 
-`bash interface-lab/scripts/deploy-api-yc.sh` обновляет только отдельный HR Vision API и Caddy origin. Выполняет unit tests на outreach, сверяет активный Caddy с файлом, сохраняет backup и проверяет HTTP. При первом создании ключ генерируется автоматически. Ключ и SQLite не входят в выпуск.
+Каждый push в `main` запускает проверки, сборку UI и публикацию API на outreach через [GitHub Actions](https://github.com/NPtow/hr-vision/actions/workflows/deploy.yml). API перезапускается только при изменении его исходников, с проверкой отсутствия живого звонка и резервной копией SQLite. Ключи и данные остаются вне выпусков. Макеты из `codex/mockups` публикуются отдельно и API не изменяют.
 
-`npm --prefix interface-lab run deploy:yc` публикует статический UI. Серверный Python и `.env` не попадают в статику. Старый UI-код сохранён в `AgencyProductPreview.tsx`, `ManagerWorkspace.tsx`, `CandidateWorkspace.tsx`.
+`bash interface-lab/scripts/deploy-api-yc.sh` из `main` и `npm --prefix interface-lab run deploy:yc` запрашивают повторный запуск этого же workflow для уже отправленного коммита. [Подробности, адреса и откат](../deploy/ci/README.md). Серверный Python и `.env` не попадают в публичную статику. Старый UI-код сохранён в `AgencyProductPreview.tsx`, `ManagerWorkspace.tsx`, `CandidateWorkspace.tsx`.
 
 ## Видеоподключение: активировано 05.10.2026
 
