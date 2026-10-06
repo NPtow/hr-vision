@@ -104,9 +104,28 @@ jobs:
         run: |
           curl --fail --silent --show-error --retry 5 --retry-delay 2 "$SITE/deployment.json" > deployment.json
           python3 - <<'PY'
-          import json, os
+          import json, os, urllib.request, urllib.error
           data = json.load(open('deployment.json'))
           assert data['sha'] == os.environ['GITHUB_SHA'], data
           assert data['target'] == os.environ['TARGET'], data
+          site, target = os.environ['SITE'], os.environ['TARGET']
+          story = 'hr-vision-product--start' if target == 'service' else 'hr-vision-employer-menu--gallery'
+          for suffix in ['/iframe.html?id=' + story + '&viewMode=story', '/?path=/story/' + story]:
+              url = site + suffix
+              with urllib.request.urlopen(url, timeout=20) as response:
+                  assert response.status == 200 and response.url == url, (url, response.url)
+          with urllib.request.urlopen(site + '/index.json', timeout=20) as response:
+              entries = json.load(response)['entries']
+          assert story in entries
+          if target == 'service':
+              assert len(entries) == 3
+          else:
+              assert not any(name.startswith('hr-vision-product--') for name in entries)
+              try:
+                  urllib.request.urlopen(site + '/api/hr/health', timeout=20)
+              except urllib.error.HTTPError as error:
+                  assert error.code == 404
+              else:
+                  raise AssertionError('Mockup site must not expose the API')
           PY
           printf '### Published\n\n[%s](%s)\n\nCommit: `%s`\n' "$TARGET" "$SITE" "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
