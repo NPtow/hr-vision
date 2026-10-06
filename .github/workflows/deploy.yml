@@ -1,0 +1,112 @@
+name: Deploy HR Vision
+
+on:
+  push:
+    branches: [main, codex/mockups]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hr-vision-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.repository == 'NPtow/hr-vision' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/codex/mockups')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      target: ${{ steps.target.outputs.target }}
+      url: ${{ steps.target.outputs.url }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Select branch destination
+        id: target
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF_NAME" == main ]]; then
+            target=service
+            url=https://hr-vision.158-160-179-53.sslip.io
+          else
+            target=mockups
+            url=https://hr-vision-lab.158-160-179-53.sslip.io
+          fi
+          echo "target=$target" >> "$GITHUB_OUTPUT"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "HR_BUILD_TARGET=$target" >> "$GITHUB_ENV"
+          node -e 'if (require("./interface-lab/build-target.json").target !== process.env.EXPECTED) throw Error("Branch build-target mismatch")'
+        env:
+          EXPECTED: ${{ github.ref == 'refs/heads/main' && 'service' || 'mockups' }}
+      - name: Install dependencies
+        run: npm ci --prefix interface-lab
+      - name: Check types and transcript parsing
+        working-directory: interface-lab
+        run: |
+          npm run typecheck
+          node scripts/transcript-check.mjs
+      - name: Check API against isolated temporary state
+        working-directory: interface-lab/server
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python3 -m unittest discover -v
+      - name: Check deployment safety
+        working-directory: interface-lab/deploy/ci
+        run: python3 -m unittest -v test_receiver
+      - name: Build and package only this destination
+        working-directory: interface-lab
+        run: |
+          npm run build
+          node scripts/package-release.mjs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: hr-vision-${{ steps.target.outputs.target }}-${{ github.sha }}
+          path: interface-lab/release.tgz
+          retention-days: 7
+          if-no-files-found: error
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: ${{ needs.build.outputs.target }}
+      url: ${{ needs.build.outputs.url }}
+    steps:
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: hr-vision-${{ needs.build.outputs.target }}-${{ github.sha }}
+      - name: Publish through restricted deploy key
+        shell: bash
+        env:
+          DEPLOY_KEY: ${{ secrets.HR_DEPLOY_KEY }}
+          KNOWN_HOSTS: ${{ secrets.HR_DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ vars.HR_DEPLOY_HOST }}
+        run: |
+          umask 077
+          key="$RUNNER_TEMP/hr-deploy-key"
+          hosts="$RUNNER_TEMP/hr-known-hosts"
+          trap 'rm -f "$key" "$hosts"' EXIT
+          printf '%s\n' "$DEPLOY_KEY" > "$key"
+          printf '%s\n' "$KNOWN_HOSTS" > "$hosts"
+          ssh -T -i "$key" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$hosts" -o ConnectTimeout=20 "hr-vision-relay@$DEPLOY_HOST" publish < release.tgz
+      - name: Verify public revision
+        env:
+          SITE: ${{ needs.build.outputs.url }}
+          TARGET: ${{ needs.build.outputs.target }}
+        run: |
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 "$SITE/deployment.json" > deployment.json
+          python3 - <<'PY'
+          import json, os
+          data = json.load(open('deployment.json'))
+          assert data['sha'] == os.environ['GITHUB_SHA'], data
+          assert data['target'] == os.environ['TARGET'], data
+          PY
+          printf '### Published\n\n[%s](%s)\n\nCommit: `%s`\n' "$TARGET" "$SITE" "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"

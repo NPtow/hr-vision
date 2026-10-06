@@ -2,7 +2,7 @@
 
 ## Текущие исходники, 06.10.2026
 
-[Пять вариантов меню работодателя](https://hr-vision.158-160-179-53.sslip.io/iframe.html?id=hr-vision-employer-menu--gallery&viewMode=story&menu=top) находятся в `src/scenes/employer-menu/`, регистрация истории в `src/EmployerMenu.stories.tsx`. Галерея использует вымышленные данные и общий компонент просмотра интервью.
+[Пять вариантов меню работодателя](https://hr-vision-lab.158-160-179-53.sslip.io/iframe.html?id=hr-vision-employer-menu--gallery&viewMode=story&menu=sidebar) находятся в `src/scenes/employer-menu/`, регистрация истории в `src/EmployerMenu.stories.tsx`. Галерея использует вымышленные данные и общий компонент просмотра интервью. Ветка `codex/mockups` автоматически публикует макеты на этом адресе; `main` публикует работающий сервис на прежнем домене. [Правила выкладки](deploy/ci/README.md).
 
 Связанный сервис работодателя и кандидатов находится в `src/scenes/connected-journey/`, API в `server/`. В него входят серверное расписание, подтверждение встречи кандидатом, Daily, фидбек по вопросам интервью, чат и офферы. Автоматическая оценка пока является заглушкой. Подключение материалов ДСА доступно только для чтения.
 

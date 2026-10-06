@@ -29,7 +29,7 @@ const destinations = [
   { id: 'chat', label: 'Чат', icon: MessageCircle },
 ] as const;
 const spring = { type: 'spring' as const, stiffness: 420, damping: 41, mass: 1 };
-const productLink = '/iframe.html?id=hr-vision-product--start&viewMode=story';
+const productLink = 'https://hr-vision.158-160-179-53.sslip.io/iframe.html?id=hr-vision-product--start&viewMode=story';
 const role = 'Менеджер по работе с клиентами';
 
 function readVariant(): Variant {

@@ -11,6 +11,17 @@ http://:8381 {
 		host hr-vision.158-160-179-53.sslip.io
 	}
 	handle @trusted {
+		@mockupStory {
+			path /iframe.html
+			not query id=hr-vision-product--*
+		}
+		redir @mockupStory "https://hr-vision-lab.158-160-179-53.sslip.io{uri}" 302
+		@mockupCatalog {
+			path /
+			query path=*
+			not query path=/story/hr-vision-product--*
+		}
+		redir @mockupCatalog "https://hr-vision-lab.158-160-179-53.sslip.io{uri}" 302
 		handle /api/hr/* {
 			request_body {
 				max_size 32KB
@@ -23,8 +34,30 @@ http://:8381 {
 		header Cache-Control "no-cache"
 		header X-Robots-Tag "noindex, nofollow"
 		@landing expression `{http.request.uri.path} == "/" && {http.request.uri.query} == ""`
-		redir @landing "/iframe.html?id=hr-vision-xpm--overview&viewMode=story" 302
+		redir @landing "/iframe.html?id=hr-vision-product--start&viewMode=story" 302
 		file_server
+		}
+	}
+	@mockups {
+		remote_ip 127.0.0.1 10.130.0.28
+		host hr-vision-lab.158-160-179-53.sslip.io
+	}
+	handle @mockups {
+		handle /api/* {
+			respond "No API on the mockup site" 404
+		}
+		handle {
+			@serviceStory query id=hr-vision-product--*
+			redir @serviceStory "https://hr-vision.158-160-179-53.sslip.io{uri}" 302
+			@serviceCatalog query path=/story/hr-vision-product--*
+			redir @serviceCatalog "https://hr-vision.158-160-179-53.sslip.io{uri}" 302
+			root * /srv/hr-vision-mockups/current
+			encode zstd gzip
+			header Cache-Control "no-cache"
+			header X-Robots-Tag "noindex, nofollow"
+			@landing expression `{http.request.uri.path} == "/" && {http.request.uri.query} == ""`
+			redir @landing "/iframe.html?id=hr-vision-employer-menu--gallery&viewMode=story&menu=sidebar" 302
+			file_server
 		}
 	}
 	handle {
