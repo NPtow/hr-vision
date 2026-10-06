@@ -1,0 +1,34 @@
+[Unit]
+Description=HR Vision shared team journey API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hr-vision
+Group=hr-vision
+WorkingDirectory=/opt/hr-vision-api/current
+EnvironmentFile=/etc/hr-vision/api.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/bin/python3 /opt/hr-vision-api/current/app.py
+Restart=on-failure
+RestartSec=3
+MemoryHigh=192M
+MemoryMax=256M
+TasksMax=64
+StateDirectory=hr-vision-api
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+ReadWritePaths=/var/lib/hr-vision-api
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

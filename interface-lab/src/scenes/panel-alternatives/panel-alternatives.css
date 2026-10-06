@@ -8,26 +8,25 @@
 .hpa-root :where(button,a,summary,[tabindex]):focus-visible,.hpa-modal :where(button,a,summary,[tabindex]):focus-visible { outline:2px solid var(--hpa-purple); outline-offset:3px; }
 .hpa-root :where(button),.hpa-modal :where(button) { touch-action:manipulation; }
 .hpa-root button:active:not(:disabled),.hpa-modal button:active:not(:disabled) { opacity:.8; }
-.hpa-lab { max-width:1180px; margin:0 auto; }
+.hpa-lab { max-width:1180px; margin:0 auto 16px; }
 .hpa-lab-top { display:flex; justify-content:space-between; align-items:center; gap:16px; color:var(--hpa-muted); font-size:11px; }
 .hpa-lab-label { display:flex; align-items:center; gap:7px; font-weight:550; }
 .hpa-prototype { color:#827d90; }
-.hpa-lab-heading { display:flex; align-items:baseline; gap:24px; margin:20px 0 18px; }
-.hpa-lab-heading h1 { font-size:26px; letter-spacing:-.7px; font-weight:620; line-height:1.2; }
-.hpa-lab-heading p { color:var(--hpa-muted); font-size:13px; }
+.hpa-lab-heading { display:flex; align-items:center; flex-wrap:wrap; gap:12px; margin:0; }
+.hpa-lab-heading h1 { font-size:15px; letter-spacing:-.3px; font-weight:600; line-height:1.3; color:var(--hpa-ink); }
+.hpa-lab-navigation { display:flex; align-items:center; flex-wrap:wrap; gap:10px 22px; margin-top:13px; }
+.hpa-pipeline-link { display:inline-flex; align-items:center; justify-content:center; gap:8px; flex-shrink:0; min-height:36px; padding:8px 13px; border-radius:8px; background:var(--hpa-purple); color:#fff; text-decoration:none; font-size:12px; font-weight:550; }
+.hpa-pipeline-link:hover { background:#5746d5; }
 .hpa-variant-nav { display:flex; align-items:center; gap:8px; }
 .hpa-variant-numbers { display:flex; align-items:center; gap:5px; }
-.hpa-variant-numbers button { height:39px; width:44px; border-radius:8px; border:1px solid transparent; font-size:12px; color:var(--hpa-muted); font-variant-numeric:tabular-nums; }
+.hpa-variant-numbers button { height:33px; width:35px; border-radius:8px; border:1px solid transparent; font-size:12px; color:var(--hpa-muted); font-variant-numeric:tabular-nums; }
 .hpa-variant-numbers button:hover { background:#eeecf3; }
 .hpa-variant-numbers button[aria-pressed=true] { background:var(--hpa-ink); color:#fff; }
 .hpa-icon-button { width:36px; height:36px; border-radius:8px; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; }
 .hpa-icon-button:hover { background:#eeecf4; }
-.hpa-variant-explanation { display:flex; justify-content:space-between; align-items:center; gap:28px; padding:17px 0 20px; min-height:86px; }
-.hpa-variant-explanation>div { display:grid; grid-template-columns:24px 1fr; column-gap:9px; row-gap:3px; }
-.hpa-variant-explanation>div>span { font-size:11px; color:var(--hpa-muted); padding-top:2px; }
-.hpa-variant-explanation strong { font-size:14px; font-weight:600; }
-.hpa-variant-explanation p { grid-column:2; font-size:12px; color:var(--hpa-muted); }
-.hpa-variant-explanation>small { max-width:310px; font-size:11px; line-height:1.6; color:var(--hpa-muted); }
+.hpa-variant-explanation { flex:1; min-width:210px; padding:0; }
+.hpa-variant-explanation strong { font-size:12px; font-weight:600; }
+.hpa-variant-explanation p { font-size:11px; color:var(--hpa-muted); margin-top:2px; }
 .hpa-product { max-width:1180px; margin:0 auto; background:#fff; border:1px solid #e5e3eb; border-radius:16px; min-width:0; box-shadow:0 4px 16px #24213603; overflow:hidden; }
 .hpa-product-header { padding:19px 28px; border-bottom:1px solid var(--hpa-line); display:flex; justify-content:space-between; align-items:center; }
 .hpa-brand { display:flex; align-items:center; gap:9px; font-size:20px; font-weight:720; letter-spacing:-.8px; }
@@ -45,7 +44,12 @@
 .hpa-shortlist-count>span { display:grid; place-items:center; background:#f3f1f8; color:#625b77; border-radius:6px; width:24px; height:24px; }
 .hpa-view { padding:0 30px 30px; min-width:0; }
 .hpa-product-foot { border-top:1px solid var(--hpa-line); display:flex; align-items:center; gap:7px; padding:14px 30px; color:var(--hpa-muted); font-size:10px; }
-.hpa-lab-foot { text-align:center; color:var(--hpa-muted); font-size:11px; margin:17px 0 0; }
+.hpa-lab-foot { max-width:1180px; margin:17px auto 0; color:var(--hpa-muted); font-size:11px; }
+.hpa-lab-foot>p { text-align:center; margin-bottom:14px; }
+.hpa-interview { margin-top:20px; min-width:0; }
+.hpa-interview-link { min-height:36px; }
+.hpa-row-interview { display:flex; align-items:center; gap:7px; font-size:11px; font-weight:550; color:var(--hpa-purple); margin-top:13px; }
+.hpa-interview-link>svg,.hpa-row-interview>svg { flex-shrink:0; }
 .hpa-avatar { display:inline-grid; place-items:center; flex-shrink:0; width:38px; height:38px; border-radius:50%; color:#6952a3; background:#ede7fb; font-size:12px; font-weight:600; }
 .hpa-avatar.hpa-mikhail { color:#7a694e; background:#f2eee6; }
 .hpa-avatar.hpa-elena { color:#4f7375; background:#e7f0ef; }
@@ -163,7 +167,7 @@
 .hpa-document-grid aside dl { display:grid; gap:13px; margin:22px 0 30px; }
 .hpa-document-grid dt { color:var(--hpa-muted); font-size:10px; }
 .hpa-document-grid dd { font-size:12px; margin:3px 0 0; }
-.hpa-dossier-lead { font-size:20px; line-height:1.55; font-weight:460; letter-spacing:-.3px; }
+.hpa-dossier-lead { margin-top:24px!important; font-size:20px; line-height:1.55; font-weight:460; letter-spacing:-.3px; }
 .hpa-dossier-section { margin-top:26px; }
 .hpa-dossier-section h4 { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; margin-bottom:16px; color:var(--hpa-muted); }
 .hpa-document-evidence { margin-top:19px; }
@@ -193,9 +197,9 @@
 .hpa-reading-index button strong { font-size:12px; font-weight:560; line-height:1.5; }
 .hpa-reading-index button>span { display:flex; justify-content:space-between; align-items:center; font-size:10px; color:#867c99; }
 .hpa-reading-page { padding:30px 36px; }
-.hpa-reading-person { display:flex; align-items:center; gap:10px; font-size:12px; margin-bottom:33px; }
-.hpa-reading-page h3 { font-size:24px; font-weight:550; line-height:1.35; letter-spacing:-.5px; margin:10px 0 24px; }
-.hpa-reading-page blockquote { font-size:17px; line-height:1.85; font-weight:420; }
+.hpa-reading-person { display:flex; align-items:center; gap:10px; font-size:12px; margin-bottom:20px; }
+.hpa-reading-page>h3 { font-size:24px; font-weight:550; line-height:1.35; letter-spacing:-.5px; margin:10px 0 24px; }
+.hpa-reading-page>blockquote { font-size:17px; line-height:1.85; font-weight:420; }
 .hpa-reading-page>.hpa-text-button { margin-top:22px; }
 .hpa-source-note { color:var(--hpa-muted); font-size:11px; margin-top:5px!important; }
 /* 09: horizontal reading with explicit controls and snap. */
@@ -235,8 +239,8 @@
 .hpa-modal .hpa-person-tabs button { font-size:11px; padding:7px; }
 .hpa-modal .hpa-person-tabs .hpa-avatar { display:none; }
 .hpa-sheet { left:auto; right:0; top:0; bottom:0; transform:none; width:min(600px,100vw); max-height:100dvh; border-radius:16px 0 0 16px; padding:28px; }
-.hpa-fragment blockquote { font-size:17px; line-height:1.85; margin:16px 0 25px; }
-.hpa-fragment>p { font-size:12px; color:var(--hpa-muted); line-height:1.7; margin-bottom:25px; }
+.hpa-fragment>blockquote { font-size:17px; line-height:1.85; margin:16px 0 25px; }
+.hpa-fragment>p { font-size:11px; color:var(--hpa-muted); line-height:1.7; margin:16px 0 20px; }
 .hpa-sr { position:absolute; width:1px; height:1px; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; }
 .hpa-tasks { padding:44px 30px 55px; max-width:830px; margin:auto; }
 .hpa-tasks h2 { font-size:28px; margin:10px 0 28px; letter-spacing:-.7px; }
@@ -256,17 +260,19 @@
 }
 @media(max-width:700px) {
  .hpa-root { padding:17px 12px 22px; }
- .hpa-lab-top { align-items:flex-start; gap:10px; }
+ .hpa-lab-top { align-items:center; gap:10px; flex-wrap:wrap; }
  .hpa-lab-label { font-size:10px; }
- .hpa-prototype { max-width:110px; text-align:right; font-size:9px; }
- .hpa-lab-heading { display:block; margin:20px 0 17px; }
- .hpa-lab-heading h1 { font-size:24px; }
- .hpa-lab-heading p { font-size:12px; margin-top:8px; }
- .hpa-variant-nav { gap:5px; }
+ .hpa-prototype { font-size:10px; }
+ .hpa-lab-heading { display:flex; gap:7px 10px; margin:0; }
+ .hpa-lab-heading h1 { font-size:14px; }
+ .hpa-lab-heading .hpa-lab-label { display:none; }
+ .hpa-lab-navigation { gap:9px; margin-top:12px; }
+ .hpa-pipeline-link { font-size:11px; min-height:33px; padding:7px 10px; }
+ .hpa-variant-nav { gap:5px; width:100%; }
  .hpa-variant-numbers { display:grid; grid-template-columns:repeat(5,1fr); flex:1; gap:5px; }
  .hpa-variant-numbers button { width:100%; height:34px; }
- .hpa-variant-explanation { display:block; padding:18px 2px; min-height:0; }
- .hpa-variant-explanation>small { display:block; max-width:none; margin:9px 0 0 33px; font-size:10px; }
+ .hpa-variant-explanation { width:100%; padding:0 2px; }
+ .hpa-variant-explanation p { font-size:10px; }
  .hpa-product { border-radius:12px; }
  .hpa-product-header { padding:16px 18px; }
  .hpa-brand { font-size:18px; }
@@ -278,7 +284,7 @@
  .hpa-view { padding:0 16px 22px; }
  .hpa-product-foot { padding:13px 18px; align-items:flex-start; font-size:9px; }
  .hpa-product-foot>svg { flex-shrink:0; margin-top:1px; }
- .hpa-lab-foot { font-size:10px; padding:0 12px; }
+ .hpa-lab-foot { font-size:10px; padding:0 2px; }
  .hpa-profile { padding:19px; }
  .hpa-identity { align-items:flex-start; gap:10px; }
  .hpa-identity h3 { font-size:19px; }
@@ -330,9 +336,9 @@
  .hpa-reading.hpa-reading-open .hpa-reading-index { display:none; }
  .hpa-reading-page { padding:20px; }
  .hpa-reading-page .hpa-mobile-back { margin:0 0 21px; }
- .hpa-reading-person { margin-bottom:25px; }
- .hpa-reading-page h3 { font-size:22px; }
- .hpa-reading-page blockquote { font-size:15px; }
+ .hpa-reading-person { margin-bottom:18px; }
+ .hpa-reading-page>h3 { font-size:22px; }
+ .hpa-reading-page>blockquote { font-size:15px; }
  .hpa-strip { gap:12px; }
  .hpa-strip-card { width:calc(100% - 16px); flex-basis:calc(100% - 16px); padding:19px; }
  .hpa-strip .hpa-identity { display:block; }
@@ -345,7 +351,7 @@
  .hpa-modal { width:calc(100vw - 24px); padding:20px; max-height:calc(100dvh - 24px); border-radius:12px; }
  .hpa-modal-heading h2 { font-size:19px; }
  .hpa-sheet { width:100vw; max-height:100dvh; border-radius:0; }
- .hpa-fragment blockquote { font-size:15px; }
+ .hpa-fragment>blockquote { font-size:15px; }
  .hpa-tasks { padding:30px 22px 42px; }
  .hpa-tasks h2 { font-size:25px; }
  .hpa-task strong { font-size:17px; }

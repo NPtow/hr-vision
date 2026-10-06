@@ -1,0 +1,78 @@
+// Run via playwright-cli run-code in a dedicated browser session, never the user's tab.
+async page => {
+  const checks = [];
+  const assert = (condition, label) => { if (!condition) throw new Error(label); checks.push(label); };
+  const button = name => page.getByRole('button', { name, exact: true });
+  const stored = () => page.evaluate(() => JSON.parse(localStorage.getItem('hr-vision-employer-pipeline-v1')));
+  const nav = name => page.getByRole('navigation', { name: 'Этапы найма' }).getByRole('button', { name, exact: true });
+  const future = days => new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
+  const date = future(2);
+  const save = async time => {
+    await page.getByLabel('Дата', { exact: true }).fill(date);
+    await page.getByLabel('Время · МСК', { exact: true }).fill(time);
+    await button('Сохранить встречу').click();
+  };
+  await page.evaluate(() => localStorage.removeItem('hr-vision-employer-pipeline-v1'));
+  await page.reload();
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await button('Открыть подборку').click();
+  await button('Назначить встречу').click(); await save('11:00');
+  await nav('Подборка').click();
+  await button('Открыть: Михаил Белов').click();
+  await button('Назначить встречу').click(); await save('14:00');
+  let state = await stored();
+  assert(state.byCandidate.anna.meeting.time === '11:00' && state.byCandidate.mikhail.meeting.time === '14:00', 'Two candidates retain independent meeting times');
+  assert(await page.getByRole('navigation', { name: 'Встречи с кандидатами' }).getByRole('button').count() === 2, 'Both meetings are available directly from meeting details');
+  await nav('Встречи · 2').click();
+  assert(await page.locator('.hp-agenda .hp-meeting-chip').count() === 2, 'All-meetings view renders both events');
+  await page.reload();
+  await page.locator('.hp-agenda .hp-meeting-chip').first().waitFor();
+  assert(await page.locator('.hp-agenda .hp-meeting-chip').count() === 2, 'All-meetings view and both events survive reload');
+  await nav('Подборка').click(); await button('Открыть: Елена Орлова').click();
+  await nav('Встречи · 2').click();
+  assert(await page.locator('.hp-agenda .hp-meeting-chip').count() === 2, 'Meetings are accessible when selected candidate has no meeting');
+  await page.locator('.hp-agenda .hp-meeting-chip').filter({ hasText: 'Анна Миронова' }).click();
+  await button('Перенести встречу').click(); await save('12:00');
+  state = await stored();
+  assert(state.byCandidate.anna.meeting.time === '12:00' && state.byCandidate.mikhail.meeting.time === '14:00', 'Rescheduling one candidate preserves the other event');
+  await page.locator('details.hp-scenario > summary').click();
+  await button('Смоделировать подтверждение').click();
+  state = await stored();
+  assert(state.byCandidate.anna.meeting.status === 'confirmed' && state.byCandidate.mikhail.meeting.status === 'pending', 'Confirmation belongs only to the selected meeting');
+  await page.getByRole('navigation', { name: 'Встречи с кандидатами' }).getByRole('button').filter({ hasText: 'Михаил Белов' }).click();
+  await button('Отменить встречу').click();
+  state = await stored();
+  assert(state.byCandidate.mikhail.meeting.status === 'cancelled' && state.byCandidate.anna.meeting.status === 'confirmed', 'Cancellation preserves the other confirmed meeting');
+  await button('Выбрать новое время').click(); await save('15:00');
+  await nav('Встречи · 2').click();
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.screenshot({ path: `output/playwright/meetings-clean-${width}.png`, fullPage: true });
+    assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `Meeting list fits ${width}px`);
+    await page.locator('.hp-agenda .hp-meeting-chip').filter({ hasText: 'Анна Миронова' }).click();
+    await page.locator('.hp-brief-section > summary').click();
+    assert(await page.locator('.hp-brief-section').getAttribute('open') !== null, `Meeting preparation remains accessible at ${width}px`);
+    await page.screenshot({ path: `output/playwright/meeting-detail-clean-${width}.png`, fullPage: true });
+    assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `Meeting detail fits ${width}px`);
+    await button('Все встречи · 2').focus();
+    await page.keyboard.press('Enter');
+    assert(await page.locator('.hp-agenda .hp-meeting-chip').count() === 2, `Keyboard return preserves both meetings at ${width}px`);
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.locator('.hp-agenda .hp-meeting-chip').filter({ hasText: 'Анна Миронова' }).click();
+  await button('Открыть комнату').click();
+  await button('Показать завершение встречи').click();
+  await page.locator('#feedback-example').fill('Кандидат уточнил причину ухода клиента.');
+  await page.locator('#feedback-doubts').fill('Нужна проверка личного вклада.');
+  await page.locator('#feedback-check').fill('Проверить рабочий кейс.');
+  await button('Сохранить фидбек').click();
+  assert(await page.getByRole('heading', { name: 'Разбор вашей встречи', exact: true }).isVisible(), 'Meeting still leads to feedback and review');
+  await button('Добавить в пул для оффера').click();
+  assert((await stored()).byCandidate.anna.decision === 'pool', 'Review still allows adding a candidate to the offer pool');
+  assert((await stored()).byCandidate.mikhail.meeting.status === 'pending', 'Review and pool do not discard another pending interview');
+  await nav('Подборка').click();
+  await button('Открыть: Михаил Белов').click();
+  assert(await page.getByRole('tab', { name: 'Интервью', exact: true }).isVisible(), 'Interview material entry remains available');
+  await nav('Встречи · 2').click();
+  return { status: 'passed', count: checks.length, checks };
+}

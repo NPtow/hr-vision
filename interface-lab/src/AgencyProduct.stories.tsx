@@ -8,3 +8,5 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 export const Manager: Story = { name: '01 Нанимающий · задачи найма', args: { initialRole: 'manager' } };
 export const Candidate: Story = { name: '02 Кандидат · предложение и процесс', args: { initialRole: 'candidate' } };
+
+export const Start: Story = { name: '00 Общий вход · аккаунты команды', args: { initialRole: 'start' } };

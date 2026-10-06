@@ -75,7 +75,7 @@ async (page) => {
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.setViewportSize({ width: 1440, height: 1000 });
   await choices.nth(3).click();
-  await page.getByRole('button', { name: 'Смотреть профиль', exact: true }).nth(2).click();
+  await page.getByRole('button', { name: 'Интервью и профиль', exact: true }).nth(2).click();
   assert((await page.locator('.hpa-card-page').innerText()).includes('Елена Орлова'), 'Card opens full profile');
   await page.getByRole('button', { name: 'К трём кандидатам', exact: true }).click();
   assert(await page.locator('.hpa-person-card').count() === 3, 'Card view returns to shortlist');
