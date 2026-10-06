@@ -13,13 +13,13 @@ http://:8381 {
 	handle @trusted {
 		@mockupStory {
 			path /iframe.html
-			not query id=hr-vision-product--*
+			not query id=hr-vision-product--start id=hr-vision-product--manager id=hr-vision-product--candidate
 		}
 		redir @mockupStory "https://hr-vision-lab.158-160-179-53.sslip.io{uri}" 302
 		@mockupCatalog {
 			path /
 			query path=*
-			not query path=/story/hr-vision-product--*
+			not query path=/story/hr-vision-product--start path=/story/hr-vision-product--manager path=/story/hr-vision-product--candidate
 		}
 		redir @mockupCatalog "https://hr-vision-lab.158-160-179-53.sslip.io{uri}" 302
 		handle /api/hr/* {
@@ -47,9 +47,9 @@ http://:8381 {
 			respond "No API on the mockup site" 404
 		}
 		handle {
-			@serviceStory query id=hr-vision-product--*
+			@serviceStory query id=hr-vision-product--start id=hr-vision-product--manager id=hr-vision-product--candidate
 			redir @serviceStory "https://hr-vision.158-160-179-53.sslip.io{uri}" 302
-			@serviceCatalog query path=/story/hr-vision-product--*
+			@serviceCatalog query path=/story/hr-vision-product--start path=/story/hr-vision-product--manager path=/story/hr-vision-product--candidate
 			redir @serviceCatalog "https://hr-vision.158-160-179-53.sslip.io{uri}" 302
 			root * /srv/hr-vision-mockups/current
 			encode zstd gzip

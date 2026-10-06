@@ -80,6 +80,18 @@ class ReceiverTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'superseded'): r.activate(s, m)
         self.assertEqual(r.pointer(base), 'releases/old')
 
+    def test_branch_lookup_retries_transient_timeout(self):
+        response = io.BytesIO(json.dumps({'object': {'sha': 'a' * 40}}).encode())
+        with patch.object(r.urllib.request, 'urlopen', side_effect=[TimeoutError(), response]) as request, patch.object(r.time, 'sleep'):
+            self.assertEqual(r.current_branch_sha('main'), 'a' * 40)
+            self.assertEqual(request.call_count, 2)
+
+    def test_branch_lookup_does_not_retry_missing_branch(self):
+        error = r.urllib.error.HTTPError('https://api.github.com', 404, 'Not found', {}, None)
+        with patch.object(r.urllib.request, 'urlopen', side_effect=error) as request, patch.object(r.time, 'sleep'):
+            with self.assertRaises(r.urllib.error.HTTPError): r.current_branch_sha('main')
+            self.assertEqual(request.call_count, 1)
+
     def test_failed_health_restores_previous_release(self):
         a, s, m = self.bundle(); r.unpack(a, s, 'mockups')
         base = self.root / 'site'; base.mkdir(); (base / 'current').symlink_to('releases/old')

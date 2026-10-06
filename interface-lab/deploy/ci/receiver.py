@@ -13,6 +13,7 @@ import sys
 import tarfile
 import tempfile
 import time
+import urllib.error
 import urllib.request
 
 REPO = 'NPtow/hr-vision'
@@ -94,8 +95,17 @@ def unpack(archive, destination, target):
 
 def current_branch_sha(branch):
     request = urllib.request.Request(f'https://api.github.com/repos/{REPO}/git/ref/heads/{branch}', headers={'User-Agent': 'hr-vision-deployer', 'Accept': 'application/vnd.github+json'})
-    with urllib.request.urlopen(request, timeout=20) as response:
-        return json.load(response)['object']['sha']
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(request, timeout=15) as response:
+                return json.load(response)['object']['sha']
+        except urllib.error.HTTPError as error:
+            if error.code not in {429, 500, 502, 503, 504} or attempt == 2:
+                raise
+        except (urllib.error.URLError, TimeoutError):
+            if attempt == 2:
+                raise
+        time.sleep(attempt + 1)
 
 
 def pointer(base):
@@ -146,6 +156,10 @@ def check_origin(target, sha):
             with urllib.request.urlopen(request, timeout=4) as response:
                 data = json.load(response)
             require(data['sha'] == sha and data['target'] == target, 'Origin revision mismatch')
+            story = 'hr-vision-product--start' if target == 'service' else 'hr-vision-employer-menu--gallery'
+            entry = 'http://127.0.0.1:8381/iframe.html?id=' + story + '&viewMode=story'
+            with urllib.request.urlopen(urllib.request.Request(entry, headers={'Host': host}), timeout=4) as response:
+                require(response.status == 200 and response.url == entry, 'Entry page was redirected to another site')
             if target == 'service':
                 with urllib.request.urlopen('http://127.0.0.1:8391/api/hr/health', timeout=4) as response:
                     require(json.load(response).get('ok'), 'API health check failed')
