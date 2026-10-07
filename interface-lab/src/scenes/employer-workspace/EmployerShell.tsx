@@ -12,6 +12,11 @@ export function EmployerShell({ enabled = true, page, scope, company, name, coun
   const side = useRef<HTMLElement>(null);
   const opener = useRef<HTMLButtonElement>(null);
   useEffect(() => {
+    if (!enabled) return;
+    setMobile(false);
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  }, [enabled, page, scope]);
+  useEffect(() => {
     if (!mobile) return;
     const previous = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
