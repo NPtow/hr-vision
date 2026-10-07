@@ -1,5 +1,5 @@
 """Temporary DB and HTTP only. Run on outreach, never the shared scenario."""
-import json, os, tempfile, threading, unittest, urllib.request, urllib.error
+import base64, json, os, tempfile, threading, unittest, urllib.request, urllib.error, uuid
 from unittest.mock import patch
 DATA=tempfile.TemporaryDirectory(prefix='hr-feedback-http-')
 os.environ.update(HR_DATA_DIR=DATA.name,HR_TEAM_KEY='isolated-test',HR_VIDEO_ENABLED='0',DAILY_API_KEY='')
@@ -94,4 +94,49 @@ class FeedbackHTTPTest(unittest.TestCase):
             self.assertEqual(status, 200); self.assertEqual(body['candidates'][0]['id'], '123')
             self.assertEqual(source.call_count, 1)
         with app.connect() as db: self.assertEqual(before, app.read(db))
+    def test_candidate_intake_persists_without_candidate_consent_and_is_private(self):
+        with app.connect() as db: before = app.read(db)
+        payload = {'scope': 'sfera', 'batch': str(uuid.uuid4()), 'entries': [{'name': 'Проверка интерфейса', 'role': 'Менеджер', 'contact': 'test@example.com', 'link': 'https://hh.ru/resume/example', 'note': 'Тест'}]}
+        self.assertEqual(self.post('intake', payload, self.candidate)[0], 403)
+        self.assertEqual(self.post('intake', payload)[0], 401)
+        code, result = self.post('intake', payload, self.manager)
+        self.assertEqual(code, 200)
+        person = result['candidates'][0]
+        listed = self.access_request('intake?scope=sfera', token=self.manager)[1]['candidates']
+        self.assertIn(person, listed)
+        self.assertFalse(person['archived'])
+        self.assertEqual(self.access_request('intake?scope=sfera', token=self.candidate)[0], 403)
+        self.assertNotIn(person, self.access_request('intake?scope=dsa', token=self.manager)[1]['candidates'])
+        self.assertEqual(self.post('intake', payload, self.manager)[1], result)
+        self.assertEqual(self.post('intake', {**payload, 'entries': [{'name': 'Другой'}]}, self.manager)[0], 409)
+        self.assertEqual(self.post('intake/archive', {'id': person['id'], 'archived': True}, self.manager)[1]['candidate']['archived'], True)
+        self.assertEqual(self.post('intake/archive', {'id': person['id'], 'archived': False}, self.manager)[1]['candidate']['archived'], False)
+        with app.connect() as db: self.assertEqual(before, app.read(db))
+
+    def test_resume_download_requires_employer_and_preserves_bytes(self):
+        content = b'%PDF-1.4\n% isolated resume test'
+        payload = {'scope': 'dsa', 'batch': str(uuid.uuid4()), 'entries': [{'name': 'Резюме', 'file': {'name': 'Test.pdf', 'data': base64.b64encode(content).decode()}}]}
+        code, result = self.post('intake', payload, self.manager)
+        self.assertEqual(code, 200)
+        file = result['candidates'][0]['files'][0]
+        self.assertEqual(self.access_request('intake/files/' + file['id'], token=self.candidate)[0], 403)
+        req = urllib.request.Request(self.url + 'intake/files/' + file['id'], headers={'Authorization': 'Bearer ' + self.manager})
+        with urllib.request.urlopen(req, timeout=5) as response:
+            self.assertEqual(response.read(), content)
+            self.assertEqual(response.headers['Cache-Control'], 'no-store')
+            self.assertIn('attachment', response.headers['Content-Disposition'])
+        self.assertNotIn('data', file)
+
+    def test_intake_validation_is_atomic_and_rejects_unsafe_links_and_files(self):
+        for bad in [
+            {'name': ''}, {'name': 'Тест', 'link': 'javascript:alert(1)'},
+            {'name': 'Тест', 'link': 'https://user:secret@example.com'},
+            {'name': 'Тест', 'file': {'name': '../test.pdf', 'data': 'AAAA'}},
+            {'name': 'Тест', 'file': {'name': 'test.pdf', 'data': base64.b64encode(b'<script>x</script>').decode()}},
+        ]:
+            with app.connect() as db: before = db.execute('SELECT COUNT(*) FROM intake_candidates').fetchone()[0]
+            payload = {'scope': 'sfera', 'batch': str(uuid.uuid4()), 'entries': [{'name': 'Valid first'}, bad]}
+            self.assertEqual(self.post('intake', payload, self.manager)[0], 400)
+            with app.connect() as db: self.assertEqual(before, db.execute('SELECT COUNT(*) FROM intake_candidates').fetchone()[0])
+
 if __name__=='__main__': unittest.main()

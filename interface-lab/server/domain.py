@@ -156,6 +156,8 @@ def transition(state, actor, data):
         require(is_manager, 'Время выбирает работодатель.', 403)
         require(not state['closedBy'], 'Подбор уже завершён.')
         require(not m or (m['status'] in ('pending', 'confirmed', 'cancelled') and not m.get('room')), 'Встреча уже началась или завершена.')
+        if 'previousMeetingId' in data:
+            require(data['previousMeetingId'] == (m['id'] if m else None), 'Встреча уже изменилась. Обновите страницу.')
         start = iso(timestamp(data.get('start')))
         require(start in free_slots(state, cid), 'Этот слот уже занят. Выберите другое время.')
         person['meeting'] = {'id': secrets.token_hex(12), 'start': start, 'status': 'pending',

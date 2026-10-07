@@ -1,5 +1,8 @@
 """Isolated test API. State lives outside releases; media provider keys stay here."""
+import base64
+import binascii
 import hashlib
+import re
 import hmac
 import json
 import os
@@ -12,7 +15,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from domain import IDS, NAMES, Problem, fresh, public_state, require, transition
+from domain import IDS, NAMES, Problem, fresh, public_state, require, transition, text, iso, now
 from daily_media import DailyMedia
 from feedback import questionnaire, vtt_turns
 import browser_access
@@ -41,6 +44,9 @@ with connect() as db:
     db.execute('CREATE TABLE IF NOT EXISTS scenario (id INTEGER PRIMARY KEY CHECK(id=1), body TEXT NOT NULL)')
     db.execute('CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, actor TEXT NOT NULL, expires INTEGER NOT NULL)')
     db.execute('INSERT OR IGNORE INTO scenario VALUES (1, ?)', (json.dumps(fresh()),))
+    db.execute('CREATE TABLE IF NOT EXISTS intake_candidates (id TEXT PRIMARY KEY, scope TEXT NOT NULL, batch TEXT NOT NULL, body TEXT NOT NULL)')
+    db.execute('CREATE TABLE IF NOT EXISTS intake_files (id TEXT PRIMARY KEY, candidate TEXT NOT NULL, name TEXT NOT NULL, content BLOB NOT NULL)')
+    db.execute('CREATE TABLE IF NOT EXISTS intake_batches (id TEXT PRIMARY KEY, digest TEXT NOT NULL)')
 os.chmod(DB, 0o600)
 
 
@@ -50,6 +56,61 @@ def read(db):
 
 def write(db, state):
     db.execute('UPDATE scenario SET body=? WHERE id=1', (json.dumps(state, ensure_ascii=False),))
+
+
+
+def intake_add(db, body):
+    """Store employer-owned drafts without fabricating candidate consent or availability."""
+    scope = body.get('scope')
+    require(scope in ('sfera', 'dsa'), 'Выберите подбор.', 400)
+    batch = body.get('batch')
+    require(isinstance(batch, str) and re.fullmatch(r'[a-zA-Z0-9-]{12,80}', batch), 'Некорректный запрос.', 400)
+    digest = hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()
+    old = db.execute('SELECT digest FROM intake_batches WHERE id=?', (batch,)).fetchone()
+    if old:
+        require(old[0] == digest, 'Состав кандидатов изменился. Обновите страницу.', 409)
+        return {'candidates': [json.loads(row[0]) for row in db.execute('SELECT body FROM intake_candidates WHERE batch=? ORDER BY rowid', (batch,))]}
+    entries = body.get('entries')
+    require(isinstance(entries, list) and 1 <= len(entries) <= 10, 'Можно добавить от 1 до 10 кандидатов.', 400)
+    count = db.execute('SELECT COUNT(*) FROM intake_candidates').fetchone()[0]
+    require(count + len(entries) <= 500, 'Достигнут лимит базы кандидатов.')
+    stored = db.execute('SELECT COALESCE(SUM(LENGTH(content)),0) FROM intake_files').fetchone()[0]
+    created, total = [], 0
+    for entry in entries:
+        require(isinstance(entry, dict), 'Проверьте данные кандидата.', 400)
+        person = {key: text(entry.get(key, ''), limit, required=key == 'name') for key, limit in [('name', 140), ('role', 200), ('contact', 160), ('link', 2048), ('note', 4000)]}
+        if person['link']:
+            try:
+                url = urllib.parse.urlsplit(person['link'])
+                require(url.scheme == 'https' and bool(url.hostname) and not url.username and not url.password and not any(ord(ch) < 32 for ch in person['link']), 'Нужна HTTPS-ссылка на резюме.', 400)
+            except ValueError:
+                raise Problem('Проверьте ссылку на резюме.', 400)
+        person.update(id=secrets.token_hex(12), scope=scope, createdAt=iso(now()), archived=False, files=[])
+        file = entry.get('file')
+        if file is not None:
+            require(isinstance(file, dict), 'Проверьте резюме.', 400)
+            name = text(file.get('name'), 240)
+            require('/' not in name and '\\' not in name and not any(ord(c) < 32 for c in name), 'Проверьте название файла.', 400)
+            extension = Path(name).suffix.lower()
+            require(extension in ('.pdf', '.doc', '.docx', '.rtf'), 'Подойдут PDF, DOC, DOCX или RTF.', 400)
+            raw = file.get('data')
+            require(isinstance(raw, str) and len(raw) <= 7 * 1024 * 1024, 'Резюме должно быть не больше 5 МБ.', 413)
+            try:
+                content = base64.b64decode(raw, validate=True)
+            except (binascii.Error, ValueError):
+                raise Problem('Не удалось прочитать файл.', 400)
+            require(0 < len(content) <= 5 * 1024 * 1024, 'Резюме должно быть не больше 5 МБ.', 413)
+            signatures = {'.pdf': b'%PDF-', '.doc': bytes.fromhex('d0cf11e0a1b11ae1'), '.docx': b'PK', '.rtf': b'{\\rtf'}
+            require(content.startswith(signatures[extension]), 'Содержимое файла не соответствует формату.', 400)
+            total += len(content)
+            require(total <= 8 * 1024 * 1024 and stored + total <= 128 * 1024 * 1024, 'Недостаточно места для резюме.', 413)
+            fid = secrets.token_hex(12)
+            db.execute('INSERT INTO intake_files VALUES (?,?,?,?)', (fid, person['id'], name, content))
+            person['files'].append({'id': fid, 'name': name, 'size': len(content)})
+        db.execute('INSERT INTO intake_candidates VALUES (?,?,?,?)', (person['id'], scope, batch, json.dumps(person, ensure_ascii=False)))
+        created.append(person)
+    db.execute('INSERT INTO intake_batches VALUES (?,?)', (batch, digest))
+    return {'candidates': created}
 
 
 def provider(path, body=None, method=None):
@@ -161,6 +222,29 @@ class Handler(BaseHTTPRequestHandler):
                 return self.answer(200, {'ok': True, 'videoConfigured': bool(DAILY and VIDEO_ENABLED)})
             if self.path == '/api/hr/access':
                 return self.answer(200, {'ready': self.browser_access()})
+            if self.path.startswith('/api/hr/intake/files/'):
+                fid = self.path.removeprefix('/api/hr/intake/files/')
+                require(re.fullmatch(r'[a-f0-9]{24}', fid), 'Резюме не найдено.', 404)
+                with connect() as db:
+                    require(self.actor(db) == 'manager', 'Резюме доступно работодателю.', 403)
+                    file = db.execute('SELECT name, content FROM intake_files WHERE id=?', (fid,)).fetchone()
+                require(file is not None, 'Резюме не найдено.', 404)
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/octet-stream')
+                self.send_header('Content-Disposition', "attachment; filename*=UTF-8''" + urllib.parse.quote(file[0], safe=''))
+                self.send_header('Content-Length', str(len(file[1])))
+                self.send_header('Cache-Control', 'no-store')
+                self.send_header('X-Content-Type-Options', 'nosniff')
+                self.end_headers()
+                self.wfile.write(file[1])
+                return
+            if urllib.parse.urlsplit(self.path).path == '/api/hr/intake':
+                scope = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get('scope', [''])[0]
+                require(scope in ('sfera', 'dsa'), 'Выберите подбор.', 400)
+                with connect() as db:
+                    require(self.actor(db) == 'manager', 'Кандидаты доступны работодателю.', 403)
+                    people = [json.loads(row[0]) for row in db.execute('SELECT body FROM intake_candidates WHERE scope=? ORDER BY rowid DESC', (scope,))]
+                return self.answer(200, {'candidates': people})
             if self.path == '/api/hr/dsa-candidates':
                 with connect() as db:
                     require(self.actor(db) == 'manager', 'Материалы доступны работодателю.', 403)
@@ -183,7 +267,10 @@ class Handler(BaseHTTPRequestHandler):
             require(self.headers.get('Origin') in (None, ORIGIN), 'Другой источник запроса.', 403)
             require(self.headers.get('Content-Type', '').startswith('application/json'), 'Нужен JSON.', 415)
             size = int(self.headers.get('Content-Length', '0'))
-            require(0 < size <= 32768, 'Слишком большой запрос.', 413)
+            if self.path == '/api/hr/intake':
+                with connect() as db:
+                    require(self.actor(db) == 'manager', 'Кандидатов добавляет работодатель.', 403)
+            require(0 < size <= (12 * 1024 * 1024 if self.path == '/api/hr/intake' else 32768), 'Слишком большой запрос.', 413)
             body = json.loads(self.rfile.read(size))
             require(isinstance(body, dict), 'Некорректный запрос.', 400)
             if self.path == '/api/hr/feedback/questions':
@@ -209,7 +296,18 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     actor = self.actor(db)
                     state = read(db)
-                    if self.path == '/api/hr/action':
+                    if self.path == '/api/hr/intake':
+                        require(actor == 'manager', 'Кандидатов добавляет работодатель.', 403)
+                        response = intake_add(db, body)
+                    elif self.path == '/api/hr/intake/archive':
+                        require(actor == 'manager', 'Нет доступа.', 403)
+                        require(isinstance(body.get('archived'), bool), 'Выберите действие.', 400)
+                        item = db.execute('SELECT body FROM intake_candidates WHERE id=?', (body.get('id'),)).fetchone()
+                        require(item is not None, 'Кандидат не найден.', 404)
+                        person = json.loads(item[0]); person['archived'] = body['archived']
+                        db.execute('UPDATE intake_candidates SET body=? WHERE id=?', (json.dumps(person, ensure_ascii=False), person['id']))
+                        response = {'candidate': person}
+                    elif self.path == '/api/hr/action':
                         if body.get('action') == 'meeting.finish':
                             _, meeting = get_meeting(state, actor, body)
                             require(actor == 'manager', 'Нет доступа.', 403)

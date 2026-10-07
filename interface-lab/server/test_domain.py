@@ -68,6 +68,18 @@ class JourneyTest(unittest.TestCase):
         self.do('manager','meeting.propose',start=free_slots(self.s,'anna')[0])
         with self.assertRaises(Problem): self.do('anna','meeting.confirm',meetingId=old)
 
+    def test_calendar_rejects_stale_reschedule_without_changing_other_meetings(self):
+        first = self.meeting()
+        second = self.meeting('mikhail')
+        slot = free_slots(self.s, 'anna')[0]
+        self.do('manager', 'meeting.propose', start=slot, previousMeetingId=first)
+        changed = self.s['candidates']['anna']['meeting']['id']
+        with self.assertRaises(Problem):
+            self.do('manager', 'meeting.propose', start=free_slots(self.s, 'anna')[0], previousMeetingId=first)
+        self.assertEqual(self.s['candidates']['anna']['meeting']['id'], changed)
+        self.assertEqual(self.s['candidates']['mikhail']['meeting']['id'], second)
+        self.assertEqual(self.s['candidates']['anna']['meeting']['status'], 'pending')
+
     def test_busy_time_not_available(self):
         self.assertNotIn(self.s['candidates']['anna']['busy'][0],free_slots(self.s,'anna'))
 

@@ -22,6 +22,12 @@ http://:8381 {
 			not query path=/story/hr-vision-product--start path=/story/hr-vision-product--manager path=/story/hr-vision-product--candidate
 		}
 		redir @mockupCatalog "https://hr-vision-lab.158-160-179-53.sslip.io{uri}" 302
+		handle /api/hr/intake {
+			request_body {
+				max_size 12MB
+			}
+			reverse_proxy 127.0.0.1:8391
+		}
 		handle /api/hr/* {
 			request_body {
 				max_size 32KB
