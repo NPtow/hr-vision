@@ -262,3 +262,5 @@
 .ew-task-brief strong { color:#303037; font-size:13px; }
 .ew-task-brief p { margin-top:12px; font-size:12px; }
 @media(max-width:700px) { .ew-task-brief { display:none; } }
+.ew-calendar>header,.ew-calendar .ew-weekdays,.ew-calendar .ew-month-days,.ew-calendar .ew-calendar-note { max-width:360px; margin-left:auto; margin-right:auto; }
+.ew-calendar .ew-month-days button { min-height:36px; }

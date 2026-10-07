@@ -21,6 +21,6 @@ export async function downloadResume(token: string, file: IntakeFile) {
   const response = await fetch(`/api/hr/intake/files/${file.id}`, { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
   if (!response.ok) throw new Error('Не удалось загрузить резюме. Попробуйте ещё раз.');
   const url = URL.createObjectURL(await response.blob());
-  const a = document.createElement('a'); a.href = url; a.download = file.name; a.click();
+  const a = document.createElement('a'); a.href = url; a.download = file.name; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
