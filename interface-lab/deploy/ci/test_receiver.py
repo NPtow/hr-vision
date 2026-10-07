@@ -40,6 +40,26 @@ class ReceiverTest(unittest.TestCase):
             a, s, m = self.bundle(target)
             self.assertEqual(r.unpack(a, s, target), m)
 
+    def test_accepts_exact_presentation_only_on_mockups(self):
+        def add_presentation(m, f):
+            name = 'ui/presentations/hrds-2026-10-07/index.html'
+            f[name] = b'<html><title>HRDS</title></html>'
+            m['files'][name] = r.digest(f[name])
+        a, s, m = self.bundle(mutate=add_presentation)
+        self.assertEqual(r.unpack(a, s, 'mockups'), m)
+        a, s, _ = self.bundle('service', mutate=add_presentation)
+        with self.assertRaisesRegex(ValueError, 'public file'):
+            r.unpack(a, s, 'service')
+
+    def test_rejects_other_nested_html(self):
+        def add_other(m, f):
+            name = 'ui/presentations/unapproved/index.html'
+            f[name] = b'<html/>'
+            m['files'][name] = r.digest(f[name])
+        a, s, _ = self.bundle(mutate=add_other)
+        with self.assertRaisesRegex(ValueError, 'public file'):
+            r.unpack(a, s, 'mockups')
+
     def test_rejects_wrong_destination(self):
         a, s, _ = self.bundle()
         with self.assertRaisesRegex(ValueError, 'target'): r.unpack(a, s, 'service')

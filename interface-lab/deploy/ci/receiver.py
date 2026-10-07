@@ -73,6 +73,7 @@ def unpack(archive, destination, target):
                 require(name.startswith('ui/') and not any(part.startswith('.') for part in PurePosixPath(rel).parts), 'Unexpected public path')
                 require(re.search(r'\.(js|css|svg|woff2?|ttf|png|jpe?g|webp|ico|gif)$', rel)
                         or rel in {'index.html', 'iframe.html', 'index.json', 'project.json', 'deployment.json'}
+                        or (target == 'mockups' and rel == 'presentations/hrds-2026-10-07/index.html')
                         or rel.endswith('.LICENSE.txt'), 'Unexpected public file')
         require({'ui/index.html', 'ui/iframe.html', 'ui/index.json', 'ui/deployment.json'} <= files.keys(), 'Missing UI files')
         if target == 'service':

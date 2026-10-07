@@ -37,6 +37,7 @@ function visit(dir = '') {
     if (info.isDirectory()) { visit(`${rel}/`); continue; }
     if (!( /\.(js|css|svg|woff2?|ttf|png|jpe?g|webp|ico|gif)$/.test(rel)
       || ['index.html', 'iframe.html', 'index.json', 'project.json'].includes(rel)
+      || (target === 'mockups' && rel === 'presentations/hrds-2026-10-07/index.html')
       || /\.LICENSE\.txt$/.test(rel))) throw Error(`Unexpected public file: ${rel}`);
     add(file, `ui/${rel}`);
   }
