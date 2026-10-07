@@ -12,7 +12,6 @@ import {
   ChevronRight,
   Clock3,
   FileText,
-  FolderOpen,
   Info,
   Link2,
   ListVideo,
@@ -316,7 +315,7 @@ export function CandidatePanel({
                             <span className="hp-person-copy">
                               <strong>{c.name}</strong>
                               <span>
-                                {c.experience} · {c.city}
+                                {[c.experience, c.city].filter(Boolean).join(" · ")}
                               </span>
                               <span
                                 className={`hp-row-status ${m ? "has-meeting" : ""}`}
@@ -358,13 +357,6 @@ export function CandidatePanel({
                         </div>
                       )}
                     </div>
-                    <button
-                      className="hp-add-row"
-                      onClick={() => navigate("add")}
-                    >
-                      <Plus size={17} />
-                      Добавить кандидатов
-                    </button>
                   </aside>
                   <section
                     className="hp-candidate-detail"
@@ -384,9 +376,9 @@ export function CandidatePanel({
                           <h2>{person.name}</h2>
                           <p>{person.role}</p>
                           <div className="hp-meta">
-                            <span>{person.city}</span>
-                            <span>{person.experience} опыта</span>
-                            <span>{person.salary}</span>
+                            {person.city && <span>{person.city}</span>}
+                            {person.experience && <span>{person.experience} опыта</span>}
+                            {person.salary && <span>{person.salary}</span>}
                           </div>
                         </div>
                       </div>
@@ -1045,9 +1037,9 @@ function AddCandidates({
           .join("")
           .toUpperCase(),
         role: d.role || position,
-        city: "Город не указан",
-        experience: "Не указан",
-        salary: "По договорённости",
+        city: "",
+        experience: "",
+        salary: "",
         email: d.email || undefined,
         source: d.source || undefined,
         note: d.note || undefined,
@@ -1069,7 +1061,6 @@ function AddCandidates({
       </button>
       <div className="hp-screen-heading">
         <h2>Добавить кандидатов</h2>
-        <span>{position}</span>
       </div>
       <form onSubmit={submit} noValidate>
         <div className="hp-add-layout">
@@ -1269,22 +1260,7 @@ function AddCandidates({
               )
             )}
           </div>
-          <aside className="hp-add-side">
-            <span className="hp-folder">
-              <FolderOpen size={24} strokeWidth={1.5} />
-            </span>
-            <span>В эту подборку</span>
-            <h3>{position}</h3>
-            <p>Сфера · Клиентский сервис</p>
-            <div className="hp-add-side-bottom">
-              <UsersRound size={17} />
-              <span>
-                {count
-                  ? `Кандидатов к добавлению: ${count}`
-                  : "Кандидаты появятся в панели"}
-              </span>
-            </div>
-          </aside>
+
         </div>
         {error && (
           <p className="hp-error" role="alert">
