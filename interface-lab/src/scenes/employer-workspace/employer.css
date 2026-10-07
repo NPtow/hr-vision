@@ -28,7 +28,7 @@
 .ew-vacancy-header { padding:17px 32px 11px; border-bottom:1px solid #e9e7f0; }
 .ew-vacancy-title { display:flex; justify-content:space-between; align-items:center; gap:24px; min-height:64px; }
 .ew-context-back { font-size:12px!important; color:#757575!important; padding:0; background:none; border:0; }
-.ew-root .ew-vacancy-title h1 { margin:3px 0 0; font-size:24px; font-weight:650; line-height:32px; margin-top:3px; letter-spacing:-.25px; }
+.ew-root .ew-vacancy-title h1 { margin:3px 0 0; font-size:24px; font-weight:600; line-height:32px; margin-top:3px; letter-spacing:-.25px; }
 .ew-add-candidates { min-width:215px; }
 .ew-vacancy-nav { display:flex; gap:10px; margin-top:19px; overflow-x:auto; }
 .ew-vacancy-nav button { flex-shrink:0; height:36px; min-width:135px; padding:8px 24px; border:0; border-radius:999px; font-size:14px; color:#757575; background:none; }
@@ -59,7 +59,7 @@
 .ew-back-list { display:none; }
 .ew-person-heading { display:flex; align-items:flex-start; gap:20px; min-width:0; min-height:82px; }
 .ew-person-name { flex:1; min-width:0; }
-.ew-person-heading h2 { font-size:30px; font-weight:650; line-height:36px; letter-spacing:-.5px; }
+.ew-person-heading h2 { font-size:30px; font-weight:600; line-height:36px; letter-spacing:-.5px; }
 .ew-person-heading p { font-size:14px; line-height:20px; color:#757575; margin-top:5px; }
 .ew-person-heading small { display:block; font-size:12px; line-height:18px; color:#929292; margin-top:6px; }
 .ew-status { font-size:12px; color:#757575; padding-top:7px; white-space:nowrap; }
@@ -120,7 +120,7 @@
 .ew-form-page { max-width:660px; margin:0 auto; padding:36px 0 52px; }
 .ew-text-back { display:inline-flex; gap:8px; align-items:center; min-height:40px; padding:10px 12px; margin-bottom:24px; background:none; border:0; color:#757575!important; font-size:14px!important; }
 .ew-form-heading { margin-bottom:32px; }
-.ew-form-heading h1 { font-size:30px; line-height:36px; letter-spacing:-.5px; font-weight:650; }
+.ew-form-heading h1 { font-size:30px; line-height:36px; letter-spacing:-.5px; font-weight:600; }
 .ew-methods { display:flex; gap:16px; margin-bottom:26px; }
 .ew-methods button { flex:1; min-width:112px; height:36px; padding:8px 24px; border:0; border-radius:999px; color:#757575; background:none; font-size:14px!important; }
 .ew-methods button[aria-pressed=true] { color:#121212; background:#f6f6f7; }
