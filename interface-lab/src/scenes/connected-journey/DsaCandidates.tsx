@@ -5,7 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/ta
 import { SourceScreeningReview, type RecordingChapter } from '../interview-review/InterviewReview';
 import { request } from './api';
 import './dsa-candidates.css';
-import { PeoplePanel } from '../employer-workspace/PeoplePanel';
+import { Avatar, PeoplePanel } from '../employer-workspace/PeoplePanel';
 import { IntakeDetail } from '../employer-workspace/CandidateIntake';
 import type { useIntake } from '../employer-workspace/intake';
 
@@ -18,7 +18,7 @@ type DsaCandidate = {
 };
 type DsaSelection = { source: string; company: string; role: string; selection: string; candidates: DsaCandidate[]; fetchedAt: number };
 
-export function DsaCandidates({ token, onAdd, intake, intakeSelected, onIntakeSelect }: { token: string; onBack: () => void; onAdd: () => void; intake: ReturnType<typeof useIntake>; intakeSelected: string; onIntakeSelect: (id: string) => void }) {
+export function DsaCandidates({ token, onAdd, intake, intakeSelected, onIntakeSelect, onCountChange }: { onCountChange: (count: number) => void; token: string; onBack: () => void; onAdd: () => void; intake: ReturnType<typeof useIntake>; intakeSelected: string; onIntakeSelect: (id: string) => void }) {
   const [selection, setSelection] = useState<DsaSelection | null>(null);
   const [selected, setSelected] = useState('');
   const [error, setError] = useState('');
@@ -31,10 +31,11 @@ export function DsaCandidates({ token, onAdd, intake, intakeSelected, onIntakeSe
       const data = await request<DsaSelection>('dsa-candidates', token);
       if (sequence.current !== seq) return;
       setSelection(data);
+      onCountChange(data.candidates.length);
       setSelected(id => data.candidates.some(c => c.id === id) ? id : data.candidates[0]?.id || '');
     } catch (e) { if (sequence.current === seq) setError((e as Error).message); }
     finally { if (sequence.current === seq) setLoading(false); }
-  }, [token]);
+  }, [token, onCountChange]);
   useEffect(() => { void load(); return () => { sequence.current++; }; }, [load]);
   const person = selection?.candidates.find(c => c.id === selected);
   const added = intake.people.find(p => p.id === intakeSelected);
@@ -44,11 +45,11 @@ export function DsaCandidates({ token, onAdd, intake, intakeSelected, onIntakeSe
     {intake.error && <p className="ew-inline-error" role="alert">{intake.error}</p>}
     {loading && !selection && <p role="status">Загружаем кандидатов…</p>}
     {added ? <IntakeDetail key={added.id} token={token} person={added} onArchived={() => { void intake.refresh(); }}/>: person && selection ? <div key={person.id} className="dsa-profile ew-dsa-profile">
-      <header className="ew-person-heading"><div><span className="ew-status">{person.sourceStatus || 'Без решения'}</span><h2>{person.name}</h2><p>{person.role}</p></div><a className="ew-source-button" href={selection.source} target="_blank" rel="noreferrer">Исходная панель ↗</a></header>
-      <Tabs defaultValue="interview" className="ew-profile-tabs"><TabsList aria-label="Материалы кандидата ДСА"><TabsTrigger value="interview">Интервью</TabsTrigger><TabsTrigger value="profile">Профиль</TabsTrigger><TabsTrigger value="cv">Резюме</TabsTrigger></TabsList>
-        <TabsContent value="interview"><SourceScreeningReview sourceId={'dsa-' + person.id} name={person.name} chapters={person.shortChapters} fullChapters={person.fullChapters} shortPlaylist media={person.video ? { src: person.video } : undefined}/><section className="dsa-recruiter"><div className="dsa-section-title"><h2>Заключение рекрутера</h2>{person.score !== null && <span>Оценка <strong>{person.score} / 5</strong></span>}</div>{person.conclusion.map((p, i) => <p key={i}>{p}</p>)}</section>{!!person.questions.length && <details className="dsa-questions"><summary>Что уточнить на встрече</summary><ul>{person.questions.map(q => <li key={q}>{q}</li>)}</ul></details>}</TabsContent>
-        <TabsContent value="profile"><dl className="dsa-facts">{person.profile.map(p => <div key={p.label}><dt>{p.label}</dt><dd>{p.value}</dd></div>)}</dl><p className="ew-form-note">Из панели ДСА · интервью {person.interviewDate}</p></TabsContent>
-        <TabsContent value="cv">{person.cv ? <pre className="dsa-cv">{person.cv}</pre> : <p>Резюме не добавлено.</p>}</TabsContent>
+      <header className="ew-person-heading"><Avatar name={person.name} photo={person.photo}/><div className="ew-person-name"><h2>{person.name}</h2><p>{person.interviewRole || selection.role}</p><small>{person.role}</small></div><span className="ew-status">{person.sourceStatus || 'Без решения'}</span></header>
+      <Tabs defaultValue="interview" className="ew-profile-tabs">
+        <div className="ew-profile-toolbar"><TabsList aria-label="Материалы кандидата ДСА"><TabsTrigger value="interview">Интервью</TabsTrigger><TabsTrigger value="cv">Резюме</TabsTrigger></TabsList><a className="ew-source-button" href={selection.source} target="_blank" rel="noreferrer">Исходная панель ↗</a></div>
+        <TabsContent value="interview"><SourceScreeningReview appearance="panel" sourceId={'dsa-' + person.id} name={person.name} chapters={person.shortChapters} fullChapters={person.fullChapters} shortPlaylist media={person.video ? { src: person.video } : undefined} recruiterContent={<><span className="ir-eyebrow">Мнение рекрутера{person.score !== null ? ` · ${person.score} / 5` : ''}</span>{person.conclusion.map((p, i) => <p key={i}>{p}</p>)}{!!person.questions.length && <details className="ew-recruiter-questions"><summary>На встрече · {person.questions.length}</summary><ul>{person.questions.map(q => <li key={q}>{q}</li>)}</ul></details>}</>}/></TabsContent>
+        <TabsContent value="cv"><dl className="dsa-facts">{person.profile.map(p => <div key={p.label}><dt>{p.label}</dt><dd>{p.value}</dd></div>)}</dl>{person.cv ? <pre className="dsa-cv">{person.cv}</pre> : <p>Резюме не добавлено.</p>}<p className="ew-form-note">Из панели ДСА · интервью {person.interviewDate}</p></TabsContent>
       </Tabs>
     </div> : undefined}
   </PeoplePanel>;

@@ -1,12 +1,14 @@
-import { useEffect, useId, useMemo, useRef, useState, type SyntheticEvent } from 'react';
-import { AlertCircle, FileText, ListVideo, MessageSquareText, Video, VideoOff } from 'lucide-react';
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode, type SyntheticEvent } from 'react';
+import { AlertCircle, FileText, ListVideo, MessageSquareText, Video, VideoOff, Play, Pause, Maximize } from 'lucide-react';
 import type { Candidate } from '../agency-product/model';
 import { useInterviewMedia, type InterviewMedia } from './InterviewMediaContext';
 import './interview-review.css';
+import playAsset from '../employer-workspace/assets/play.svg';
 
 export type { InterviewMedia } from './InterviewMediaContext';
 export type InterviewReviewProps = {
   person: Candidate;
+  appearance?: 'panel';
   initialEvidenceIndex?: number;
   compact?: boolean;
   media?: InterviewMedia;
@@ -24,6 +26,8 @@ export type RecordingChapter = {
 
 type RecordingReviewProps = {
   sourceId: string;
+  appearance?: 'panel';
+  recruiterContent?: ReactNode;
   name: string;
   chapters: RecordingChapter[];
   kind: 'screening' | 'meeting';
@@ -64,7 +68,7 @@ export function InterviewReview(props: InterviewReviewProps) {
     sourceId={props.person.id} name={props.person.name} kind="screening"
     chapters={props.person.evidence.map(e => ({ ...e, seconds: evidenceTime(e.source) }))}
     summary={props.person.summary} unknown={props.person.unknown}
-    initialEvidenceIndex={props.initialEvidenceIndex} compact={props.compact} media={media}/>;
+    initialEvidenceIndex={props.initialEvidenceIndex} compact={props.compact} media={media} appearance={props.appearance}/>;
 }
 
 /** Only this meeting's server-supplied materials. It never reads screening fixture media. */
@@ -78,7 +82,7 @@ export function SourceScreeningReview(props: Omit<RecordingReviewProps, 'kind'>)
 }
 
 function RecordingReview({ sourceId, name, chapters: evidence, kind, summary, unknown, transcriptText,
-  emptyMessage, initialEvidenceIndex, compact = false, media, fullChapters, shortPlaylist = false }: RecordingReviewProps) {
+  emptyMessage, initialEvidenceIndex, compact = false, media, fullChapters, shortPlaylist = false, appearance, recruiterContent }: RecordingReviewProps) {
   const headingId = useId();
   const player = useRef<HTMLVideoElement>(null);
   const meeting = kind === 'meeting';
@@ -90,6 +94,12 @@ function RecordingReview({ sourceId, name, chapters: evidence, kind, summary, un
   const [duration, setDuration] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [playing, setPlaying] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
+  useEffect(() => {
+    const update = () => setFullscreen(document.fullscreenElement === player.current);
+    document.addEventListener('fullscreenchange', update);
+    return () => document.removeEventListener('fullscreenchange', update);
+  }, []);
   const [failed, setFailed] = useState(false);
   const [notice, setNotice] = useState('');
   const pendingSeek = useRef<number | null>(null);
@@ -181,17 +191,16 @@ function RecordingReview({ sourceId, name, chapters: evidence, kind, summary, un
     if (next === 'short' && shortPlaylist && list[0]?.seconds !== null && list[0]?.seconds !== undefined) seek(list[0].seconds);
   }
 
-  return <section className={`ir-review${compact ? ' ir-review-compact' : ''}`} aria-labelledby={headingId} data-candidate={sourceId} data-recording-kind={kind}>
-    <header className="ir-heading"><div>{meeting && <span className="ir-eyebrow">{name}</span>}<h3 id={headingId}>{meeting ? 'Запись вашей встречи' : 'Интервью с рекрутером'}</h3></div><span className="ir-heading-icon"><Video size={19} aria-hidden="true"/></span></header>
 
-    {!meeting && <div className="ir-mode" role="group" aria-label="Режим просмотра интервью">
-      <button type="button" aria-pressed={mode === 'short'} onClick={() => changeMode('short')}><ListVideo size={15} aria-hidden="true"/>{meeting ? 'Фрагменты разговора' : 'Короткая версия'}</button>
-      <button type="button" aria-pressed={mode === 'full'} onClick={() => changeMode('full')}><Video size={15} aria-hidden="true"/>Полное интервью</button>
-    </div>}
-
-    <div className={`ir-player${media ? ' ir-player-connected' : ''}`}>
+  function togglePlayback() {
+    const video = player.current;
+    if (!video || !media || failed) return;
+    if (!video.paused) video.pause();
+    else void video.play().catch(() => setNotice('Не удалось начать воспроизведение. Попробуйте ещё раз.'));
+  }
+  const videoBlock = (<div className={`ir-player${media ? ' ir-player-connected' : ''}`}>
       {media ? <>
-        <video ref={player} src={media.src} controls playsInline preload="metadata" aria-label={media.localPreview ? 'Локальная тестовая видеозапись' : `Видеозапись: ${name}`} onLoadedMetadata={event => {
+        <video ref={player} src={media.src} controls={appearance !== 'panel' || fullscreen} playsInline preload="metadata" aria-label={media.localPreview ? 'Локальная тестовая видеозапись' : `Видеозапись: ${name}`} onLoadedMetadata={event => {
           setLoaded(true); setFailed(false); setDuration(Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : 0);
           if (pendingSeek.current !== null) seek(pendingSeek.current, event.currentTarget);
         }} onDurationChange={event => setDuration(Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : 0)} onTimeUpdate={onTimeUpdate} onPlay={() => {
@@ -207,9 +216,41 @@ function RecordingReview({ sourceId, name, chapters: evidence, kind, summary, un
           setFailed(true); setLoaded(false); setPlaying(false); pendingSeek.current = null;
           setNotice('Не удалось открыть видеозапись. Доступные текстовые материалы показаны ниже.');
         }}>Ваш браузер не поддерживает воспроизведение видео.</video>
+        {appearance === 'panel' && !playing && !failed && <button className="ir-big-play" onClick={togglePlayback} aria-label="Воспроизвести интервью"><img src={playAsset} alt=""/></button>}
         {failed && <div className="ir-media-error" role="alert"><AlertCircle size={24} aria-hidden="true"/><strong>Не удалось открыть запись</strong><p>Проверьте доступность файла и поддержку его формата.</p><button type="button" onClick={() => { setFailed(false); setNotice(''); player.current?.load(); }}>Попробовать снова</button></div>}
       </> : <div className="ir-media-missing"><VideoOff size={31} strokeWidth={1.4} aria-hidden="true"/><strong>{meeting ? 'Записи встречи пока нет' : 'Видеозапись не подключена'}</strong><p>{emptyMessage || 'Ключевые моменты и текст интервью доступны ниже.'}</p></div>}
+    </div>);
+  const chaptersBlock = (<div className="ir-chapters"><h4>{meeting ? 'Расшифровка по времени' : mode === 'short' ? 'Ключевые моменты' : 'Главы интервью'}</h4>{chapters.length ? <ol>{chapters.map(chapter => <li key={`${sourceId}-${chapter.index}`}><button type="button" aria-pressed={selected === chapter.index} aria-current={loaded && !failed && activeChapter?.index === chapter.index ? 'true' : undefined} onClick={() => chooseChapter(chapter.index)} aria-label={`${media && !failed && chapter.seconds !== null ? 'Открыть момент' : 'Показать текст'}: ${chapter.title}${chapter.seconds === null ? '' : `, ${formatTime(chapter.seconds)}`}`}><span className="ir-chapter-time">{chapter.seconds === null ? <FileText size={14} aria-hidden="true"/> : formatTime(chapter.seconds)}</span><span><strong>{chapter.title}</strong>{mode === 'full' && <small>{chapter.detail}</small>}</span></button></li>)}</ol> : <p className="ir-muted">{meeting ? 'Фрагменты появятся, когда будет готова расшифровка с таймкодами.' : 'Ключевые моменты ещё не подготовлены.'}</p>}</div>);
+  const excerptBlock = (excerpt && <article className="ir-excerpt" aria-label="Выбранный фрагмент интервью"><span className="ir-eyebrow">{meeting ? 'Автоматическая расшифровка' : excerpt.isQuote === false ? 'Описание главы из панели ДСА' : 'Со слов кандидата'}</span><h4>{excerpt.title}</h4>{excerpt.isQuote === false ? <p>{excerpt.fragment}</p> : <blockquote>«{excerpt.fragment}»</blockquote>}<p className="ir-source"><FileText size={13} aria-hidden="true"/>{excerpt.source}</p>{excerpt.isQuote !== false && <p className="ir-source-boundary">{meeting ? 'Распознавание может ошибаться. Сверяйте важные формулировки с записью.' : 'Слова кандидата. Независимого подтверждения результата пока нет.'}</p>}</article>);
+  const recruiterBlock = recruiterContent || ((summary || unknown) && <><span className="ir-eyebrow">Мнение рекрутера</span>{summary && <p>{summary}</p>}{unknown && <><span className="ir-eyebrow">На встрече</span><p className="ir-recruiter-question">{unknown}</p></>}</>);
+
+  if (appearance === 'panel') return <section className="ir-review ir-panel-review" aria-labelledby={headingId} data-candidate={sourceId} data-recording-kind={kind}>
+    <div className="ir-panel-main">
+      <header className="ir-panel-heading"><h3 id={headingId}>Интервью с рекрутером</h3><div className="ir-mode" role="group" aria-label="Режим просмотра интервью"><button type="button" aria-pressed={mode === 'short'} onClick={() => changeMode('short')}>Коротко</button><button type="button" aria-pressed={mode === 'full'} onClick={() => changeMode('full')}>Целиком</button></div></header>
+      {videoBlock}
+      <div className="ir-panel-controls" aria-label="Таймлайн видеозаписи">
+        <button aria-label={playing ? 'Пауза' : 'Воспроизвести'} disabled={!media || failed} onClick={togglePlayback}>{playing ? <Pause size={16}/> : <Play size={16}/>}</button><span>{formatTime(currentTime)}</span>
+        <div className="ir-panel-track"><input type="range" aria-label="Позиция видеозаписи" min={0} max={duration || 1} step={0.1} value={Math.min(currentTime, duration || 1)} disabled={!loaded || failed || !duration} aria-valuetext={formatTime(currentTime)} onChange={event => seek(Math.min(Number(event.target.value), Math.max(0, duration - 0.01)))}/>
+          {!!duration && !failed && <div className="ir-timeline-markers" aria-label="Моменты на таймлайне">{chronological.filter(c => c.seconds! < duration).map(c => <button type="button" key={c.index} style={{ left: `${c.seconds! / duration * 100}%` }} onClick={() => chooseChapter(c.index)} aria-label={`На таймлайне: ${c.title}, ${formatTime(c.seconds!)}`} title={`${formatTime(c.seconds!)} · ${c.title}`}/>)}</div>}
+        </div><span>{duration ? formatTime(duration) : '—'}</span><button aria-label="Видео на весь экран" disabled={!media || failed} onClick={() => { const video = player.current; if (!video) return; if (video.requestFullscreen) void video.requestFullscreen().catch(() => setNotice('Полный экран недоступен.')); else (video as HTMLVideoElement & { webkitEnterFullscreen?: () => void }).webkitEnterFullscreen?.(); }}><Maximize size={15}/></button>
+      </div>
+      <div className="ir-panel-caption"><span>{mode === 'short' ? 'Ключевые фрагменты' : 'Главы интервью'} · {chapters.length}</span>{media?.localPreview && <span>Тестовая запись</span>}</div>
+      {excerptBlock}
+      {(transcriptText || chapters.length > 0) && <details className="ir-transcript-full"><summary>{transcriptText ? 'Расшифровка' : 'Все фрагменты'}</summary><pre>{transcriptText || chapters.map(c => `${c.seconds === null ? '' : formatTime(c.seconds) + ' · '}${c.title}\n${c.fragment}`).join('\n\n')}</pre></details>}
+      <p className="ir-seek-status" role="status" aria-live="polite">{notice}</p>
     </div>
+    <aside className="ir-panel-aside">{chaptersBlock}{recruiterBlock && <section className="ir-panel-recruiter">{recruiterBlock}</section>}</aside>
+  </section>;
+
+  return <section className={`ir-review${compact ? ' ir-review-compact' : ''}`} aria-labelledby={headingId} data-candidate={sourceId} data-recording-kind={kind}>
+    <header className="ir-heading"><div>{meeting && <span className="ir-eyebrow">{name}</span>}<h3 id={headingId}>{meeting ? 'Запись вашей встречи' : 'Интервью с рекрутером'}</h3></div><span className="ir-heading-icon"><Video size={19} aria-hidden="true"/></span></header>
+
+    {!meeting && <div className="ir-mode" role="group" aria-label="Режим просмотра интервью">
+      <button type="button" aria-pressed={mode === 'short'} onClick={() => changeMode('short')}><ListVideo size={15} aria-hidden="true"/>{meeting ? 'Фрагменты разговора' : 'Короткая версия'}</button>
+      <button type="button" aria-pressed={mode === 'full'} onClick={() => changeMode('full')}><Video size={15} aria-hidden="true"/>Полное интервью</button>
+    </div>}
+
+    {videoBlock}
 
     <div className="ir-timeline" aria-label="Таймлайн видеозаписи">
       <input type="range" aria-label="Позиция видеозаписи" min={0} max={duration || 1} step={0.1}
@@ -224,9 +265,9 @@ function RecordingReview({ sourceId, name, chapters: evidence, kind, summary, un
     {!media?.localPreview && media?.label && <p className="ir-source-label">{media.label}</p>}
 
     <div className="ir-materials">
-      <div className="ir-chapters"><h4>{meeting ? 'Расшифровка по времени' : mode === 'short' ? 'Ключевые моменты' : 'Главы интервью'}</h4>{chapters.length ? <ol>{chapters.map(chapter => <li key={`${sourceId}-${chapter.index}`}><button type="button" aria-pressed={selected === chapter.index} aria-current={loaded && !failed && activeChapter?.index === chapter.index ? 'true' : undefined} onClick={() => chooseChapter(chapter.index)} aria-label={`${media && !failed && chapter.seconds !== null ? 'Открыть момент' : 'Показать текст'}: ${chapter.title}${chapter.seconds === null ? '' : `, ${formatTime(chapter.seconds)}`}`}><span className="ir-chapter-time">{chapter.seconds === null ? <FileText size={14} aria-hidden="true"/> : formatTime(chapter.seconds)}</span><span><strong>{chapter.title}</strong>{mode === 'full' && <small>{chapter.detail}</small>}</span></button></li>)}</ol> : <p className="ir-muted">{meeting ? 'Фрагменты появятся, когда будет готова расшифровка с таймкодами.' : 'Ключевые моменты ещё не подготовлены.'}</p>}</div>
+      {chaptersBlock}
 
-      {excerpt && <article className="ir-excerpt" aria-label="Выбранный фрагмент интервью"><span className="ir-eyebrow">{meeting ? 'Автоматическая расшифровка' : excerpt.isQuote === false ? 'Описание главы из панели ДСА' : 'Со слов кандидата'}</span><h4>{excerpt.title}</h4>{excerpt.isQuote === false ? <p>{excerpt.fragment}</p> : <blockquote>«{excerpt.fragment}»</blockquote>}<p className="ir-source"><FileText size={13} aria-hidden="true"/>{excerpt.source}</p>{excerpt.isQuote !== false && <p className="ir-source-boundary">{meeting ? 'Распознавание может ошибаться. Сверяйте важные формулировки с записью.' : 'Слова кандидата. Независимого подтверждения результата пока нет.'}</p>}</article>}
+      {excerptBlock}
     </div>
     <p className="ir-seek-status" role="status" aria-live="polite">{notice}</p>
 
