@@ -141,7 +141,7 @@ function RecordingReview({ sourceId, name, chapters: evidence, kind, summary, un
     try {
       video.currentTime = seconds;
       setCurrentTime(seconds);
-      setNotice(`В записи выбран момент ${formatTime(seconds)}. Нажмите воспроизведение в плеере.`);
+      setNotice(appearance === 'panel' ? '' : `В записи выбран момент ${formatTime(seconds)}. Нажмите воспроизведение в плеере.`);
       pendingSeek.current = null;
     } catch {
       setNotice('Перейти к этому моменту пока не удалось. Текст фрагмента доступен ниже.');

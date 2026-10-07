@@ -100,6 +100,7 @@
 .ew-root .ir-panel-review .ir-transcript-full summary { font-size:12px; color:#757575; }
 .ew-root .ir-panel-review .ir-transcript-full pre { border-radius:16px; font-size:14px; background:#f8f8f8; }
 .ew-root .ir-panel-review .ir-seek-status { font-size:12px; }
+.ew-root .ir-panel-review .ir-seek-status:empty { display:none; }
 .ew-root .ir-panel-review .ir-chapters>h4 { font-size:14px; font-weight:500; min-height:36px; display:flex; align-items:center; margin-bottom:18px; }
 .ew-root .ir-panel-review .ir-chapters ol { margin:0; gap:8px; max-height:312px; overflow-y:auto; scrollbar-width:thin; overscroll-behavior:contain; }
 .ew-root .ir-panel-review .ir-chapters button { position:relative; flex-direction:column-reverse; gap:5px; border:0; border-radius:24px; padding:14px 18px; min-height:72px; }
@@ -227,8 +228,7 @@
   .ew-person-heading h2 { font-size:26px; line-height:32px; }
   .ew-person-heading>.ew-status { display:none; }
   .ew-root .ir-panel-review { gap:24px; grid-template-columns:minmax(0,1.4fr) minmax(230px,1fr); }
-  .ew-root .ir-panel-heading { flex-wrap:wrap; min-height:76px; align-content:space-between; }
-  .ew-root .ir-panel-review .ir-chapters>h4 { min-height:76px; align-items:flex-start; padding-top:8px; }
+  .ew-root .ir-panel-heading { flex-wrap:wrap; align-content:flex-start; }
 }
 @media(max-width:1100px) {
   .ew-panel { grid-template-columns:248px minmax(0,1fr); }
