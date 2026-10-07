@@ -21,6 +21,7 @@ import { dateTime, names, request, useEntryAccess, useJourney, type Actor, type 
 import '../agency-product/theme.css';
 import '../agency-product/product.css';
 import './connected.css';
+import '../employer-workspace/employer.css';
 
 type Page = EmployerPage;
 const entryPage = (): Page => new URLSearchParams(location.search).get('task') === 'dsa' ? 'dsa' : new URLSearchParams(location.search).get('screen') === 'panel' ? 'shortlist' : 'tasks';
