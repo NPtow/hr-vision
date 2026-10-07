@@ -7,7 +7,7 @@ The working service uses the existing shared API, not the isolated candidate-pan
 - Scheduling: server-provided slots, Moscow calendar, 30-minute meetings. Existing pending/confirmed invitations can be rescheduled; candidate confirmation is required again. Concurrent stale forms cannot overwrite another tab's new invitation. Other candidates' meetings remain unchanged.
 - Existing calls, post-call feedback, chat and offer flow remain connected.
 
-Entry: `/iframe.html?id=hr-vision-product--manager&viewMode=story&screen=panel`. Existing browser access is required. The logo and vacancy breadcrumb return to hiring tasks and the DSA panel.
+Entry: `/iframe.html?id=hr-vision-product--manager&viewMode=story&screen=panel`. Existing browser access is required. The logo and Tasks sidebar item return to hiring tasks and the DSA panel.
 
 ## Deployment
 
@@ -23,8 +23,12 @@ TypeScript, Storybook build, transcript checks; API tests execute with an isolat
 
 The service follows the three existing HR-UI frames, not a new navigation proposal:
 
-- [N01 · Candidate panel](https://www.figma.com/design/YrF3nopj0JRGxNjVfeAyH4/HR-UI?node-id=51-33079): top company/account header, vacancy tabs, candidate list on the left, recording and quote in the main column, chapters and recruiter opinion on the right.
+- [N01 · Candidate panel](https://www.figma.com/design/YrF3nopj0JRGxNjVfeAyH4/HR-UI?node-id=51-33079): candidate list on the left, recording and quote in the main column, chapters and recruiter opinion on the right.
 - [N02 · Intake](https://www.figma.com/design/YrF3nopj0JRGxNjVfeAyH4/HR-UI?node-id=51-33141): 660px form, three method pills, dropzone and compact file rows.
 - [N03 · Scheduling](https://www.figma.com/design/YrF3nopj0JRGxNjVfeAyH4/HR-UI?node-id=51-33167): candidate context next to a week strip and time-slot grid.
 
 The uploaded ZIP contained the compiled connected service and was checked as the baseline. Logo/play SVGs and the primary-button gradient are taken from the exact Figma frame. Existing server data determine counts, statuses and available actions; no placeholder candidates or availability are introduced to match a screenshot. Scheduling remains 30 minutes, the currently supported server duration. Fullscreen playback keeps native controls; the panel adds a compact play/seek/fullscreen control bar. The candidate account and post-meeting recording layout are unchanged.
+
+## Navigation cleanup (8 October 2026)
+
+The user requested the original ZIP sidebar plus removal of the company caption, vacancy breadcrumb, stage pills/counts, redundant task-brief disclosure and duplicate fragment disclosure. The service now reuses the existing `ag-sidebar` rules from `agency-product/product.css`, which match `storybook-static/assets/AgencyProduct-Cx_dSC3m.css` in the uploaded ZIP (214px desktop width, original item geometry and active state). Links are connected to existing Tasks, Candidates, Meetings and Offers pages. The sidebar does not restore the old coordinator feature or explanatory labels. Mobile uses an accessible menu disclosure; navigation closes it. Full transcripts remain available when supplied; duplicate chapter compilations are removed.

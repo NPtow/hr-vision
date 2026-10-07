@@ -18,7 +18,7 @@ type DsaCandidate = {
 };
 type DsaSelection = { source: string; company: string; role: string; selection: string; candidates: DsaCandidate[]; fetchedAt: number };
 
-export function DsaCandidates({ token, onAdd, intake, intakeSelected, onIntakeSelect, onCountChange }: { onCountChange: (count: number) => void; token: string; onBack: () => void; onAdd: () => void; intake: ReturnType<typeof useIntake>; intakeSelected: string; onIntakeSelect: (id: string) => void }) {
+export function DsaCandidates({ token, onAdd, intake, intakeSelected, onIntakeSelect }: { token: string; onBack: () => void; onAdd: () => void; intake: ReturnType<typeof useIntake>; intakeSelected: string; onIntakeSelect: (id: string) => void }) {
   const [selection, setSelection] = useState<DsaSelection | null>(null);
   const [selected, setSelected] = useState('');
   const [error, setError] = useState('');
@@ -31,11 +31,10 @@ export function DsaCandidates({ token, onAdd, intake, intakeSelected, onIntakeSe
       const data = await request<DsaSelection>('dsa-candidates', token);
       if (sequence.current !== seq) return;
       setSelection(data);
-      onCountChange(data.candidates.length);
       setSelected(id => data.candidates.some(c => c.id === id) ? id : data.candidates[0]?.id || '');
     } catch (e) { if (sequence.current === seq) setError((e as Error).message); }
     finally { if (sequence.current === seq) setLoading(false); }
-  }, [token, onCountChange]);
+  }, [token]);
   useEffect(() => { void load(); return () => { sequence.current++; }; }, [load]);
   const person = selection?.candidates.find(c => c.id === selected);
   const added = intake.people.find(p => p.id === intakeSelected);

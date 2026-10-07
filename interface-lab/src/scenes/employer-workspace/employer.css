@@ -1,6 +1,6 @@
 @import './fonts.css';
 
-/* HR-UI N01–N03: the vacancy is the context, and the only side list contains candidates. */
+/* HR-UI N01–N03 content with the original ag-sidebar shipped in the user's ZIP. */
 .ew-root { --background:#fff; --foreground:#121212; --primary:#5462fd; --primary-foreground:#fff; --secondary:#f6f6f7; --secondary-foreground:#121212; --muted:#f8f8f8; --muted-foreground:#757575; --border:#e9e7f0; --input:#e9e7f0; --ring:#5462fd; --accent:#f6f6f7; --accent-foreground:#121212; color:#121212; font-family:'HRDS Roboto Flex',Arial,sans-serif; font-size:14px; line-height:1.5; font-synthesis:none; }
 .ew-root * { box-sizing:border-box; }
 .ew-root :where(button,input,select,textarea) { font:inherit; }
@@ -19,25 +19,24 @@
 .ew-root [data-slot=button][data-variant=ghost]:hover { background:#f6f6f7; }
 .ew-root button[data-size=icon] { padding:8px; }
 .ew-shell { min-height:100dvh; background:#fff; }
+.ew-body { display:flex; align-items:stretch; }
+.ew-sidebar { position:sticky; top:0; align-self:flex-start; min-height:calc(100dvh - 70px); }
+.ew-workspace { flex:1; min-width:0; border-left:0; }
+.ew-topbar .ew-menu-toggle { display:none; }
 .ew-topbar { height:70px; padding:0 32px; display:flex; align-items:center; gap:44px; border-bottom:1px solid #e9e7f0; }
 .ew-topbar button { border:0; background:none; padding:0; }
 .ew-logo { display:flex; flex-shrink:0; }
 .ew-logo img { width:150px; height:24px; }
-.ew-company { color:#757575!important; font-size:14px!important; text-align:left; }
 .ew-account { margin-left:auto; display:flex; align-items:center; justify-content:space-between; gap:24px; min-height:40px; padding:0 12px!important; color:#121212!important; }
-.ew-vacancy-header { padding:17px 32px 11px; border-bottom:1px solid #e9e7f0; }
+.ew-vacancy-header { padding:16px 32px; border-bottom:1px solid #e9e7f0; }
 .ew-vacancy-title { display:flex; justify-content:space-between; align-items:center; gap:24px; min-height:64px; }
-.ew-context-back { font-size:12px!important; color:#757575!important; padding:0; background:none; border:0; }
-.ew-root .ew-vacancy-title h1 { margin:3px 0 0; font-size:24px; font-weight:600; line-height:32px; margin-top:3px; letter-spacing:-.25px; }
+.ew-root .ew-vacancy-title h1 { margin:0; font-size:24px; font-weight:600; line-height:32px; letter-spacing:-.25px; }
 .ew-add-candidates { min-width:215px; }
-.ew-vacancy-nav { display:flex; gap:10px; margin-top:19px; overflow-x:auto; }
-.ew-vacancy-nav button { flex-shrink:0; height:36px; min-width:135px; padding:8px 24px; border:0; border-radius:999px; font-size:14px; color:#757575; background:none; }
-.ew-vacancy-nav button[aria-current=page] { color:#121212; background:#f6f6f7; }
 .ew-content { min-width:0; }
 .ew-content>.cj-header { display:none; }
 .ew-avatar { width:52px; height:52px; border-radius:50%; display:inline-grid; place-items:center; flex-shrink:0; overflow:hidden; color:#707070; background:#f1f1f1; font-size:15px; font-weight:500; }
 .ew-avatar img { width:100%; height:100%; object-fit:cover; }
-.ew-panel { display:grid; grid-template-columns:276px minmax(0,1fr); min-height:calc(100dvh - 218px); }
+.ew-panel { display:grid; grid-template-columns:276px minmax(0,1fr); min-height:calc(100dvh - 167px); }
 .ew-candidate-list { border-right:1px solid #e9e7f0; background:#fcfcfd; padding:28px 16px; min-width:0; }
 .ew-search { position:relative; display:flex; align-items:center; }
 .ew-search input { width:100%; height:40px; padding:0 16px; border:1px solid #eeeeef; border-radius:999px; color:#121212; background:#f6f6f7; font-size:14px; }
@@ -92,7 +91,7 @@
 .ir-panel-track .ir-timeline-markers button { height:20px; width:12px; }
 .ir-panel-track .ir-timeline-markers button::before { height:7px; width:2px; background:#9b9ba5; }
 .ew-root .ir-panel-caption { display:flex; justify-content:space-between; gap:16px; color:#929292; font-size:12px; padding:14px 0; }
-.ew-root .ir-panel-review .ir-excerpt { background:none; border:0; border-radius:0; padding:8px 0 0; }
+.ew-root .ir-panel-review .ir-excerpt { background:none; border:0; border-radius:0; padding:22px 0 0; }
 .ew-root .ir-panel-review .ir-excerpt>.ir-eyebrow,.ew-root .ir-panel-review .ir-excerpt>h4,.ew-root .ir-panel-review .ir-source-boundary { display:none; }
 .ew-root .ir-panel-review .ir-excerpt blockquote,.ew-root .ir-panel-review .ir-excerpt>p:not(.ir-source) { font-size:14px; line-height:22px; color:#757575; margin:0; }
 .ew-root .ir-panel-review .ir-source { font-size:12px; color:#929292; margin-top:10px; }
@@ -152,7 +151,7 @@
 .ew-form-note { color:#929292; font-size:12px; line-height:18px; margin-top:20px!important; }
 .ew-form-footer { display:flex; justify-content:space-between; align-items:center; gap:16px; padding-top:20px; margin-top:48px; border-top:1px solid #e9e7f0; }
 .ew-form-footer>button:last-child { min-width:240px; }
-.ew-book-page { max-width:1008px; padding:36px 0 56px; margin:0 auto; }
+.ew-book-page { max-width:1072px; padding:36px 32px 56px; margin:0 auto; }
 .ew-book-page .ew-form-heading { margin-bottom:42px; }
 .ew-book-layout { display:grid; grid-template-columns:268px minmax(0,690px); gap:46px; }
 .ew-book-person { padding-top:5px; }
@@ -210,10 +209,6 @@
 .ew-empty { min-height:440px; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:14px; color:#929292; text-align:center; }
 .ew-empty h2 { font-size:24px; color:#757575; }
 .ew-empty p { font-size:14px; }
-.ew-task-brief { color:#929292; font-size:12px; }
-.ew-task-brief summary { padding:10px 0; cursor:pointer; }
-.ew-task-brief>div { font-size:12px; line-height:20px; padding-top:8px; }
-.ew-task-brief p { margin-top:8px; }
 .ew-root .cj-error { margin:14px 24px 0; border-radius:12px; border:0; }
 .ew-root .cj-main { max-width:1180px; padding:36px; margin:0 auto; }
 .ew-root .cj-main>h1 { font-size:30px; font-weight:600; }
@@ -238,7 +233,7 @@
 @media(max-width:1100px) {
   .ew-panel { grid-template-columns:248px minmax(0,1fr); }
   .ew-candidate-detail { padding:28px 24px; }
-  .ew-book-page { margin:0 32px; }
+  .ew-book-page { padding-inline:24px; }
   .ew-book-layout { grid-template-columns:220px minmax(0,1fr); gap:32px; }
   .ew-person-actions button { min-width:180px; }
   .ew-root .ew-profile-toolbar [data-slot=tabs-trigger] { width:112px; }
@@ -254,19 +249,23 @@
   .ew-days-strip button { font-size:12px!important; }
   .ew-profile-toolbar { flex-wrap:wrap; }
 }
+@media(max-width:850px) {
+  .ew-body { display:block; }
+  .ew-topbar .ew-menu-toggle { display:grid; place-items:center; width:32px; height:40px; flex-shrink:0; color:#121212; }
+  .ew-root .ew-sidebar { display:none; position:static; width:100%; min-height:0; border-right:0; border-bottom:1px solid #e9e7f0; padding:16px 18px; }
+  .ew-root .ew-sidebar[data-open=true] { display:flex; }
+  .ew-sidebar nav button { font-size:14px; padding:12px; }
+}
 @media(max-width:700px) {
   .ew-topbar { padding:0 18px; height:64px; gap:16px; }
   .ew-logo img { width:125px; height:20px; }
-  .ew-company { display:none; }
   .ew-account { gap:8px; padding:0!important; font-size:12px!important; }
-  .ew-vacancy-header { padding:16px 18px 10px; }
+  .ew-vacancy-header { padding:18px; }
   .ew-vacancy-title { gap:12px; align-items:flex-start; }
   .ew-root .ew-vacancy-title h1 { font-size:20px; line-height:26px; }
-  .ew-add-candidates { min-width:40px; width:40px; font-size:0!important; padding:10px!important; margin-top:20px; }
+  .ew-add-candidates { min-width:40px; width:40px; font-size:0!important; padding:10px!important; }
   .ew-add-candidates svg { width:18px; height:18px; }
-  .ew-vacancy-nav { margin-top:18px; gap:4px; }
-  .ew-vacancy-nav button { min-width:0; padding:8px 18px; }
-  .ew-panel { display:block; min-height:calc(100dvh - 216px); }
+  .ew-panel { display:block; min-height:calc(100dvh - 165px); }
   .ew-candidate-list { border:0; padding:24px 18px; }
   .ew-candidate-detail { display:none; }
   .ew-show-detail .ew-candidate-list { display:none; }

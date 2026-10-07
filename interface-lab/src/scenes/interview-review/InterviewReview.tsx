@@ -236,9 +236,9 @@ function RecordingReview({ sourceId, name, chapters: evidence, kind, summary, un
           {!!duration && !failed && <div className="ir-timeline-markers" aria-label="Моменты на таймлайне">{chronological.filter(c => c.seconds! < duration).map(c => <button type="button" key={c.index} style={{ left: `${c.seconds! / duration * 100}%` }} onClick={() => chooseChapter(c.index)} aria-label={`На таймлайне: ${c.title}, ${formatTime(c.seconds!)}`} title={`${formatTime(c.seconds!)} · ${c.title}`}/>)}</div>}
         </div><span>{duration ? formatTime(duration) : '—'}</span><button aria-label="Видео на весь экран" disabled={!media || failed} onClick={() => { const video = player.current; if (!video) return; if (video.requestFullscreen) void video.requestFullscreen().catch(() => setNotice('Полный экран недоступен.')); else (video as HTMLVideoElement & { webkitEnterFullscreen?: () => void }).webkitEnterFullscreen?.(); }}><Maximize size={15}/></button>
       </div>
-      <div className="ir-panel-caption"><span>{mode === 'short' ? 'Ключевые фрагменты' : 'Главы интервью'} · {chapters.length}</span>{media?.localPreview && <span>Тестовая запись</span>}</div>
+      {media?.localPreview && <div className="ir-panel-caption">Тестовая запись</div>}
       {excerptBlock}
-      {(transcriptText || chapters.length > 0) && <details className="ir-transcript-full"><summary>{transcriptText ? 'Расшифровка' : 'Все фрагменты'}</summary><pre>{transcriptText || chapters.map(c => `${c.seconds === null ? '' : formatTime(c.seconds) + ' · '}${c.title}\n${c.fragment}`).join('\n\n')}</pre></details>}
+      {transcriptText && <details className="ir-transcript-full"><summary>Расшифровка</summary><pre>{transcriptText}</pre></details>}
       <p className="ir-seek-status" role="status" aria-live="polite">{notice}</p>
     </div>
     <aside className="ir-panel-aside">{chaptersBlock}{recruiterBlock && <section className="ir-panel-recruiter">{recruiterBlock}</section>}</aside>
