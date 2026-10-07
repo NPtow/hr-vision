@@ -74,8 +74,8 @@
 .ir-panel-main,.ir-panel-aside { min-width:0; }
 .ew-root .ir-panel-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:36px; margin-bottom:18px; }
 .ew-root .ir-panel-heading h3 { font-size:14px; font-weight:500; line-height:20px; }
-.ew-root .ir-panel-review .ir-mode { background:none; padding:0; margin:0; gap:0; border-radius:0; flex-shrink:0; }
-.ew-root .ir-panel-review .ir-mode button { min-height:36px; padding:8px 16px; color:#757575; font-size:14px; font-weight:400; border-radius:999px; }
+.ew-root .ir-panel-review .ir-mode { background:none; padding:0; margin:0; gap:0; border-radius:0; flex-shrink:0; width:auto; }
+.ew-root .ir-panel-review .ir-mode button { flex:none; min-height:36px; padding:8px 16px; color:#757575; font-size:14px; font-weight:400; border-radius:999px; }
 .ew-root .ir-panel-review .ir-mode button[aria-pressed=true] { background:#f6f6f7; color:#121212; box-shadow:none; }
 .ew-root .ir-panel-review .ir-player { background:#252935; border-radius:22px; min-height:0; aspect-ratio:16/9; }
 .ew-root .ir-panel-review .ir-player video { background:#252935; min-height:0; }
@@ -102,7 +102,7 @@
 .ew-root .ir-panel-review .ir-transcript-full pre { border-radius:16px; font-size:14px; background:#f8f8f8; }
 .ew-root .ir-panel-review .ir-seek-status { font-size:12px; }
 .ew-root .ir-panel-review .ir-chapters>h4 { font-size:14px; font-weight:500; min-height:36px; display:flex; align-items:center; margin-bottom:18px; }
-.ew-root .ir-panel-review .ir-chapters ol { margin:0; gap:8px; }
+.ew-root .ir-panel-review .ir-chapters ol { margin:0; gap:8px; max-height:312px; overflow-y:auto; scrollbar-width:thin; overscroll-behavior:contain; }
 .ew-root .ir-panel-review .ir-chapters button { position:relative; flex-direction:column-reverse; gap:5px; border:0; border-radius:24px; padding:14px 18px; min-height:72px; }
 .ew-root .ir-panel-review .ir-chapters button[aria-pressed=true] { background:#f6f6f7; border:0; }
 .ew-root .ir-panel-review .ir-chapters strong { font-size:14px; font-weight:500; line-height:20px; }
