@@ -131,10 +131,18 @@ def api_changed(source):
     return any(not (API / 'current' / name).is_file() or (source / name).read_bytes() != (API / 'current' / name).read_bytes() for name in RUNTIME)
 
 
+def guard_live_interviews(db):
+    states = db.execute('SELECT body FROM scenario WHERE id=1').fetchall()
+    if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='scenario_variants'").fetchone():
+        states += db.execute('SELECT body FROM scenario_variants').fetchall()
+    for row in states:
+        state = json.loads(row[0])
+        require(not any(c.get('meeting') and c['meeting']['status'] == 'live' for c in state['candidates'].values()), 'An interview is live. Retry after it finishes; current release is unchanged.')
+
+
 def guard_and_backup(release):
     with sqlite3.connect(f'file:{DATABASE}?mode=ro', uri=True) as db:
-        state = json.loads(db.execute('SELECT body FROM scenario WHERE id=1').fetchone()[0])
-        require(not any(c.get('meeting') and c['meeting']['status'] == 'live' for c in state['candidates'].values()), 'An interview is live. Retry after it finishes; current release is unchanged.')
+        guard_live_interviews(db)
         folder = Path('/var/backups/hr-vision')
         folder.mkdir(mode=0o700, parents=True, exist_ok=True)
         backup = folder / (release + '.sqlite3')

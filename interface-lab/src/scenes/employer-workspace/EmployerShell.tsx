@@ -27,10 +27,10 @@ export function EmployerShell({ enabled = true, page, scope, vacancy, name, hasO
         <nav aria-label="Кабинет нанимающего">
           <button className={active === 'tasks' ? 'active' : ''} aria-current={active === 'tasks' ? 'page' : undefined} onClick={() => navigate('tasks')}><ClipboardList size={18}/>Задачи</button>
           <button className={active === panel ? 'active' : ''} aria-current={active === panel ? 'page' : undefined} onClick={() => navigate(panel)}><Users size={18}/>Кандидаты</button>
-          {scope === 'sfera' && <>
+          <>
             <button className={active === 'meetings' ? 'active' : ''} aria-current={active === 'meetings' ? 'page' : undefined} onClick={() => navigate('meetings')}><CalendarDays size={18}/>Встречи</button>
             {hasOffers && <button className={active === 'pool' ? 'active' : ''} aria-current={active === 'pool' ? 'page' : undefined} onClick={() => navigate('pool')}><FileText size={18}/>Офферы</button>}
-          </>}
+          </>
         </nav>
       </aside>
       <div className="ew-workspace">

@@ -43,12 +43,12 @@ def text(value, limit=3000, required=True):
     return value
 
 
-def fresh():
+def fresh(scope='sfera', profiles=None):
     # Ready accounts have suggested availability; the candidate may edit it.
     base = now().astimezone(dt.timezone(dt.timedelta(hours=3))).date()
     slots = [iso(dt.datetime.combine(base + dt.timedelta(days=d), dt.time(h), dt.timezone(dt.timedelta(hours=3))))
              for d in range(1, 5) for h in (11, 14, 16)]
-    return {'generation': secrets.token_hex(12), 'revision': 0, 'closedBy': None,
+    state = {'scope': scope, 'generation': secrets.token_hex(12), 'revision': 0, 'closedBy': None,
             'vacancy': {'company': 'Сфера', 'role': 'Менеджер по работе с клиентами',
                         'problem': 'Вернуть клиентов к повторным покупкам', 'salary': '150–180 тыс. ₽ + бонус',
                         'format': 'Москва · гибрид', 'expectations': 'Разобраться в причинах ухода клиентов и восстановить повторные продажи.'},
@@ -56,6 +56,34 @@ def fresh():
                                 'slots': slots[:], 'busy': [slots[-1]], 'meeting': None,
                                 'feedback': None, 'afterInterest': 'pending', 'decision': 'review',
                                 'offer': None, 'messages': []} for cid in IDS}}
+    if scope == 'dsa':
+        require(profiles, 'Не удалось загрузить профили ДСА.', 502)
+        template = state['candidates']['anna']
+        state['candidates'] = {}
+        for profile in profiles:
+            cid = 'dsa-' + profile['id']
+            person = copy.deepcopy(template)
+            # These are explicitly seeded test copies, not decisions in the source panel.
+            person.update(id=cid, name=profile['name'], interest='accepted',
+                          initials=profile.get('initials', ''), role=profile.get('role', ''),
+                          photo=profile.get('photo'), summary=profile.get('shortSummary', ''),
+                          sourceProfile=copy.deepcopy(profile))
+            state['candidates'][cid] = person
+        state['vacancy'] = {'company': 'ДСА Инжиниринг', 'role': 'Менеджер по работе с клиентами',
+                            'problem': 'Работа с клиентами', 'salary': 'По договорённости',
+                            'format': 'Санкт-Петербург', 'expectations': ''}
+    return state
+
+
+def actor_name(state, actor):
+    return NAMES['manager'] if actor == 'manager' else state['candidates'][actor]['name']
+
+
+def accounts(state):
+    return {'scope': state.get('scope', 'sfera'), 'company': state['vacancy']['company'],
+            'accounts': [{'id': 'manager', 'name': NAMES['manager'], 'role': 'Работодатель'}] +
+                        [{'id': p['id'], 'name': p['name'], 'role': p.get('role', '')}
+                         for p in state['candidates'].values()]}
 
 
 def overlap(a, b):
@@ -79,7 +107,8 @@ def public_state(state, actor):
                if (actor == 'manager' and c['interest'] == 'accepted') or actor == cid}
     result['candidates'] = visible
     result['actor'] = actor
-    result['actorName'] = NAMES[actor]
+    result['scope'] = state.get('scope', 'sfera')
+    result['actorName'] = actor_name(state, actor)
     for cid, person in visible.items():
         person['freeSlots'] = free_slots(state, cid)
         if actor == 'manager':
@@ -87,6 +116,7 @@ def public_state(state, actor):
             person.pop('busy', None)
         else:
             person.pop('feedback', None)
+            person.pop('sourceProfile', None)
         m = person['meeting']
         if m:
             m.pop('room', None)
@@ -112,8 +142,11 @@ def transition(state, actor, data):
         require(actor == 'manager', 'Начать тест заново может работодатель.', 403)
         require(not any(c['meeting'] and c['meeting']['status'] == 'live' for c in state['candidates'].values()),
                 'Сначала завершите активный звонок.')
-        return fresh()
-    require(cid in IDS, 'Кандидат не найден.', 404)
+        scope = state.get('scope', 'sfera')
+        reset = fresh(scope, [p['sourceProfile'] for p in state['candidates'].values()] if scope == 'dsa' else None)
+        reset['vacancy'] = copy.deepcopy(state['vacancy'])
+        return reset
+    require(cid in state['candidates'], 'Кандидат не найден.', 404)
     person = state['candidates'][cid]
     is_manager = actor == 'manager'
     require(is_manager or actor == cid, 'Этот аккаунт не имеет доступа.', 403)

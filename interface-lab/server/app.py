@@ -15,7 +15,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from domain import IDS, NAMES, Problem, fresh, public_state, require, transition, text, iso, now
+from domain import NAMES, Problem, accounts, actor_name, fresh, public_state, require, transition, text, iso, now
 from daily_media import DailyMedia
 from feedback import questionnaire, vtt_turns
 import browser_access
@@ -43,6 +43,8 @@ with connect() as db:
     db.execute('PRAGMA journal_mode=WAL')
     db.execute('CREATE TABLE IF NOT EXISTS scenario (id INTEGER PRIMARY KEY CHECK(id=1), body TEXT NOT NULL)')
     db.execute('CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, actor TEXT NOT NULL, expires INTEGER NOT NULL)')
+    db.execute('CREATE TABLE IF NOT EXISTS session_scopes (token TEXT PRIMARY KEY, scope TEXT NOT NULL)')
+    db.execute('CREATE TABLE IF NOT EXISTS scenario_variants (scope TEXT PRIMARY KEY, body TEXT NOT NULL)')
     db.execute('INSERT OR IGNORE INTO scenario VALUES (1, ?)', (json.dumps(fresh()),))
     db.execute('CREATE TABLE IF NOT EXISTS intake_candidates (id TEXT PRIMARY KEY, scope TEXT NOT NULL, batch TEXT NOT NULL, body TEXT NOT NULL)')
     db.execute('CREATE TABLE IF NOT EXISTS intake_files (id TEXT PRIMARY KEY, candidate TEXT NOT NULL, name TEXT NOT NULL, content BLOB NOT NULL)')
@@ -50,12 +52,37 @@ with connect() as db:
 os.chmod(DB, 0o600)
 
 
-def read(db):
-    return json.loads(db.execute('SELECT body FROM scenario WHERE id=1').fetchone()[0])
+def read(db, scope='sfera'):
+    require(scope in ('sfera', 'dsa'), 'Подбор не найден.', 404)
+    row = (db.execute('SELECT body FROM scenario WHERE id=1').fetchone() if scope == 'sfera'
+           else db.execute('SELECT body FROM scenario_variants WHERE scope=?', (scope,)).fetchone())
+    require(row, 'Откройте подбор заново.', 409)
+    state = json.loads(row[0])
+    state['scope'] = scope
+    return state
 
 
 def write(db, state):
-    db.execute('UPDATE scenario SET body=? WHERE id=1', (json.dumps(state, ensure_ascii=False),))
+    body = json.dumps(state, ensure_ascii=False)
+    if state.get('scope', 'sfera') == 'sfera':
+        db.execute('UPDATE scenario SET body=? WHERE id=1', (body,))
+    else:
+        db.execute('UPDATE scenario_variants SET body=? WHERE scope=?', (body, state['scope']))
+
+
+def ensure_scope(scope):
+    if scope == 'sfera':
+        return
+    with connect() as db:
+        if db.execute('SELECT 1 FROM scenario_variants WHERE scope=?', (scope,)).fetchone():
+            return
+    # Read once, outside the shared-state lock. Later source refreshes cannot erase test progress.
+    source = DSA_PANEL.load()
+    state = fresh('dsa', source['candidates'])
+    state['vacancy']['role'] = source.get('role') or state['vacancy']['role']
+    with LOCK, connect() as db:
+        db.execute('INSERT OR IGNORE INTO scenario_variants VALUES (?,?)',
+                   (scope, json.dumps(state, ensure_ascii=False)))
 
 
 
@@ -119,7 +146,7 @@ def provider(path, body=None, method=None):
 
 def get_meeting(state, actor, body):
     cid = body.get('candidate')
-    require(cid in IDS and (actor == 'manager' or actor == cid), 'Нет доступа.', 403)
+    require(cid in state['candidates'] and (actor == 'manager' or actor == cid), 'Нет доступа.', 403)
     person = state['candidates'][cid]
     m = person['meeting']
     require(body.get('generation') == state['generation'] and m and m['id'] == body.get('meetingId'), 'Встреча изменилась. Обновите страницу.')
@@ -167,6 +194,8 @@ class Handler(BaseHTTPRequestHandler):
         digest = hashlib.sha256(raw[7:].encode()).hexdigest()
         item = db.execute('SELECT actor FROM sessions WHERE token=? AND expires>?', (digest, int(time.time()))).fetchone()
         require(item, 'Сессия закончилась. Войдите снова.', 401)
+        scope = db.execute('SELECT scope FROM session_scopes WHERE token=?', (digest,)).fetchone()
+        self.scope = scope[0] if scope else 'sfera'
         return item[0]
 
     def browser_access(self):
@@ -184,7 +213,7 @@ class Handler(BaseHTTPRequestHandler):
         # Provider processing must not block state polling, chat or another call.
         with LOCK, connect() as db:
             actor = self.actor(db)
-            state = read(db)
+            state = read(db, self.scope)
             _, m = get_meeting(state, actor, body)
             require(actor == 'manager' and m['status'] == 'completed', 'Вопросы доступны работодателю после встречи.', 403)
             if m.get('questionnaire'):
@@ -204,7 +233,7 @@ class Handler(BaseHTTPRequestHandler):
         if result:
             with LOCK, connect() as db:
                 db.execute('BEGIN IMMEDIATE')
-                state = read(db)
+                state = read(db, self.scope)
                 _, current = get_meeting(state, actor, body)
                 # Freeze one version. A second device cannot change an open form.
                 current.setdefault('questionnaire', result)
@@ -253,7 +282,7 @@ class Handler(BaseHTTPRequestHandler):
             require(self.path == '/api/hr/state', 'Не найдено.', 404)
             with LOCK, connect() as db:
                 actor = self.actor(db)
-                result = public_state(read(db), actor)
+                result = public_state(read(db, self.scope), actor)
                 result['videoConfigured'] = bool(DAILY and VIDEO_ENABLED)
             self.answer(200, result)
         except Problem as error:
@@ -275,6 +304,12 @@ class Handler(BaseHTTPRequestHandler):
             require(isinstance(body, dict), 'Некорректный запрос.', 400)
             if self.path == '/api/hr/feedback/questions':
                 return self.feedback_questions(body)
+            if self.path in ('/api/hr/session', '/api/hr/accounts'):
+                scope = body.get('scope', 'sfera')
+                require(scope in ('sfera', 'dsa'), 'Подбор не найден.', 400)
+                with connect() as db:
+                    self.invite_access(db, body)
+                ensure_scope(scope)
             response_headers = {}
             with LOCK, connect() as db:
                 db.execute('BEGIN IMMEDIATE')
@@ -284,18 +319,25 @@ class Handler(BaseHTTPRequestHandler):
                     response = {'ready': True}
                 elif self.path == '/api/hr/invite':
                     self.invite_access(db, {})
-                    response = {'url': ORIGIN + '/iframe.html?id=hr-vision-product--start&viewMode=story#team=' + urllib.parse.quote(TEAM, safe='')}
+                    task = '&task=dsa' if body.get('scope') == 'dsa' else ''
+                    response = {'url': ORIGIN + '/iframe.html?id=hr-vision-product--start&viewMode=story' + task + '#team=' + urllib.parse.quote(TEAM, safe='')}
+                elif self.path == '/api/hr/accounts':
+                    response = accounts(read(db, scope))
                 elif self.path == '/api/hr/session':
                     self.invite_access(db, body)
                     actor = body.get('actor')
-                    require(actor in (*IDS, 'manager'), 'Аккаунт не найден.', 400)
+                    state = read(db, scope)
+                    require(actor == 'manager' or actor in state['candidates'], 'Аккаунт не найден.', 400)
                     token = secrets.token_urlsafe(32)
+                    digest = hashlib.sha256(token.encode()).hexdigest()
                     db.execute('DELETE FROM sessions WHERE expires<?', (int(time.time()),))
-                    db.execute('INSERT INTO sessions VALUES (?,?,?)', (hashlib.sha256(token.encode()).hexdigest(), actor, int(time.time()) + 86400 * 7))
-                    response = {'token': token, 'actor': actor}
+                    db.execute('DELETE FROM session_scopes WHERE token NOT IN (SELECT token FROM sessions)')
+                    db.execute('INSERT INTO sessions VALUES (?,?,?)', (digest, actor, int(time.time()) + 86400 * 7))
+                    db.execute('INSERT INTO session_scopes VALUES (?,?)', (digest, scope))
+                    response = {'token': token, 'actor': actor, 'scope': scope}
                 else:
                     actor = self.actor(db)
-                    state = read(db)
+                    state = read(db, self.scope)
                     if self.path == '/api/hr/intake':
                         require(actor == 'manager', 'Кандидатов добавляет работодатель.', 403)
                         response = intake_add(db, body)
@@ -325,7 +367,7 @@ class Handler(BaseHTTPRequestHandler):
                         m['room'] = MEDIA.room(m['id'])
                         write(db, state)
                         token = provider('/meeting-tokens', {'properties': {'room_name': m['room']['name'],
-                            'user_name': NAMES[actor], 'user_id': actor, 'is_owner': actor == 'manager',
+                            'user_name': actor_name(state, actor), 'user_id': actor, 'is_owner': actor == 'manager',
                             'exp': int(time.time()) + 3600, 'eject_at_token_exp': True}})
                         response = {'url': m['room']['url'], 'token': token['token']}
                     elif self.path == '/api/hr/materials':

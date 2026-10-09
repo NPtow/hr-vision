@@ -1,5 +1,6 @@
 import io
 import json
+import sqlite3
 from pathlib import Path
 import tarfile
 import tempfile
@@ -106,6 +107,18 @@ class ReceiverTest(unittest.TestCase):
             r.activate(s, m)
             restart.assert_not_called()
         self.assertEqual(r.pointer(base), 'releases/' + m['release'])
+
+    def test_live_call_guard_checks_legacy_and_dsa_scenarios(self):
+        with sqlite3.connect(':memory:') as db:
+            db.execute('CREATE TABLE scenario (id INTEGER PRIMARY KEY, body TEXT)')
+            db.execute('INSERT INTO scenario VALUES (1, ?)', (json.dumps({'candidates': {}}),))
+            r.guard_live_interviews(db)  # Compatible with the pre-migration database.
+            db.execute('CREATE TABLE scenario_variants (scope TEXT PRIMARY KEY, body TEXT)')
+            db.execute('INSERT INTO scenario_variants VALUES (?,?)', ('dsa', json.dumps({'candidates': {'dsa-1': {'meeting': {'status': 'live'}}}})))
+            with self.assertRaisesRegex(ValueError, 'interview is live'):
+                r.guard_live_interviews(db)
+            db.execute('UPDATE scenario_variants SET body=?', (json.dumps({'candidates': {}}),))
+            r.guard_live_interviews(db)
 
     def test_failed_service_health_restores_both_pointers(self):
         a, s, m = self.bundle('service'); r.unpack(a, s, 'service')

@@ -28,7 +28,9 @@ class FeedbackHTTPTest(unittest.TestCase):
         m['room']={'id':'test-room','name':'test-only'}
         act('manager','meeting.joined',meetingId=m['id']);act('manager','meeting.finish',meetingId=m['id'])
         self.identity=dict(candidate='anna',generation=s['generation'],meetingId=m['id'])
-        with app.connect() as db:app.write(db,s)
+        with app.connect() as db:
+            app.write(db,s)
+            db.execute('DELETE FROM scenario_variants')
         self.manager=self.post('session',{'teamKey':'isolated-test','actor':'manager'})[1]['token']
         self.candidate=self.post('session',{'teamKey':'isolated-test','actor':'anna'})[1]['token']
     def test_transcript_fallback_freezes_and_auth_rejects(self):
@@ -93,6 +95,106 @@ class FeedbackHTTPTest(unittest.TestCase):
             status, body, _ = self.access_request('dsa-candidates', token=self.manager)
             self.assertEqual(status, 200); self.assertEqual(body['candidates'][0]['id'], '123')
             self.assertEqual(source.call_count, 1)
+        with app.connect() as db: self.assertEqual(before, app.read(db))
+
+    def dsa_accounts(self):
+        source = {'role': 'Менеджер', 'candidates': [
+            {'id': str(i), 'name': f'Тестовый кандидат {i}', 'role': 'Опыт в продажах',
+             'cv': f'Резюме {i}', 'sourceStatus': 'не подходит'} for i in range(1, 7)]}
+        with patch.object(app.DSA_PANEL, 'load', return_value=source) as loader:
+            code, roster = self.post('accounts', {'scope': 'dsa', 'teamKey': 'isolated-test'})
+            self.assertEqual(code, 200); self.assertEqual(len(roster['accounts']), 7)
+            tokens = {}
+            for actor in ('manager', 'dsa-1', 'dsa-2'):
+                code, result = self.post('session', {'scope': 'dsa', 'actor': actor, 'teamKey': 'isolated-test'})
+                self.assertEqual(code, 200); tokens[actor] = result['token']
+            self.assertEqual(loader.call_count, 1)
+        return tokens
+
+    def test_dsa_accounts_are_private_and_do_not_change_source_decisions(self):
+        with app.connect() as db: before = app.read(db)
+        with patch.object(app.DSA_PANEL, 'load') as loader:
+            self.assertEqual(self.post('accounts', {'scope': 'dsa'})[0], 403)
+            self.assertEqual(self.post('session', {'scope': '../dsa', 'actor': 'manager', 'teamKey': 'isolated-test'})[0], 400)
+            loader.assert_not_called()
+        tokens = self.dsa_accounts()
+        manager = self.access_request('state', token=tokens['manager'])[1]
+        self.assertEqual(manager['scope'], 'dsa'); self.assertEqual(len(manager['candidates']), 6)
+        self.assertEqual(manager['candidates']['dsa-1']['decision'], 'review')
+        self.assertEqual(manager['candidates']['dsa-1']['sourceProfile']['sourceStatus'], 'не подходит')
+        person = self.access_request('state', token=tokens['dsa-1'])[1]
+        self.assertEqual(person['actorName'], 'Тестовый кандидат 1')
+        self.assertEqual(list(person['candidates']), ['dsa-1'])
+        self.assertNotIn('sourceProfile', person['candidates']['dsa-1'])
+        self.assertEqual(self.post('session', {'scope': 'sfera', 'actor': 'dsa-1', 'teamKey': 'isolated-test'})[0], 400)
+        self.assertEqual(self.post('session', {'scope': 'dsa', 'actor': 'anna', 'teamKey': 'isolated-test'})[0], 400)
+        with app.connect() as db: self.assertEqual(before, app.read(db))
+
+    def test_dsa_parallel_meetings_persist_and_confirmation_is_manual(self):
+        tokens = self.dsa_accounts()
+        with app.connect() as db: before = app.read(db)
+        s = self.access_request('state', token=tokens['manager'])[1]
+        generation = s['generation']
+        def act(actor, action, cid='dsa-1', **values):
+            return self.post('action', dict(generation=generation, candidate=cid, action=action, **values), tokens[actor])
+        slot = s['candidates']['dsa-1']['freeSlots'][0]
+        code, s = act('manager', 'meeting.propose', start=slot, previousMeetingId=None)
+        self.assertEqual(code, 200)
+        first = s['candidates']['dsa-1']['meeting']
+        self.assertEqual(first['status'], 'pending')
+        self.assertEqual(act('manager', 'meeting.confirm', meetingId=first['id'])[0], 403)
+        self.assertEqual(act('dsa-2', 'meeting.confirm', meetingId=first['id'])[0], 403)
+        self.assertNotIn(slot, s['candidates']['dsa-2']['freeSlots'])
+        self.assertEqual(act('manager', 'meeting.propose', 'dsa-2', start=slot)[0], 409)
+        code, s = act('manager', 'meeting.propose', 'dsa-2', start=s['candidates']['dsa-2']['freeSlots'][0])
+        self.assertEqual(code, 200)
+        second = s['candidates']['dsa-2']['meeting']
+        self.assertEqual(act('dsa-1', 'meeting.confirm', meetingId=first['id'])[0], 200)
+        s = self.access_request('state', token=tokens['manager'])[1]
+        self.assertEqual(s['candidates']['dsa-1']['meeting']['status'], 'confirmed')
+        self.assertEqual(s['candidates']['dsa-2']['meeting'], second)
+        self.assertEqual(self.post('action', dict(action='chat', generation=generation, candidate='dsa-1', text='Привет'), self.manager)[0], 409)
+        # Reset only this scenario; source profiles and ready accounts remain.
+        code, reset = act('manager', 'reset')
+        self.assertEqual(code, 200); self.assertEqual(len(reset['candidates']), 6)
+        self.assertNotEqual(reset['generation'], generation)
+        self.assertEqual(reset['candidates']['dsa-1']['sourceProfile']['cv'], 'Резюме 1')
+        self.assertIsNone(reset['candidates']['dsa-2']['meeting'])
+        self.assertEqual(act('dsa-1', 'meeting.confirm', meetingId=first['id'])[0], 409)
+        with app.connect() as db: self.assertEqual(before, app.read(db))
+
+    def test_dsa_room_feedback_and_offer_use_the_selected_profile(self):
+        tokens = self.dsa_accounts()
+        with app.connect() as db: before = app.read(db)
+        s = self.access_request('state', token=tokens['manager'])[1]
+        identity = {'generation': s['generation'], 'candidate': 'dsa-1'}
+        def act(actor, action, **values):
+            code, result = self.post('action', {**identity, 'action': action, **values}, tokens[actor])
+            self.assertEqual(code, 200, result)
+            return result
+        s = act('manager', 'meeting.propose', start=s['candidates']['dsa-1']['freeSlots'][0])
+        identity['meetingId'] = s['candidates']['dsa-1']['meeting']['id']
+        self.assertEqual(self.post('room', {**identity, 'consent': True}, tokens['manager'])[0], 409)
+        act('dsa-1', 'meeting.confirm')
+        with patch.object(app.MEDIA, 'room', return_value={'id': 'test-room', 'name': 'test-room', 'url': 'https://example.test/room'}), patch.object(app, 'provider', return_value={'token': 'isolated-provider-token'}) as provider:
+            for actor in ('manager', 'dsa-1'):
+                self.assertEqual(self.post('room', {**identity, 'consent': True}, tokens[actor])[0], 200)
+            self.assertEqual(provider.call_args.args[1]['properties']['user_name'], 'Тестовый кандидат 1')
+            self.assertEqual(self.post('room', {**identity, 'consent': True}, tokens['dsa-2'])[0], 403)
+        act('manager', 'meeting.joined'); act('dsa-1', 'meeting.joined')
+        with patch.object(app.MEDIA, 'finish'):
+            act('manager', 'meeting.finish')
+        act('manager', 'feedback.questions', questions='Как вы вернули клиента?')
+        code, form = self.post('feedback/questions', identity, tokens['manager'])
+        self.assertEqual(code, 200); q = form['questionnaire']
+        act('manager', 'feedback', questionnaireId=q['id'], answers={q['questions'][0]['id']: {'rating': 'clear', 'comment': 'Пример'}})
+        act('dsa-1', 'after', value='yes')
+        act('manager', 'decision', value='pool')
+        act('manager', 'offer.save', role='Менеджер', compensation='150000', format='Офис', expectations='Продажи', startDate='2099-01-20')
+        act('manager', 'offer.send')
+        candidate = act('dsa-1', 'offer.reply', value='accepted', version=1)
+        self.assertEqual(candidate['closedBy'], 'dsa-1')
+        self.assertNotIn('feedback', candidate['candidates']['dsa-1'])
         with app.connect() as db: self.assertEqual(before, app.read(db))
     def test_candidate_intake_persists_without_candidate_consent_and_is_private(self):
         with app.connect() as db: before = app.read(db)

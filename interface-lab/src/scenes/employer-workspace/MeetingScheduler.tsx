@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '../../components/ui/button';
-import type { CandidateId } from '../agency-product/model';
+import type { CandidateId } from '../connected-journey/api';
 import { candidates } from '../agency-product/model';
 import { dateTime, type Journey, type Person } from '../connected-journey/api';
 import { Avatar } from './PeoplePanel';
@@ -36,7 +36,7 @@ export function MeetingScheduler({ journey, person, onSelect, onBack, onBooked }
     <header className="ew-form-heading"><h1>{person?.meeting && ['pending', 'confirmed'].includes(person.meeting.status) ? 'Перенести встречу' : 'Назначить встречу'}</h1></header>
     <div className="ew-book-layout">
       <aside className="ew-book-person">
-        {person && <><Avatar name={person.name}/><h2>{person.name}</h2><p>{profile?.role || journey.state!.vacancy.role}</p></>}
+        {person && <><Avatar name={person.name} photo={person.photo}/><h2>{person.name}</h2><p>{profile?.role || journey.state!.vacancy.role}</p></>}
         <label><span className="sr-only">Кандидат</span><select value={person?.id || ''} onChange={e => onSelect(e.target.value as CandidateId)} disabled={journey.busy}><option value="" disabled>Выберите кандидата</option>{people.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
         <div className="ew-book-meta"><strong>На нашей платформе</strong><span>30 минут</span><span>МСК · Москва, UTC+3</span></div>
         {person?.meeting && ['pending','confirmed'].includes(person.meeting.status) && <div className="ew-previous-slot"><span>Сейчас назначено</span><strong>{dateTime(person.meeting.start)}</strong></div>}
