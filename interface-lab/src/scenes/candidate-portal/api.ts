@@ -11,7 +11,16 @@ export type CandidateProfile = {
   availability: Availability[];
   consentReuse: boolean;
   autoApprove: boolean;
+  salaryMin: number | null;
+  salaryMax: number | null;
+  latestStartDate: string;
+  residence: string;
+  employmentType: '' | 'full-time' | 'part-time' | 'project' | 'internship';
+  resumeReviewed: boolean;
 };
+export type MissingPreference = 'salaryMin' | 'salaryMax' | 'latestStartDate';
+export type CandidatePreferences = Pick<CandidateProfile, MissingPreference | 'consentReuse' | 'autoApprove' | 'about' | 'city' | 'residence' | 'employmentType' | 'resumeReviewed'>;
+export type CandidateResume = { filename: string; mime: string; size: number; uploadedAt: string | number; extractedFields: string[] };
 export type RecruiterSlot = { id: string; start: string; end: string; recruiterName: string };
 export type CandidateInterview = RecruiterSlot & { status: 'booked' | 'live' | 'completed' };
 export type CandidateMeeting = { id: string; start: string; end: string; status: 'pending' | 'confirmed' | 'live' | 'completed' };
@@ -39,6 +48,8 @@ export type CandidateState = CandidateProfile & {
   applications: CandidateApplication[];
   videoConfigured: boolean;
   channels?: Channels;
+  resume: CandidateResume | null;
+  onboarding: { step: 'resume' | 'preferences' | 'complete'; missingFields: MissingPreference[] };
 };
 export type CandidateSession = { authenticated: boolean; candidate?: CandidateState; videoConfigured: boolean; channels?: Channels };
 export type RoomCredentials = { url: string; token: string };

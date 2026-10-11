@@ -4,6 +4,7 @@ SQLite is authoritative. A person, their recruiter interview and their applicati
 are separate records. Candidate approval of a vacancy never confirms a meeting.
 """
 import datetime as dt
+import base64
 from contextlib import contextmanager
 import hashlib
 import hmac
@@ -18,11 +19,13 @@ import urllib.parse
 import urllib.request
 
 from domain import Problem, require, text, timestamp, iso, now
+from candidate_resume import parse_upload, salary_value, start_date_value
 
 COOKIE = '__Host-hr_candidate'
 SESSION_SECONDS = 30 * 86400
 PROFILE_FIELDS = {'name', 'city', 'desiredRole', 'about', 'telegram', 'geographies',
-                  'availability', 'consentReuse', 'autoApprove', 'desiredSalary', 'workMode'}
+                  'availability', 'consentReuse', 'autoApprove', 'desiredSalary', 'workMode',
+                  'salaryMin', 'salaryMax', 'latestStartDate', 'residence', 'employmentType', 'resumeReviewed'}
 
 
 class ClosingConnection(sqlite3.Connection):
@@ -97,19 +100,24 @@ def profile_value(body, previous=None):
     unexpected = set(body) - PROFILE_FIELDS
     require(not unexpected, 'В запросе есть недоступные поля профиля.', 400)
     result = {}
-    for key, limit, mandatory in [('name', 140, True), ('city', 120, True),
-                                  ('desiredRole', 200, True), ('about', 1500, False),
-                                  ('telegram', 100, False), ('desiredSalary', 120, False)]:
+    for key, limit, mandatory in [('name', 140, False), ('city', 120, False),
+                                  ('desiredRole', 200, False), ('about', 1500, False),
+                                  ('telegram', 100, False), ('desiredSalary', 120, False), ('residence', 200, False)]:
         result[key] = text(body.get(key, old.get(key, '')), limit, required=mandatory)
     result['workMode'] = body.get('workMode', old.get('workMode', 'any'))
     require(result['workMode'] in ('office', 'hybrid', 'remote', 'any'), 'Выберите формат работы.', 400)
+    result['employmentType'] = body.get('employmentType', old.get('employmentType', ''))
+    require(result['employmentType'] in ('', 'full-time', 'part-time', 'project', 'internship'),
+            'Выберите тип занятости.', 400)
+    result['resumeReviewed'] = body.get('resumeReviewed', old.get('resumeReviewed', False))
+    require(isinstance(result['resumeReviewed'], bool), 'Подтвердите данные резюме.', 400)
     geography = body.get('geographies', old.get('geographies', []))
-    require(isinstance(geography, list) and 1 <= len(geography) <= 20,
-            'Укажите подходящие города.', 400)
+    require(isinstance(geography, list) and len(geography) <= 20,
+            'Проверьте список городов.', 400)
     result['geographies'] = list(dict.fromkeys(text(city, 120) for city in geography))
     availability = body.get('availability', old.get('availability', []))
-    require(isinstance(availability, list) and 1 <= len(availability) <= 40,
-            'Укажите от 1 до 40 удобных интервалов.', 400)
+    require(isinstance(availability, list) and len(availability) <= 40,
+            'Укажите не больше 40 удобных интервалов.', 400)
     result['availability'] = []
     for item in availability:
         require(isinstance(item, dict) and set(item) == {'start', 'end'}, 'Проверьте удобное время.', 400)
@@ -122,6 +130,12 @@ def profile_value(body, previous=None):
         require(isinstance(result[key], bool), 'Подтвердите выбранный режим.', 400)
     require(not result['autoApprove'] or result['consentReuse'],
             'Для автосогласования нужно согласие на использование интервью.', 400)
+    for key in ('salaryMin', 'salaryMax'):
+        result[key] = salary_value(body.get(key, old.get(key)))
+    require(result['salaryMin'] is None or result['salaryMax'] is None or result['salaryMin'] <= result['salaryMax'],
+            'Верхняя граница зарплаты должна быть не меньше нижней.', 400)
+    result['latestStartDate'] = start_date_value(body.get('latestStartDate', old.get('latestStartDate', '')),
+                                                future='latestStartDate' in body)
     return result
 
 
@@ -185,6 +199,10 @@ class CandidatePortal:
           confirmed_at TEXT, completed_at TEXT);
         CREATE TABLE IF NOT EXISTS cp_internal_profiles (
           candidate_id TEXT PRIMARY KEY REFERENCES cp_candidates(id), body TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS cp_resumes (
+          candidate_id TEXT PRIMARY KEY REFERENCES cp_candidates(id), filename TEXT NOT NULL,
+          mime TEXT NOT NULL, content BLOB NOT NULL, text_content TEXT NOT NULL,
+          extracted TEXT NOT NULL, uploaded_at TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS cp_media_consents (
           meeting_id TEXT NOT NULL, actor_id TEXT NOT NULL, consented_at TEXT NOT NULL,
           version TEXT NOT NULL, PRIMARY KEY(meeting_id,actor_id));
@@ -282,6 +300,8 @@ class CandidatePortal:
     def candidate_state(self, db, cid, internal=False):
         result = self.person(db, cid)
         result['interview'] = self.interview(db, cid)
+        result['resume'] = self.resume_metadata(db, cid)
+        result['onboarding'] = self.onboarding(result)
         if result['interview']:
             result['interview'].pop('room', None)
         result['applications'] = []
@@ -319,7 +339,7 @@ class CandidatePortal:
             return False
         # The first vacancy bridge has no structured compensation/hybrid schedule.
         # Unknown requirements therefore always need a personal decision.
-        if person['desiredSalary'] or person['workMode'] == 'hybrid':
+        if person['desiredSalary'] or person.get('salaryMin') or person.get('salaryMax') or person['workMode'] == 'hybrid':
             return False
         if vacancy['remote'] and person['workMode'] != 'remote':
             return False
@@ -331,6 +351,7 @@ class CandidatePortal:
 
     def register(self, db, body):
         require(set(body) <= PROFILE_FIELDS | {'email', 'password'}, 'Проверьте поля регистрации.', 400)
+        require(not body.get('resumeReviewed'), 'Сначала загрузите резюме.', 400)
         email = email_value(body.get('email'))
         require(db.execute('SELECT 1 FROM cp_candidates WHERE email=?', (email,)).fetchone() is None,
                 'Не удалось создать аккаунт. Если вы уже регистрировались, войдите.', 409)
@@ -349,12 +370,54 @@ class CandidatePortal:
     def profile(self, db, cid, body):
         previous = self.person(db, cid)
         profile = profile_value(body, previous)
+        if body.get('resumeReviewed'):
+            require(self.resume_metadata(db, cid), 'Сначала загрузите резюме.', 409)
+            require(all(profile.get(key) for key in ('salaryMin', 'salaryMax', 'latestStartDate')),
+                    'Укажите желаемую зарплату и дату выхода на работу.', 400)
         changed = any(profile[key] != previous[key] for key in ('consentReuse', 'autoApprove'))
         db.execute('UPDATE cp_candidates SET profile=?,updated_at=? WHERE id=?', (dump(profile), iso(now()), cid))
         if changed:
             db.execute('INSERT INTO cp_consent_log VALUES (?,?,?,?,?,?)',
                        (uid('consent'), cid, iso(now()), int(profile['consentReuse']),
                         int(profile['autoApprove']), 'candidate-preferences-v1'))
+
+    def resume_metadata(self, db, cid):
+        row = db.execute('SELECT filename,mime,length(content),extracted,uploaded_at FROM cp_resumes WHERE candidate_id=?', (cid,)).fetchone()
+        return ({'filename': row[0], 'mime': row[1], 'size': row[2],
+                 'extractedFields': list(json.loads(row[3])), 'uploadedAt': row[4]} if row else None)
+
+    @staticmethod
+    def onboarding(person):
+        missing = [key for key in ('salaryMin', 'salaryMax', 'latestStartDate') if not person.get(key)]
+        if person.get('latestStartDate'):
+            try:
+                start_date_value(person['latestStartDate'], future=True)
+            except Problem:
+                missing.append('latestStartDate')
+        # An existing appointment is a commitment. Migration must never hide it.
+        step = 'complete' if person.get('interview') else 'resume' if not person.get('resume') else 'preferences' if missing or not person.get('resumeReviewed') else 'complete'
+        return {'step': step, 'missingFields': missing}
+
+    def save_resume(self, db, cid, resume):
+        previous = self.person(db, cid)
+        fields = dict(resume['fields'])
+        if fields.get('salaryMin') and 'salaryMax' not in fields and previous.get('salaryMax') and fields['salaryMin'] > previous['salaryMax']:
+            fields['salaryMax'] = None
+        if fields.get('salaryMax') and 'salaryMin' not in fields and previous.get('salaryMin') and fields['salaryMax'] < previous['salaryMin']:
+            fields['salaryMin'] = None
+        # Sparse updates preserve prior user preferences and meeting availability.
+        profile = profile_value({**fields, 'resumeReviewed': False}, previous)
+        uploaded = iso(now())
+        db.execute('''INSERT INTO cp_resumes VALUES (?,?,?,?,?,?,?) ON CONFLICT(candidate_id) DO UPDATE SET
+          filename=excluded.filename,mime=excluded.mime,content=excluded.content,text_content=excluded.text_content,
+          extracted=excluded.extracted,uploaded_at=excluded.uploaded_at''',
+                   (cid, resume['filename'], resume['mime'], resume['content'], resume['text'], dump(resume['fields']), uploaded))
+        db.execute('UPDATE cp_candidates SET profile=?,updated_at=? WHERE id=?', (dump(profile), uploaded, cid))
+
+    def download_resume(self, db, cid):
+        row = db.execute('SELECT filename,mime,content FROM cp_resumes WHERE candidate_id=?', (cid,)).fetchone()
+        require(row, 'Резюме ещё не загружено.', 404)
+        return {'filename': row[0], 'mime': row[1], 'contentBase64': base64.b64encode(row[2]).decode('ascii')}
 
     def add_slot(self, db, body):
         times = interval(body.get('start'), future=True)
@@ -372,8 +435,11 @@ class CandidatePortal:
         if existing:
             require(existing[0] == slot[0], 'Вы уже записаны. Для переноса свяжитесь с командой.', 409)
             return
+        person = self.candidate_state(db, cid)
+        require(person['resume'] is not None, 'Сначала загрузите резюме.', 409)
+        require(person['onboarding']['step'] == 'complete', 'Укажите желаемую зарплату и дату выхода на работу.', 409)
         require(slot[3] is None and timestamp(slot[1]) > now(), 'Это время уже недоступно. Выберите другое.', 409)
-        require(self.person(db, cid)['consentReuse'], 'Подтвердите согласие в профиле.', 400)
+        require(person['consentReuse'], 'Подтвердите согласие в профиле.', 400)
         self.ensure_candidate_free(db, cid, {'start': slot[1], 'end': slot[2]})
         iid = uid('interview')
         db.execute('UPDATE cp_recruiter_slots SET candidate_id=? WHERE id=? AND candidate_id IS NULL', (cid, slot[0]))
@@ -478,7 +544,7 @@ class CandidatePortal:
             require(current and current[0] in allowed, 'Интервью уже завершено.', 409)
         room = self.media.room(mid)
         token = self.media.request('/meeting-tokens', {'properties': {
-            'room_name': room['name'], 'user_name': 'Рекрутер HR Vision' if owner else person['name'],
+            'room_name': room['name'], 'user_name': 'Рекрутер HR Vision' if owner else (person['name'] or 'Кандидат'),
             'user_id': 'recruiter' if owner else cid, 'is_owner': bool(owner),
             'exp': int(time.time()) + 3600, 'eject_at_token_exp': True}})
         require(isinstance(token.get('token'), str) and token['token'], 'Видеосервис не выдал доступ.', 502)
@@ -580,6 +646,11 @@ class CandidatePortal:
             self.rate_limit('write-account:' + rate_identity, 240, 60)
         response_headers = {}
         provider_action = False
+        parsed_resume = None
+        if method == 'POST' and path == '/api/hr/candidate/resume':
+            # Identity was checked above. Parsing must not block unrelated SQLite writes.
+            self.rate_limit('resume-account:' + rate_identity, 12, 3600)
+            parsed_resume = parse_upload(body)
 
         with self.lock, self.connect() as db:
             if method == 'POST':
@@ -596,6 +667,8 @@ class CandidatePortal:
                             'videoConfigured': self.media.configured, 'channels': self.channels()}, {}
                 if path == '/api/hr/candidate/state':
                     return self.candidate_state(db, cid), {}
+                if path == '/api/hr/candidate/resume':
+                    return self.download_resume(db, cid), {}
                 if path == '/api/hr/candidate/slots':
                     return {'slots': self.slots(db)}, {}
                 if path == '/api/hr/candidate/notifications':
@@ -618,6 +691,8 @@ class CandidatePortal:
                 return {'ok': True}, {'Set-Cookie': self.clear_session(db, headers)}
             elif path == '/api/hr/candidate/profile':
                 self.profile(db, cid, body)
+            elif path == '/api/hr/candidate/resume':
+                self.save_resume(db, cid, parsed_resume)
             elif path == '/api/hr/candidate/book':
                 self.book(db, cid, body)
             elif path == '/api/hr/candidate/application/decision':

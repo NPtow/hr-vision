@@ -327,7 +327,13 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == '/api/hr/intake':
                 with connect() as db:
                     require(self.actor(db) == 'manager', 'Кандидатов добавляет работодатель.', 403)
-            require(0 < size <= (12 * 1024 * 1024 if self.path == '/api/hr/intake' else 32768), 'Слишком большой запрос.', 413)
+            if self.path == '/api/hr/candidate/resume':
+                # Authenticate before reading a potentially large private file.
+                with connect() as db:
+                    CANDIDATE_PORTAL.session_candidate(db, self.headers)
+            limit = (12 * 1024 * 1024 if self.path == '/api/hr/intake' else
+                     7 * 1024 * 1024 if self.path == '/api/hr/candidate/resume' else 32768)
+            require(0 < size <= limit, 'Слишком большой запрос.', 413)
             body = json.loads(self.rfile.read(size))
             require(isinstance(body, dict), 'Некорректный запрос.', 400)
             if self.path == '/api/hr/candidate/telegram/webhook':

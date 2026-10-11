@@ -56,7 +56,12 @@ jobs:
         working-directory: interface-lab/server
         env:
           PYTHONDONTWRITEBYTECODE: '1'
-        run: python3 -m unittest discover -v
+        run: |
+          if ! command -v pdftotext >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends poppler-utils
+          fi
+          python3 -m unittest discover -v
       - name: Check deployment safety
         working-directory: interface-lab/deploy/ci
         run: python3 -m unittest -v test_receiver

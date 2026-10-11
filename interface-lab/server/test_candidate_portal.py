@@ -1,5 +1,6 @@
 """Isolated identity/flow/concurrency checks. No provider calls or real recipients."""
 import concurrent.futures
+import base64
 import datetime as dt
 import hashlib
 import json
@@ -93,7 +94,16 @@ class CandidatePortalTest(unittest.TestCase):
 
     def register(self, **changes):
         result, headers = self.call('candidate/register', self.payload(**changes))
-        return result, headers['Set-Cookie'].split(';')[0]
+        cookie = headers['Set-Cookie'].split(';')[0]
+        resume = ('Желаемая должность: Менеджер\nГород: Москва\n'
+                  'Опыт работы: пять лет развивал продажи и поддерживал отношения с клиентами. '
+                  'Проводил переговоры, готовил коммерческие предложения, обучал новых коллег и работал в CRM. '
+                  'Образование: высшее экономическое. Навыки: планирование, коммуникация и анализ данных.')
+        result, _ = self.call('candidate/resume', {'filename': 'resume.txt',
+            'contentBase64': base64.b64encode(resume.encode()).decode()}, cookie)
+        result, _ = self.call('candidate/profile', {'salaryMin': 100000, 'salaryMax': 150000,
+            'latestStartDate': (self.tick + dt.timedelta(days=14)).date().isoformat(), 'resumeReviewed': True}, cookie)
+        return result, cookie
 
     def slot(self, minutes=0, recruiter='Рекрутер'):
         state, _ = self.call('recruiter/slots', {'start': iso(self.tick + dt.timedelta(minutes=minutes)),
@@ -107,6 +117,18 @@ class CandidatePortalTest(unittest.TestCase):
         self.call('candidate/book', {'slotId': slot['id']}, cookie)
         self.call('recruiter/interview/join', {'candidateId': person['id'], 'consent': True}, manager=True)
         self.call('recruiter/interview/complete', {'candidateId': person['id']}, manager=True)
+        return person, cookie
+
+    def legacy_auto_person(self):
+        person, cookie = self.completed_person(autoApprove=True)
+        # Historical completed accounts did not have structured salary expectations.
+        # Keep testing their opt-in behaviour without weakening the new booking gate.
+        with self.connect() as db:
+            row = db.execute('SELECT profile FROM cp_candidates WHERE id=?', (person['id'],)).fetchone()
+            profile = json.loads(row[0])
+            profile.pop('salaryMin', None)
+            profile.pop('salaryMax', None)
+            db.execute('UPDATE cp_candidates SET profile=? WHERE id=?', (dump(profile), person['id']))
         return person, cookie
 
     def vacancy(self, **changes):
@@ -300,7 +322,7 @@ class CandidatePortalTest(unittest.TestCase):
         self.assertEqual(result['applications'][0]['meeting']['status'], 'confirmed')
 
     def test_opt_in_auto_geo_match_does_not_confirm_time(self):
-        p, cookie = self.completed_person(autoApprove=True)
+        p, cookie = self.legacy_auto_person()
         app = self.propose(p, self.vacancy(city='МОСКВА'))
         self.assertEqual(app['status'], 'accepted')
         self.assertTrue(app['approvedAutomatically'])
@@ -308,14 +330,14 @@ class CandidatePortalTest(unittest.TestCase):
         self.assertEqual(state['candidates'][0]['applications'][0]['meeting']['status'], 'pending')
 
     def test_auto_geo_mismatch_and_remote_without_explicit_preference_stay_pending(self):
-        p, cookie = self.completed_person(autoApprove=True)
+        p, cookie = self.legacy_auto_person()
         self.assertEqual(self.propose(p, self.vacancy(city='Казань'))['status'], 'pending')
         self.assertEqual(self.propose(p, self.vacancy(remote=True))['status'], 'pending')
         self.call('candidate/profile', {'workMode': 'remote'}, cookie)
         self.assertEqual(self.propose(p, self.vacancy(remote=True))['status'], 'accepted')
 
     def test_auto_unknown_role_salary_and_workmode_fall_back_to_manual(self):
-        p, cookie = self.completed_person(autoApprove=True)
+        p, cookie = self.legacy_auto_person()
         self.assertEqual(self.propose(p, self.vacancy(title='Бухгалтер'))['status'], 'pending')
         self.call('candidate/profile', {'workMode': 'hybrid'}, cookie)
         self.assertEqual(self.propose(p, self.vacancy())['status'], 'pending')
@@ -331,12 +353,12 @@ class CandidatePortalTest(unittest.TestCase):
         self.assertEqual(self.call('candidate/state', cookie=other_cookie)[0]['applications'], [])
 
     def test_manager_times_must_match_actual_availability_and_are_unique(self):
-        p, cookie = self.completed_person(autoApprove=True)
+        p, cookie = self.legacy_auto_person()
         app = self.propose(p, self.vacancy())
         self.assert_problem(409, 'recruiter/meetings', {'applicationId': app['id'], 'start': iso(self.tick + dt.timedelta(hours=5))}, manager=True)
         target = iso(self.tick + dt.timedelta(hours=1))
         self.call('recruiter/meetings', {'applicationId': app['id'], 'start': target}, manager=True)
-        p2, c2 = self.completed_person(autoApprove=True)
+        p2, c2 = self.legacy_auto_person()
         app2 = self.propose(p2, self.vacancy())
         self.assert_problem(409, 'recruiter/meetings', {'applicationId': app2['id'], 'start': target}, manager=True)
 
