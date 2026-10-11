@@ -4,6 +4,7 @@ import binascii
 import hashlib
 import re
 import hmac
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -20,6 +21,8 @@ from daily_media import DailyMedia
 from feedback import questionnaire, vtt_turns
 import browser_access
 from dsa_panel import DsaPanel
+from candidate_portal import CandidatePortal, ClosingConnection
+import candidate_notifications
 
 ROOT = Path(os.environ.get('HR_DATA_DIR', '/var/lib/hr-vision-api'))
 ROOT.mkdir(parents=True, exist_ok=True)
@@ -28,14 +31,34 @@ TEAM = os.environ['HR_TEAM_KEY']
 ORIGIN = os.environ.get('HR_ORIGIN', 'https://hr-vision.158-160-179-53.sslip.io')
 DAILY = os.environ.get('DAILY_API_KEY', '')
 VIDEO_ENABLED = os.environ.get('HR_VIDEO_ENABLED') == '1'
+TRUST_CLIENT_IP = os.environ.get('HR_TRUST_CLIENT_IP') == '1'
 MEDIA = DailyMedia(DAILY, VIDEO_ENABLED)
 DSA_PANEL = DsaPanel()
 LOCK = threading.RLock()
 
 
+def client_identity(peer, headers):
+    """Accept only the address overwritten by our ingress, never arbitrary XFF."""
+    try:
+        remote = ipaddress.ip_address(peer)
+    except ValueError:
+        return peer
+    if TRUST_CLIENT_IP and remote.is_loopback:
+        forwarded = headers.get('X-HR-Client-IP', '')
+        try:
+            # One IP only; no forwarding chains, port suffixes or IPv6 zones.
+            require(isinstance(forwarded, str) and len(forwarded) <= 45 and '%' not in forwarded,
+                    'Некорректный адрес.', 400)
+            return str(ipaddress.ip_address(forwarded.strip()))
+        except (ValueError, Problem):
+            pass
+    return str(remote)
+
+
 def connect():
-    db = sqlite3.connect(DB, timeout=10)
+    db = sqlite3.connect(DB, timeout=10, factory=ClosingConnection)
     db.execute('PRAGMA busy_timeout=10000')
+    db.execute('PRAGMA foreign_keys=ON')
     return db
 
 
@@ -50,6 +73,7 @@ with connect() as db:
     db.execute('CREATE TABLE IF NOT EXISTS intake_files (id TEXT PRIMARY KEY, candidate TEXT NOT NULL, name TEXT NOT NULL, content BLOB NOT NULL)')
     db.execute('CREATE TABLE IF NOT EXISTS intake_batches (id TEXT PRIMARY KEY, digest TEXT NOT NULL)')
 os.chmod(DB, 0o600)
+CANDIDATE_PORTAL = CandidatePortal(connect, LOCK, MEDIA, ORIGIN, candidate_notifications)
 
 
 def read(db, scope='sfera'):
@@ -247,6 +271,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         try:
+            if CANDIDATE_PORTAL.handles(urllib.parse.urlsplit(self.path).path):
+                result, headers = CANDIDATE_PORTAL.handle('GET', self.path, self.headers, None,
+                    client_identity(self.client_address[0], self.headers), self.actor)
+                return self.answer(200, result, headers)
             if self.path == '/api/hr/health':
                 return self.answer(200, {'ok': True, 'videoConfigured': bool(DAILY and VIDEO_ENABLED)})
             if self.path == '/api/hr/access':
@@ -302,6 +330,16 @@ class Handler(BaseHTTPRequestHandler):
             require(0 < size <= (12 * 1024 * 1024 if self.path == '/api/hr/intake' else 32768), 'Слишком большой запрос.', 413)
             body = json.loads(self.rfile.read(size))
             require(isinstance(body, dict), 'Некорректный запрос.', 400)
+            if self.path == '/api/hr/candidate/telegram/webhook':
+                with LOCK, connect() as db:
+                    db.execute('BEGIN IMMEDIATE')
+                    result = candidate_notifications.handle_telegram_update(db, body,
+                        supplied_secret=self.headers.get('X-Telegram-Bot-Api-Secret-Token', ''))
+                return self.answer(200, result)
+            if CANDIDATE_PORTAL.handles(urllib.parse.urlsplit(self.path).path):
+                result, headers = CANDIDATE_PORTAL.handle('POST', self.path, self.headers, body,
+                    client_identity(self.client_address[0], self.headers), self.actor)
+                return self.answer(200, result, headers)
             if self.path == '/api/hr/feedback/questions':
                 return self.feedback_questions(body)
             if self.path in ('/api/hr/session', '/api/hr/accounts'):
@@ -393,4 +431,5 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == '__main__':
+    candidate_notifications.start_worker(connect)
     ThreadingHTTPServer(('127.0.0.1', int(os.environ.get('HR_PORT', '8391'))), Handler).serve_forever()

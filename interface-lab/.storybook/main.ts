@@ -10,6 +10,12 @@ const config: StorybookConfig = {
   addons: ['@storybook/addon-docs'],
   framework: '@storybook/react-vite',
   core: { disableTelemetry: true },
-  viteFinal: async (config) => ({ ...config, plugins: [...(config.plugins ?? []), tailwindcss()] }),
+  viteFinal: async (config) => ({
+    ...config,
+    plugins: [...(config.plugins ?? []), tailwindcss()],
+    ...(process.env.HR_DEV_API ? { server: { ...config.server, proxy: {
+      ...config.server?.proxy, '/api/hr': { target: process.env.HR_DEV_API, changeOrigin: false },
+    } } } : {}),
+  }),
 };
 export default config;

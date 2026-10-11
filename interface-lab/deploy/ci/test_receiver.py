@@ -131,5 +131,19 @@ class ReceiverTest(unittest.TestCase):
         self.assertEqual(r.pointer(base), 'releases/old-ui')
         self.assertEqual(r.pointer(api), 'releases/old-api')
 
+    def test_live_call_guard_checks_candidate_portal_interviews_and_meetings(self):
+        with sqlite3.connect(':memory:') as db:
+            db.execute('CREATE TABLE scenario (id INTEGER PRIMARY KEY, body TEXT)')
+            db.execute('INSERT INTO scenario VALUES (1, ?)', (json.dumps({'candidates': {}}),))
+            for table in ('cp_interviews', 'cp_meetings'):
+                db.execute(f'CREATE TABLE {table} (status TEXT)')
+                db.execute(f'INSERT INTO {table} VALUES (?)', ('booked',))
+                r.guard_live_interviews(db)
+                db.execute(f'UPDATE {table} SET status=?', ('live',))
+                with self.assertRaisesRegex(ValueError, 'interview is live'):
+                    r.guard_live_interviews(db)
+                db.execute(f'UPDATE {table} SET status=?', ('completed',))
+                r.guard_live_interviews(db)
+
 
 if __name__ == '__main__': unittest.main()

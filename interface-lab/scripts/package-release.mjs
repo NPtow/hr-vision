@@ -46,7 +46,7 @@ const manifest = { version: 1, target, branch, sha, run, release: `${sha}-${run}
 const deployment = JSON.stringify({ target, branch, sha, run }) + '\n';
 writeFileSync(`${stage}/ui/deployment.json`, deployment);
 files['ui/deployment.json'] = digest(deployment);
-if (target === 'service') for (const name of ['app.py', 'browser_access.py', 'daily_media.py', 'domain.py', 'dsa_panel.py', 'feedback.py']) add(`server/${name}`, `api/${name}`);
+if (target === 'service') for (const name of ['app.py', 'browser_access.py', 'candidate_portal.py', 'candidate_notifications.py', 'daily_media.py', 'domain.py', 'dsa_panel.py', 'feedback.py']) add(`server/${name}`, `api/${name}`);
 writeFileSync(`${stage}/release.json`, JSON.stringify(manifest) + '\n');
 execFileSync('tar', ['-czf', 'release.tgz', '-C', stage, 'release.json', 'ui', ...(target === 'service' ? ['api'] : [])], {
   env: { ...process.env, COPYFILE_DISABLE: '1' },

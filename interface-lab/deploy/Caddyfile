@@ -1,5 +1,7 @@
 # DSA HTTPS entry only. Static releases live on outreach.
 # Replace only the existing HR Vision block, preserving neighbouring sites.
 hr-vision.158-160-179-53.sslip.io {
-	reverse_proxy 10.130.0.18:8381
+	reverse_proxy 10.130.0.18:8381 {
+		header_up X-HR-Client-IP {remote_host}
+	}
 }

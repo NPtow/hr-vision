@@ -21,7 +21,7 @@ BRANCHES = {'service': 'main', 'mockups': 'codex/mockups'}
 BASES = {'service': Path('/srv/hr-vision'), 'mockups': Path('/srv/hr-vision-mockups')}
 API = Path('/opt/hr-vision-api')
 DATABASE = Path('/var/lib/hr-vision-api/journey.sqlite3')
-RUNTIME = {'app.py', 'browser_access.py', 'daily_media.py', 'domain.py', 'dsa_panel.py', 'feedback.py'}
+RUNTIME = {'app.py', 'browser_access.py', 'candidate_portal.py', 'candidate_notifications.py', 'daily_media.py', 'domain.py', 'dsa_panel.py', 'feedback.py'}
 MAX_ARCHIVE = 50 * 1024 * 1024
 MAX_CONTENT = 120 * 1024 * 1024
 
@@ -138,6 +138,10 @@ def guard_live_interviews(db):
     for row in states:
         state = json.loads(row[0])
         require(not any(c.get('meeting') and c['meeting']['status'] == 'live' for c in state['candidates'].values()), 'An interview is live. Retry after it finishes; current release is unchanged.')
+    for table in ('cp_interviews', 'cp_meetings'):
+        if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone():
+            require(not db.execute(f"SELECT 1 FROM {table} WHERE status='live' LIMIT 1").fetchone(),
+                    'An interview is live. Retry after it finishes; current release is unchanged.')
 
 
 def guard_and_backup(release):
