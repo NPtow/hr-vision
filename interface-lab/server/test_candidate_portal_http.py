@@ -23,7 +23,8 @@ class CandidateHTTPTest(unittest.TestCase):
     def setUpClass(cls):
         cls.data = tempfile.TemporaryDirectory(prefix='hr-candidate-http-')
         cls.env = patch.dict(os.environ, {'HR_DATA_DIR': cls.data.name, 'HR_TEAM_KEY': 'http-test-team-only',
-            'HR_VIDEO_ENABLED': '0', 'DAILY_API_KEY': '', 'HR_NOTIFICATIONS_ENABLED': '0'})
+            'HR_VIDEO_ENABLED': '0', 'DAILY_API_KEY': '', 'HR_NOTIFICATIONS_ENABLED': '0',
+            'HR_HH_ENABLED': '0', 'HR_HH_SENDING_ENABLED': '0'})
         cls.env.start()
         spec = importlib.util.spec_from_file_location('candidate_http_isolated_app', Path(__file__).with_name('app.py'))
         cls.app = importlib.util.module_from_spec(spec)
@@ -91,6 +92,20 @@ class CandidateHTTPTest(unittest.TestCase):
         self.assertTrue(events)
         self.assertTrue(all(row[0] == 'disabled' for row in events))
 
+    def test_hh_routes_are_manager_only_and_disabled_without_configuration(self):
+        self.assertEqual(self.request('recruiter/hh/state')[0], 401)
+        self.assertEqual(self.request('recruiter/hh/state', cookie=self.cookie)[0], 401)
+        status, state, headers = self.request('recruiter/hh/state', token=self.manager)
+        self.assertEqual(status, 200, state)
+        self.assertFalse(state['configured'])
+        self.assertFalse(state['sendingEnabled'])
+        self.assertEqual(state['connections'], [])
+        self.assertEqual(headers['Referrer-Policy'], 'no-referrer')
+        status, result, _ = self.request('recruiter/hh/oauth/start', {}, token=self.manager)
+        self.assertEqual(status, 503, result)
+        self.assertEqual(self.request('recruiter/hh/oauth/start', {}, token=self.manager,
+            extra_headers={'Origin': 'https://untrusted.example'})[0], 403)
+
     def test_actual_http_full_manual_interview_to_meeting_path(self):
         resume = ('Имя: HTTP Test\nГород: Москва\nЖелаемая должность: Менеджер\n'
                   'Опыт работы: ведение клиентов, подготовка коммерческих предложений, '
@@ -153,6 +168,42 @@ class CandidateHTTPTest(unittest.TestCase):
             self.assertEqual(connection.getresponse().status, 413)
         finally:
             connection.close()
+
+    def test_recruiter_cv_upload_authenticates_before_body_and_accepts_large_cv(self):
+        resume = ('Имя: Подготовленный кандидат\nГород: Москва\nЖелаемая должность: Менеджер\n'
+                  + 'Опыт работы с клиентами и подготовка предложений. ' * 850)
+        payload = {'filename': 'prepared.txt', 'contentBase64': base64.b64encode(resume.encode()).decode()}
+        self.assertGreater(len(json.dumps(payload)), 32768)
+        self.assertEqual(self.request('recruiter/candidates', payload)[0], 401)
+        self.assertEqual(self.request('recruiter/candidates', payload, cookie=self.cookie)[0], 401)
+        self.assertEqual(self.request('recruiter/candidates', payload, token=self.manager,
+            extra_headers={'Origin': 'https://malicious.example'})[0], 403)
+        code, result, _ = self.request('recruiter/candidates', payload, token=self.manager)
+        self.assertEqual(code, 200, result)
+        self.assertFalse(result['candidate']['accountActive'])
+        self.assertFalse(result['candidate']['consentReuse'])
+        self.assertEqual(result['candidate']['resume']['filename'], 'prepared.txt')
+        with self.app.connect() as db:
+            stored = db.execute('SELECT content FROM cp_resumes WHERE candidate_id=?',
+                                (result['candidate']['id'],)).fetchone()[0]
+        self.assertEqual(stored, resume.encode())
+        # No body is sent: rejection must happen before the server attempts to read it.
+        for path, token, length, expected in (
+            ('recruiter/candidates', '', 100000, 401),
+            ('recruiter/candidates?test=1', '', 100000, 401),
+            ('recruiter/candidates', self.manager, 7 * 1024 * 1024 + 1, 413),
+        ):
+            connection = http.client.HTTPConnection('127.0.0.1', self.server.server_port, timeout=3)
+            try:
+                connection.putrequest('POST', '/api/hr/' + path)
+                connection.putheader('Content-Type', 'application/json')
+                if token:
+                    connection.putheader('Authorization', 'Bearer ' + token)
+                connection.putheader('Content-Length', str(length))
+                connection.endheaders()
+                self.assertEqual(connection.getresponse().status, expected)
+            finally:
+                connection.close()
 
     def test_sparse_registration_cv_review_and_owner_download_survive_reload(self):
         status, person, headers = self.request('candidate/register', {

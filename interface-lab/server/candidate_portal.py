@@ -16,13 +16,16 @@ import sqlite3
 import threading
 import time
 import urllib.parse
-import urllib.request
+import uuid
 
 from domain import Problem, require, text, timestamp, iso, now
 from candidate_resume import parse_upload, salary_value, start_date_value
+import candidate_invites as invites
+import recruiter_availability as availability
 
 COOKIE = '__Host-hr_candidate'
 SESSION_SECONDS = 30 * 86400
+MEDIA_WAIT_SECONDS = 30 * 60
 PROFILE_FIELDS = {'name', 'city', 'desiredRole', 'about', 'telegram', 'geographies',
                   'availability', 'consentReuse', 'autoApprove', 'desiredSalary', 'workMode',
                   'salaryMin', 'salaryMax', 'latestStartDate', 'residence', 'employmentType', 'resumeReviewed'}
@@ -67,7 +70,7 @@ def password_matches(password, stored):
             return False
         expected = password_hash(password, bytes.fromhex(salt)).split('$')[-1]
         return hmac.compare_digest(expected, digest)
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, AttributeError):
         return False
 
 
@@ -140,9 +143,10 @@ def profile_value(body, previous=None):
 
 
 class CandidatePortal:
-    def __init__(self, connect, lock, media, origin, notifications=None):
+    def __init__(self, connect, lock, media, origin, notifications=None, invitation_lookup=None):
         self.connect, self.lock, self.media, self.origin = connect, lock, media, origin
         self.notifications = notifications
+        self.invitation_lookup = invitation_lookup
         self._media_guard = threading.Lock()
         self._media_locks = {}
         self.dummy_hash = password_hash(secrets.token_urlsafe(24))
@@ -206,8 +210,14 @@ class CandidatePortal:
         CREATE TABLE IF NOT EXISTS cp_media_consents (
           meeting_id TEXT NOT NULL, actor_id TEXT NOT NULL, consented_at TEXT NOT NULL,
           version TEXT NOT NULL, PRIMARY KEY(meeting_id,actor_id));
+        CREATE TABLE IF NOT EXISTS cp_media_state (
+          meeting_id TEXT PRIMARY KEY, kind TEXT NOT NULL, room_id TEXT NOT NULL,
+          body TEXT NOT NULL, updated_at TEXT NOT NULL);
         CREATE INDEX IF NOT EXISTS cp_application_candidate ON cp_applications(candidate_id);
         ''')
+        invites.migrate_accounts(db)
+        invites.init(db)
+        availability.init(db)
         if self.notifications:
             self.notifications.init(db)
 
@@ -216,13 +226,17 @@ class CandidatePortal:
         return path.startswith('/api/hr/candidate/') or path.startswith('/api/hr/recruiter/')
 
     def event(self, db, cid, event_type, entity_id):
-        if self.notifications:
+        active = db.execute('SELECT email FROM cp_candidates WHERE id=?', (cid,)).fetchone()
+        if self.notifications and active and active[0]:
             self.notifications.enqueue(db, cid, event_type + ':' + entity_id, event_type)
 
     def channels(self, db=None, cid=None):
         if not self.notifications:
             return {'email': False, 'telegram': False}
         if cid is not None:
+            active = db.execute('SELECT email FROM cp_candidates WHERE id=?', (cid,)).fetchone()
+            if not active or not active[0]:
+                return {'email': False, 'telegram': False}
             return self.notifications.public_status(db, cid)
         return self.notifications.configuration_public()
 
@@ -274,20 +288,22 @@ class CandidatePortal:
     def person(self, db, cid):
         row = db.execute('SELECT id,email,profile,created_at FROM cp_candidates WHERE id=?', (cid,)).fetchone()
         require(row is not None, 'Кандидат не найден.', 404)
-        return {'id': row[0], 'email': row[1], **json.loads(row[2]), 'createdAt': row[3]}
+        return {'id': row[0], 'email': row[1], 'accountActive': row[1] is not None,
+                **json.loads(row[2]), 'createdAt': row[3]}
 
     def interview(self, db, cid):
-        row = db.execute('''SELECT i.id,i.status,i.room,s.start,s.end,s.recruiter_name
+        row = db.execute('''SELECT i.id,i.status,i.room,s.start,s.end,s.recruiter_name,i.completed_at
           FROM cp_interviews i JOIN cp_recruiter_slots s ON i.slot_id=s.id WHERE i.candidate_id=?''', (cid,)).fetchone()
         if not row:
             return None
         return {'id': row[0], 'status': row[1], 'room': json.loads(row[2]) if row[2] else None,
-                'start': row[3], 'end': row[4], 'recruiterName': row[5]}
+                'start': row[3], 'end': row[4], 'recruiterName': row[5], 'completedAt': row[6],
+                'recording': invites.recording(db, row[0])}
 
     def meeting(self, db, app_id):
-        row = db.execute('SELECT id,start,end,status,room FROM cp_meetings WHERE application_id=?', (app_id,)).fetchone()
+        row = db.execute('SELECT id,start,end,status,room,completed_at FROM cp_meetings WHERE application_id=?', (app_id,)).fetchone()
         return ({'id': row[0], 'start': row[1], 'end': row[2], 'status': row[3],
-                 'room': json.loads(row[4]) if row[4] else None} if row else None)
+                 'room': json.loads(row[4]) if row[4] else None, 'completedAt': row[5]} if row else None)
 
     def application(self, db, app_id, cid=None):
         row = db.execute('''SELECT a.id,a.candidate_id,a.status,a.approved_automatically,v.body
@@ -314,11 +330,13 @@ class CandidatePortal:
         result['videoConfigured'] = self.media.configured
         result['channels'] = self.channels(db, cid)
         if internal:
+            result['intake'] = invites.intake(db, cid)
             profile = db.execute('SELECT body FROM cp_internal_profiles WHERE candidate_id=?', (cid,)).fetchone()
             result['internalProfile'] = json.loads(profile[0]) if profile else None
         return result
 
     def slots(self, db, internal=False):
+        availability.materialize(db)
         rows = db.execute('SELECT id,start,end,recruiter_name,candidate_id FROM cp_recruiter_slots ORDER BY start')
         return [{'id': row[0], 'start': row[1], 'end': row[2], 'recruiterName': row[3],
                  **({'booked': bool(row[4]), 'candidateId': row[4]} if internal else {})}
@@ -328,6 +346,7 @@ class CandidatePortal:
         return {'candidates': [self.candidate_state(db, row[0], internal=True)
                                for row in db.execute('SELECT id FROM cp_candidates ORDER BY created_at DESC,rowid DESC')],
                 'slots': self.slots(db, internal=True),
+                'availabilityBlocks': availability.blocks(db),
                 'vacancies': [json.loads(row[0]) for row in db.execute('SELECT body FROM cp_vacancies ORDER BY created_at DESC,rowid DESC')],
                 'videoConfigured': self.media.configured}
 
@@ -420,6 +439,7 @@ class CandidatePortal:
         return {'filename': row[0], 'mime': row[1], 'contentBase64': base64.b64encode(row[2]).decode('ascii')}
 
     def add_slot(self, db, body):
+        availability.materialize(db)
         times = interval(body.get('start'), future=True)
         recruiter = text(body.get('recruiterName'), 140)
         for row in db.execute('SELECT start,end,recruiter_name FROM cp_recruiter_slots'):
@@ -428,7 +448,8 @@ class CandidatePortal:
         db.execute('INSERT INTO cp_recruiter_slots VALUES (?,?,?,?,NULL)',
                    (uid('slot'), times['start'], times['end'], recruiter))
 
-    def book(self, db, cid, body):
+    def book(self, db, cid, body, *, prepared=False):
+        availability.materialize(db)
         slot = db.execute('SELECT id,start,end,candidate_id FROM cp_recruiter_slots WHERE id=?', (body.get('slotId'),)).fetchone()
         require(slot is not None, 'Слот не найден.', 404)
         existing = db.execute('SELECT slot_id FROM cp_interviews WHERE candidate_id=?', (cid,)).fetchone()
@@ -437,14 +458,18 @@ class CandidatePortal:
             return
         person = self.candidate_state(db, cid)
         require(person['resume'] is not None, 'Сначала загрузите резюме.', 409)
-        require(person['onboarding']['step'] == 'complete', 'Укажите желаемую зарплату и дату выхода на работу.', 409)
+        if prepared:
+            require(invites.intake(db, cid), 'Профиль не подготовлен рекрутером.', 409)
+        else:
+            require(person['onboarding']['step'] == 'complete', 'Укажите желаемую зарплату и дату выхода на работу.', 409)
+            require(person['consentReuse'], 'Подтвердите согласие в профиле.', 400)
         require(slot[3] is None and timestamp(slot[1]) > now(), 'Это время уже недоступно. Выберите другое.', 409)
-        require(person['consentReuse'], 'Подтвердите согласие в профиле.', 400)
         self.ensure_candidate_free(db, cid, {'start': slot[1], 'end': slot[2]})
         iid = uid('interview')
         db.execute('UPDATE cp_recruiter_slots SET candidate_id=? WHERE id=? AND candidate_id IS NULL', (cid, slot[0]))
         db.execute('INSERT INTO cp_interviews VALUES (?,?,?,\'booked\',NULL,?,NULL)', (iid, cid, slot[0], iso(now())))
-        self.event(db, cid, 'interview.booked', iid)
+        if person['accountActive']:
+            self.event(db, cid, 'interview.booked', iid)
 
     def ensure_candidate_free(self, db, cid, times):
         interview = self.interview(db, cid)
@@ -517,8 +542,86 @@ class CandidatePortal:
         db.execute("UPDATE cp_meetings SET status='confirmed',confirmed_at=? WHERE id=?", (iso(now()), meeting['id']))
         self.event(db, cid, 'meeting.confirmed', meeting['id'])
 
-    def join(self, cid, application_id, consent, owner=False):
-        require(consent is True, 'Подтвердите запись разговора.', 400)
+    def create_prepared(self, db, resume, contact_email=''):
+        contact_email = email_value(contact_email) if contact_email else ''
+        profile = profile_value(resume['fields'])
+        return invites.create_prepared(db, profile, contact_email=contact_email, cv=resume)
+
+    def guest_state(self, db, capability):
+        person = self.person(db, capability['candidateId'])
+        meeting = self.interview(db, person['id'])
+        require(meeting and meeting['id'] == capability['interviewId'], 'Встреча не найдена.', 404)
+        meeting.pop('room', None)
+        return {'name': person['name'], 'interview': meeting, 'videoConfigured': self.media.configured}
+
+    def claim_state(self, db, capability):
+        person = self.person(db, capability['candidateId'])
+        if capability['consumed'] or person['accountActive']:
+            return {'claimed': True, 'candidate': None}
+        # A profile capability grants this person's public profile and CV, not the
+        # recruiter's internal assessment, applications or notification settings.
+        person['resume'] = self.resume_metadata(db, person['id'])
+        person['interview'] = self.interview(db, person['id'])
+        if person['interview']:
+            person['interview'].pop('room', None)
+        person['onboarding'] = self.onboarding(person)
+        return {'claimed': False, 'candidate': person}
+
+    def claim(self, db, capability, body):
+        require(set(body) <= {'token', 'email', 'password', 'consentReuse', 'profile'}, 'Проверьте поля регистрации.', 400)
+        cid = capability['candidateId']
+        person = self.person(db, cid)
+        require(not person['accountActive'], 'Профиль уже активирован. Войдите в кабинет.', 409)
+        email = email_value(body.get('email'))
+        require(not db.execute('SELECT 1 FROM cp_candidates WHERE email=?', (email,)).fetchone(),
+                'Эта почта уже зарегистрирована. Войдите в существующий аккаунт и обратитесь к рекрутеру.', 409)
+        require(body.get('consentReuse') is True, 'Подтвердите использование интервью для подбора вакансий.', 400)
+        edits = body.get('profile', {})
+        require(isinstance(edits, dict), 'Проверьте профиль.', 400)
+        require('consentReuse' not in edits, 'Подтвердите согласие отдельно.', 400)
+        profile = profile_value({**edits, 'consentReuse': True}, person)
+        if profile.get('resumeReviewed'):
+            require(all(profile.get(key) for key in ('salaryMin', 'salaryMax', 'latestStartDate')),
+                    'Укажите желаемую зарплату и дату выхода на работу.', 400)
+        hashed = password_hash(body.get('password'))
+        changed = iso(now())
+        db.execute('UPDATE cp_candidates SET email=?,password_hash=?,profile=?,updated_at=? WHERE id=?',
+                   (email, hashed, dump(profile), changed, cid))
+        db.execute('UPDATE cp_invitations SET consumed_at=? WHERE id=?', (changed, capability['id']))
+        db.execute('INSERT INTO cp_consent_log VALUES (?,?,?,?,?,?)',
+                   (uid('consent'), cid, changed, 1, int(profile['autoApprove']), 'candidate-claim-v1'))
+        if self.notifications:
+            self.notifications.set_email(db, cid, email, verified=False)
+        self.event(db, cid, 'candidate.registered', cid)
+        return cid
+
+    def capability_request(self, path, body, ip):
+        # Capability values are accepted only in a JSON body, never in query logs.
+        token = body.get('token')
+        self.rate_limit('invitation-ip:' + ip, 120, 60)
+        if path == '/api/hr/candidate/claim':
+            self.rate_limit('claim-ip:' + ip, 20, 900)
+        scope = 'call' if '/guest/' in path else 'claim'
+        with self.lock, self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            capability = invites.resolve(db, token, scope, allow_consumed=path.endswith('/claim/state'))
+            if scope == 'call':
+                state = self.guest_state(db, capability)
+                if path.endswith('/state'):
+                    return state, {}
+                cid = capability['candidateId']
+            elif path.endswith('/state'):
+                return self.claim_state(db, capability), {}
+            elif path.endswith('/resume'):
+                require(not self.person(db, capability['candidateId'])['accountActive'], 'Войдите в свой кабинет.', 409)
+                return self.download_resume(db, capability['candidateId']), {}
+            else:
+                cid = self.claim(db, capability, body)
+                return self.candidate_state(db, cid), {'Set-Cookie': self.session_cookie(db, cid)}
+        return self.join(cid, None, None, guest_token=token), {}
+
+    def join(self, cid, application_id, consent, owner=False, guest_token=None):
+        require(owner or guest_token is not None or consent is True, 'Подтвердите запись разговора.', 400)
         # Provider I/O is deliberately outside the shared SQLite transaction.
         with self.lock, self.connect() as db:
             person = self.person(db, cid)
@@ -534,31 +637,94 @@ class CandidatePortal:
                     'Комната откроется за 15 минут до встречи.', 409)
             mid = meeting['id']
         with self.media_operation(mid):
-            return self._join_room(cid, application_id, owner, mid, person)
+            return self._join_room(cid, application_id, owner, mid, person, consent, guest_token)
 
-    def _join_room(self, cid, application_id, owner, mid, person):
+    def _join_room(self, cid, application_id, owner, mid, person, consent, guest_token):
         table = 'cp_meetings' if application_id else 'cp_interviews'
+        token_expires = int(time.time()) + 3600
         with self.lock, self.connect() as db:
             current = db.execute(f'SELECT status FROM {table} WHERE id=?', (mid,)).fetchone()
             allowed = ('confirmed', 'live') if application_id else ('booked', 'live')
             require(current and current[0] in allowed, 'Интервью уже завершено.', 409)
-        room = self.media.room(mid)
+            if guest_token:
+                capability = invites.resolve(db, guest_token, 'call')
+                require(capability['candidateId'] == cid and capability['interviewId'] == mid, 'Ссылка недействительна.', 404)
+                token_expires = min(token_expires, capability['expires'])
+            prepared_intro = not application_id and invites.intake(db, cid) is not None
+            can_record = not prepared_intro or invites.recording(db, mid)['startRequested']
+        room = self.media.room(mid, recordable=can_record)
         token = self.media.request('/meeting-tokens', {'properties': {
             'room_name': room['name'], 'user_name': 'Рекрутер HR Vision' if owner else (person['name'] or 'Кандидат'),
-            'user_id': 'recruiter' if owner else cid, 'is_owner': bool(owner),
-            'exp': int(time.time()) + 3600, 'eject_at_token_exp': True}})
+            'user_id': 'recruiter' if owner else cid, 'is_owner': bool(owner and can_record),
+            'permissions': {'canAdmin': bool(owner and can_record)},
+            'enable_recording_ui': bool(owner and can_record),
+            'enable_live_captions_ui': bool(owner and can_record),
+            'exp': token_expires, 'eject_at_token_exp': True,
+            'start_cloud_recording': False, 'auto_start_transcription': False}})
         require(isinstance(token.get('token'), str) and token['token'], 'Видеосервис не выдал доступ.', 502)
         with self.lock, self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             table = 'cp_meetings' if application_id else 'cp_interviews'
             current = db.execute(f'SELECT status FROM {table} WHERE id=?', (mid,)).fetchone()
             require(current and current[0] != 'completed', 'Интервью уже завершено.', 409)
+            if guest_token:
+                # Rotation/revocation during provider I/O must not issue access.
+                invites.resolve(db, guest_token, 'call')
             # Candidate prejoin alone cannot mark a human interview as live.
             db.execute(f'UPDATE {table} SET room=?,status=? WHERE id=?',
                        (dump(room), 'live' if owner else current[0], mid))
-            db.execute('INSERT OR IGNORE INTO cp_media_consents VALUES (?,?,?,?)',
-                       (mid, 'recruiter' if owner else cid, iso(now()), 'recording-v1'))
+            if not application_id:
+                # A new explicitly controlled interview is distinguishable from
+                # legacy calls whose capture request state was not persisted.
+                db.execute('INSERT OR IGNORE INTO cp_recording_control VALUES (?,NULL,NULL,NULL,0,0)', (mid,))
+            if consent is True and not owner and not guest_token:
+                db.execute('INSERT OR IGNORE INTO cp_media_consents VALUES (?,?,?,?)',
+                           (mid, cid, iso(now()), 'recording-v1'))
         return {'url': room['url'], 'token': token['token']}
+
+    def start_interview(self, cid, oral_consent, *, retry_recording=False, retry_transcription=False):
+        require(oral_consent is True, 'Сначала подтвердите полученное устное согласие.', 400)
+        require(type(retry_recording) is bool and type(retry_transcription) is bool, 'Проверьте команду запуска записи.', 400)
+        with self.connect() as db:
+            meeting = self.interview(db, cid)
+            require(meeting and meeting['status'] == 'live' and meeting['room'], 'Сначала войдите в комнату интервью.', 409)
+            mid = meeting['id']
+        with self.media_operation(mid):
+            with self.lock, self.connect() as db:
+                db.execute('BEGIN IMMEDIATE')
+                meeting = self.interview(db, cid)
+                require(meeting and meeting['status'] == 'live', 'Интервью уже завершено.', 409)
+                person = self.person(db, cid)
+                require(invites.intake(db, cid) or person['consentReuse'], 'Кандидат не дал согласие на интервью.', 409)
+                stamp = iso(now())
+                db.execute('''INSERT INTO cp_recording_control VALUES (?,?,?, ?,0,0)
+                  ON CONFLICT(interview_id) DO UPDATE SET
+                  consent_received_at=COALESCE(consent_received_at,excluded.consent_received_at),
+                  consent_source=COALESCE(consent_source,excluded.consent_source),
+                  start_requested_at=COALESCE(start_requested_at,excluded.start_requested_at)''',
+                           (mid, stamp, 'recruiter_oral', stamp))
+                if retry_recording:
+                    db.execute('UPDATE cp_recording_control SET recording_requested=0 WHERE interview_id=?', (mid,))
+                if retry_transcription:
+                    db.execute('UPDATE cp_recording_control SET transcription_requested=0 WHERE interview_id=?', (mid,))
+                control = invites.recording(db, mid)
+                room_name = meeting['room']['name']
+            if control['recordingRequested'] and control['transcriptionRequested']:
+                return
+            # REST acknowledges a requested start; only Daily participant events
+            # prove recording has started. Persist partial progress for safe retry.
+            room_path = '/rooms/' + urllib.parse.quote(room_name, safe='')
+            self.media.request(room_path, {'properties': {'enable_recording': 'cloud',
+                               'enable_transcription_storage': True, 'enable_live_captions_ui': True}})
+            if not control['recordingRequested']:
+                self.media.request(room_path + '/recordings/start', {'type': 'cloud',
+                                   'instanceId': str(uuid.uuid5(uuid.NAMESPACE_URL, 'hr-vision:' + mid)), 'maxDuration': 3600})
+                with self.lock, self.connect() as db:
+                    db.execute('UPDATE cp_recording_control SET recording_requested=1 WHERE interview_id=?', (mid,))
+            if not control['transcriptionRequested']:
+                self.media.request(room_path + '/transcription/start', {'language': 'ru', 'model': 'nova-2'})
+                with self.lock, self.connect() as db:
+                    db.execute('UPDATE cp_recording_control SET transcription_requested=1 WHERE interview_id=?', (mid,))
 
     def complete(self, cid, application_id=None):
         with self.lock, self.connect() as db:
@@ -581,6 +747,15 @@ class CandidatePortal:
                 return
             require(row[0] == 'live' and row[1], 'Сначала проведите интервью на платформе.', 409)
             room = json.loads(row[1])
+            if not application_id:
+                if invites.recording(db, mid)['startRequested']:
+                    room = {**room, 'recordingInstanceId': str(uuid.uuid5(uuid.NAMESPACE_URL, 'hr-vision:' + mid))}
+                elif invites.intake(db, cid):
+                    # This server-controlled intro had recording disabled and
+                    # non-owner participants. An unstated 400 from stop is not
+                    # evidence of "already stopped"; do not send capture-stop
+                    # for the one mode known never to have enabled capture.
+                    room = {**room, 'captureNeverStarted': True}
         self.media.finish(room)
         with self.lock, self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
@@ -590,31 +765,62 @@ class CandidatePortal:
             if changed and not application_id:
                 self.event(db, cid, 'interview.completed', mid)
 
-    def materials(self, cid):
+    def materials(self, cid, application_id=None, meeting_id=None):
+        kind = 'meeting' if application_id else 'interview'
         with self.connect() as db:
-            meeting = self.interview(db, cid)
-            require(meeting and meeting['status'] == 'completed', 'Материалы доступны после интервью.', 409)
-            room = meeting['room']
-        require(room, 'Комната интервью не найдена.', 409)
-        recordings, transcripts = [], []
-        records = self.media.request('/recordings?' + urllib.parse.urlencode({'room_name': room['name'], 'limit': 100}))
-        for item in records.get('data', []):
-            if item.get('room_name') == room['name'] and item.get('status') == 'finished':
-                access = self.media.request('/recordings/' + urllib.parse.quote(item['id'], safe='') + '/access-link')
-                url = access.get('download_link')
-                require(isinstance(url, str) and url.startswith('https://'), 'Не удалось получить запись.', 502)
-                recordings.append({'id': item['id'], 'url': url, 'duration': item.get('duration')})
-        result = self.media.request('/transcript?' + urllib.parse.urlencode({'roomId': room['id'], 'limit': 100}))
-        for item in result.get('data', []):
-            if item.get('roomId') == room['id'] and item.get('status') == 't_finished':
-                access = self.media.request('/transcript/' + urllib.parse.quote(item['transcriptId'], safe='') + '/access-link')
-                url = access.get('download_link') or access.get('link')
-                require(isinstance(url, str) and url.startswith('https://'), 'Не удалось получить расшифровку.', 502)
-                with urllib.request.urlopen(url, timeout=18) as response:
-                    content = response.read(1024 * 1024 + 1)
-                require(len(content) <= 1024 * 1024, 'Расшифровка слишком большая.', 502)
-                transcripts.append({'id': item['transcriptId'], 'text': content.decode('utf-8')})
-        return {'status': 'ready' if recordings else 'processing', 'recordings': recordings, 'transcripts': transcripts}
+            self.person(db, cid)
+            meeting = self.application(db, application_id, cid)['meeting'] if application_id else self.interview(db, cid)
+            require(meeting and meeting['status'] == 'completed', 'Материалы доступны после встречи.', 409)
+            require(meeting_id is None or meeting['id'] == meeting_id, 'Встреча изменилась. Обновите кабинет.', 409)
+            mid = meeting['id']
+        with self.media_operation(mid):
+            with self.connect() as db:
+                current = self.application(db, application_id, cid)['meeting'] if application_id else self.interview(db, cid)
+                require(current and current['id'] == mid and current['status'] == 'completed',
+                        'Встреча изменилась. Обновите кабинет.', 409)
+                room = current['room']
+                require(room, 'Комната встречи не найдена.', 409)
+                room_key = dump({'id': room['id'], 'name': room['name']})
+                cached = db.execute('SELECT body FROM cp_media_state WHERE meeting_id=? AND kind=? AND room_id=?',
+                                    (mid, kind, room_key)).fetchone()
+                known = json.loads(cached[0]) if cached else {}
+                control = db.execute('SELECT start_requested_at FROM cp_recording_control WHERE interview_id=?',
+                                     (mid,)).fetchone() if not application_id else None
+                never_requested = (control is not None and control[0] is None
+                                   and invites.intake(db, cid) is not None)
+                finished = timestamp(current['completedAt']) if current.get('completedAt') else None
+                waiting = bool(finished and (now() - finished).total_seconds() < MEDIA_WAIT_SECONDS)
+            # No SQLite transaction or shared state lock spans provider I/O.
+            result = self.media.materials(room, known)
+            for channel in ('video', 'transcription'):
+                state = result[channel]
+                if state['status'] == 'absent':
+                    state['status'] = 'not_recorded' if never_requested else 'processing' if waiting else 'error'
+                    if state['status'] == 'error':
+                        state['error'] = ('Видеосервис пока не вернул файл. Это не подтверждает отсутствие записи. '
+                                          'Повторите проверку позже или обратитесь к команде.')
+                elif state['status'] == 'processing' and not waiting:
+                    state['status'] = 'error'
+                    state['error'] = 'Обработка заняла больше времени, чем ожидалось. Попробуйте получить материалы ещё раз.'
+            statuses = {result[channel]['status'] for channel in ('video', 'transcription')}
+            result['status'] = ('ready' if 'ready' in statuses else 'processing' if 'processing' in statuses
+                                else 'error' if 'error' in statuses else 'not_recorded')
+            # Persist only exact-room IDs, finite states and check time. Signed
+            # links and transcript content are requested afresh for each viewer.
+            durations = {item['id']: item.get('duration') for item in result['recordings']}
+            metadata = {'recordings': [{'id': rid, 'duration': durations.get(rid)} for rid in result['video']['ids']],
+                        'transcripts': [{'id': rid} for rid in result['transcription']['ids']],
+                        'video': result['video'], 'transcription': result['transcription'],
+                        'status': result['status'], 'checkedAt': result['checkedAt']}
+            with self.lock, self.connect() as db:
+                db.execute('BEGIN IMMEDIATE')
+                latest = self.application(db, application_id, cid)['meeting'] if application_id else self.interview(db, cid)
+                require(latest and latest['id'] == mid and latest['status'] == 'completed' and latest['room'] == room,
+                        'Встреча изменилась. Обновите кабинет.', 409)
+                db.execute('''INSERT INTO cp_media_state VALUES (?,?,?,?,?) ON CONFLICT(meeting_id)
+                  DO UPDATE SET kind=excluded.kind,room_id=excluded.room_id,body=excluded.body,updated_at=excluded.updated_at''',
+                           (mid, kind, room_key, dump(metadata), result['checkedAt']))
+            return result
 
     def handle(self, method, raw_path, headers, body, ip, manager_actor):
         path = urllib.parse.urlsplit(raw_path).path
@@ -627,6 +833,11 @@ class CandidatePortal:
             require(isinstance(body, dict), 'Некорректный запрос.', 400)
         auth = path.rsplit('/', 1)[-1]
         is_recruiter = path.startswith('/api/hr/recruiter/')
+        capability_paths = ('/api/hr/candidate/guest/state', '/api/hr/candidate/guest/join',
+                            '/api/hr/candidate/claim/state', '/api/hr/candidate/claim/resume', '/api/hr/candidate/claim')
+        if path in capability_paths:
+            require(method == 'POST', 'Откройте персональную ссылку.', 405)
+            return self.capability_request(path, body, ip)
         if method == 'POST' and path in ('/api/hr/candidate/register', '/api/hr/candidate/login'):
             # app.py resolves this from a validated, explicitly trusted ingress
             # header or the socket peer. Clients cannot invent a forwarding chain.
@@ -647,10 +858,13 @@ class CandidatePortal:
         response_headers = {}
         provider_action = False
         parsed_resume = None
-        if method == 'POST' and path == '/api/hr/candidate/resume':
+        if method == 'POST' and path in ('/api/hr/candidate/resume', '/api/hr/recruiter/candidates'):
             # Identity was checked above. Parsing must not block unrelated SQLite writes.
             self.rate_limit('resume-account:' + rate_identity, 12, 3600)
-            parsed_resume = parse_upload(body)
+            if is_recruiter:
+                require(set(body) <= {'filename', 'contentBase64', 'contactEmail'}, 'Проверьте поля резюме.', 400)
+            parsed_resume = parse_upload({key: body[key] for key in ('filename', 'contentBase64') if key in body}
+                                         if is_recruiter else body)
 
         with self.lock, self.connect() as db:
             if method == 'POST':
@@ -710,6 +924,26 @@ class CandidatePortal:
                 return self.notifications.verify_email(db, cid, body.get('token')), {}
             elif path == '/api/hr/recruiter/slots':
                 self.add_slot(db, body)
+            elif path == '/api/hr/recruiter/availability':
+                availability.add_block(db, body)
+            elif path == '/api/hr/recruiter/candidates':
+                cid = self.create_prepared(db, parsed_resume, body.get('contactEmail', ''))
+                return {'candidate': self.candidate_state(db, cid, internal=True), 'state': self.recruiter_state(db)}, {}
+            elif path == '/api/hr/recruiter/interview/book':
+                self.book(db, cid, body, prepared=True)
+            elif path == '/api/hr/recruiter/invitations':
+                replace = body.get('replace', False)
+                require(type(replace) is bool, 'Проверьте команду замены ссылки.', 400)
+                self.person(db, cid)
+                require(body.get('scope') in ('call', 'claim'), 'Выберите назначение ссылки.', 400)
+                if not replace and self.invitation_lookup:
+                    existing = self.invitation_lookup(db, cid, body.get('scope'))
+                    if existing:
+                        return existing, {}
+                return invites.issue(db, cid, body.get('scope'), self.origin), {}
+            elif path == '/api/hr/recruiter/invitations/revoke':
+                self.person(db, cid)
+                invites.revoke(db, cid, body.get('scope'))
             elif path == '/api/hr/recruiter/vacancies':
                 self.add_vacancy(db, body)
             elif path == '/api/hr/recruiter/applications':
@@ -725,11 +959,14 @@ class CandidatePortal:
             elif path in ('/api/hr/candidate/interview/join', '/api/hr/candidate/meeting/join',
                           '/api/hr/recruiter/interview/join', '/api/hr/recruiter/meeting/join',
                           '/api/hr/recruiter/interview/complete', '/api/hr/recruiter/meeting/complete',
-                          '/api/hr/recruiter/interview/materials'):
+                          '/api/hr/recruiter/interview/materials', '/api/hr/recruiter/meeting/materials',
+                          '/api/hr/candidate/interview/materials', '/api/hr/candidate/meeting/materials',
+                          '/api/hr/recruiter/interview/start'):
                 if '/meeting/' in path:
                     application = self.application(db, body.get('applicationId'), None if is_recruiter else cid)
+                    require(not is_recruiter or cid is None or cid == application['candidateId'], 'Кандидат не найден.', 404)
                     cid = application['candidateId']
-                    if not is_recruiter:
+                    if not is_recruiter or path.endswith('/materials') or 'meetingId' in body:
                         require(application['meeting'] and application['meeting']['id'] == body.get('meetingId'),
                                 'Встреча изменилась. Обновите кабинет.', 409)
                 else:
@@ -745,7 +982,13 @@ class CandidatePortal:
             return self.join(cid, body.get('applicationId') if '/meeting/' in path else None,
                              body.get('consent'), owner=is_recruiter), {}
         if path.endswith('/materials'):
-            return self.materials(cid), {}
+            return self.materials(cid, body.get('applicationId') if '/meeting/' in path else None,
+                                  body.get('meetingId')), {}
+        if path.endswith('/start'):
+            self.start_interview(cid, body.get('oralConsent'), retry_recording=body.get('retryRecording', False),
+                                 retry_transcription=body.get('retryTranscription', False))
+            with self.connect() as db:
+                return self.recruiter_state(db), {}
         self.complete(cid, body.get('applicationId') if '/meeting/' in path else None)
         with self.connect() as db:
             return self.recruiter_state(db), {}

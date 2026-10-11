@@ -34,6 +34,12 @@ http://:8381 {
 			}
 			reverse_proxy 127.0.0.1:8391
 		}
+		handle /api/hr/recruiter/candidates {
+			request_body {
+				max_size 7MB
+			}
+			reverse_proxy 127.0.0.1:8391
+		}
 		handle /api/hr/* {
 			request_body {
 				max_size 32KB

@@ -1,5 +1,6 @@
 """Temporary DB and HTTP only. Run on outreach, never the shared scenario."""
 import base64, json, os, tempfile, threading, unittest, urllib.request, urllib.error, uuid
+from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
 DATA=tempfile.TemporaryDirectory(prefix='hr-feedback-http-')
 os.environ.update(HR_DATA_DIR=DATA.name,HR_TEAM_KEY='isolated-test',HR_VIDEO_ENABLED='0',DAILY_API_KEY='')
@@ -53,6 +54,118 @@ class FeedbackHTTPTest(unittest.TestCase):
         self.assertEqual(self.post('action',{**data,'action':'feedback.draft'},self.manager)[0],200)
         self.assertEqual(self.post('feedback/questions',self.identity,self.manager)[1]['draft'],answers)
         self.assertEqual(self.post('action',{**data,'action':'feedback'},self.manager)[0],200)
+
+    def media_result(self):
+        return {'recordings': [{'id': 'recording-test', 'url': 'https://example.test/private-playback',
+                                'expires': 9999999999, 'duration': 123}], 'transcripts': [],
+                'video': {'status': 'ready', 'ids': ['recording-test']},
+                'transcription': {'status': 'error', 'ids': [], 'error': 'Расшифровка временно недоступна.'},
+                'checkedAt': '2026-10-12T00:00:00+00:00'}
+
+    def live_meeting(self):
+        with app.connect() as db:
+            state = app.read(db)
+            state['candidates']['anna']['meeting']['status'] = 'live'
+            app.write(db, state)
+
+    def test_finish_failure_keeps_meeting_live_and_checks_owner(self):
+        self.live_meeting()
+        body = {**self.identity, 'action': 'meeting.finish'}
+        with patch.object(app.MEDIA, 'finish', side_effect=app.Problem('Provider unavailable', 502)) as finish:
+            self.assertEqual(self.post('action', body, self.candidate)[0], 403)
+            self.assertEqual(finish.call_count, 0)
+            self.assertEqual(self.post('action', body, self.manager)[0], 502)
+        with app.connect() as db:
+            self.assertEqual(app.read(db)['candidates']['anna']['meeting']['status'], 'live')
+
+    def test_finish_provider_does_not_block_other_state_and_then_persists(self):
+        self.live_meeting()
+        entered, release = threading.Event(), threading.Event()
+        def slow(room):
+            entered.set()
+            if not release.wait(4):
+                raise TimeoutError('test provider timed out')
+        body = {**self.identity, 'action': 'meeting.finish'}
+        with patch.object(app.MEDIA, 'finish', side_effect=slow), ThreadPoolExecutor(max_workers=2) as pool:
+            request = pool.submit(self.post, 'action', body, self.manager)
+            try:
+                self.assertTrue(entered.wait(2))
+                status, _ = self.post('action', {**self.identity, 'action': 'chat', 'text': 'During provider I/O'}, self.manager)
+                self.assertEqual(status, 200)
+                with app.connect() as db:
+                    self.assertEqual(app.read(db)['candidates']['anna']['meeting']['status'], 'live')
+            finally:
+                release.set()
+            self.assertEqual(request.result()[0], 200)
+        with app.connect() as db:
+            state = app.read(db)
+            self.assertEqual(state['candidates']['anna']['meeting']['status'], 'completed')
+            self.assertTrue(any(m['text'] == 'During provider I/O' for m in state['candidates']['anna']['messages']))
+
+    def test_join_cannot_reopen_room_while_finish_is_in_progress(self):
+        self.live_meeting()
+        entered, release, join_started = threading.Event(), threading.Event(), threading.Event()
+        def slow(room):
+            entered.set()
+            if not release.wait(4):
+                raise TimeoutError('test provider timed out')
+        def join():
+            join_started.set()
+            return self.post('room', {**self.identity, 'consent': True}, self.candidate)
+        with patch.object(app.MEDIA, 'finish', side_effect=slow), patch.object(app.MEDIA, 'room') as create_room, ThreadPoolExecutor(max_workers=2) as pool:
+            closing = pool.submit(self.post, 'action', {**self.identity, 'action': 'meeting.finish'}, self.manager)
+            try:
+                self.assertTrue(entered.wait(2))
+                joining = pool.submit(join)
+                self.assertTrue(join_started.wait(2))
+            finally:
+                release.set()
+            self.assertEqual(closing.result()[0], 200)
+            self.assertEqual(joining.result()[0], 409)
+            self.assertEqual(create_room.call_count, 0)
+
+    def test_materials_preserve_ready_video_and_store_only_metadata(self):
+        with patch.object(app.MEDIA, 'materials', return_value=self.media_result()) as media:
+            status, result = self.post('materials', self.identity, self.manager)
+            self.assertEqual(status, 200, result)
+            self.assertEqual(result['video']['status'], 'ready')
+            self.assertEqual(result['transcription']['status'], 'error')
+            self.assertEqual(result['recordings'][0]['id'], 'recording-test')
+            self.assertEqual(self.post('materials', self.identity)[0], 401)
+            self.assertEqual(self.post('materials', {**self.identity, 'meetingId': 'old'}, self.manager)[0], 409)
+            self.assertEqual(media.call_count, 1)
+        with app.connect() as db:
+            state = app.read(db)
+        metadata = state['candidates']['anna']['meeting']['mediaMetadata']
+        self.assertEqual(metadata['recordings'], [{'id': 'recording-test', 'duration': 123}])
+        self.assertNotIn('private-playback', json.dumps(state))
+
+    def test_materials_provider_does_not_hold_global_state_lock(self):
+        entered, release = threading.Event(), threading.Event()
+        def slow(*args, **kwargs):
+            entered.set()
+            if not release.wait(4):
+                raise TimeoutError('test provider timed out')
+            return self.media_result()
+        with patch.object(app.MEDIA, 'materials', side_effect=slow), ThreadPoolExecutor(max_workers=2) as pool:
+            material_request = pool.submit(self.post, 'materials', self.identity, self.manager)
+            try:
+                self.assertTrue(entered.wait(2))
+                state_request = pool.submit(self.access_request, 'state', token=self.manager)
+                self.assertEqual(state_request.result(timeout=2)[0], 200)
+            finally:
+                release.set()
+            self.assertEqual(material_request.result(timeout=3)[0], 200)
+
+    def test_materials_revalidate_identity_after_provider_returns(self):
+        def reset(*args, **kwargs):
+            with app.LOCK, app.connect() as db:
+                app.write(db, fresh())
+            return self.media_result()
+        with patch.object(app.MEDIA, 'materials', side_effect=reset):
+            status, result = self.post('materials', self.identity, self.manager)
+        self.assertEqual(status, 409)
+        self.assertNotIn('private-playback', json.dumps(result))
 
     def access_request(self, path, body=None, cookie='', token='', origin=None):
         headers = {'Cookie': cookie}

@@ -12,16 +12,17 @@ from pathlib import Path
 
 from candidate_portal import CandidatePortal, COOKIE, ClosingConnection, dump
 from domain import Problem, iso, now
+from daily_media import DailyMedia
 
 
-class FakeMedia:
+class FakeMedia(DailyMedia):
     configured = True
 
     def __init__(self):
         self.tokens, self.finished = [], []
         self.rooms = []
 
-    def room(self, mid):
+    def room(self, mid, *, recordable=True):
         self.rooms.append(mid)
         return {'id': mid, 'name': 'hrv-' + mid, 'url': 'https://test.daily.co/hrv-' + mid}
 
@@ -262,7 +263,9 @@ class CandidatePortalTest(unittest.TestCase):
     def test_materials_pending_never_fabricates_recording(self):
         p, _ = self.completed_person()
         state, _ = self.call('recruiter/interview/materials', {'candidateId': p['id']}, manager=True)
-        self.assertEqual(state, {'status': 'processing', 'recordings': [], 'transcripts': []})
+        self.assertEqual(state['status'], 'processing')
+        self.assertEqual(state['recordings'], [])
+        self.assertEqual(state['transcripts'], [])
 
     def test_concurrent_join_cannot_reopen_room_while_it_is_finishing(self):
         person, cookie = self.register()

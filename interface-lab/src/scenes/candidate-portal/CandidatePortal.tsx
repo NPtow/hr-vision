@@ -8,6 +8,7 @@ import { PreferencesForm } from './PreferencesForm';
 import { ResumeUpload } from './ResumeUpload';
 import { AvailabilityForm } from './AvailabilityForm';
 import { InterviewRoom } from './InterviewRoom';
+import { InvitationPortal } from './InvitationPortal';
 import '../agency-product/theme.css';
 import './candidate-portal.css';
 
@@ -31,6 +32,11 @@ const initials = (name: string) => name.split(' ').filter(Boolean).slice(0, 2).m
 const safeSupportEmail = (channels?: Channels) => channels?.supportEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(channels.supportEmail) ? channels.supportEmail : null;
 
 export function CandidatePortal() {
+  const invitation = new URLSearchParams(location.search).get('cp');
+  return invitation === 'guest' || invitation === 'claim' ? <InvitationPortal kind={invitation}/> : <AuthenticatedCandidatePortal/>;
+}
+
+function AuthenticatedCandidatePortal() {
   const [page, setPage] = useState<Page>(readPage);
   const [candidate, setCandidate] = useState<CandidateState | null>(null);
   const [channels, setChannels] = useState<Channels>({});
@@ -111,9 +117,6 @@ export function CandidatePortal() {
     }).catch(cause => { if (alive.current && generation === authGeneration.current) setError((cause as Error).message); }).finally(() => { verifying.current = false; });
   }, [candidate?.id, refresh]);
   useEffect(() => {
-    if (candidate?.interview?.status === 'completed' && page === 'interview') { go('home', true); setNotice('Интервью завершено. Следующие шаги появятся здесь.'); }
-  }, [candidate?.interview?.status, page, go]);
-  useEffect(() => {
     if (!candidate || loading) return;
     const nextPage = destination(candidate, page);
     if (nextPage !== page) go(nextPage, true);
@@ -190,7 +193,7 @@ function CandidateHome({ candidate, onNavigate, onRefresh, channels }: { candida
   return <section className="cp-content-page"><div className="cp-page-heading"><h1>Мой поиск</h1></div><div className="cp-home-grid"><div className="cp-home-primary">
     {!interview && <article className="cp-feature-card"><span className="cp-large-icon"><Video size={28}/></span><h2>Давайте познакомимся</h2><p>Выберите время для интервью с рекрутером. За 30 минут обсудим ваш опыт и следующую работу.</p><Button onClick={() => onNavigate('calendar')}>Выбрать время<ArrowRight size={17}/></Button></article>}
     {interview && !completed && <article className="cp-feature-card"><div className="cp-status"><span className="cp-status-dot"/>Вы записаны</div><h2>Интервью с рекрутером</h2><p className="cp-booking-date">{dateTimeLabel(interview.start)}</p><p>{interview.recruiterName} · 30 минут · {timeZone()}</p><Button onClick={() => onNavigate('interview')}><Video size={17}/>Подготовиться и войти</Button></article>}
-    {completed && <article className="cp-feature-card"><div className="cp-status"><CheckCircle2 size={17}/>Интервью пройдено</div><h2>{applications.length ? 'Есть подходящие вакансии' : 'Ищем подходящие вакансии'}</h2><p>{applications.length ? 'Посмотрите предложения. Если вас приглашают на встречу, подтвердите удобное время.' : 'Ваш профиль готов к следующему этапу. Когда появятся предложения, вы увидите их здесь.'}</p>{applications.length ? <Button onClick={() => onNavigate('vacancies')}>Посмотреть вакансии<ArrowRight size={17}/></Button> : <Button variant="secondary" onClick={onRefresh}><RefreshCw size={16}/>Проверить предложения</Button>}</article>}
+    {completed && <article className="cp-feature-card"><div className="cp-status"><CheckCircle2 size={17}/>Встреча завершена</div><h2>{applications.length ? 'Есть подходящие вакансии' : 'Ищем подходящие вакансии'}</h2><p>{applications.length ? 'Посмотрите предложения. Если вас приглашают на встречу, подтвердите удобное время.' : 'Когда появятся предложения, вы увидите их здесь.'}</p><div className="cp-actions">{applications.length ? <Button onClick={() => onNavigate('vacancies')}>Посмотреть вакансии<ArrowRight size={17}/></Button> : <Button variant="secondary" onClick={onRefresh}><RefreshCw size={16}/>Проверить предложения</Button>}<Button variant="secondary" onClick={() => onNavigate('interview')}><Video size={16}/>Материалы встречи</Button></div></article>}
     {!completed && applications.length > 0 && <button className="cp-simple-row" onClick={() => onNavigate('vacancies')}><span><Briefcase size={20}/>Предложения вакансий</span><span>{applications.length}<ArrowRight size={18}/></span></button>}
     <ContactSettings compact candidate={candidate} channels={channels} onRefresh={onRefresh}/>
   </div><aside className="cp-summary-card"><div className="cp-profile-summary"><span className="cp-avatar cp-avatar-large">{initials(candidate.name) || <UserRound size={24}/>}</span><h2>{candidate.name || 'Ваш профиль'}</h2><p>{candidate.desiredRole}</p></div><dl>{candidate.city && <div><dt>Город</dt><dd>{candidate.city}</dd></div>}{candidate.salaryMin != null && candidate.salaryMax != null && <div><dt>Желаемая зарплата</dt><dd>{candidate.salaryMin.toLocaleString('ru-RU')}–{candidate.salaryMax.toLocaleString('ru-RU')} ₽</dd></div>}{candidate.latestStartDate && <div><dt>Выход на работу до</dt><dd>{dateLabel(`${candidate.latestStartDate}T12:00:00`)}</dd></div>}<div><dt>Вакансии</dt><dd>{candidate.autoApprove ? 'Согласуются автоматически' : 'Согласуете лично'}</dd></div></dl><Button variant="ghost" onClick={() => onNavigate('profile')}>Изменить профиль<ArrowRight size={16}/></Button></aside></div></section>;
@@ -228,7 +231,7 @@ function ApplicationCard({ application, busy, onDecision, onConfirm, onJoin, cha
 }) {
   const { vacancy, meeting } = application;
   return <article className="cp-application-card"><div className="cp-application-top"><div><p className="cp-muted">{vacancy.company}</p><h2>{vacancy.title}</h2><p className="cp-muted">{vacancy.city}{vacancy.remote ? ' · Удалённо' : ''}</p></div>{application.status === 'accepted' && <span className="cp-status"><Check size={15}/>{application.approvedAutomatically ? 'Согласовано автоматически' : 'Вы участвуете'}</span>}</div><p className="cp-vacancy-description">{vacancy.description}</p>
-    {application.status === 'pending' ? <div className="cp-actions"><Button disabled={busy} onClick={() => onDecision(application.id, 'accepted')}>Хочу участвовать<ArrowRight size={16}/></Button><Button variant="ghost" disabled={busy} onClick={() => onDecision(application.id, 'declined')}>Не подходит</Button></div> : !meeting ? <p className="cp-waiting-line"><Clock3 size={16}/>Ждём предложения о встрече от работодателя.</p> : <div className="cp-employer-meeting"><div><CalendarDays size={21}/><div><strong>{dateTimeLabel(meeting.start)}</strong><p>{meeting.status === 'pending' ? 'Работодатель предлагает время. Подтвердите, если вам удобно.' : meeting.status === 'completed' ? 'Встреча завершена' : 'Встреча подтверждена'} · {timeZone()}</p></div></div>{meeting.status === 'pending' && <div className="cp-actions"><Button disabled={busy} onClick={() => onConfirm(application.id, meeting.id)}>Подтвердить время<Check size={16}/></Button>{safeSupportEmail(channels) && <a href={`mailto:${safeSupportEmail(channels)}?subject=${encodeURIComponent(`Другое время встречи: ${vacancy.title}`)}`}>Нужно другое время</a>}</div>}{['confirmed', 'live'].includes(meeting.status) && <Button onClick={() => onJoin(application.id)}><Video size={17}/>Войти во встречу</Button>}</div>}
+    {application.status === 'pending' ? <div className="cp-actions"><Button disabled={busy} onClick={() => onDecision(application.id, 'accepted')}>Хочу участвовать<ArrowRight size={16}/></Button><Button variant="ghost" disabled={busy} onClick={() => onDecision(application.id, 'declined')}>Не подходит</Button></div> : !meeting ? <p className="cp-waiting-line"><Clock3 size={16}/>Ждём предложения о встрече от работодателя.</p> : <div className="cp-employer-meeting"><div><CalendarDays size={21}/><div><strong>{dateTimeLabel(meeting.start)}</strong><p>{meeting.status === 'pending' ? 'Работодатель предлагает время. Подтвердите, если вам удобно.' : meeting.status === 'completed' ? 'Встреча завершена' : 'Встреча подтверждена'} · {timeZone()}</p></div></div>{meeting.status === 'pending' && <div className="cp-actions"><Button disabled={busy} onClick={() => onConfirm(application.id, meeting.id)}>Подтвердить время<Check size={16}/></Button>{safeSupportEmail(channels) && <a href={`mailto:${safeSupportEmail(channels)}?subject=${encodeURIComponent(`Другое время встречи: ${vacancy.title}`)}`}>Нужно другое время</a>}</div>}{['confirmed', 'live'].includes(meeting.status) && <Button onClick={() => onJoin(application.id)}><Video size={17}/>Войти во встречу</Button>}{meeting.status === 'completed' && <Button variant="secondary" onClick={() => onJoin(application.id)}><Video size={17}/>Материалы встречи</Button>}</div>}
   </article>;
 }
 

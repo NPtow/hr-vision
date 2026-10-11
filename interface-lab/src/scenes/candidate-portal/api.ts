@@ -22,7 +22,8 @@ export type MissingPreference = 'salaryMin' | 'salaryMax' | 'latestStartDate';
 export type CandidatePreferences = Pick<CandidateProfile, MissingPreference | 'consentReuse' | 'autoApprove' | 'about' | 'city' | 'residence' | 'employmentType' | 'resumeReviewed'>;
 export type CandidateResume = { filename: string; mime: string; size: number; uploadedAt: string | number; extractedFields: string[] };
 export type RecruiterSlot = { id: string; start: string; end: string; recruiterName: string };
-export type CandidateInterview = RecruiterSlot & { status: 'booked' | 'live' | 'completed' };
+export type InterviewRecording = { consentReceived: boolean; consentSource: 'recruiter_oral' | null; startRequested: boolean; recordingRequested: boolean; transcriptionRequested: boolean };
+export type CandidateInterview = RecruiterSlot & { status: 'booked' | 'live' | 'completed'; recording?: InterviewRecording };
 export type CandidateMeeting = { id: string; start: string; end: string; status: 'pending' | 'confirmed' | 'live' | 'completed' };
 export type CandidateApplication = {
   id: string;
@@ -43,7 +44,9 @@ export type Channels = {
 };
 export type CandidateState = CandidateProfile & {
   id: string;
-  email: string;
+  email: string | null;
+  accountActive?: boolean;
+  intake?: { source: 'manual' | 'hh'; contactEmail: string };
   interview: CandidateInterview | null;
   applications: CandidateApplication[];
   videoConfigured: boolean;
@@ -52,7 +55,19 @@ export type CandidateState = CandidateProfile & {
   onboarding: { step: 'resume' | 'preferences' | 'complete'; missingFields: MissingPreference[] };
 };
 export type CandidateSession = { authenticated: boolean; candidate?: CandidateState; videoConfigured: boolean; channels?: Channels };
+export type GuestState = { name: string; interview: CandidateInterview; videoConfigured: boolean };
+export type ClaimState = { candidate: Partial<CandidateProfile> & { name: string; resume: CandidateResume | null; interview?: CandidateInterview | null } | null; claimed: boolean };
 export type RoomCredentials = { url: string; token: string };
+export type MediaStatus = 'ready' | 'processing' | 'not_recorded' | 'error';
+export type MediaChannel = { status: MediaStatus; error?: string };
+export type CallMaterials = {
+  status: MediaStatus;
+  recordings: { id: string; url: string; duration?: number | null; expires?: number | null }[];
+  transcripts: { id: string; text: string }[];
+  video: MediaChannel;
+  transcription: MediaChannel;
+  checkedAt: string | number;
+};
 
 export class CandidateApiError extends Error {
   constructor(message: string, public status: number) { super(message); }
@@ -60,7 +75,7 @@ export class CandidateApiError extends Error {
 
 export async function candidateRequest<T>(path: string, body?: unknown): Promise<T> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 25000);
+  const timeout = setTimeout(() => controller.abort(), path.endsWith('/materials') ? 60000 : 25000);
   try {
     const response = await fetch(`/api/hr/candidate/${path}`, {
       method: body === undefined ? 'GET' : 'POST',

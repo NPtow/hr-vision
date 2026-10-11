@@ -222,3 +222,16 @@
 .cp-extracted-preferences strong { font-size:15px; font-weight:500; }
 .cp-extracted-preferences button { flex:none; }
 @media (max-width:600px) { .cp-extracted-preferences { padding:6px 16px; } .cp-extracted-preferences>div { align-items:flex-start; gap:5px; } .cp-extracted-preferences button[data-slot=button] { padding:7px; min-height:34px; } }
+
+.cp-invitation { display:grid; gap:24px; padding-top:64px; }
+.cp-invitation>button { justify-self:start; }
+.cp-invitation-details { display:flex; align-items:center; gap:18px; padding:24px; }
+.cp-invitation-details strong { font-weight:550; }
+.cp-invitation-details p { margin-top:5px; font-size:14px; }
+.cp-invitation-error { padding:0 32px 24px; }
+.cp-claim-profile { display:grid; gap:14px; padding:28px; }
+.cp-claim-profile .cp-prewrap { white-space:pre-wrap; overflow-wrap:anywhere; font-size:14px; color:#757575; }
+.cp-claim-profile .cp-resume-current { margin:0; background:#fff; border-radius:18px; padding:16px; }
+.cp-claim .cp-auth-form { margin-top:0; }
+.cp-claim .cp-auth-form label.cp-check { display:flex; font-weight:400; }
+@media(max-width:600px) { .cp-invitation { padding-top:36px; } .cp-claim-profile { padding:22px; } }

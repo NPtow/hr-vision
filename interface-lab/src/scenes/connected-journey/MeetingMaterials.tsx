@@ -5,8 +5,10 @@ import { request, type Journey, type Person } from './api';
 import { parseMeetingTranscript } from './transcript';
 
 type MaterialData = {
-  recordings: { id: string; url: string }[];
+  recordings: { id: string; url: string; expires?: number }[];
   transcripts: { id: string; text: string }[];
+  video?: { status: 'ready' | 'processing' | 'absent' | 'error' | 'unavailable'; error?: string };
+  transcription?: { status: 'ready' | 'processing' | 'absent' | 'error' | 'unavailable'; error?: string };
 };
 
 export function Materials({ person, journey }: { person: Person; journey: Journey }) {
@@ -45,14 +47,17 @@ function MeetingMaterials({ person, journey }: { person: Person; journey: Journe
   const emptyMessage = meeting.testSkip
     ? 'Звонок был пропущен в тесте. Записи и расшифровки у этой встречи нет.'
     : !available ? 'Видеосервис ещё не подключён. Здесь будет запись именно этой встречи.'
+    : data?.video?.status === 'absent' ? 'Видеосервис не вернул запись этой встречи.'
+    : data?.video?.status === 'error' || data?.video?.status === 'unavailable' ? 'Сейчас не удалось получить запись. Можно проверить ещё раз.'
     : 'Запись обрабатывается. Проверьте готовность материалов через некоторое время.';
   const recordings = data?.recordings || [];
   // Multiple recording segments may have different clocks. Do not apply one transcript's
   // timestamps to several files until the backend provides a verified correspondence.
   const canSeekTranscript = recordings.length <= 1;
   return <section className="cj-materials">
-    {available && <div className="cj-materials-toolbar"><span>{loading ? 'Получаем материалы встречи…' : data?.recordings.length ? 'Материалы этой встречи' : 'Подготовка материалов'}</span><Button variant="ghost" disabled={loading} onClick={load}>{loading ? 'Проверяем…' : 'Обновить материалы'}</Button></div>}
+    {available && <div className="cj-materials-toolbar"><span>{loading ? 'Получаем материалы встречи…' : data?.video?.status === 'processing' ? 'Подготовка материалов' : 'Материалы этой встречи'}</span><Button variant="ghost" disabled={loading} onClick={load}>{loading ? 'Проверяем…' : 'Обновить материалы'}</Button></div>}
     {error && <p className="cj-materials-error" role="alert">{error}</p>}
+    {(data?.transcription?.status === 'error' || data?.transcription?.status === 'unavailable') && <p className="cj-info" role="status">Расшифровка сейчас недоступна.{recordings.length > 0 ? ' Готовую запись можно посмотреть.' : ' Попробуйте обновить материалы позже.'}</p>}
     {(recordings.length ? recordings : [null]).map((recording, index) => <MeetingRecordingReview
       key={recording?.id || 'pending'} sourceId={`${meeting.id}:${recording?.id || 'pending'}`}
       name={person.name} chapters={canSeekTranscript ? chapters : []} emptyMessage={emptyMessage}

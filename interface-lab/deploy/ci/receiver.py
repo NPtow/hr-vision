@@ -21,7 +21,7 @@ BRANCHES = {'service': 'main', 'mockups': 'codex/mockups'}
 BASES = {'service': Path('/srv/hr-vision'), 'mockups': Path('/srv/hr-vision-mockups')}
 API = Path('/opt/hr-vision-api')
 DATABASE = Path('/var/lib/hr-vision-api/journey.sqlite3')
-RUNTIME = {'app.py', 'browser_access.py', 'candidate_portal.py', 'candidate_resume.py', 'candidate_notifications.py', 'daily_media.py', 'domain.py', 'dsa_panel.py', 'feedback.py'}
+RUNTIME = {'app.py', 'browser_access.py', 'candidate_portal.py', 'candidate_resume.py', 'candidate_notifications.py', 'candidate_invites.py', 'recruiter_availability.py', 'hh_recruiting.py', 'hh_routes.py', 'daily_media.py', 'domain.py', 'dsa_panel.py', 'feedback.py'}
 MAX_ARCHIVE = 50 * 1024 * 1024
 MAX_CONTENT = 120 * 1024 * 1024
 

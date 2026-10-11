@@ -3,10 +3,11 @@ import { createPortal } from 'react-dom';
 import { ArrowLeft, Camera, CameraOff, Mic, PhoneOff, Video } from 'lucide-react';
 import type { DailyCall } from '@daily-co/daily-js';
 import { Button } from '../../components/ui/button';
-import { candidateRequest, dateTimeLabel, type RoomCredentials } from './api';
+import { candidateRequest, dateTimeLabel, type CallMaterials, type RoomCredentials } from './api';
+import { MediaPanel } from './MediaPanel';
 
-export function InterviewRoom({ title, start, completed, configured, applicationId, meetingId, onRefresh, onBack }: {
-  title: string; start: string; completed: boolean; configured: boolean; applicationId?: string; meetingId?: string; onRefresh: () => Promise<void>; onBack: () => void;
+export function InterviewRoom({ title, start, completed, configured, applicationId, meetingId, guestToken, onRefresh, onBack }: {
+  title: string; start: string; completed: boolean; configured: boolean; applicationId?: string; meetingId?: string; guestToken?: string; onRefresh: () => Promise<void>; onBack: () => void;
 }) {
   const host = useRef<HTMLElement>(null);
   const mount = useRef<HTMLDivElement>(null);
@@ -59,7 +60,9 @@ export function InterviewRoom({ title, start, completed, configured, application
     const currentAttempt = ++attempt.current;
     setError(''); setJoining(true); setRecording('unknown'); stopPreview(); setPreviewReady(false);
     try {
-      const credentials = await candidateRequest<RoomCredentials>(applicationId ? 'meeting/join' : 'interview/join', { ...(applicationId ? { applicationId, meetingId } : {}), consent });
+      const credentials = guestToken
+        ? await candidateRequest<RoomCredentials>('guest/join', { token: guestToken })
+        : await candidateRequest<RoomCredentials>(applicationId ? 'meeting/join' : 'interview/join', { ...(applicationId ? { applicationId, meetingId } : {}), consent });
       const { default: DailyIframe } = await import('@daily-co/daily-js');
       if (!alive.current || attempt.current !== currentAttempt) return;
       setOpened(true);
@@ -76,31 +79,38 @@ export function InterviewRoom({ title, start, completed, configured, application
       call.on('recording-started', () => { if (active()) setRecording('recording'); });
       call.on('recording-stopped', () => { if (active()) setRecording('stopped'); });
       call.on('recording-error', () => { if (active()) setRecording('error'); });
+      call.on('network-connection', event => { if (active() && event?.event === 'interrupted') setRecording('unknown'); });
       call.on('camera-error', () => { if (active()) setError('Не удалось включить камеру или микрофон. Проверьте доступ к устройствам.'); });
-      call.on('error', () => { if (active()) setError('Соединение прервалось. Проверьте сеть; после выхода можно подключиться снова.'); });
+      call.on('error', () => { if (active()) { setRecording('unknown'); setError('Соединение прервалось. Проверьте сеть; после выхода можно подключиться снова.'); } });
       call.on('left-meeting', () => { if (active()) { void close(); void onRefresh(); } });
       await call.join({ url: credentials.url, token: credentials.token, startVideoOff: !camera });
     } catch (cause) {
       if (alive.current && attempt.current === currentAttempt) { setError((cause as Error).message); await close(); }
     } finally { if (alive.current && attempt.current === currentAttempt) setJoining(false); }
   }
-  if (completed) return <section className="cp-narrow cp-done"><h1>Интервью завершено</h1><p>Все следующие шаги появятся в вашем кабинете.</p><Button onClick={onBack}>В кабинет</Button></section>;
+  if (completed) return <section className="cp-content-page">
+    {!guestToken && <Button className="cp-back" variant="ghost" onClick={onBack}><ArrowLeft size={16}/>В кабинет</Button>}
+    <div className="cp-page-heading"><h1>Встреча завершена</h1><p>{title} · {dateTimeLabel(start)}</p></div>
+    {guestToken ? <p>Спасибо за разговор. Рекрутер пришлёт дальнейшие шаги.</p>
+      : applicationId && !meetingId ? <p className="cp-error" role="alert">Не удалось определить встречу. Откройте её заново из вакансии.</p>
+        : <MediaPanel identity={applicationId ? `meeting:${applicationId}:${meetingId}` : `interview:${start}`} load={() => candidateRequest<CallMaterials>(applicationId ? 'meeting/materials' : 'interview/materials', applicationId ? { applicationId, meetingId } : {})}/>}
+  </section>;
   return <section className="cp-interview-page" ref={host}>
-    <Button className="cp-back" variant="ghost" onClick={onBack}><ArrowLeft size={16}/>В кабинет</Button>
+    <Button className="cp-back" variant="ghost" onClick={onBack}><ArrowLeft size={16}/>{guestToken ? 'К приглашению' : 'В кабинет'}</Button>
     <div className="cp-page-heading"><h1>{title}</h1><p>{dateTimeLabel(start)} · 30 минут</p></div>
     <div className="cp-precall">
       <div className="cp-preview"><video ref={preview} autoPlay muted playsInline className={previewReady && camera ? 'is-visible' : ''}/>{(!previewReady || !camera) && <div>{camera ? <Camera size={34}/> : <Mic size={34}/>}<p>{previewReady ? 'Микрофон доступен' : camera ? 'Проверим камеру и микрофон' : 'Разговор без камеры'}</p></div>}</div>
       <div className="cp-call-settings">
         <h2>Увидимся через минуту</h2><p className="cp-muted">Интервью проходит с человеком. Пожалуйста, включите камеру: так проще познакомиться. Если не получается, можно общаться голосом.</p>
         <div className="cp-device-actions"><Button variant="secondary" disabled={checking || joining} onClick={checkDevices}>{checking ? 'Проверяем…' : previewReady ? 'Проверить ещё раз' : 'Проверить устройства'}</Button><Button variant="ghost" disabled={joining || checking} aria-pressed={!camera} onClick={() => { stopPreview(); setPreviewReady(false); setCamera(value => !value); }}>{camera ? <CameraOff size={16}/> : <Camera size={16}/>} {camera ? 'Без камеры' : 'С камерой'}</Button></div>
-        <label className="cp-check"><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)}/><span>Согласен на запись и расшифровку этой встречи.</span></label>
+        {guestToken ? <p className="cp-muted">Сначала познакомимся без записи. Рекрутер объяснит сервис и включит запись только после вашего согласия.</p> : <label className="cp-check"><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)}/><span>Согласен на запись и расшифровку этой встречи.</span></label>}
         {error && <p className="cp-error" role="alert">{error}</p>}
         {!configured && <p className="cp-notice">Видеовстреча пока недоступна. Свяжитесь с рекрутером; выбранное время сохранено.</p>}
-        <Button disabled={!consent || !configured || joining || checking} onClick={join}><Video size={17}/>{joining ? 'Подключаем…' : 'Войти в интервью'}</Button>
+        <Button disabled={(!guestToken && !consent) || !configured || joining || checking} onClick={join}><Video size={17}/>{joining ? 'Подключаем…' : 'Войти в интервью'}</Button>
       </div>
     </div>
     {opened && createPortal(<div className="agency-product-theme cp-root cp-call-overlay" role="dialog" aria-modal="true" aria-label={title}>
-      <div className="cp-call-bar"><div><strong>{title}</strong><span role="status">{!joined ? 'Подключение…' : otherPresent ? 'Вы в эфире' : 'Ждём собеседника'}{recording === 'recording' ? ' · Запись идёт' : recording === 'stopped' ? ' · Запись остановлена' : recording === 'error' ? ' · Запись недоступна' : ''}</span></div><Button autoFocus variant="secondary" onClick={async () => { await close(); await onRefresh(); }}><PhoneOff size={17}/>Выйти</Button></div>
+      <div className="cp-call-bar"><div><strong>{title}</strong><span role="status">{!joined ? 'Подключение…' : otherPresent ? 'Вы в эфире' : 'Ждём собеседника'}{recording === 'recording' ? ' · Запись идёт' : recording === 'stopped' ? ' · Запись остановлена' : recording === 'error' ? ' · Запись недоступна' : ' · Статус записи уточняется'}</span></div><Button autoFocus variant="secondary" onClick={async () => { await close(); await onRefresh(); }}><PhoneOff size={17}/>Выйти</Button></div>
       {error && <p role="alert" className="cp-call-error">{error}</p>}
       <div ref={mount} className="cp-daily-mount"/>
     </div>, document.body)}
