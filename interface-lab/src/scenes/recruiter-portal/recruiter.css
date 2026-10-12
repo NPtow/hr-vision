@@ -71,12 +71,10 @@
 .rp-fields { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
 .rp-slot-form { display:grid; gap:24px; }
 .rp-space { margin-top:32px; }
-.rp-root .rp-space .rp-check { margin:0; }
 .rp-slot-list { margin-top:16px; }
 .rp-slot-row { display:flex; justify-content:space-between; align-items:center; gap:20px; padding:22px 0; border-bottom:1px solid #e9e7f0; }
 .rp-slot-row strong { font-weight:500; }
 .rp-slot-row p { font-size:13px; margin-top:6px; }
-.rp-slot-row>span { font-size:13px; }
 .rp-vacancy-form { margin:28px 0; display:grid; gap:24px; }
 .rp-vacancy-form>button { justify-self:start; }
 .rp-vacancy-form .rp-fields .rp-check { align-self:center; }

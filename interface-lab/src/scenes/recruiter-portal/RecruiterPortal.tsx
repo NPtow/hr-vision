@@ -217,9 +217,8 @@ function ApplicationCard({ application, candidate, busy, run, onCall, videoConfi
 function SlotsPage({ state, busy, run, onCandidate }: { state: RecruiterState; busy: boolean; run: RunAction; onCandidate: (id: string) => void }) {
   const [start, setStart] = useState('');
   const [name, setName] = useState('');
-  const [showPast, setShowPast] = useState(false);
   const [formError, setFormError] = useState('');
-  const slots = state.slots.filter(slot => showPast || Date.parse(slot.end) > Date.now()).sort((a, b) => a.start.localeCompare(b.start));
+  const interviews = state.slots.filter(slot => slot.booked && Date.parse(slot.end) > Date.now()).sort((a, b) => a.start.localeCompare(b.start));
   async function submit(event: FormEvent) {
     event.preventDefault(); setFormError('');
     let iso = '';
@@ -230,8 +229,7 @@ function SlotsPage({ state, busy, run, onCandidate }: { state: RecruiterState; b
   return <div className="rp-page-content">
     <AvailabilitySchedule blocks={state.availabilityBlocks || []} busy={busy} run={run}/>
     <details className="rp-single-slot"><summary>Добавить отдельный слот</summary><form className="rp-card rp-slot-form" onSubmit={submit}><h2>Отдельный слот</h2><div className="rp-fields"><label>Рекрутер<input required value={name} onChange={e => setName(e.target.value)} placeholder="Имя и фамилия" maxLength={120}/></label><label>Начало · МСК<input required type="datetime-local" min={moscowInput(new Date())} value={start} onChange={e => setStart(e.target.value)}/></label></div><div className="rp-section-heading"><span className="rp-muted">Интервью длится 30 минут</span><Button disabled={busy || !name.trim() || !start}><Plus size={16}/>Добавить</Button></div>{formError && <p role="alert" className="rp-error">{formError}</p>}</form></details>
-    <div className="rp-section-heading rp-space"><h2>Расписание</h2><label className="rp-check"><input type="checkbox" checked={showPast} onChange={e => setShowPast(e.target.checked)}/><span>Показать прошедшие</span></label></div>
-    {slots.length ? <div className="rp-slot-list">{slots.map(slot => { const person = state.candidates.find(candidate => candidate.id === slot.candidateId); return <article key={slot.id} className="rp-slot-row"><div><strong>{formatDate(slot.start)}</strong><p className="rp-muted">{slot.recruiterName}</p></div>{slot.booked ? <Button variant="secondary" disabled={!person} onClick={() => person && onCandidate(person.id)}>{person?.name || 'Забронировано'}</Button> : <span className="rp-muted">Свободно</span>}</article>; })}</div> : <div className="rp-empty rp-short"><CalendarDays size={28}/><h2>Свободное время ещё не добавлено</h2><p>Кандидаты увидят здесь созданные слоты при записи на интервью.</p></div>}
+    {interviews.length > 0 && <><h2 className="rp-space">Назначенные интервью</h2><div className="rp-slot-list">{interviews.map(slot => { const person = state.candidates.find(candidate => candidate.id === slot.candidateId); return <article key={slot.id} className="rp-slot-row"><div><strong>{formatDate(slot.start)}</strong><p className="rp-muted">{slot.recruiterName}</p></div><Button variant="secondary" disabled={!person} onClick={() => person && onCandidate(person.id)}>{person?.name || 'Забронировано'}</Button></article>; })}</div></>}
   </div>;
 }
 
