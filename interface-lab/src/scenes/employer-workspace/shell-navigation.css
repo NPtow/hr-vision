@@ -1,16 +1,18 @@
 /* МашаДаша_UI: compact employer navigation; candidate and recruiter shells stay separate. */
+.ew-root .ew-shell { min-height:100dvh; background:#f4f3f7; }
+.ew-root .ew-shell :is(.ew-topbar,.ew-vacancy-header,.ew-workspace,.ew-content) { border:0; background:transparent; }
 .ew-root .ew-shell .ew-sidebar {
   width:88px; padding:24px 12px; border:0; background:transparent;
 }
 .ew-root .ew-shell .ew-sidebar nav {
   display:grid; gap:8px; width:64px; padding:8px; border-radius:24px;
-  background:#fff; box-shadow:0 2px 8px #352b5210;
+  background:transparent; box-shadow:none;
 }
 .ew-root .ew-shell .ew-sidebar nav button {
   display:flex; align-items:center; justify-content:center; width:48px; min-height:48px;
   padding:12px; border:0; border-radius:16px; color:#686473; background:transparent;
 }
-.ew-root .ew-shell .ew-sidebar nav button:hover { background:#f5f5f7; }
+.ew-root .ew-shell .ew-sidebar nav button:hover { background:#eae7f0; }
 .ew-root .ew-shell .ew-sidebar nav button.active { color:#5946d6; background:#eeebf7; }
 .ew-root .ew-shell .ew-sidebar nav button:focus-visible { outline:2px solid #6756ce; outline-offset:3px; }
 .ew-root .ew-shell .ew-sidebar nav button:disabled { opacity:.5; }
@@ -29,6 +31,7 @@
 .ew-root .ew-shell .ew-vacancy-switcher[data-state=open] { background:#eeebf7; }
 .ew-root .ew-shell .ew-vacancy-switcher:focus-visible { outline:2px solid #6756ce; outline-offset:3px; }
 .ew-root .ew-shell .ew-vacancy-switcher:disabled { opacity:.6; }
+.ew-root .ew-shell .ew-vacancy-loading { color:#686473; }
 .ew-root.ew-vacancy-menu {
   z-index:80; width:max-content; min-width:min(320px,calc(100vw - 32px));
   max-width:min(540px,calc(100vw - 32px)); max-height:var(--radix-dropdown-menu-content-available-height);
@@ -54,12 +57,10 @@
   .ew-root .ew-shell .ew-add-candidates-label { display:none; }
 }
 @media(prefers-contrast:more) {
-  .ew-root .ew-shell .ew-sidebar nav,
   .ew-root.ew-vacancy-menu { outline:1px solid #83798e; }
   .ew-root .ew-shell .ew-sidebar nav button.active { outline:1px solid #6756ce; outline-offset:-1px; }
 }
 @media(forced-colors:active) {
-  .ew-root .ew-shell .ew-sidebar nav,
   .ew-root.ew-vacancy-menu,
   .ew-navigation-tooltip { border:1px solid CanvasText; box-shadow:none; }
   .ew-root .ew-shell .ew-sidebar nav button.active { outline:2px solid Highlight; outline-offset:-2px; }

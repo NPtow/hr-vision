@@ -26,6 +26,7 @@ export function EmployerShell({ enabled = true, page, scope, vacancy, vacancyId,
   const active = page === 'create-vacancy' || (page === panel && candidateContext === 'vacancy') ? 'tasks' : page === 'intake' ? panel : ['meeting', 'book', 'review'].includes(page) ? 'meetings' : page === 'offer' ? 'pool' : page;
   const navigate = (next: EmployerPage) => { setMenuOpen(false); onNavigate(next); };
   const canChooseVacancy = page === panel && candidateContext !== 'vacancy' && !!onVacancyChange && vacancies.length > 0;
+  const canAddCandidates = page !== 'intake' && (!onVacancyChange || !!vacancyId);
   const sections = [
     { page: 'tasks' as const, label: 'Задачи', Icon: ClipboardList },
     { page: panel, label: 'Кандидаты', Icon: Users },
@@ -51,7 +52,17 @@ export function EmployerShell({ enabled = true, page, scope, vacancy, vacancyId,
       </aside>
       <div className="ew-workspace">
         {page !== 'tasks' && page !== 'create-vacancy' && page !== 'meetings' && <section className="ew-vacancy-header" aria-label="Текущая вакансия">
-          <div className="ew-vacancy-title"><h1>{canChooseVacancy ? <DropdownMenu.Root><DropdownMenu.Trigger asChild><button className="ew-vacancy-switcher" aria-label={`Выбрать вакансию: ${vacancy}`} disabled={navigationBusy}>{vacancy}</button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content className="ew-root ew-vacancy-menu" align="start" sideOffset={12} collisionPadding={16}><DropdownMenu.RadioGroup value={vacancyId} onValueChange={id => { if (id !== vacancyId) onVacancyChange?.(id); }}>{vacancies.map(option => <DropdownMenu.RadioItem className="ew-vacancy-option" key={option.id} value={option.id}><span>{option.role}</span><DropdownMenu.ItemIndicator><Check size={17} aria-hidden="true"/></DropdownMenu.ItemIndicator></DropdownMenu.RadioItem>)}</DropdownMenu.RadioGroup></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root> : vacancy}</h1>{page !== 'intake' && <Button variant="secondary" className="ew-add-candidates" aria-label="Добавить кандидатов" onClick={() => navigate('intake')}><Plus size={16}/><span className="ew-add-candidates-label">Добавить кандидатов</span></Button>}</div>
+          <div className="ew-vacancy-title">
+            <h1>{canChooseVacancy ? <DropdownMenu.Root>
+              <DropdownMenu.Trigger asChild><button className="ew-vacancy-switcher" aria-label={`Выбрать вакансию: ${vacancy}`} disabled={navigationBusy}>{vacancy}</button></DropdownMenu.Trigger>
+              <DropdownMenu.Portal><DropdownMenu.Content className="ew-root ew-vacancy-menu" align="start" sideOffset={12} collisionPadding={16}>
+                <DropdownMenu.RadioGroup value={vacancyId} onValueChange={id => { if (id !== vacancyId) onVacancyChange?.(id); }}>
+                  {vacancies.map(option => <DropdownMenu.RadioItem className="ew-vacancy-option" key={option.id} value={option.id}><span>{option.role}</span><DropdownMenu.ItemIndicator><Check size={17} aria-hidden="true"/></DropdownMenu.ItemIndicator></DropdownMenu.RadioItem>)}
+                </DropdownMenu.RadioGroup>
+              </DropdownMenu.Content></DropdownMenu.Portal>
+            </DropdownMenu.Root> : vacancy}</h1>
+            {canAddCandidates && <Button variant="secondary" className="ew-add-candidates" aria-label="Добавить кандидатов" disabled={navigationBusy} onClick={() => navigate('intake')}><Plus size={16}/><span className="ew-add-candidates-label">Добавить кандидатов</span></Button>}
+          </div>
         </section>}
         <div className="ew-content">{children}</div>
       </div>
