@@ -288,7 +288,8 @@ class CandidateBooking:
         require(parsed.path in (PREFIX + 'state', PREFIX + 'book', PREFIX + 'call'), 'Не найдено.', 404)
         require(method == 'POST', 'Откройте персональную ссылку.', 405)
         require(not parsed.query and not parsed.fragment, 'Передайте ссылку в теле запроса.', 400)
-        require(headers.get('Origin') in (None, self.portal.origin)
+        allowed = getattr(self.portal, 'origins', frozenset((self.portal.origin,)))
+        require((headers.get('Origin') is None or headers.get('Origin') in allowed)
                 and headers.get('Sec-Fetch-Site') != 'cross-site', 'Другой источник запроса.', 403)
         require(headers.get('Content-Type', '').split(';', 1)[0].strip() == 'application/json', 'Нужен JSON.', 415)
         expected = {'token', 'slotId', 'requestId'} if parsed.path.endswith('/book') else {'token'}

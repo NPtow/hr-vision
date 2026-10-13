@@ -149,6 +149,20 @@ class CandidateBookingTest(unittest.TestCase):
         rows = self.rows('SELECT kind,invitation_id,interview_id FROM booking_test_events')
         self.assertEqual([('booking.page_loaded', issued['invitationId'], None)], rows)
 
+    def test_booking_accepts_explicit_product_alias_during_domain_migration(self):
+        _, _, token = self.issue()
+        alias = 'https://candidate.example.test'
+        self.portal.origins = frozenset((self.portal.origin, alias))
+        state, _ = self.service.handle('POST', booking.PREFIX + 'state',
+            {'Content-Type': 'application/json', 'Origin': alias, 'Sec-Fetch-Site': 'same-origin'},
+            {'token': token}, '127.0.0.1')
+        self.assertEqual('available', state['status'])
+        with self.assertRaises(Problem) as failure:
+            self.service.handle('POST', booking.PREFIX + 'state',
+                {'Content-Type': 'application/json', 'Origin': alias, 'Sec-Fetch-Site': 'cross-site'},
+                {'token': token}, '127.0.0.1')
+        self.assertEqual(403, failure.exception.status)
+
     def test_public_shape_origin_method_and_invalid_tokens_fail_closed(self):
         _, _, token = self.issue()
         for path, method, headers, body, status in [
