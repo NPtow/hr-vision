@@ -83,8 +83,6 @@ const fileBase64 = (file: File) => new Promise<string>((resolve, reject) => {
   reader.onerror = () => reject(new Error('Не удалось прочитать файл. Выберите его ещё раз.'));
   reader.readAsDataURL(file);
 });
-const hasExtraConditions = (value: VacancyCreateValues) => ['address', 'employmentType', 'schedule', 'salaryPeriod', 'salaryTax', 'experience'].some(key => Boolean(value.details[key as keyof EmployerVacancyDetails]));
-const hasExtraDescription = (value: VacancyCreateValues) => Boolean(value.details.niceToHave || value.details.benefits || value.description);
 
 export function VacancyCreate({ active, token, draftKey, onBack, busy, error, onCreate, company = '', initialDescription = '' }: VacancyCreateProps) {
   const id = useId();
@@ -97,8 +95,6 @@ export function VacancyCreate({ active, token, draftKey, onBack, busy, error, on
   const [localError, setLocalError] = useState('');
   const [importError, setImportError] = useState('');
   const [pendingImport, setPendingImport] = useState<EmployerVacancyImport | null>(null);
-  const [conditionsOpen, setConditionsOpen] = useState(() => hasExtraConditions(draft.values));
-  const [descriptionOpen, setDescriptionOpen] = useState(() => hasExtraDescription(draft.values));
   const locked = useRef(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const titleInput = useRef<HTMLInputElement>(null);
@@ -137,7 +133,6 @@ export function VacancyCreate({ active, token, draftKey, onBack, busy, error, on
   function applyImport(result: EmployerVacancyImport) {
     const imported = normalizeValues(result.fields, values.company || company);
     setDraft(previous => ({ ...previous, dirty: true, values: imported, source: result.source, warnings: result.warnings || [], importId: result.importId }));
-    setConditionsOpen(hasExtraConditions(imported)); setDescriptionOpen(hasExtraDescription(imported));
     setPendingImport(null); setImportError(''); setLocalError('');
   }
   async function runImport() {
@@ -187,7 +182,7 @@ export function VacancyCreate({ active, token, draftKey, onBack, busy, error, on
       if (draft.importId) prepared.importId = draft.importId;
       if (await onCreate(prepared)) {
         setDraft({ values: emptyValues(company), source: null, warnings: [], sourceKind: 'file', text: '', url: '', importId: '', dirty: false });
-        setFile(null); setPendingImport(null); setConditionsOpen(false); setDescriptionOpen(false);
+        setFile(null); setPendingImport(null);
         try { sessionStorage.removeItem(storageKey); } catch { /* The form also resets in memory. */ }
       }
     } catch (cause) { setLocalError(cause instanceof Error ? cause.message : 'Не удалось создать вакансию. Попробуйте ещё раз.'); }
@@ -235,22 +230,11 @@ export function VacancyCreate({ active, token, draftKey, onBack, busy, error, on
           <label htmlFor={`${id}-format`}>Формат работы<select id={`${id}-format`} value={values.format} onChange={event => edit('format', event.target.value)}><option value="">Не указан</option>{!!values.format && !['В офисе', 'Гибрид', 'Удалённо'].includes(values.format) && <option value={values.format}>{values.format}</option>}<option>В офисе</option><option>Гибрид</option><option>Удалённо</option></select></label>
           <div className="ew-vacancy-create-wide ew-vacancy-salary"><label htmlFor={`${id}-salary-min`}>Зарплата от<Input id={`${id}-salary-min`} type="number" inputMode="numeric" min={1} max={100000000} step={1} value={details.salaryMin ?? ''} onChange={event => editDetail('salaryMin', event.target.value === '' ? null : Number(event.target.value))} placeholder="От"/></label><label htmlFor={`${id}-salary-max`}>До<Input id={`${id}-salary-max`} type="number" inputMode="numeric" min={1} max={100000000} step={1} value={details.salaryMax ?? ''} onChange={event => editDetail('salaryMax', event.target.value === '' ? null : Number(event.target.value))} placeholder="До"/></label><label htmlFor={`${id}-currency`}>Валюта<select id={`${id}-currency`} value={details.currency} onChange={event => editDetail('currency', event.target.value as EmployerVacancyDetails['currency'])}><option value="">Не указана</option><option value="RUB">₽ · RUB</option><option value="USD">$ · USD</option><option value="EUR">€ · EUR</option><option value="KZT">₸ · KZT</option><option value="BYN">BYN</option></select></label></div>
           {!hasStructuredSalary && !!values.salary && <label htmlFor={`${id}-salary-text`} className="ew-vacancy-create-wide">Условия оплаты<Input id={`${id}-salary-text`} maxLength={300} value={values.salary} onChange={event => edit('salary', event.target.value)}/></label>}
-        </div><details className="ew-vacancy-more" open={conditionsOpen} onToggle={event => setConditionsOpen(event.currentTarget.open)}><summary>Дополнительные условия</summary><div className="ew-vacancy-create-fields">
-          <label htmlFor={`${id}-address`} className="ew-vacancy-create-wide">Адрес работы<Input id={`${id}-address`} maxLength={300} value={details.address} onChange={event => editDetail('address', event.target.value)} placeholder="Улица, район или ближайшее метро"/></label>
-          <label htmlFor={`${id}-employment`}>Занятость<select id={`${id}-employment`} value={details.employmentType} onChange={event => editDetail('employmentType', event.target.value as EmployerVacancyDetails['employmentType'])}><option value="">Не указана</option><option value="full-time">Полная</option><option value="part-time">Частичная</option><option value="project">Проектная работа</option><option value="internship">Стажировка</option><option value="temporary">Временная работа</option></select></label>
-          <label htmlFor={`${id}-schedule`}>График<Input id={`${id}-schedule`} maxLength={500} value={details.schedule} onChange={event => editDetail('schedule', event.target.value)} placeholder="Например, 5/2 с 9 до 18"/></label>
-          <label htmlFor={`${id}-salary-period`}>Период оплаты<select id={`${id}-salary-period`} value={details.salaryPeriod} onChange={event => editDetail('salaryPeriod', event.target.value as EmployerVacancyDetails['salaryPeriod'])}><option value="">Не указан</option><option value="month">В месяц</option><option value="year">В год</option><option value="hour">В час</option><option value="shift">За смену</option></select></label>
-          <label htmlFor={`${id}-salary-tax`}>Налоги<select id={`${id}-salary-tax`} value={details.salaryTax} onChange={event => editDetail('salaryTax', event.target.value as EmployerVacancyDetails['salaryTax'])}><option value="">Не указаны</option><option value="gross">До вычета налогов</option><option value="net">На руки</option></select></label>
-          <label htmlFor={`${id}-experience`} className="ew-vacancy-create-wide">Опыт<Input id={`${id}-experience`} maxLength={500} value={details.experience} onChange={event => editDetail('experience', event.target.value)} placeholder="Например, от 3 лет"/></label>
-        </div></details></section>
+        </div></section>
         <section className="ew-vacancy-section" aria-labelledby={`${id}-requirements-title`}><h2 id={`${id}-requirements-title`}>Задачи и требования</h2><div className="ew-vacancy-create-fields">
           <label htmlFor={`${id}-responsibilities`}>Чем предстоит заниматься<Textarea id={`${id}-responsibilities`} rows={5} maxLength={4000} value={details.responsibilities} onChange={event => editDetail('responsibilities', event.target.value)} placeholder="Основные задачи сотрудника"/></label>
           <label htmlFor={`${id}-requirements`}>Что важно для этой роли<Textarea id={`${id}-requirements`} rows={5} maxLength={4000} value={details.requirements} onChange={event => editDetail('requirements', event.target.value)} placeholder="Навыки и обязательные требования"/></label>
-        </div><details className="ew-vacancy-more" open={descriptionOpen} onToggle={event => setDescriptionOpen(event.currentTarget.open)}><summary>Дополнительно</summary><div className="ew-vacancy-create-fields">
-          <label htmlFor={`${id}-nice`}>Будет плюсом<Textarea id={`${id}-nice`} rows={3} maxLength={4000} value={details.niceToHave} onChange={event => editDetail('niceToHave', event.target.value)}/></label>
-          <label htmlFor={`${id}-benefits`}>Что предлагаете<Textarea id={`${id}-benefits`} rows={3} maxLength={4000} value={details.benefits} onChange={event => editDetail('benefits', event.target.value)} placeholder="Бонусы, обучение, ДМС"/></label>
-          <label htmlFor={`${id}-description`} className="ew-vacancy-create-wide">Общее описание<Textarea id={`${id}-description`} rows={4} maxLength={10000} value={values.description} onChange={event => edit('description', event.target.value)}/></label>
-        </div></details></section>
+        </div></section>
       </fieldset>
       {(localError || error) && <p className="ew-vacancy-create-error" role="alert">{localError || error}</p>}
       <footer className="ew-vacancy-create-footer"><Button type="button" variant="ghost" disabled={disabled} onClick={onBack}>Отмена</Button><Button type="submit" disabled={disabled || !!pendingImport}>{saving ? 'Создаём…' : 'Создать вакансию'}</Button></footer>

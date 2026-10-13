@@ -25,11 +25,11 @@
 .ew-vacancy-imported p { min-width:0; overflow-wrap:anywhere; }
 .ew-vacancy-imported svg { margin-top:2px; color:#5462fd; }
 .ew-vacancy-import-warnings { display:grid; gap:6px; margin-top:12px; color:#8a6234; font-size:13px; line-height:20px; }
-.ew-vacancy-import-confirm { margin-top:20px; padding-top:20px; border-top:1px solid #e9e7f0; font-size:14px; }
+.ew-vacancy-import-confirm { margin-top:20px; font-size:14px; }
 .ew-vacancy-import-confirm>div { display:flex; gap:12px; flex-wrap:wrap; margin-top:16px; }
 .ew-vacancy-create form>fieldset { min-width:0; border:0; margin:0; padding:0; }
 .ew-vacancy-create form>fieldset:disabled { opacity:.65; }
-.ew-vacancy-section { padding-bottom:28px; margin-bottom:28px; border-bottom:1px solid #e9e7f0; }
+.ew-vacancy-section { margin-bottom:36px; }
 .ew-root .ew-vacancy-section>h2 { margin-bottom:20px; }
 .ew-vacancy-create-fields { display:grid; grid-template-columns:1fr 1fr; gap:20px 24px; }
 .ew-vacancy-create-fields label { display:grid; gap:8px; min-width:0; color:#757575; font-size:14px; font-weight:400; }
@@ -43,9 +43,6 @@
 .ew-root .ew-vacancy-create .ew-vacancy-source-surface textarea { min-height:112px; }
 .ew-vacancy-create :is(input,textarea)::placeholder { color:#a1a1a1; }
 .ew-vacancy-salary { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; }
-.ew-vacancy-more { margin-top:24px; }
-.ew-vacancy-more summary { cursor:pointer; color:#757575; font-size:14px; }
-.ew-vacancy-more>.ew-vacancy-create-fields { padding-top:20px; }
 .ew-vacancy-create-footer { display:flex; justify-content:space-between; align-items:center; gap:16px; }
 .ew-vacancy-create-footer>button:last-child { min-width:220px; }
 .ew-root .ew-vacancy-create-error { margin-top:16px!important; margin-bottom:16px!important; color:#c43d4f; font-size:14px; line-height:20px; }
