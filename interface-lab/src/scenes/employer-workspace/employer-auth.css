@@ -31,7 +31,7 @@
 .ew-auth-switch button:hover { text-decoration:underline; }
 .ew-auth button:disabled { cursor:default; }
 .ew-auth button:disabled,.ew-auth fieldset:disabled { opacity:.6; }
-.ew-auth :where(button,input):focus-visible { outline:2px solid #5462fd; outline-offset:3px; }
+.ew-auth :where(button,input,a):focus-visible { outline:2px solid #5462fd; outline-offset:3px; }
 
 @media (max-width:540px) {
   .ew-auth-header { min-height:64px; padding:10px 20px; gap:12px; }

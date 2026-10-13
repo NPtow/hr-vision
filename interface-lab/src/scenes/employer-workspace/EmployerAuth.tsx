@@ -2,6 +2,7 @@ import { useId, useRef, useState, type FormEvent } from 'react';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import logo from './assets/hr-vision-logo.svg';
+import { COMPANY_SITE_URL } from '../../lib/employer-entry';
 import '../agency-product/theme.css';
 import './employer-auth.css';
 
@@ -13,13 +14,14 @@ export type EmployerAuthValues = {
   workspaceName?: string;
 };
 
-export function EmployerAuth({ busy, error, onSubmit, onModeChange }: {
+export function EmployerAuth({ busy, error, onSubmit, onModeChange, initialMode = 'register' }: {
   busy: boolean;
   error: string;
   onSubmit: (mode: EmployerAuthMode, values: EmployerAuthValues) => Promise<boolean>;
   onModeChange?: () => void;
+  initialMode?: EmployerAuthMode;
 }) {
-  const [mode, setMode] = useState<EmployerAuthMode>('register');
+  const [mode, setMode] = useState<EmployerAuthMode>(initialMode);
   const [values, setValues] = useState({ name: '', workspaceName: '', email: '', password: '' });
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
@@ -71,7 +73,7 @@ export function EmployerAuth({ busy, error, onSubmit, onModeChange }: {
 
   return <div className="agency-product-theme ew-auth">
     <header className="ew-auth-header">
-      <img className="ew-auth-logo" src={logo} alt="HR Vision"/>
+      <a href={COMPANY_SITE_URL} aria-label="На сайт HR Vision"><img className="ew-auth-logo" src={logo} alt="HR Vision"/></a>
       <Button type="button" variant="ghost" disabled={locked} onClick={changeMode}>{isRegistration ? 'Войти' : 'Создать кабинет'}</Button>
     </header>
     <main className="ew-auth-main">
