@@ -11,14 +11,12 @@ import { RecruiterProfile } from './RecruiterProfile';
 import { InterviewList } from './InterviewList';
 import { useRecruiterSession } from './session';
 import { RecruiterCandidateDetails } from './RecruiterCandidateDetails';
-import { RecruiterAgendaPreview } from './RecruiterAgendaPreview';
 
 type SessionIdentity = { token: string; generation: number };
 
 /** Personal interview queue. Ownership and calendar assignment are enforced by the API. */
 export function RecruiterPortal() {
-  return new URLSearchParams(location.search).get('recruiterPreview') === '30'
-    ? <RecruiterAgendaPreview/> : <RecruiterWorkspace/>;
+  return <RecruiterWorkspace/>;
 }
 
 function RecruiterWorkspace() {
