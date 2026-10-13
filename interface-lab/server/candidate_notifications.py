@@ -353,6 +353,12 @@ def create_telegram_link(db, candidate_id, settings=None, now=None):
 
 def _consume_telegram_update(db, update, timestamp):
     require(isinstance(update, dict) and type(update.get('update_id')) is int, 'Некорректное обновление.', 400)
+    message = update.get('message')
+    content = message.get('text', '') if isinstance(message, dict) else ''
+    if isinstance(content, str) and re.fullmatch(r'/start(?:@[A-Za-z0-9_]+)? rc_[A-Za-z0-9_-]{43}', content):
+        # One bot/polling offset, separate identity namespaces and link tokens.
+        import recruiter_notifications
+        return recruiter_notifications.consume_telegram_update(db, update, timestamp)
     inserted = db.execute('INSERT OR IGNORE INTO cn_telegram_updates VALUES (?,?)', (update['update_id'], timestamp))
     if not inserted.rowcount:
         return {'status': 'duplicate'}
@@ -620,10 +626,12 @@ def start_worker(connect, interval=5, stop_event=None):
                     if not config.enabled:
                         return
                     counts = process_pending(connect, settings=config, limit=5)
+                    import recruiter_notifications
+                    recruiter_counts = recruiter_notifications.process_pending(connect, limit=5)
                     polled = poll_telegram_updates(connect, settings=config)
-                    if any(counts.values()) or polled.get('processed'):
+                    if any(counts.values()) or any(recruiter_counts.values()) or polled.get('processed'):
                         print(json.dumps({'worker': 'candidate_notifications', 'outbox': counts,
-                                          'telegram': polled}), flush=True)
+                                          'recruiterOutbox': recruiter_counts, 'telegram': polled}), flush=True)
                 except Exception:
                     # Provider/SQLite exception reprs may contain contacts, auth, URLs.
                     # Keep the worker alive and emit at most one generic error/minute.
@@ -652,19 +660,22 @@ def main():
     try:
         with db:
             init(db)
+            import recruiter_notifications
+            recruiter_notifications.init(db)
     finally:
         db.close()
     os.chmod(args.db, 0o600)
     while True:
         config = settings()
         counts = process_pending(connect, settings=config)
+        recruiter_counts = recruiter_notifications.process_pending(connect)
         try:
             polled = poll_telegram_updates(connect, settings=config)
         except DeliveryFailure as failure:
             polled = {'status': 'error', 'code': failure.code}
         # Safe counters only. No identities, URLs, token, email, provider response or credential.
-        if not args.loop or any(counts.values()) or polled.get('processed') or polled.get('status') == 'error':
-            print(json.dumps({'outbox': counts, 'telegram': polled}), flush=True)
+        if not args.loop or any(counts.values()) or any(recruiter_counts.values()) or polled.get('processed') or polled.get('status') == 'error':
+            print(json.dumps({'outbox': counts, 'recruiterOutbox': recruiter_counts, 'telegram': polled}), flush=True)
         if not args.loop:
             break
         time.sleep(max(2, min(args.interval, 60)))

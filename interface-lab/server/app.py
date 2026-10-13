@@ -400,7 +400,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.answer(200, result, headers)
             if CANDIDATE_PORTAL.handles(urllib.parse.urlsplit(self.path).path):
                 result, headers = CANDIDATE_PORTAL.handle('GET', self.path, self.headers, None,
-                    client_identity(self.client_address[0], self.headers), self.actor)
+                    client_identity(self.client_address[0], self.headers), self.actor, team_grant=self.browser_access())
                 return self.answer(200, result, headers)
             if self.path == '/api/hr/health':
                 return self.answer(200, {'ok': True, 'videoConfigured': bool(DAILY and VIDEO_ENABLED)})
@@ -459,7 +459,10 @@ class Handler(BaseHTTPRequestHandler):
             if path == '/api/hr/employer/intake':
                 with connect() as db:
                     employer_access.authenticate(db, self.headers)
-            if path in ('/api/hr/intake', '/api/hr/recruiter/candidates'):
+            if path == '/api/hr/recruiter/candidates':
+                with connect() as db:
+                    CANDIDATE_PORTAL.recruiter_principal(db, self.headers, self.actor)
+            if path == '/api/hr/intake':
                 with connect() as db:
                     require(self.actor(db) == 'manager', 'Кандидатов добавляет работодатель.', 403)
             if path == '/api/hr/candidate/resume':
@@ -486,7 +489,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.answer(200, result)
             if CANDIDATE_PORTAL.handles(urllib.parse.urlsplit(self.path).path):
                 result, headers = CANDIDATE_PORTAL.handle('POST', self.path, self.headers, body,
-                    client_identity(self.client_address[0], self.headers), self.actor)
+                    client_identity(self.client_address[0], self.headers), self.actor, team_grant=self.browser_access())
                 return self.answer(200, result, headers)
             if self.path == '/api/hr/feedback/questions':
                 return self.feedback_questions(body)

@@ -13,6 +13,16 @@ from pathlib import Path
 from candidate_portal import CandidatePortal, COOKIE, ClosingConnection, dump
 from domain import Problem, iso, now
 from daily_media import DailyMedia
+import recruiter_access
+
+
+def assign_fixture_slot(db, slot):
+    """Give synthetic public-booking slots an explicit test recruiter owner."""
+    identifier = 'fixture-recruiter-' + hashlib.sha256(slot['recruiterName'].encode()).hexdigest()[:16]
+    db.execute('''INSERT OR IGNORE INTO rc_accounts VALUES (?,?,?,?,1,?,?)''',
+               (identifier, identifier + '@example.test', recruiter_access._DUMMY_HASH,
+                slot['recruiterName'], iso(now()), iso(now())))
+    db.execute('INSERT OR IGNORE INTO cp_recruiter_slot_owners VALUES (?,?)', (slot['id'], identifier))
 
 
 class FakeMedia(DailyMedia):
@@ -109,8 +119,11 @@ class CandidatePortalTest(unittest.TestCase):
     def slot(self, minutes=0, recruiter='Рекрутер'):
         state, _ = self.call('recruiter/slots', {'start': iso(self.tick + dt.timedelta(minutes=minutes)),
                                                  'recruiterName': recruiter}, manager=True)
-        return next(slot for slot in state['slots'] if slot['start'] == iso(self.tick + dt.timedelta(minutes=minutes))
+        slot = next(slot for slot in state['slots'] if slot['start'] == iso(self.tick + dt.timedelta(minutes=minutes))
                     and slot['recruiterName'] == recruiter)
+        with self.connect() as db:
+            assign_fixture_slot(db, slot)
+        return slot
 
     def completed_person(self, **changes):
         person, cookie = self.register(**changes)

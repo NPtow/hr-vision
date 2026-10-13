@@ -120,6 +120,9 @@ class CandidateHTTPTest(unittest.TestCase):
         status, state, _ = self.request('recruiter/slots', {'start': iso(self.start), 'recruiterName': self.person['id']}, token=self.manager)
         self.assertEqual(status, 200, state)
         slot = next(s for s in state['slots'] if s['recruiterName'] == self.person['id'])
+        from test_candidate_portal import assign_fixture_slot
+        with self.app.connect() as db:
+            assign_fixture_slot(db, slot)
         self.assertEqual(self.request('candidate/book', {'slotId': slot['id']}, cookie=self.cookie)[0], 200)
         self.assertEqual(self.request('recruiter/interview/join', {'candidateId': self.person['id'], 'consent': True}, token=self.manager)[0], 200)
         self.assertEqual(self.request('candidate/interview/join', {'consent': True}, cookie=self.cookie)[0], 200)

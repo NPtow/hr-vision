@@ -188,3 +188,13 @@
 
 .rp-root button[data-slot=button] { border:0; }
 .rp-root button[data-variant=outline] { border:1px solid #e9e7f0; }
+
+.rp-personal-account{margin-left:auto;display:flex;align-items:center;gap:10px;font-size:14px;color:#121212;max-width:50%;overflow-wrap:anywhere;text-align:right}
+.rp-personal-account svg{flex-shrink:0}
+.rp-interview-profile{padding:8px 0 16px}
+.rp-interview-profile .rp-info-grid{margin:0;gap:24px}
+.rp-interview-profile h3{margin:12px 0;font-size:15px}
+.rp-interview-profile p{line-height:1.6;overflow-wrap:anywhere}
+.rp-interview-notes{margin-top:20px}
+.rp-interview-notes summary{cursor:pointer;color:#757575;font-size:14px}
+.rp-interview-notes form{margin-top:20px}

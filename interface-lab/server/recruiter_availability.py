@@ -35,6 +35,16 @@ def init(db):
       block_id TEXT NOT NULL REFERENCES cp_availability_blocks(id))''')
     db.execute('''CREATE INDEX IF NOT EXISTS cp_availability_recruiter
       ON cp_availability_blocks(recruiter_key)''')
+    # Separate ownership mappings preserve historical slot/block IDs and legacy
+    # positional inserts. Old name-only schedules stay unassigned.
+    db.execute('''CREATE TABLE IF NOT EXISTS cp_recruiter_block_owners (
+      block_id TEXT PRIMARY KEY REFERENCES cp_availability_blocks(id),
+      recruiter_id TEXT NOT NULL REFERENCES rc_accounts(id))''')
+    db.execute('''CREATE TABLE IF NOT EXISTS cp_recruiter_slot_owners (
+      slot_id TEXT PRIMARY KEY REFERENCES cp_recruiter_slots(id),
+      recruiter_id TEXT NOT NULL REFERENCES rc_accounts(id))''')
+    db.execute('CREATE INDEX IF NOT EXISTS cp_slot_owner ON cp_recruiter_slot_owners(recruiter_id)')
+    db.execute('CREATE INDEX IF NOT EXISTS cp_block_owner ON cp_recruiter_block_owners(recruiter_id)')
 
 
 def _block(row):
@@ -43,10 +53,12 @@ def _block(row):
             'timezone': row[7], 'createdAt': row[8]}
 
 
-def blocks(db):
+def blocks(db, recruiter_id=None):
     return [_block(row) for row in db.execute('''SELECT id,recruiter_name,recruiter_key,
       start_date,weekdays,start_time,end_time,timezone,created_at
-      FROM cp_availability_blocks ORDER BY recruiter_key,start_date,start_time,id''')]
+      FROM cp_availability_blocks''' + (''' WHERE id IN (
+      SELECT block_id FROM cp_recruiter_block_owners WHERE recruiter_id=?)''' if recruiter_id else '') +
+      ' ORDER BY recruiter_key,start_date,start_time,id', (recruiter_id,) if recruiter_id else ())]
 
 
 def _time(value):
@@ -60,11 +72,12 @@ def _id(prefix, values):
     return prefix + hashlib.sha256(encoded).hexdigest()[:32]
 
 
-def add_block(db, body):
+def add_block(db, body, *, recruiter=None):
     require(isinstance(body, dict) and set(body) == FIELDS,
             'Укажите рекрутера, дату начала, дни недели, время и часовой пояс.', 400)
-    recruiter = ' '.join(text(body['recruiterName'], 140).split())
-    key = recruiter_key(recruiter)
+    principal = recruiter
+    recruiter = ' '.join(text(principal['name'] if principal else body['recruiterName'], 140).split())
+    key = 'account:' + principal['id'] if principal else recruiter_key(recruiter)
     require(body['timezone'] == TIMEZONE, 'Пока доступен часовой пояс Europe/Moscow.', 400)
     day_text = body['startDate']
     require(isinstance(day_text, str) and re.fullmatch(r'\d{4}-\d{2}-\d{2}', day_text),
@@ -103,6 +116,8 @@ def add_block(db, body):
     row = (identifier, recruiter, key, day_text, json.dumps(weekdays, separators=(',', ':')),
            body['startTime'], body['endTime'], TIMEZONE, iso(instant))
     db.execute('INSERT INTO cp_availability_blocks VALUES (?,?,?,?,?,?,?,?,?)', row)
+    if principal:
+        db.execute('INSERT INTO cp_recruiter_block_owners VALUES (?,?)', (identifier, principal['id']))
     return _block(row)
 
 
@@ -111,14 +126,18 @@ def materialize(db):
     instant = now()
     today = instant.astimezone(MOSCOW).date()
     occupied = {}
-    for start, end, recruiter in db.execute('SELECT start,end,recruiter_name FROM cp_recruiter_slots'):
+    for start, end, recruiter, owner in db.execute('''SELECT s.start,s.end,s.recruiter_name,o.recruiter_id
+      FROM cp_recruiter_slots s LEFT JOIN cp_recruiter_slot_owners o ON o.slot_id=s.id'''):
         finish = timestamp(end)
         if finish > instant:
-            occupied.setdefault(recruiter_key(recruiter), []).append((timestamp(start), finish))
+            key = 'account:' + owner if owner else recruiter_key(recruiter)
+            occupied.setdefault(key, []).append((timestamp(start), finish))
     created = 0
     for block in blocks(db):
         first_day = max(today, dt.date.fromisoformat(block['startDate']))
-        key = recruiter_key(block['recruiterName'])
+        row = db.execute('SELECT recruiter_key FROM cp_availability_blocks WHERE id=?', (block['id'],)).fetchone()
+        key = row[0]
+        owner = db.execute('SELECT recruiter_id FROM cp_recruiter_block_owners WHERE block_id=?', (block['id'],)).fetchone()
         intervals = occupied.setdefault(key, [])
         for offset in range(HORIZON_DAYS):
             day = first_day + dt.timedelta(days=offset)
@@ -137,6 +156,8 @@ def materialize(db):
                     if cursor.rowcount:
                         db.execute('INSERT INTO cp_generated_slots (slot_id,block_id) VALUES (?,?)',
                                    (identifier, block['id']))
+                        if owner:
+                            db.execute('INSERT INTO cp_recruiter_slot_owners VALUES (?,?)', (identifier, owner[0]))
                         intervals.append((start, finish))
                         created += 1
                 start = finish
