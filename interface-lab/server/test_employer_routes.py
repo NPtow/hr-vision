@@ -50,6 +50,32 @@ class EmployerRoutesTest(unittest.TestCase):
         self.assertEqual(session['state']['workspaceId'], employer['workspace']['id'])
         self.assertNotEqual(session['state']['workspaceId'], 'hr-vision-team')
 
+    def test_public_entry_does_not_create_team_account_from_recruiter_grant(self):
+        result, headers = self.app.EMPLOYER_ROUTES._session({}, {}, True)
+        team_cookie = headers['Set-Cookie'].split(';')[0]
+        with self.app.connect() as db:
+            before = db.execute('SELECT COUNT(*) FROM em_sessions').fetchone()[0]
+        for headers in ({}, {'Cookie': team_cookie}):
+            with self.assertRaises(self.app.Problem) as raised:
+                self.app.EMPLOYER_ROUTES.handle('GET', '/api/hr/employer/session?personal=1', headers, team_grant=True)
+            self.assertEqual(raised.exception.status, 401)
+        with self.app.connect() as db:
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM em_sessions').fetchone()[0], before)
+
+    def test_registered_employer_restores_created_vacancy_after_logout_and_login(self):
+        employer = self.employer('Registration')
+        vacancy = self.vacancy(employer)
+        session = self.ok('employer/session?personal=1', cookie=employer['cookie'])
+        self.assertEqual(session['state']['vacancy']['id'], vacancy['id'])
+        self.assertEqual(session['state']['workspaceName'], 'Приемка Registration')
+        self.ok('employer/logout', {}, cookie=employer['cookie'])
+        self.assertEqual(self.request('employer/session?personal=1', cookie=employer['cookie'])[0], 401)
+        status, logged_in, headers = self.request('employer/login', {'email': employer['email'], 'password': fixture.PASSWORD})
+        self.assertEqual(status, 200, logged_in)
+        restored = self.ok('employer/session?personal=1', cookie=headers['Set-Cookie'].split(';')[0])
+        self.assertEqual(restored['state']['workspaceId'], employer['workspace']['id'])
+        self.assertEqual([v['id'] for v in restored['state']['vacancies']], [vacancy['id']])
+
     def test_pending_rejection_cancels_same_meeting_and_retry_does_not_duplicate_events(self):
         employer, vacancy, person, aid, meeting = self.ready()
         command = self.action_body(employer, vacancy, aid, 'review.reject')

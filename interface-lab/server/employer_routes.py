@@ -96,10 +96,12 @@ class EmployerRoutes:
             require(meeting and meeting['id'] == meeting_id, 'Встреча изменилась. Обновите кабинет.', 409)
         return check
 
-    def _session(self, headers, body, team_grant):
+    def _session(self, headers, body, team_grant, *, personal_only=False):
         require(not body, 'Проверьте поля входа.', 400)
         with self.lock, self.connect() as db:
             principal = access.authenticate(db, headers, required=False)
+            if personal_only:
+                require(principal and not principal['team'], 'Войдите в кабинет работодателя.', 401)
             auth = None
             if principal:
                 token = access._token(headers)
@@ -139,7 +141,9 @@ class EmployerRoutes:
         if route in ('/register', '/login') and method == 'POST':
             return self._auth(route[1:], headers, body, ip)
         if route == '/session':
-            return self._session(headers, body, team_grant)
+            # Public entry restores only a registered employer, never an internal
+            # team account merely because this browser has a recruiter grant.
+            return self._session(headers, body, team_grant, personal_only=query.get('personal') == ['1'])
         if route == '/accounts' and method == 'GET':
             return self._accounts(headers, team_grant)
         if route == '/logout' and method == 'POST':

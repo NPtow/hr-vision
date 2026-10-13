@@ -17,7 +17,9 @@ export type Questionnaire = { id: string; meetingId: string; questions: Feedback
 export type Meeting = { id: string; revision?: number; start: string; startedAt?: string; endedAt?: string; status: 'pending' | 'confirmed' | 'live' | 'cancelled' | 'completed'; testSkip: boolean; joined: Actor[]; questionnaire?: Questionnaire | null; feedbackDraft?: Record<string, FeedbackAnswer> };
 export type Person = { id: CandidateId; candidateId?: string; applicationId?: string; vacancyId?: string; vacancyRole?: string; reviewState?: string; name: string; role?: string; summary?: string; photo?: string | null; sourceProfile?: SourceProfile; interest: 'pending' | 'accepted' | 'declined'; auto: boolean; slots?: string[]; busy?: string[]; freeSlots: string[]; meeting: Meeting | null; feedback?: { example?: string; doubts?: string; check?: string; at: string; questions?: FeedbackQuestion[]; answers?: Record<string, FeedbackAnswer> } | null; afterInterest: 'pending' | 'yes' | 'no'; decision: 'review' | 'pool' | 'declined'; offer: Offer | null; messages: { id: string; actor: string; text: string; at: string; system: boolean }[] };
 export type Vacancy = { id?: string; company: string; role: string; problem: string; salary: string; format: string; expectations: string; proposedCount?: number; selectedCount?: number };
-export type SharedState = { mode?: 'employer'; scope: Scope; generation: string; revision: number; actor: Actor; actorName: string; closedBy: CandidateId | null; videoConfigured: boolean; vacancy: Vacancy; vacancies?: Vacancy[]; candidates: Partial<Record<CandidateId, Person>>; meetings?: Person[]; offerCandidates?: Person[]; pendingFeedback?: Person[] };
+export type SharedState = { mode?: 'employer'; workspaceName?: string; scope: Scope; generation: string; revision: number; actor: Actor; actorName: string; closedBy: CandidateId | null; videoConfigured: boolean; vacancy: Vacancy; vacancies?: Vacancy[]; candidates: Partial<Record<CandidateId, Person>>; meetings?: Person[]; offerCandidates?: Person[]; pendingFeedback?: Person[] };
+export type EmployerCredentials = { email: string; password: string; name?: string; workspaceName?: string };
+type EmployerSession = { token: string; state: SharedState };
 export const sessionKey = 'hr-vision-connected-session';
 export const employerSessionKey = 'hr-vision-employer-session';
 const employerVacancyKey = 'hr-vision-employer-vacancy';
@@ -62,6 +64,7 @@ export function useEntryAccess(options: { employer?: boolean } = {}) {
   const [status, setStatus] = useState<'checking' | 'ready' | 'missing' | 'error'>('checking');
   const sequence = useRef(0);
   const check = useCallback(async () => {
+    if (employer) { setStatus('ready'); return; }
     const seq = ++sequence.current;
     setStatus('checking');
     try {
@@ -116,10 +119,12 @@ export function useJourney(scope: Scope = 'sfera', options: { employer?: boolean
   const [state, setState] = useState<SharedState | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [initializing, setInitializing] = useState(employer);
   const busyRef = useRef(false);
   const operation = useRef(false);
   busyRef.current = busy;
   const sequence = useRef(0);
+  const vacancyCommand = useRef<{ payload: string; requestId: string } | null>(null);
   const acceptState = useCallback((data: SharedState, auth: string) => {
     if (employer) {
       vacancyId.current = data.vacancy.id || '';
@@ -128,8 +133,32 @@ export function useJourney(scope: Scope = 'sfera', options: { employer?: boolean
     }
     setState(data); setError('');
   }, [employer]);
+  useEffect(() => {
+    if (!employer) return;
+    let current = true;
+    setInitializing(true);
+    // Restore the HttpOnly session even in a new tab. A team grant/cookie is not
+    // a registration and must never bypass the public employer entry.
+    void request<EmployerSession>('employer/session?personal=1').then(async next => {
+      let restored = next.state;
+      const wanted = vacancyId.current;
+      if (wanted && wanted !== restored.vacancy.id && restored.vacancies?.some(v => v.id === wanted)) {
+        restored = await request<SharedState>('employer/state?vacancyId=' + encodeURIComponent(wanted), next.token);
+      }
+      if (!current) return;
+      sessionStorage.setItem(employerSessionKey, next.token);
+      acceptState(restored, next.token);
+      setSession({ key: employerSessionKey, token: next.token });
+    }).catch(cause => {
+      if (!current) return;
+      sessionStorage.removeItem(employerSessionKey);
+      setSession({ key: employerSessionKey, token: '' }); setState(null);
+      if (!(cause instanceof RequestError && cause.status === 401)) setError((cause as Error).message);
+    }).finally(() => { if (current) setInitializing(false); });
+    return () => { current = false; };
+  }, [employer, acceptState]);
   const refresh = useCallback(async () => {
-    if (!token) return;
+    if (!token || initializing) return;
     const seq = ++sequence.current;
     try {
       const path = employer ? `employer/state${vacancyId.current ? '?vacancyId=' + encodeURIComponent(vacancyId.current) : ''}` : 'state';
@@ -143,7 +172,7 @@ export function useJourney(scope: Scope = 'sfera', options: { employer?: boolean
         setSession({ key: employerSessionKey, token: '' }); setState(null);
       }
     }
-  }, [token, scope, employer, acceptState]);
+  }, [token, scope, employer, acceptState, initializing]);
   useEffect(() => { void refresh(); const timer = setInterval(() => { if (!busyRef.current) void refresh(); }, 2500); return () => { sequence.current++; clearInterval(timer); }; }, [refresh]);
   async function login(actor: Actor, targetScope: Scope = scope) {
     if (operation.current) return false;
@@ -158,6 +187,54 @@ export function useJourney(scope: Scope = 'sfera', options: { employer?: boolean
       if (next.state) acceptState(next.state, next.token);
       setSession({ key, token: next.token }); return true;
     } catch (e) { setError((e as Error).message); return false; } finally { operation.current = false; setBusy(false); }
+  }
+  const clearLocation = () => {
+    const url = new URL(location.href);
+    for (const key of ['vacancyId', 'applicationId', 'screen', 'pool', 'task']) url.searchParams.delete(key);
+    history.replaceState(history.state, '', url);
+  };
+  async function authenticate(mode: 'register' | 'login', credentials: EmployerCredentials) {
+    if (!employer || operation.current) return false;
+    operation.current = true;
+    sequence.current++; setBusy(true); setError('');
+    try {
+      const next = await request<EmployerSession>('employer/' + mode, undefined, credentials);
+      sequence.current++; clearLocation(); vacancyCommand.current = null;
+      if (token) employerContexts.delete(token);
+      sessionStorage.setItem(employerSessionKey, next.token);
+      acceptState(next.state, next.token);
+      setSession({ key: employerSessionKey, token: next.token }); return true;
+    } catch (e) { setError((e as Error).message); return false; }
+    finally { operation.current = false; setBusy(false); }
+  }
+  async function logout() {
+    if (!employer || operation.current) return false;
+    operation.current = true;
+    sequence.current++; setBusy(true); setError('');
+    try {
+      await request('employer/logout', token, {});
+      sequence.current++; clearLocation(); vacancyCommand.current = null;
+      employerContexts.delete(token); vacancyId.current = '';
+      sessionStorage.removeItem(employerSessionKey); sessionStorage.removeItem(employerVacancyKey);
+      setSession({ key: employerSessionKey, token: '' }); setState(null); return true;
+    } catch (e) { setError((e as Error).message); return false; }
+    finally { operation.current = false; setBusy(false); }
+  }
+  async function createVacancy(values: Record<string, unknown>) {
+    if (!employer || !token || operation.current) return false;
+    operation.current = true;
+    sequence.current++; setBusy(true); setError('');
+    const payload = JSON.stringify(values);
+    if (vacancyCommand.current?.payload !== payload) vacancyCommand.current = { payload, requestId: crypto.randomUUID() };
+    try {
+      const created = await request<{ vacancy: Vacancy }>('employer/vacancies', token, { ...values, requestId: vacancyCommand.current.requestId });
+      const data = await request<SharedState>('employer/state?vacancyId=' + encodeURIComponent(created.vacancy.id!), token);
+      sequence.current++; acceptState(data, token); vacancyCommand.current = null;
+      clearLocation();
+      const url = new URL(location.href); url.searchParams.set('vacancyId', data.vacancy.id!);
+      history.replaceState(history.state, '', url); return true;
+    } catch (e) { setError((e as Error).message); return false; }
+    finally { operation.current = false; setBusy(false); }
   }
   async function act(action: string, candidate?: CandidateId, values: Record<string, unknown> = {}) {
     if (!state || (!employer && state.scope !== scope) || operation.current) return false;
@@ -183,7 +260,7 @@ export function useJourney(scope: Scope = 'sfera', options: { employer?: boolean
     } catch (e) { if (seq === sequence.current) setError((e as Error).message); return false; }
     finally { operation.current = false; setBusy(false); }
   }
-  return { state: employer || state?.scope === scope ? state : null, token, error, setError, busy, login, act, refresh, openVacancy, employer };
+  return { state: employer || state?.scope === scope ? state : null, token, error, setError, busy, initializing, login, authenticate, logout, createVacancy, act, refresh, openVacancy, employer };
 }
 export type Journey = ReturnType<typeof useJourney>;
 export const dateTime = (value: string) => new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Moscow' }).format(new Date(value)) + ' МСК';

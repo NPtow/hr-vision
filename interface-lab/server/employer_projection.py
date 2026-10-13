@@ -167,6 +167,7 @@ def build_state(db, principal, portal, media, vacancy_id=None):
         'revision': sum(v['revision'] for v in vacancies) + sum(p['workflowRevision'] +
                       (p['meeting'].get('revision', 0) if p['meeting'] else 0) for p in people),
         'actor': 'manager', 'actorName': principal['name'], 'workspaceId': wid,
+        'workspaceName': db.execute('SELECT name FROM em_workspaces WHERE id=?', (wid,)).fetchone()[0],
         'closedBy': closed_by, 'videoConfigured': media.configured,
         'vacancy': selected, 'vacancies': vacancies, 'candidates': current,
         'meetings': meetings, 'offerCandidates': [p for p in people if p['offer'] or p['decision'] == 'pool'],
