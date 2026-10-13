@@ -30,10 +30,16 @@ PRE_IMPORT_RUNTIME = {
 }
 # Keep complete previous releases available for deployment and rollback. Each
 # feature's modules form one indivisible set; partial layouts are forbidden.
-RUNTIME = PRE_IMPORT_RUNTIME | {'vacancy_import.py', 'vacancy_sources.py'}
+PRE_OUTREACH_RUNTIME = PRE_IMPORT_RUNTIME | {'vacancy_import.py', 'vacancy_sources.py'}
+OUTREACH_RUNTIME = {
+    'candidate_booking.py', 'hh_outreach.py', 'hh_outreach_routes.py', 'hh_outreach_worker.py',
+    'hh_browser/__init__.py', 'hh_browser/adapter.py', 'hh_browser/store.py', 'hh_browser/bridge.py',
+}
+RUNTIME = PRE_OUTREACH_RUNTIME | OUTREACH_RUNTIME
 BOT_RUNTIME = PRE_IMPORT_RUNTIME - {'recruiter_access.py', 'recruiter_sources.py', 'recruiter_notifications.py'}
 LEGACY_RUNTIME = BOT_RUNTIME - {'candidate_bot.py'}
-RUNTIME_LAYOUTS = {frozenset(LEGACY_RUNTIME), frozenset(BOT_RUNTIME), frozenset(PRE_IMPORT_RUNTIME), frozenset(RUNTIME)}
+RUNTIME_LAYOUTS = {frozenset(LEGACY_RUNTIME), frozenset(BOT_RUNTIME), frozenset(PRE_IMPORT_RUNTIME),
+                   frozenset(PRE_OUTREACH_RUNTIME), frozenset(RUNTIME)}
 MAX_ARCHIVE = 50 * 1024 * 1024
 MAX_CONTENT = 120 * 1024 * 1024
 
@@ -141,11 +147,11 @@ def switch(base, name, value):
 
 
 def api_changed(source):
-    incoming = frozenset(path.name for path in source.iterdir() if path.is_file())
+    incoming = frozenset(path.relative_to(source).as_posix() for path in source.rglob('*') if path.is_file())
     require(incoming in RUNTIME_LAYOUTS, 'Incomplete API')
     installed = {name for name in RUNTIME if (API / 'current' / name).is_file()}
-    # Adding or removing the bot module is an API change even if every shared
-    # file is byte-identical; rollback/backup/restart must cover both directions.
+    # Adding or removing a complete runtime/package is an API change even if
+    # shared files are identical; rollback/backup/restart cover both directions.
     return installed != incoming or any(
         (source / name).read_bytes() != (API / 'current' / name).read_bytes() for name in incoming)
 

@@ -1,0 +1,40 @@
+--- a/worker.py
++++ b/worker.py
+@@ -42,0 +43 @@
++from hh_browser import WorkerBridge
+@@ -50,0 +52 @@
++RPA = WorkerBridge.from_env()
+@@ -716 +718,3 @@
+-        page.goto(START_URL, wait_until="domcontentloaded"); time.sleep(2)
++        # Manual mode/pause survives restart; do not discard a restored draft.
++        if RPA is None or RPA.legacy_allowed():
++            page.goto(START_URL, wait_until="domcontentloaded"); time.sleep(2)
+@@ -723,0 +728,2 @@
++        if RPA: RPA.sample_status(page)
++        rpa_last_sample = time.time()
+@@ -724,0 +731,6 @@
++            if RPA:
++                if RPA.poll(page): continue
++                if time.time() - rpa_last_sample > 15:
++                    RPA.sample_status(page); rpa_last_sample = time.time()
++                if not RPA.legacy_allowed():
++                    time.sleep(0.1); continue
+@@ -726 +738 @@
+-                job = JOBS.get(timeout=5)
++                job = JOBS.get(timeout=0.2 if RPA else 5)
+@@ -728 +740 @@
+-                if time.time() - last_check > 900:   # раз в 15 минут проверяем, жива ли сессия
++                if time.time() - last_check > 900 and (RPA is None or RPA.begin_legacy()):   # раз в 15 минут проверяем, жива ли сессия
+@@ -732,0 +745,2 @@
++                    finally:
++                        if RPA: RPA.end_legacy()
+@@ -734,0 +749,2 @@
++            if RPA and not RPA.begin_legacy():
++                JOBS.put(job); continue
+@@ -741,0 +758,2 @@
++            finally:
++                if RPA: RPA.end_legacy()
+@@ -748,0 +767 @@
++        if RPA and RPA.handle_http(self): return
+@@ -756,0 +776 @@
++        if RPA and RPA.handle_http(self): return

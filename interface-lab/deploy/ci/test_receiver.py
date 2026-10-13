@@ -1,4 +1,5 @@
 import ast
+import importlib.util
 import io
 import json
 import os
@@ -44,26 +45,68 @@ class ReceiverTest(unittest.TestCase):
             a, s, m = self.bundle(target)
             self.assertEqual(r.unpack(a, s, target), m)
 
+    def assert_runtime_imports(self, server, runtime):
+        """Check absolute/relative imports and package initializers at any depth."""
+        def local_paths(module):
+            parts = module.split('.')
+            result = []
+            for i in range(1, len(parts) + 1):
+                prefix = '/'.join(parts[:i])
+                package = prefix + '/__init__.py'
+                if (server / package).is_file():
+                    result.append(package)
+            leaf = '/'.join(parts) + '.py'
+            if (server / leaf).is_file():
+                result.append(leaf)
+            return result
+
+        for filename in runtime:
+            tree = ast.parse((server / filename).read_text())
+            package = '.'.join(Path(filename).parts[:-1])
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    names = [alias.name for alias in node.names]
+                elif isinstance(node, ast.ImportFrom):
+                    module = node.module or ''
+                    if node.level:
+                        module = importlib.util.resolve_name('.' * node.level + module, package)
+                    names = [module] + [module + '.' + alias.name for alias in node.names if alias.name != '*']
+                else:
+                    continue
+                for name in names:
+                    for imported in local_paths(name):
+                        self.assertIn(imported, runtime,
+                                      f'{filename}:{node.lineno} imports unpackaged {imported}')
+
     def test_runtime_includes_local_imports_even_inside_route_handlers(self):
         server = Path(__file__).resolve().parents[2] / 'server'
-        local_modules = {path.stem for path in server.glob('*.py')}
-        for filename in r.RUNTIME:
-            tree = ast.parse((server / filename).read_text())
-            for node in ast.walk(tree):
-                names = ([alias.name for alias in node.names] if isinstance(node, ast.Import)
-                         else [node.module] if isinstance(node, ast.ImportFrom) and node.module else [])
-                for name in names:
-                    module = name.split('.')[0]
-                    if module in local_modules:
-                        self.assertIn(module + '.py', r.RUNTIME,
-                                      f'{filename}:{node.lineno} imports an unpackaged module')
+        self.assert_runtime_imports(server, r.RUNTIME)
+
+    def test_import_scanner_follows_relative_package_imports(self):
+        server = self.root / 'server'
+        (server / 'nested' / 'child').mkdir(parents=True)
+        sources = {
+            'app.py': 'def route():\n    from nested.child.client import Client\n',
+            'nested/__init__.py': '',
+            'nested/child/__init__.py': '',
+            'nested/child/client.py': 'from .. import store\nfrom .helpers import Client\n',
+            'nested/child/helpers.py': 'class Client: pass\n',
+            'nested/store.py': '',
+        }
+        for name, code in sources.items():
+            (server / name).write_text(code)
+        self.assert_runtime_imports(server, sources)
+        for missing in ('nested/__init__.py', 'nested/child/helpers.py', 'nested/store.py'):
+            with self.subTest(missing=missing), self.assertRaisesRegex(AssertionError, 'imports unpackaged'):
+                self.assert_runtime_imports(server, sources.keys() - {missing})
 
     def test_known_complete_service_layouts_are_accepted(self):
         self.assertEqual(len(r.LEGACY_RUNTIME), 19)
         self.assertEqual(r.BOT_RUNTIME - r.LEGACY_RUNTIME, {'candidate_bot.py'})
         self.assertEqual(r.PRE_IMPORT_RUNTIME - r.BOT_RUNTIME, {'recruiter_access.py', 'recruiter_sources.py', 'recruiter_notifications.py'})
-        self.assertEqual(r.RUNTIME - r.PRE_IMPORT_RUNTIME, {'vacancy_import.py', 'vacancy_sources.py'})
-        for runtime in (r.LEGACY_RUNTIME, r.BOT_RUNTIME, r.PRE_IMPORT_RUNTIME, r.RUNTIME):
+        self.assertEqual(r.PRE_OUTREACH_RUNTIME - r.PRE_IMPORT_RUNTIME, {'vacancy_import.py', 'vacancy_sources.py'})
+        self.assertEqual(r.RUNTIME - r.PRE_OUTREACH_RUNTIME, r.OUTREACH_RUNTIME)
+        for runtime in (r.LEGACY_RUNTIME, r.BOT_RUNTIME, r.PRE_IMPORT_RUNTIME, r.PRE_OUTREACH_RUNTIME, r.RUNTIME):
             with self.subTest(count=len(runtime)):
                 a, s, m = self.bundle('service', runtime=runtime)
                 self.assertEqual(r.unpack(a, s, 'service'), m)
@@ -81,9 +124,39 @@ class ReceiverTest(unittest.TestCase):
 
     def test_partial_import_layout_is_rejected(self):
         for name in ('vacancy_import.py', 'vacancy_sources.py'):
-            a, s, _ = self.bundle('service', runtime=r.RUNTIME - {name})
+            a, s, _ = self.bundle('service', runtime=r.PRE_OUTREACH_RUNTIME - {name})
             with self.assertRaisesRegex(ValueError, 'Incomplete API'):
                 r.unpack(a, s, 'service')
+
+    def test_partial_outreach_layout_is_rejected(self):
+        for name in r.OUTREACH_RUNTIME:
+            with self.subTest(missing=name):
+                a, s, _ = self.bundle('service', runtime=r.RUNTIME - {name})
+                with self.assertRaisesRegex(ValueError, 'Incomplete API'):
+                    r.unpack(a, s, 'service')
+        a, s, _ = self.bundle('service', runtime=r.PRE_OUTREACH_RUNTIME | {'candidate_booking.py'})
+        with self.assertRaisesRegex(ValueError, 'Incomplete API'):
+            r.unpack(a, s, 'service')
+
+    def test_nested_runtime_change_detection_and_rollback(self):
+        source, api = self.root / 'nested-incoming', self.root / 'nested-installed'
+        for folder in (source, api / 'current'):
+            for name in r.RUNTIME:
+                path = folder / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text('# same')
+        with patch.object(r, 'API', api):
+            self.assertFalse(r.api_changed(source))
+            nested = source / 'hh_browser' / 'bridge.py'
+            nested.write_text('# changed bridge')
+            self.assertTrue(r.api_changed(source))
+            nested.write_text('# same')
+            for name in r.OUTREACH_RUNTIME:
+                (source / name).unlink()
+            self.assertTrue(r.api_changed(source))
+            for name in r.OUTREACH_RUNTIME:
+                (api / 'current' / name).unlink()
+            self.assertFalse(r.api_changed(source))
 
     def test_runtime_change_detection_handles_both_layout_directions(self):
         source, api = self.root / 'incoming-api', self.root / 'installed-api'
@@ -163,6 +236,15 @@ class ReceiverTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Unexpected API file'):
             r.unpack(a, s, 'service')
 
+    def test_service_package_allowlist_stays_closed(self):
+        def mutate(m, f):
+            # The operator patch generator and private browser config are not API runtime.
+            f['api/hh_browser/integration.py'] = b'not allowed'
+            m['files']['api/hh_browser/integration.py'] = r.digest(b'not allowed')
+        a, s, _ = self.bundle('service', mutate=mutate)
+        with self.assertRaisesRegex(ValueError, 'Unexpected API file'):
+            r.unpack(a, s, 'service')
+
     def test_actual_packager_and_receiver_agree_on_complete_api(self):
         # Exercise the JS release producer against the Python receiver rather than
         # duplicating either allowlist in a test-only parser.
@@ -170,7 +252,9 @@ class ReceiverTest(unittest.TestCase):
         (fixture / 'server').mkdir(parents=True)
         (fixture / 'storybook-static').mkdir()
         for name in r.RUNTIME:
-            (fixture / 'server' / name).write_text('# synthetic runtime fixture\n')
+            source = fixture / 'server' / name
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_text('# synthetic runtime fixture\n')
         for name in ('index.html', 'iframe.html'):
             (fixture / 'storybook-static' / name).write_text('<html/>')
         entries = {f'hr-vision-product--{name}': {} for name in ('start', 'manager', 'candidate')}
@@ -184,6 +268,14 @@ class ReceiverTest(unittest.TestCase):
         stage.mkdir()
         manifest = r.unpack(fixture / 'release.tgz', stage, 'service')
         self.assertEqual({p[4:] for p in manifest['files'] if p.startswith('api/')}, r.RUNTIME)
+
+        # The operator lives in manager?workspace=outreach, never a fourth public story.
+        entries['hr-vision-product--outreach'] = {}
+        (fixture / 'storybook-static' / 'index.json').write_text(json.dumps({'entries': entries}))
+        invalid = subprocess.run(['node', str(script)], cwd=fixture, env=environment,
+                                 capture_output=True, text=True, timeout=30)
+        self.assertNotEqual(invalid.returncode, 0)
+        self.assertIn('exactly start, manager and candidate', invalid.stderr)
 
     def test_rejects_sensitive_public_file(self):
         def mutate(m, f):

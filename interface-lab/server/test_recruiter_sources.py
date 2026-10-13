@@ -47,6 +47,23 @@ class RecruiterSourcesTest(unittest.TestCase):
         self.db.execute('INSERT INTO hh_negotiations VALUES (?,?,?,?,?,?,?,?)',
                         (connection, response, vacancy, resume_id, 'private-chat-id', 'response', 'available', 1))
 
+    def browser(self):
+        # Exact columns used from the stable HHOutreach schema. Extra private
+        # columns ensure the public projection never copies an entire row.
+        self.db.execute('CREATE TABLE ho_campaigns (id TEXT PRIMARY KEY,mode TEXT,name TEXT)')
+        self.db.execute('''CREATE TABLE ho_recipients (
+          id TEXT PRIMARY KEY,campaign_id TEXT,candidate_id TEXT,vacancy_id TEXT,
+          response_id TEXT,created REAL,chat_url TEXT,resume_url TEXT)''')
+
+    def browser_recipient(self, *, candidate='candidate1', vacancy='123', campaign='campaign1',
+                          recipient='recipient1', mode='applicants', response='private-response'):
+        self.db.execute('INSERT OR IGNORE INTO ho_campaigns VALUES (?,?,?)',
+                        (campaign, mode, 'NOT THE VACANCY TITLE'))
+        self.db.execute('INSERT INTO ho_recipients VALUES (?,?,?,?,?,?,?,?)',
+                        (recipient, campaign, candidate, vacancy, response, 1,
+                         'https://hh.ru/chat/private?booking=secret',
+                         'https://hh.ru/resume/private?token=secret'))
+
     def test_registration_without_hh_tables(self):
         self.assertEqual({'source': {'kind': 'registration', 'label': 'Регистрация'},
                           'sourceApplications': []}, candidate_sources(self.db, 'candidate1'))
@@ -141,6 +158,86 @@ class RecruiterSourcesTest(unittest.TestCase):
         self.assertEqual(['Actual HH Company', ''], [v['company'] for v in result])
         self.assertEqual(1, len(calls))
         self.assertEqual('Actual HH Company', candidate_sources(self.db, 'candidate1')['sourceApplications'][0]['company'])
+
+    def test_browser_applicants_project_known_vacancy_without_invented_metadata(self):
+        self.browser()
+        self.intake()
+        self.browser_recipient()
+        before = self.db.total_changes
+        result = candidate_sources(self.db, 'candidate1')
+        self.assertEqual(before, self.db.total_changes)
+        self.assertEqual({'kind': 'hh', 'label': 'HH'}, result['source'])
+        self.assertEqual(1, len(result['sourceApplications']))
+        item = result['sourceApplications'][0]
+        self.assertEqual({'id', 'title', 'company', 'url'}, set(item))
+        self.assertEqual(('Вакансия HH №123', '', 'https://hh.ru/vacancy/123'),
+                         (item['title'], item['company'], item['url']))
+        for private in ('private', 'secret', 'NOT THE VACANCY TITLE', 'campaign1', 'recipient1'):
+            self.assertNotIn(private, json.dumps(result, ensure_ascii=False))
+
+    def test_browser_same_vacancy_dedupes_across_campaigns_and_has_stable_public_id(self):
+        self.browser()
+        self.browser_recipient()
+        initial = candidate_sources(self.db, 'candidate1')['sourceApplications']
+        self.browser_recipient(campaign='campaign2', recipient='recipient2')
+        self.assertEqual(initial, candidate_sources(self.db, 'candidate1')['sourceApplications'])
+        self.db.execute("DELETE FROM ho_recipients WHERE id='recipient1'")
+        self.assertEqual(initial, candidate_sources(self.db, 'candidate1')['sourceApplications'])
+
+    def test_browser_projection_is_scoped_to_candidate_and_supports_row_factory(self):
+        self.browser()
+        self.browser_recipient()
+        self.browser_recipient(candidate='foreign-candidate', vacancy='999', recipient='foreign-recipient')
+        self.db.row_factory = sqlite3.Row
+        result = candidate_sources(self.db, 'candidate1')
+        self.assertEqual(['Вакансия HH №123'], [item['title'] for item in result['sourceApplications']])
+        self.assertNotIn('999', json.dumps(result))
+        self.assertEqual({'kind': 'hh', 'label': 'HH'}, result['source'])
+
+    def test_browser_direct_without_vacancy_does_not_invent_application(self):
+        self.browser()
+        self.browser_recipient(mode='direct', vacancy=None, response=None)
+        self.assertEqual({'source': {'kind': 'hh', 'label': 'HH'}, 'sourceApplications': []},
+                         candidate_sources(self.db, 'candidate1'))
+
+    def test_browser_invalid_vacancy_ids_never_become_links_or_labels(self):
+        self.browser()
+        for index, invalid in enumerate(('', 'private-id', '123/../../chat', 'https://hh.ru/vacancy/123',
+                                         '123?token=secret', '１２３', '1' * 33)):
+            self.browser_recipient(vacancy=invalid, recipient='recipient' + str(index))
+        self.assertEqual([], candidate_sources(self.db, 'candidate1')['sourceApplications'])
+
+    def test_same_vacancy_across_api_and_browser_preserves_known_title_and_company(self):
+        self.hh()
+        self.browser()
+        self.response()
+        self.response(connection='connection2', response='second-response')
+        self.browser_recipient()
+        result = candidate_sources(self.db, 'candidate1')['sourceApplications']
+        self.assertEqual(1, len(result))
+        self.assertEqual(('Sales', 'Source Co', 'https://hh.ru/vacancy/123'),
+                         (result[0]['title'], result[0]['company'], result[0]['url']))
+
+    def test_browser_fills_only_missing_public_metadata_for_same_api_vacancy(self):
+        self.hh()
+        self.browser()
+        self.response(body={'company': 'Actual Company'})
+        self.browser_recipient()
+        result = candidate_sources(self.db, 'candidate1')['sourceApplications']
+        self.assertEqual(1, len(result))
+        self.assertEqual(('Вакансия HH №123', 'Actual Company', 'https://hh.ru/vacancy/123'),
+                         (result[0]['title'], result[0]['company'], result[0]['url']))
+
+    def test_public_vacancy_id_stays_stable_when_api_metadata_arrives_later(self):
+        self.browser()
+        self.browser_recipient()
+        first = candidate_sources(self.db, 'candidate1')['sourceApplications'][0]['id']
+        self.hh()
+        self.response()
+        enriched = candidate_sources(self.db, 'candidate1')['sourceApplications']
+        self.assertEqual(1, len(enriched))
+        self.assertEqual(first, enriched[0]['id'])
+        self.assertEqual('Sales', enriched[0]['title'])
 
 
 if __name__ == '__main__':

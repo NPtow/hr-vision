@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { AgencyProduct } from './scenes/agency-product/AgencyProduct';
 import { CandidatePortal } from './scenes/candidate-portal/CandidatePortal';
 import { RecruiterPortal } from './scenes/recruiter-portal/RecruiterPortal';
+import { HHOutreach } from './scenes/hh-outreach/HHOutreach';
 const meta = {
   title: 'HR Vision/Продукт · агентство', id: 'hr-vision-product', component: AgencyProduct,
   parameters: { layout: 'fullscreen', controls: { disable: true } },
@@ -10,7 +11,8 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 export const Manager: Story = {
   name: '01 Нанимающий · вакансии', args: { initialRole: 'manager' },
-  render: args => new URLSearchParams(location.search).get('workspace') === 'recruiter'
+  render: args => new URLSearchParams(location.search).get('workspace') === 'outreach'
+    ? <HHOutreach/> : new URLSearchParams(location.search).get('workspace') === 'recruiter'
     ? <RecruiterPortal/> : <AgencyProduct {...args}/>,
 };
 export const Candidate: Story = {

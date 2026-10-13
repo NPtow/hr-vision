@@ -25,6 +25,10 @@ from candidate_portal import CandidatePortal, ClosingConnection
 import candidate_notifications
 from candidate_bot import CandidateBot
 from hh_routes import HHRecruiterRoutes
+from candidate_booking import CandidateBooking
+from hh_outreach import HHOutreach
+from hh_outreach_routes import HHOutreachRoutes
+from hh_outreach_worker import OutreachBrowserService
 from employer_routes import EmployerRoutes
 import employer_access
 
@@ -84,6 +88,13 @@ CANDIDATE_PORTAL = CandidatePortal(connect, LOCK, MEDIA, ORIGIN, candidate_notif
 CANDIDATE_BOT = CandidateBot(CANDIDATE_PORTAL, candidate_notifications)
 HH_ROUTES = HHRecruiterRoutes(connect, CANDIDATE_PORTAL)
 CANDIDATE_PORTAL.invitation_lookup = HH_ROUTES.existing_invitation
+BOOKING = CandidateBooking(CANDIDATE_PORTAL)
+OUTREACH = HHOutreach(connect, issue_booking=BOOKING.issue, booking_current=BOOKING.current,
+    prepare_candidate=HH_ROUTES.prepare_candidate,
+    sending_enabled=os.environ.get('HR_HH_BROWSER_SENDING_ENABLED') == '1')
+BOOKING.event_sink = OUTREACH.event_sink
+OUTREACH_ROUTES = HHOutreachRoutes(OUTREACH, worker_secret=os.environ.get('HR_HH_OUTREACH_WORKER_SECRET', ''))
+OUTREACH_BROWSER = OutreachBrowserService.from_env(OUTREACH, CANDIDATE_PORTAL)
 EMPLOYER_ROUTES = EmployerRoutes(connect, LOCK, CANDIDATE_PORTAL, MEDIA, ORIGIN)
 
 
@@ -396,6 +407,16 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         try:
+            if OUTREACH_BROWSER.handles(self.path):
+                result, headers = OUTREACH_BROWSER.handle('GET', self.path, self.headers, None, self.actor)
+                return self.answer(200, result, headers)
+            if OUTREACH_ROUTES.handles(self.path):
+                result, headers = OUTREACH_ROUTES.handle('GET', self.path, self.headers, None, self.actor)
+                return self.answer(200, result, headers)
+            if BOOKING.handles(self.path):
+                result, headers = BOOKING.handle('GET', self.path, self.headers, None,
+                    client_identity(self.client_address[0], self.headers))
+                return self.answer(200, result, headers)
             if EMPLOYER_ROUTES.handles(self.path):
                 result, headers = EMPLOYER_ROUTES.handle('GET', self.path, self.headers,
                     ip=client_identity(self.client_address[0], self.headers), team_grant=self.browser_access())
@@ -475,12 +496,26 @@ class Handler(BaseHTTPRequestHandler):
                 # Authenticate before reading a potentially large private file.
                 with connect() as db:
                     CANDIDATE_PORTAL.session_candidate(db, self.headers)
+            outreach_discovery = bool(re.fullmatch(r'/api/hr/outreach/campaigns/[A-Za-z0-9_-]+/discover', path))
+            if outreach_discovery:
+                OUTREACH_ROUTES.authorize(self.actor)
             limit = (12 * 1024 * 1024 if path in ('/api/hr/intake', '/api/hr/employer/intake') else
                      7 * 1024 * 1024 if path in ('/api/hr/candidate/resume', '/api/hr/recruiter/candidates', '/api/hr/employer/vacancies/import') else
+                     256 * 1024 if outreach_discovery else
                      128 * 1024 if path in ('/api/hr/employer/vacancies', '/api/hr/employer/vacancies/update') else 32768)
             require(0 < size <= limit, 'Слишком большой запрос.', 413)
             body = json.loads(self.rfile.read(size))
             require(isinstance(body, dict), 'Некорректный запрос.', 400)
+            if OUTREACH_BROWSER.handles(self.path):
+                result, headers = OUTREACH_BROWSER.handle('POST', self.path, self.headers, body, self.actor)
+                return self.answer(200, result, headers)
+            if OUTREACH_ROUTES.handles(self.path):
+                result, headers = OUTREACH_ROUTES.handle('POST', self.path, self.headers, body, self.actor)
+                return self.answer(200, result, headers)
+            if BOOKING.handles(self.path):
+                result, headers = BOOKING.handle('POST', self.path, self.headers, body,
+                    client_identity(self.client_address[0], self.headers))
+                return self.answer(200, result, headers)
             if EMPLOYER_ROUTES.handles(self.path):
                 result, headers = EMPLOYER_ROUTES.handle('POST', self.path, self.headers, body,
                     ip=client_identity(self.client_address[0], self.headers), team_grant=self.browser_access())
@@ -572,4 +607,5 @@ if __name__ == '__main__':
     candidate_notifications.start_worker(connect, update_handler=CANDIDATE_BOT.handle_update,
         telegram_renderer=CANDIDATE_BOT.render_notification)
     HH_ROUTES.start_worker()
+    OUTREACH_BROWSER.start_worker()
     ThreadingHTTPServer(('127.0.0.1', int(os.environ.get('HR_PORT', '8391'))), Handler).serve_forever()

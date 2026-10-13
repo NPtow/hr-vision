@@ -8,6 +8,7 @@ import { PreferencesForm } from './PreferencesForm';
 import { ResumeUpload } from './ResumeUpload';
 import { InterviewRoom } from './InterviewRoom';
 import { InvitationPortal } from './InvitationPortal';
+import { BookingPortal } from './BookingPortal';
 import { TelegramHandoff } from './TelegramHandoff';
 import { CandidateSearch } from './CandidateSearch';
 import { CandidateSchedule } from './CandidateSchedule';
@@ -39,6 +40,7 @@ const safeSupportEmail = (channels?: Channels) => channels?.supportEmail && /^[^
 
 export function CandidatePortal() {
   const invitation = new URLSearchParams(location.search).get('cp');
+  if (invitation === 'invite-booking') return <BookingPortal/>;
   return invitation === 'guest' || invitation === 'claim' ? <InvitationPortal kind={invitation}/> : <AuthenticatedCandidatePortal/>;
 }
 

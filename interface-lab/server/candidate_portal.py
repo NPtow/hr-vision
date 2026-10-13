@@ -244,6 +244,9 @@ class CandidatePortal:
         require(self.recruiter_origin in self.origins, 'Recruiter origin must be an allowed product origin.')
         self.notifications = notifications
         self.invitation_lookup = invitation_lookup
+        # Optional personal-booking adapter; no booking schema is required here.
+        self.booking_invitation_lookup = None
+        self.booking_invitation_store = None
         self._media_guard = threading.Lock()
         self._media_locks = {}
         self.dummy_hash = password_hash(secrets.token_urlsafe(24))
@@ -1415,11 +1418,15 @@ class CandidatePortal:
                 require(type(replace) is bool, 'Проверьте команду замены ссылки.', 400)
                 self.person(db, cid)
                 require(body.get('scope') in ('call', 'claim'), 'Выберите назначение ссылки.', 400)
-                if not replace and self.invitation_lookup:
-                    existing = self.invitation_lookup(db, cid, body.get('scope'))
-                    if existing:
-                        return existing, {}
-                return invites.issue(db, cid, body.get('scope'), self.origin), {}
+                if not replace:
+                    for lookup in (self.booking_invitation_lookup, self.invitation_lookup):
+                        existing = lookup(db, cid, body.get('scope')) if lookup else None
+                        if existing:
+                            return existing, {}
+                invitation = invites.issue(db, cid, body.get('scope'), self.origin)
+                if self.booking_invitation_store:
+                    self.booking_invitation_store(db, cid, body.get('scope'), invitation)
+                return invitation, {}
             elif path == '/api/hr/recruiter/invitations/revoke':
                 self.person(db, cid)
                 invites.revoke(db, cid, body.get('scope'))

@@ -13,8 +13,8 @@ const build = 'storybook-static';
 const entries = JSON.parse(readFileSync(`${build}/index.json`)).entries;
 const ids = Object.keys(entries);
 if (target === 'service') {
-  for (const id of ['start', 'manager', 'candidate']) if (!entries[`hr-vision-product--${id}`]) throw Error(`Missing ${id}`);
-  if (ids.some(id => !id.startsWith('hr-vision-product--'))) throw Error('Mockup story in service build');
+  const serviceIds = ['start', 'manager', 'candidate'].map(id => `hr-vision-product--${id}`);
+  if (ids.length !== serviceIds.length || ids.some(id => !serviceIds.includes(id))) throw Error('Service build must contain exactly start, manager and candidate');
 } else {
   if (!entries['hr-vision-employer-menu--gallery']) throw Error('Missing employer gallery');
   if (ids.some(id => id.startsWith('hr-vision-product--'))) throw Error('Connected service in mockup build');
@@ -49,6 +49,8 @@ files['ui/deployment.json'] = digest(deployment);
 if (target === 'service') for (const name of [
   'app.py', 'browser_access.py', 'candidate_portal.py', 'candidate_resume.py', 'candidate_notifications.py', 'candidate_bot.py',
   'candidate_invites.py', 'recruiter_availability.py', 'hh_recruiting.py', 'hh_routes.py',
+  'candidate_booking.py', 'hh_outreach.py', 'hh_outreach_routes.py', 'hh_outreach_worker.py',
+  'hh_browser/__init__.py', 'hh_browser/adapter.py', 'hh_browser/store.py', 'hh_browser/bridge.py',
   'recruiter_access.py', 'recruiter_sources.py', 'recruiter_notifications.py',
   'employer_access.py', 'employer_store.py', 'employer_workflow.py', 'employer_routes.py',
   'employer_projection.py', 'employer_intake.py', 'vacancy_import.py', 'vacancy_sources.py',

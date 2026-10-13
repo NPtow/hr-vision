@@ -116,6 +116,24 @@ class CandidateHTTPTest(unittest.TestCase):
         self.assertEqual(self.request('recruiter/hh/oauth/start', {}, token=self.manager,
             extra_headers={'Origin': 'https://untrusted.example'})[0], 403)
 
+    def test_browser_outreach_and_booking_http_boundaries(self):
+        self.assertEqual(self.request('outreach/campaigns')[0], 401)
+        self.assertEqual(self.request('outreach/browser', cookie=self.cookie)[0], 401)
+        status, state, _ = self.request('outreach/browser', token=self.manager)
+        self.assertEqual(status, 200, state)
+        self.assertFalse(state['configured'])
+        status, data, _ = self.request('outreach/campaigns', {'name': 'HTTP campaign', 'mode': 'direct',
+            'accountId': 'test-only', 'template': 'Интервью: {booking_url}', 'limit': 1, 'paceSeconds': 60}, token=self.manager)
+        self.assertEqual(status, 200, data)
+        campaign = data['campaign']['id']
+        status, detail, _ = self.request('outreach/campaigns/' + campaign, token=self.manager)
+        self.assertEqual(status, 200, detail)
+        self.assertEqual(detail['stats']['sentObserved'], 0)
+        self.assertEqual(self.request('outreach-worker/claim', {'accountId': 'test-only', 'workerId': 'test'}, token=self.manager)[0], 403)
+        self.assertEqual(self.request('booking/state', {'token': 'invalid'})[0], 404)
+        self.assertIn(self.request('booking/state')[0], (400, 405))
+        self.assertEqual(self.request('booking/state', {'token': 'invalid'}, extra_headers={'Origin': 'https://foreign.example'})[0], 403)
+
     def test_actual_http_full_manual_interview_to_meeting_path(self):
         resume = ('Имя: HTTP Test\nГород: Москва\nЖелаемая должность: Менеджер\n'
                   'Опыт работы: ведение клиентов, подготовка коммерческих предложений, '
