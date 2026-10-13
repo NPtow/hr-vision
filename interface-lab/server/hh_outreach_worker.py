@@ -102,7 +102,7 @@ class OutreachBrowserService:
             state['calibrationReady'] = observed.get('selectorsCalibrated') is True
             state['lastCheckedAt'] = observed.get('lastCheckedAt')
             code = observed.get('error')
-            if observed.get('accountId') != self.account_id:
+            if state['calibrationReady'] and state['loggedIn'] and observed.get('accountId') != self.account_id:
                 state['loggedIn'], code = False, 'account_mismatch'
             if code:
                 state['error'] = safe_error(code)

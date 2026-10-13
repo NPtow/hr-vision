@@ -141,8 +141,11 @@ class WorkerBridge:
         self.prepared = None
         self.owner = None
         self.cached = {'configured': True, 'loggedIn': False, 'accountId': account_id,
-                       'busy': False, 'captcha': False, 'error': 'not_checked',
+                       'busy': False, 'captcha': False,
+                       'error': 'not_checked' if profile.data.get('calibrated') is True else 'selectors_not_calibrated',
                        'selectorsCalibrated': profile.data.get('calibrated') is True}
+        if profile.data.get('calibrated') is not True:
+            self.cached['accountId'] = ''
 
     @classmethod
     def from_env(cls):
@@ -245,6 +248,12 @@ class WorkerBridge:
             raise BrowserError('browser_paused')
 
     def sample_status(self, page):
+        if self.profile.data.get('calibrated') is not True:
+            # Connectivity is real; fixture selectors are not a live identity
+            # probe. Do not query them against an operator's existing browser.
+            self.cached.update(loggedIn=False, accountId='', captcha=False,
+                               error='selectors_not_calibrated')
+            return
         adapter = HHBrowserAdapter(page, self.profile, clock=self.clock)
         try:
             account = self.account_id or adapter.value(page, self.profile.data['identity']['accountId'])
@@ -308,6 +317,8 @@ class WorkerBridge:
             return self.status()
         self._guard_control(observation=action == 'observe')
         if action == 'discover':
+            if self.profile.data.get('calibrated') is not True:
+                raise BrowserError('selectors_not_calibrated')
             if self.prepared:
                 raise BrowserError('prepared_send_holds_browser')
             return adapter.discover(body.get('source', {}))

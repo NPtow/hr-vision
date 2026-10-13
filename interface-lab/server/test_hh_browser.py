@@ -282,6 +282,22 @@ class BridgeTests(unittest.TestCase):
         with self.assertRaises(BrowserError) as caught: WorkerBridge(self.temp.name, profile(), TOKEN)
         self.assertEqual('browser_owner_exists', caught.exception.code)
 
+    def test_uncalibrated_bridge_status_does_not_probe_fake_selectors(self):
+        self.bridge.close()
+        self.bridge = WorkerBridge(self.temp.name, profile(False), TOKEN)
+        self.bridge.sample_status(object())
+        status = self.bridge.status()
+        self.assertTrue(status['configured'])
+        self.assertFalse(status['selectorsCalibrated'])
+        self.assertEqual('', status['accountId'])
+        self.assertEqual('selectors_not_calibrated', status['error'])
+        self.assertTrue(self.bridge.legacy_allowed())
+        with self.assertRaises(BrowserError) as caught:
+            self.bridge._execute(self.adapter, 'discover', {'source': {'kind': 'direct'}})
+        self.assertEqual('selectors_not_calibrated', caught.exception.code)
+        self.assertFalse(caught.exception.pause)
+        self.assertEqual([], self.page.navigations)
+
     def test_rpc_auth_and_async_discovery_poll_without_network(self):
         self.assertEqual(401, self.bridge.request('GET', '/rpa/status', {}, 'bad')[0])
         body = {'source': {'kind': 'direct', 'accountId': 'account1', 'resumeUrls': ['https://hh.ru/resume/1']}}
