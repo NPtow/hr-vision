@@ -101,7 +101,7 @@ export function InterviewRoom({ title, start, completed, configured, application
     <div className="cp-precall">
       <div className="cp-preview"><video ref={preview} autoPlay muted playsInline className={previewReady && camera ? 'is-visible' : ''}/>{(!previewReady || !camera) && <div>{camera ? <Camera size={34}/> : <Mic size={34}/>}<p>{previewReady ? 'Микрофон доступен' : camera ? 'Проверим камеру и микрофон' : 'Разговор без камеры'}</p></div>}</div>
       <div className="cp-call-settings">
-        <h2>Увидимся через минуту</h2><p className="cp-muted">Интервью проходит с человеком. Пожалуйста, включите камеру: так проще познакомиться. Если не получается, можно общаться голосом.</p>
+        <h2>Перед встречей</h2><p className="cp-muted">Включите камеру. Если не получается — можно голосом.</p>
         <div className="cp-device-actions"><Button variant="secondary" disabled={checking || joining} onClick={checkDevices}>{checking ? 'Проверяем…' : previewReady ? 'Проверить ещё раз' : 'Проверить устройства'}</Button><Button variant="ghost" disabled={joining || checking} aria-pressed={!camera} onClick={() => { stopPreview(); setPreviewReady(false); setCamera(value => !value); }}>{camera ? <CameraOff size={16}/> : <Camera size={16}/>} {camera ? 'Без камеры' : 'С камерой'}</Button></div>
         {guestToken ? <p className="cp-muted">Сначала познакомимся без записи. Рекрутер объяснит сервис и включит запись только после вашего согласия.</p> : <label className="cp-check"><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)}/><span>Согласен на запись и расшифровку этой встречи.</span></label>}
         {error && <p className="cp-error" role="alert">{error}</p>}

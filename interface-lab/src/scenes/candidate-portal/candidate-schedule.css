@@ -4,7 +4,6 @@
 .cp-schedule button:disabled { opacity:.55; cursor:wait; }
 .cp-schedule .cp-schedule-heading { display:flex; align-items:center; justify-content:space-between; gap:24px; margin-bottom:29px; }
 .cp-schedule .cp-schedule-heading h1 { color:#21324c; font-size:27px; font-weight:600; letter-spacing:-.65px; }
-.cp-schedule .cp-schedule-heading p { margin-top:8px; color:var(--cps-muted); font-size:13px; }
 .cp-schedule .cp-schedule-timezone { display:flex; align-items:center; gap:7px; color:#6b778a; font-size:11px; overflow-wrap:anywhere; }
 .cp-schedule .cp-schedule-sections { display:flex; gap:28px; border-bottom:1px solid var(--cps-line); margin-bottom:25px; }
 .cp-schedule .cp-schedule-sections>button { display:flex; align-items:center; gap:8px; padding:0 1px 14px; color:#728097; background:none; border:0; border-bottom:2px solid transparent; font-size:13px; font-weight:500; }
@@ -72,8 +71,6 @@
 .cp-schedule .cp-schedule-availability-list>div>strong { color:#4a617f; font-size:12px; font-weight:500; }
 .cp-schedule .cp-schedule-availability-list>div>span { color:#596e89; font-size:12px; margin-left:auto; text-align:right; }
 .cp-schedule .cp-schedule-availability-empty { display:flex; flex-direction:column; align-items:center; text-align:center; padding:36px 20px; color:#8ea3c0; }
-.cp-schedule .cp-schedule-availability-empty h3 { color:#4f6685; font-size:15px; font-weight:500; margin-top:13px; }
-.cp-schedule .cp-schedule-availability-empty p { margin-top:9px; max-width:325px; color:#72829a; font-size:12px; line-height:1.65; }
 .cp-schedule .cp-schedule-availability-empty>[data-slot=button] { margin-top:20px; }
 .cp-schedule .cp-schedule-availability-foot { margin-top:24px; padding-top:17px; border-top:1px solid var(--cps-line); color:#77869c; font-size:11px; line-height:1.65; }
 .cp-schedule .cp-schedule-availability-form { margin-top:26px; }

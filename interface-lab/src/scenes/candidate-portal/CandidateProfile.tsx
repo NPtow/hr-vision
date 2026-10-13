@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { ArrowLeft, BriefcaseBusiness, CalendarDays, Check, MapPin, Pencil, UserRound, X } from 'lucide-react';
+import { ArrowLeft, BriefcaseBusiness, CalendarDays, MapPin, Pencil, UserRound } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { PreferencesForm } from './PreferencesForm';
 import { ResumeUpload } from './ResumeUpload';
@@ -73,18 +73,14 @@ export function CandidateProfile({ candidate, busy, onSave, onUpload, onSearchCh
     catch (error) { if (alive.current) setLocalError(error instanceof Error ? error.message : 'Не удалось изменить статус поиска. Попробуйте ещё раз.'); }
     finally { lock.current = false; if (alive.current) setOperation(null); }
   }
-  function editButton(label = 'Изменить') {
-    return <Button type="button" variant="ghost" size="sm" className="cp-profile-edit" disabled={working} onClick={openEditor}><Pencil size={14}/>{label}</Button>;
-  }
-
   return <section ref={profileRoot} className="cp-profile" aria-labelledby={`${id}-title`}>
     <header className="cp-profile-heading">
-      <div><Button type="button" variant="ghost" size="sm" className="cp-profile-back" disabled={working} onClick={onBack}><ArrowLeft size={15}/>К поиску</Button><h1 id={`${id}-title`}>Мой профиль</h1><p>Ваш опыт и пожелания к следующей работе</p></div>
-      {!editing && editButton('Редактировать')}
+      <div><Button type="button" variant="ghost" size="sm" className="cp-profile-back" disabled={working} onClick={onBack}><ArrowLeft size={15}/>К поиску</Button><h1 id={`${id}-title`}>Профиль</h1></div>
+      {!editing && <Button type="button" variant="ghost" size="sm" className="cp-profile-edit" disabled={working} onClick={openEditor}><Pencil size={14}/>Редактировать</Button>}
     </header>
 
     <section className={`cp-profile-search ${searching ? 'is-searching' : ''}`} aria-labelledby={`${id}-search-title`}>
-      <div className="cp-profile-search-row"><div><h2 id={`${id}-search-title`}>Ищу работу</h2><p id={`${id}-search-description`}>{searching ? 'При остановке поиска все текущие вакансии, встречи и офферы уйдут в историю.' : 'Поиск остановлен. Если возобновите его, прежние процессы останутся в истории.'}</p></div><label className="cp-profile-switch"><input type="checkbox" role="switch" aria-label="Ищу работу" aria-describedby={`${id}-search-description`} checked={searching && !stopRequested} disabled={working} onChange={event => { setLocalError(''); if (searching) setStopRequested(!event.target.checked); else if (event.target.checked) void changeSearch(true); }}/><span aria-hidden="true"/></label></div>
+      <div className="cp-profile-search-row"><h2 id={`${id}-search-title`}>{searching ? 'Ищу работу' : 'Поиск остановлен'}</h2><label className="cp-profile-switch"><input type="checkbox" role="switch" aria-label="Ищу работу" checked={searching && !stopRequested} disabled={working} onChange={event => { setLocalError(''); if (searching) setStopRequested(!event.target.checked); else if (event.target.checked) void changeSearch(true); }}/><span aria-hidden="true"/></label></div>
       <AnimatePresence initial={false}>{stopRequested && searching && <motion.div className="cp-profile-stop-confirm" role="group" aria-labelledby={`${id}-confirm-title`} initial={{ height: reducedMotion ? 'auto' : 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: reducedMotion ? 'auto' : 0, opacity: 0 }} transition={{ duration: .18 }}><div><h3 id={`${id}-confirm-title`}>Остановить поиск?</h3><p>Текущие вакансии, встречи и офферы перейдут в историю. Возобновление поиска не вернёт их в работу.</p><div className="cp-profile-confirm-actions"><Button type="button" variant="ghost" disabled={working} onClick={() => setStopRequested(false)}>Продолжить поиск</Button><Button type="button" className="cp-profile-stop-button" disabled={working} onClick={() => void changeSearch(false)}>{operation === 'search' ? 'Останавливаем…' : 'Остановить поиск'}</Button></div></div></motion.div>}</AnimatePresence>
       {operation === 'search' && !stopRequested && <p className="cp-profile-search-progress" role="status">Возобновляем поиск…</p>}
     </section>
@@ -95,25 +91,21 @@ export function CandidateProfile({ candidate, busy, onSave, onUpload, onSearchCh
       <aside className="cp-profile-sidebar">
         <section className="cp-profile-person" aria-label="Личные данные">
           <span className="cp-profile-avatar" aria-hidden="true">{initials(candidate.name) || <UserRound size={28}/>}</span>
-          <h2>{candidate.name || 'Ваш профиль'}</h2>
+          {candidate.name && <h2>{candidate.name}</h2>}
           {candidate.desiredRole && <p className="cp-profile-role">{candidate.desiredRole}</p>}
           <div className="cp-profile-location"><MapPin size={15}/><div><span>{candidate.city || 'Город не указан'}</span>{candidate.residence && <small>{candidate.residence}</small>}</div></div>
-          {!editing && editButton('Изменить пожелания')}
-          <div className="cp-profile-person-divider"/>
-          <p className="cp-profile-small-label">Выбор вакансий</p>
-          <p className="cp-profile-approval"><Check size={15}/>{candidate.autoApprove && candidate.consentReuse ? 'Автосогласование включено' : 'Согласовываю лично'}</p>
-          <p className="cp-profile-note">Время каждой встречи вы подтверждаете сами.</p>
+          <dl className="cp-profile-approval"><dt>Вакансии</dt><dd>{candidate.autoApprove && candidate.consentReuse ? 'Согласовываются автоматически' : 'Согласовываю лично'}</dd></dl>
         </section>
-        <section className="cp-profile-contacts-card">{contacts}</section>
       </aside>
 
       <div className="cp-profile-main">
-        {editing ? <motion.section ref={editor} className="cp-profile-card cp-profile-editor" aria-labelledby={`${id}-editor-title`} initial={{ opacity: 0, y: reducedMotion ? 0 : 5 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .16 }}><div className="cp-profile-card-heading"><div><h2 id={`${id}-editor-title`}>Редактировать профиль</h2><p>Изменения сохранятся после нажатия кнопки.</p></div><Button type="button" variant="ghost" size="icon" aria-label="Отменить изменения" disabled={working} onClick={closeEditor}><X size={18}/></Button></div><fieldset className="cp-profile-editor-fields" disabled={working}><PreferencesForm key={candidate.id} initial={candidate} busy={working} onSubmit={savePreferences}/></fieldset><Button type="button" variant="ghost" className="cp-profile-cancel" disabled={working} onClick={closeEditor}>Отмена</Button></motion.section> : <>
-          <section className="cp-profile-card cp-profile-about-card"><div className="cp-profile-card-heading"><h2>О себе</h2>{editButton()}</div><p className={`cp-profile-about ${candidate.about ? '' : 'is-empty'}`}>{candidate.about || 'Добавьте несколько слов о своём опыте и о том, какую работу ищете.'}</p></section>
-          <section className="cp-profile-card"><div className="cp-profile-card-heading"><h2>Условия работы</h2>{editButton()}</div><dl className="cp-profile-conditions"><div className="cp-profile-salary"><dt>Желаемая зарплата в месяц</dt><dd>{salaryLabel(candidate.salaryMin, candidate.salaryMax)}</dd></div><div><dt><BriefcaseBusiness size={15}/>Занятость</dt><dd>{employmentLabels[candidate.employmentType] || 'Не указана'}</dd></div><div><dt><CalendarDays size={15}/>Выход не позднее</dt><dd>{startDateLabel(candidate.latestStartDate)}</dd></div></dl></section>
-        </>}
+        {editing ? <motion.section ref={editor} className="cp-profile-card cp-profile-editor" aria-labelledby={`${id}-editor-title`} initial={{ opacity: 0, y: reducedMotion ? 0 : 5 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .16 }}><div className="cp-profile-card-heading"><h2 id={`${id}-editor-title`}>Редактирование</h2></div><fieldset className="cp-profile-editor-fields" disabled={working}><PreferencesForm key={candidate.id} initial={candidate} busy={working} onSubmit={savePreferences}/></fieldset><Button type="button" variant="ghost" className="cp-profile-cancel" disabled={working} onClick={closeEditor}>Отмена</Button></motion.section> : <section className="cp-profile-card cp-profile-details">
+          <section className="cp-profile-about-card"><div className="cp-profile-card-heading"><h2>О себе</h2></div><p className={`cp-profile-about ${candidate.about ? '' : 'is-empty'}`}>{candidate.about || 'Не заполнено'}</p></section>
+          <section><div className="cp-profile-card-heading"><h2>Условия работы</h2></div><dl className="cp-profile-conditions"><div className="cp-profile-salary"><dt>Зарплата в месяц</dt><dd>{salaryLabel(candidate.salaryMin, candidate.salaryMax)}</dd></div><div><dt><BriefcaseBusiness size={15}/>Занятость</dt><dd>{employmentLabels[candidate.employmentType] || 'Не указана'}</dd></div><div><dt><CalendarDays size={15}/>Выход не позднее</dt><dd>{startDateLabel(candidate.latestStartDate)}</dd></div></dl></section>
+        </section>}
         <section className="cp-profile-card cp-profile-resume-card"><ResumeUpload compact resume={candidate.resume} busy={working} onUpload={onUpload}/></section>
       </div>
+      <section className="cp-profile-contacts-card">{contacts}</section>
     </div>
   </section>;
 }

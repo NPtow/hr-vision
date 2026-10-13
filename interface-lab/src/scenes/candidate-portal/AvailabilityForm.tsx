@@ -6,7 +6,7 @@ import { localDate, localTime, timeZone, type Availability } from './api';
 
 type WindowDraft = { id: string; date: string; start: string; end: string; original?: Availability };
 const unchanged = (window: WindowDraft) => window.original && window.date === localDate(new Date(window.original.start)) && window.start === localTime(window.original.start) && window.end === localTime(window.original.end);
-export function AvailabilityForm({ initial, busy, onSubmit }: { initial: Availability[]; busy: boolean; onSubmit: (windows: Availability[]) => Promise<void> }) {
+export function AvailabilityForm({ initial, busy, onSubmit, showDescription = true }: { initial: Availability[]; busy: boolean; onSubmit: (windows: Availability[]) => Promise<void>; showDescription?: boolean }) {
   const id = useId();
   const [windows, setWindows] = useState<WindowDraft[]>(() => initial.map((window, index) => ({ id: String(index), date: localDate(new Date(window.start)), start: localTime(window.start), end: localTime(window.end), original: window })));
   const [error, setError] = useState('');
@@ -18,7 +18,7 @@ export function AvailabilityForm({ initial, busy, onSubmit }: { initial: Availab
     await onSubmit(dates.map((window, index) => unchanged(windows[index]) ? { ...windows[index].original! } : { start: window.start.toISOString(), end: window.end.toISOString() }));
   }
   return <form onSubmit={submit}>
-    <p className="cp-muted">Работодатель предложит время в этих интервалах. Вы подтвердите его отдельно. {timeZone()}.</p>
+    {showDescription && <p className="cp-muted">Работодатель предложит время в этих интервалах. Вы подтвердите его отдельно. {timeZone()}.</p>}
     <div className="cp-window-list">{windows.map((window, index) => <div className="cp-window" key={window.id}>
       <label htmlFor={`${id}-date-${window.id}`}>Дата<Input id={`${id}-date-${window.id}`} type="date" required value={window.date} onChange={event => edit(window.id, 'date', event.target.value)}/></label>
       <label htmlFor={`${id}-start-${window.id}`}>С<Input id={`${id}-start-${window.id}`} type="time" required step="60" value={window.start} onInput={event => edit(window.id, 'start', event.currentTarget.value)} onChange={event => edit(window.id, 'start', event.target.value)}/></label>

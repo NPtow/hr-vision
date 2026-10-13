@@ -4,6 +4,7 @@ import { ArrowRight, ArrowUpRight, BriefcaseBusiness, CalendarDays, Check, Check
 import type { CandidateApplication, CandidateOffer, CandidateState, CandidateWorkflowCommand } from './api';
 import { timeZone } from './api';
 import { applicationAfterInterest, applicationGroup, applicationHistory, applicationOffer, applicationRevision, applicationStatus, canReplyToMeeting, currentApplicationMeeting, meetingInterval, validDate, workspaceDateTime, type ApplicationGroup, type ApplicationHistoryItem } from './workspace-model';
+import sandboxGirl from '../../assets/candidate/sandbox-girl.png';
 import './candidate-search.css';
 
 export type CandidateSearchProps = {
@@ -134,12 +135,6 @@ function ApplicationCard({ application, props, scope }: { application: Candidate
   </motion.article>;
 }
 
-function RecruiterNextAction({ props }: { props: CandidateSearchProps }) {
-  const interview = props.candidate.interview;
-  if (interview?.status === 'completed') return null;
-  return <section className="cps-recruiter"><span className="cps-recruiter-icon"><Video size={20}/></span><div><h2>{interview ? 'Знакомство с рекрутером' : 'Начнём с знакомства'}</h2><p>{interview ? `${meetingInterval(interview)} · ${timeZone()}` : 'Расскажите о себе один раз — затем выбирайте предложения.'}</p>{interview?.recruiterName && <p>{interview.recruiterName}</p>}</div><ActionButton secondary disabled={props.busy} onClick={interview ? props.onInterview : props.onBookInterview}>{interview?.status === 'live' ? 'Войти в интервью' : interview ? 'Открыть интервью' : 'Выбрать время'}<ArrowRight size={15}/></ActionButton></section>;
-}
-
 function Paused({ props }: { props: CandidateSearchProps }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
@@ -176,6 +171,12 @@ export function CandidateSearch(props: CandidateSearchProps) {
       <span>Выбрать время интервью</span>
     </button>
   </section>;
+  if (candidate.interview && candidate.interview.status !== 'completed') return <section className="cps-search cps-interview-wait" aria-labelledby={`${scope}-waiting-title`}>
+    <h1 id={`${scope}-waiting-title`}>{candidate.interview.status === 'live' ? 'Пора знакомиться' : 'Пупупу… ждём встречи'}</h1>
+    <img className="cps-waiting-character" src={sandboxGirl} width="1374" height="1145" alt="Девочка играет в песочнице"/>
+    <p className="cps-waiting-time"><time dateTime={candidate.interview.start}>{meetingInterval(candidate.interview)}</time></p>
+    <button type="button" className="cps-waiting-join" disabled={busy} onClick={props.onInterview}><Video size={18} aria-hidden="true"/>Ко встрече</button>
+  </section>;
   return <MotionConfig reducedMotion="user" transition={{ duration: reduced ? 0 : .24, ease: [.2, .75, .25, 1] }}><LayoutGroup id={`${scope}-search`}><section className="cps-search">
     <div className="cps-tabs" role="tablist" aria-label="Вакансии по статусу">{filters.map((item, index) => <button type="button" key={item.value} role="tab" id={`${scope}-tab-${item.value}`} aria-selected={filter === item.value} aria-controls={`${scope}-results`} tabIndex={filter === item.value ? 0 : -1} onClick={() => setFilter(item.value)} onKeyDown={event => {
       let next = index;
@@ -191,7 +192,7 @@ export function CandidateSearch(props: CandidateSearchProps) {
       {paused && filter !== 'history' ? <Paused props={props}/> : <>
         <header className="cps-heading"><div><span className="cps-eyebrow">Поиск работы</span><h1>{filter === 'new' ? 'Место для нового.' : filter === 'process' ? 'На шаг ближе.' : 'Ваш пройденный путь.'}</h1><p>{items.length ? countLabel(items.length) : filter === 'new' ? 'Предложения появятся здесь.' : filter === 'process' ? 'Здесь продолжатся ваши знакомства.' : 'Здесь сохраняются завершённые процессы.'}</p></div><button type="button" className="cps-refresh" disabled={busy || refreshing} aria-label="Обновить вакансии" onClick={() => void refresh()}><RefreshCw size={18} className={refreshing ? 'is-refreshing' : ''}/></button></header>
         {refreshError && <p className="cps-error" role="alert">{refreshError}</p>}
-        {paused ? <div className="cps-paused-note"><Pause size={16}/><span>Поиск приостановлен. История сохранена.</span><button type="button" onClick={() => setFilter('new')}>Вернуться к поиску<ArrowRight size={14}/></button></div> : <RecruiterNextAction props={props}/>}
+        {paused && <div className="cps-paused-note"><Pause size={16}/><span>Поиск приостановлен. История сохранена.</span><button type="button" onClick={() => setFilter('new')}>Вернуться к поиску<ArrowRight size={14}/></button></div>}
         {candidate.autoApprove && !paused && <p className="cps-auto-note">Автосогласование вакансий включено. Время каждой встречи подтверждаете вы. <button type="button" onClick={onProfile}>Настроить</button></p>}
         {items.length ? <div className="cps-grid">{items.map(application => <ApplicationCard key={application.id} application={application} props={props} scope={scope}/>)}</div> : <div className="cps-empty"><BriefcaseBusiness size={28}/><h2>{filter === 'new' ? 'Возможности ещё впереди' : filter === 'process' ? 'Всё начинается с интереса' : 'История пока чиста'}</h2><p>{filter === 'new' ? 'Когда появятся новые вакансии, вы сможете изучить их и решить, хотите ли участвовать.' : filter === 'process' ? 'Выберите «Хочу участвовать» в новой вакансии. Все следующие шаги будут здесь.' : 'Завершённые и приостановленные процессы останутся в этой вкладке.'}</p>{filter === 'process' && candidate.applications.some(application => applicationGroup(application) === 'new') ? <ActionButton secondary onClick={() => setFilter('new')}>Посмотреть предложения<ArrowRight size={15}/></ActionButton> : filter === 'new' && <ActionButton secondary onClick={onProfile}>Мои предпочтения<ArrowRight size={15}/></ActionButton>}</div>}
       </>}
