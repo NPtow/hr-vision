@@ -1,0 +1,48 @@
+/* The selected Cards workspace; onboarding and call room keep their own layout. */
+.cp-root.cp-cabinet { --primary:#3e69ce; --ring:#3e69ce; --border:#e8edf4; --muted-foreground:#7f8998; font-family:'Inter Variable',Inter,system-ui,sans-serif; color:#222b38; background:#fff; }
+.cp-cabinet :where(h1,h2,h3) { font-variation-settings:normal; letter-spacing:-.035em; }
+.cp-cabinet .cp-topbar { min-height:78px; padding:0 34px; border-color:#e9edf3; position:relative; z-index:10; background:#fff; }
+.cp-cabinet .cp-avatar { border:0; background:#edf2fb; color:#3d62a7; font-weight:600; width:42px; height:42px; transition:background .16s; }
+.cp-cabinet .cp-avatar:hover { background:#e1eafb; }
+.cp-cabinet .cp-avatar[aria-current=page] { outline:2px solid #c7d8fa; outline-offset:3px; }
+.cp-cabinet .cp-sidebar { width:184px; padding:30px 15px; border-color:#e9edf3; }
+.cp-cabinet .cp-sidebar nav { position:sticky; top:24px; }
+.cp-cabinet .cp-sidebar nav>button { min-height:48px; color:#9299a5; border-radius:12px; font-size:13px; }
+.cp-cabinet .cp-sidebar nav>button:hover { background:#f5f7fb; }
+.cp-cabinet .cp-sidebar nav>button[aria-current=page] { color:#3b63ae; background:#edf2fc; }
+.cp-cabinet .cp-count { color:#6a83b4; min-width:21px; height:21px; font-size:11px; }
+.cp-cabinet .cp-support { color:#9198a4!important; font-size:12px; }
+.cp-cabinet .cp-main { padding-bottom:32px; }
+.cp-cabinet .cps-search { max-width:1320px; margin:0 auto; padding:32px 40px 56px; }
+.cp-cabinet .cp-message { margin:18px 32px 0; padding:12px 16px; border-radius:12px; font-size:13px; }
+.cp-cabinet .cp-message .cp-error { font-size:13px; }
+.cp-cabinet .cp-contacts { border:0; margin:0; padding:0; }
+.cp-cabinet .cp-contacts h2 { font-size:19px; margin-bottom:14px; }
+.cp-cabinet [data-slot=button][data-variant=default] { background:#3d67ca; box-shadow:none; color:#fff; }
+.cp-cabinet [data-slot=button][data-variant=default]:hover { background:#315abb; filter:none; }
+.cp-cabinet [data-slot=button][data-variant=secondary] { background:#f0f3f8; color:#44536b; }
+.cp-cabinet [data-slot=input],.cp-cabinet select { border-radius:12px; border-color:#e1e7ef; font-size:14px; }
+.cp-cabinet [data-slot=textarea] { border-radius:14px; border-color:#e1e7ef; font-size:14px; }
+.cp-cabinet .cp-auto-option { border-radius:16px; background:#f5f7fb; }
+.cp-cabinet .cp-preferences .cp-consent-box { margin-top:24px; }
+.cp-cabinet .cp-availability { margin:0; }
+.cp-cabinet .cp-calendar-page { padding-top:36px; }
+@media(max-width:760px) {
+  .cp-cabinet .cp-topbar { min-height:68px; padding:0 20px; }
+  .cp-cabinet .cp-logo img { width:139px; height:auto; }
+  .cp-cabinet .cp-account { gap:8px; }
+  .cp-cabinet .cp-avatar { width:38px; height:38px; }
+  .cp-cabinet .cp-body { display:block; min-height:calc(100dvh - 68px); }
+  .cp-cabinet .cp-sidebar,.cp-cabinet .cp-sidebar[data-open=false],.cp-cabinet .cp-sidebar[data-open=true] { display:flex; position:fixed; inset:auto 0 0; width:100%; height:auto; z-index:30; padding:8px 18px max(8px,env(safe-area-inset-bottom)); background:#fffffff2; backdrop-filter:blur(14px); border:0; border-top:1px solid #e7edf5; box-shadow:none; transform:none; }
+  .cp-cabinet .cp-sidebar nav { position:static; display:grid; grid-template-columns:1fr 1fr; gap:8px; width:100%; }
+  .cp-cabinet .cp-sidebar nav>button { display:flex; justify-content:center; min-height:46px; gap:9px; font-size:12px; padding:10px 12px; }
+  .cp-cabinet .cp-count { margin-left:0; }
+  .cp-cabinet .cp-sidebar .cp-support { display:none; }
+  .cp-cabinet .cp-main { padding-bottom:100px; }
+  .cp-cabinet .cps-search { padding:24px 20px 32px; }
+  .cp-cabinet .cp-message { margin:12px 16px 0; }
+  .cp-cabinet .cp-contacts .cp-contact-row { flex-wrap:wrap; }
+  .cp-cabinet .cp-contacts .cp-contact-row>div { flex-basis:calc(100% - 38px); }
+  .cp-cabinet .cp-contacts .cp-contact-row>[data-slot=button],.cp-cabinet .cp-contact-link { margin-left:33px; }
+}
+@media(prefers-reduced-motion:reduce) { .cp-cabinet * { scroll-behavior:auto!important; } }

@@ -56,7 +56,7 @@ class EmployerRoutes:
         from employer_projection import build_state
         return build_state(db, principal, self.portal, self.media, vacancy_id=vacancy_id)
 
-    def _identity(self, db, headers, body, *, include_rejected=False, include_unapproved=False):
+    def _identity(self, db, headers, body, *, include_rejected=False, include_unapproved=False, allow_archived=False):
         principal = access.authenticate(db, headers)
         aid = body.get('applicationId', body.get('candidate'))
         require(isinstance(aid, str) and 0 < len(aid) <= 160, 'Укажите кандидата.', 400)
@@ -64,6 +64,8 @@ class EmployerRoutes:
             require(body['candidate'] == aid, 'Кандидат не найден.', 404)
         app = store.application(db, principal['workspaceId'], aid, include_rejected=include_rejected,
                                 include_unapproved=include_unapproved)
+        if not allow_archived:
+            store.require_active(app)
         require(body.get('vacancyId') == app['vacancyId'], 'Вакансия не найдена.', 404)
         vacancy = store.vacancy(db, principal['workspaceId'], app['vacancyId'])
         require(body.get('generation') == vacancy['generation'], 'Вакансия изменилась. Обновите кабинет.', 409)
@@ -88,9 +90,9 @@ class EmployerRoutes:
                 app['applicationId'] == before_app['applicationId'] and
                 app['candidateId'] == before_app['candidateId'], 'Нет доступа.', 403)
 
-    def _access_check(self, headers, body, principal, app, meeting_id, *, screening=False, finish=False):
+    def _access_check(self, headers, body, principal, app, meeting_id, *, screening=False, finish=False, allow_archived=False):
         def check(db):
-            latest, current, _ = self._identity(db, headers, body, include_unapproved=finish)
+            latest, current, _ = self._identity(db, headers, body, include_unapproved=finish, allow_archived=allow_archived)
             self._same(latest, current, principal, app)
             meeting = self.portal.interview(db, current['candidateId']) if screening else self._meeting(db, current, body)
             require(meeting and meeting['id'] == meeting_id, 'Встреча изменилась. Обновите кабинет.', 409)
@@ -362,13 +364,13 @@ class EmployerRoutes:
 
     def _materials(self, headers, body, *, screening=False):
         with self.lock, self.connect() as db:
-            principal, app, _ = self._identity(db, headers, body)
+            principal, app, _ = self._identity(db, headers, body, allow_archived=True)
             meeting = self.portal.interview(db, app['candidateId']) if screening else self._meeting(db, app, body)
             require(meeting and meeting['status'] == 'completed', 'Материалы доступны после встречи.', 409)
         result = self.portal.materials(app['candidateId'], None if screening else app['applicationId'], meeting_id=meeting['id'],
-            access_check=self._access_check(headers, body, principal, app, meeting['id'], screening=screening))
+            access_check=self._access_check(headers, body, principal, app, meeting['id'], screening=screening, allow_archived=True))
         with self.lock, self.connect() as db:
-            latest, current, _ = self._identity(db, headers, body)
+            latest, current, _ = self._identity(db, headers, body, allow_archived=True)
             self._same(latest, current, principal, app)
             checked = self.portal.interview(db, current['candidateId']) if screening else self._meeting(db, current, body)
             require(checked and checked['id'] == meeting['id'] and checked['status'] == 'completed'

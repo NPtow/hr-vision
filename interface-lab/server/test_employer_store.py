@@ -65,7 +65,8 @@ class EmployerStoreTest(unittest.TestCase):
         # Include an untrusted internal-looking field; DTO must still whitelist.
         profile['secretToken'] = 'must-not-leak'
         with self.connect() as db:
-            db.execute('INSERT INTO cp_candidates VALUES (?,?,?,?,?,?)',
+            db.execute('''INSERT INTO cp_candidates
+                (id,email,password_hash,profile,created_at,updated_at) VALUES (?,?,?,?,?,?)''',
                 (cid, cid + '@example.test', 'not-a-real-password', json.dumps(profile), iso(now()), iso(now())))
             if completed:
                 sid, iid = 'slot-' + cid, 'interview-' + cid

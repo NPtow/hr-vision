@@ -28,7 +28,7 @@ export type CandidateMeeting = { id: string; start: string; end: string; status:
 export type CandidateMeetingHistory = Omit<CandidateMeeting, 'status'> & {
   status: CandidateMeeting['status'] | 'cancelled' | 'declined';
   cancelledAt?: string | null;
-  cancellationReason?: 'manager' | 'candidate' | 'rescheduled' | null;
+  cancellationReason?: 'manager' | 'candidate' | 'rescheduled' | 'search_stopped' | null;
 };
 export type CandidateOffer = {
   id: string; version: number; status: 'sent' | 'accepted' | 'declined' | 'superseded' | 'withdrawn';
@@ -53,6 +53,7 @@ export type CandidateWorkflowCommand = { applicationId: string; requestId?: stri
 export type CandidateMeetingReference = { applicationId: string; meetingId: string; revision?: number };
 export type CandidateApplication = {
   id: string;
+  archivedAt?: string | null;
   vacancy: { id: string; title: string; company: string; city: string; remote: boolean; description: string };
   status: 'pending' | 'accepted' | 'declined';
   approvedAutomatically: boolean;
@@ -77,6 +78,7 @@ export type Channels = {
 };
 export type CandidateState = CandidateProfile & {
   id: string;
+  searching?: boolean;
   email: string | null;
   accountActive?: boolean;
   intake?: { source: 'manual' | 'hh'; contactEmail: string };

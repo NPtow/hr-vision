@@ -70,7 +70,7 @@ def create_prepared(db, profile, *, source='manual', external_key=None, contact_
             return row[0]
     cid, created = uid('person'), iso(now())
     # NULL is intentional: no guessed email, password or consent from a CV.
-    db.execute('INSERT INTO cp_candidates VALUES (?,NULL,NULL,?,?,?)', (cid, dump(profile), created, created))
+    db.execute('INSERT INTO cp_candidates(id,email,password_hash,profile,created_at,updated_at) VALUES (?,NULL,NULL,?,?,?)', (cid, dump(profile), created, created))
     db.execute('INSERT INTO cp_intake VALUES (?,?,?,?,?)', (cid, source, external_key, contact_email, created))
     if cv:
         db.execute('INSERT INTO cp_resumes VALUES (?,?,?,?,?,?,?)',

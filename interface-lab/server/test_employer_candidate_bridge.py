@@ -122,6 +122,33 @@ class EmployerCandidateBridgeTest(unittest.TestCase):
             self.assertEqual(self.portal.meeting(db, application['id'])['status'], 'pending')
             self.assertEqual(db.execute('SELECT COUNT(*) FROM cp_meetings WHERE application_id=?', (application['id'],)).fetchone()[0], 1)
 
+    def test_candidate_after_no_blocks_new_meeting_without_resetting_history(self):
+        person, cookie, application = self.application()
+        first = self.scheduled(application)
+        with self.connect() as db:
+            db.execute("UPDATE cp_meetings SET status='completed',completed_at=? WHERE id=?", (iso(self.tick), first['id']))
+        self.call('candidate/workflow', {'applicationId': application['id'], 'action': 'after',
+            'meetingId': first['id'], 'value': 'no'}, cookie)
+        with self.connect() as db:
+            before_meetings = db.execute('SELECT * FROM cp_meetings WHERE application_id=?', (application['id'],)).fetchall()
+            before_workflow = employer_workflow.load(db, application['id'], actor='candidate', candidate_id=person['id'])
+            before_events = db.execute('SELECT * FROM fake_events').fetchall()
+        with self.assertRaises(Problem) as caught:
+            self.scheduled(application, minutes=120)
+        self.assertEqual(caught.exception.status, 409)
+        self.assertIn('Кандидат отказался', caught.exception.message)
+        with self.connect() as db:
+            self.assertEqual(db.execute('SELECT * FROM cp_meetings WHERE application_id=?', (application['id'],)).fetchall(), before_meetings)
+            self.assertEqual(employer_workflow.load(db, application['id'], actor='candidate', candidate_id=person['id']), before_workflow)
+            self.assertEqual(db.execute('SELECT * FROM fake_events').fetchall(), before_events)
+            self.assertEqual(self.portal.candidate_state(db, person['id'])['applications'][0]['afterInterest'], 'no')
+        # Only the candidate's explicit changed decision permits a new proposal.
+        self.call('candidate/workflow', {'applicationId': application['id'], 'action': 'after',
+            'meetingId': first['id'], 'value': 'yes'}, cookie)
+        second = self.scheduled(application, minutes=120)
+        self.assertNotEqual(first['id'], second['id'])
+        self.assertEqual(second['status'], 'pending')
+
     def test_withdrawn_consent_blocks_proposal_and_confirmation(self):
         _, cookie, application = self.application()
         first = self.scheduled(application)

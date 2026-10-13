@@ -56,6 +56,7 @@ def _busy(db, candidate_id, workspace_id):
     meetings = db.execute('''SELECT m.start,m.end FROM cp_meetings m
       JOIN cp_applications a ON a.id=m.application_id
       WHERE m.status IN ('pending','confirmed','live')
+      AND (a.archived_at IS NULL OR m.status='live')
       AND (a.candidate_id=? OR m.manager_id=?)''',
                           (candidate_id, 'workspace:' + workspace_id)).fetchall()
     interviews = db.execute('''SELECT s.start,s.end FROM cp_interviews i

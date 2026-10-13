@@ -224,7 +224,8 @@ def archive_vacancy(db, workspace_id, vacancy_id, expected_revision=None):
             return current
         _check_revision(current, expected_revision)
         active = db.execute('''SELECT 1 FROM cp_meetings m JOIN cp_applications a
-          ON a.id=m.application_id WHERE a.vacancy_id=? AND m.status IN ('pending','confirmed','live') LIMIT 1''',
+          ON a.id=m.application_id WHERE a.vacancy_id=? AND m.status IN ('pending','confirmed','live')
+          AND (a.archived_at IS NULL OR m.status='live') LIMIT 1''',
                             (vacancy_id,)).fetchone()
         require(active is None, 'Сначала завершите или отмените назначенные встречи.', 409)
         db.execute('UPDATE em_vacancies SET archived_at=? WHERE vacancy_id=?', (iso(now()), vacancy_id))
@@ -280,7 +281,7 @@ def adopt_existing(db, workspace_id):
             adopt_vacancy(db, workspace_id, row[0])
         applications = db.execute('''SELECT a.id,a.vacancy_id FROM cp_applications a
           JOIN em_vacancies v ON v.vacancy_id=a.vacancy_id LEFT JOIN em_reviews r ON r.application_id=a.id
-          WHERE v.workspace_id=? AND r.application_id IS NULL ORDER BY a.created_at,a.rowid''',
+          WHERE v.workspace_id=? AND r.application_id IS NULL AND a.archived_at IS NULL ORDER BY a.created_at,a.rowid''',
                                   (workspace_id,)).fetchall()
         changed = set()
         for aid, vid in applications:
@@ -291,14 +292,15 @@ def adopt_existing(db, workspace_id):
         if 'manager_id' in {row[1] for row in db.execute('PRAGMA table_info(cp_meetings)')}:
             db.execute('''UPDATE cp_meetings SET manager_id=? WHERE manager_id='recruiter:team'
               AND application_id IN (SELECT a.id FROM cp_applications a JOIN em_vacancies v
-                ON v.vacancy_id=a.vacancy_id WHERE v.workspace_id=?)''',
+                ON v.vacancy_id=a.vacancy_id WHERE v.workspace_id=? AND a.archived_at IS NULL)''',
                        ('workspace:' + workspace_id, workspace_id))
         return {'vacanciesAdopted': len(unowned), 'applicationsAdopted': len(applications)}
 
 
 def _eligible(db, candidate_id):
-    row = db.execute('SELECT profile FROM cp_candidates WHERE id=?', (candidate_id,)).fetchone()
+    row = db.execute('SELECT profile,searching FROM cp_candidates WHERE id=?', (candidate_id,)).fetchone()
     require(row is not None, 'Кандидат не найден.', 404)
+    require(bool(row[1]), 'Кандидат остановил поиск работы.', 409)
     profile = json.loads(row[0])
     require(profile.get('consentReuse') is True,
             'Кандидат не разрешил использовать интервью для новых вакансий.', 409)
@@ -360,12 +362,12 @@ def import_batch(db, workspace_id, vacancy_id, body, portal=None):
                     payload['externalBatchId'], digest, '{}', created))
         for item in payload['candidates']:
             cid = item['candidateId']
-            app = db.execute('SELECT id FROM cp_applications WHERE vacancy_id=? AND candidate_id=?',
+            app = db.execute('SELECT id FROM cp_applications WHERE vacancy_id=? AND candidate_id=? AND archived_at IS NULL',
                              (vacancy_id, cid)).fetchone()
             if app is None:
                 require(portal is not None, 'Не подключён обработчик согласования вакансии.', 503)
                 portal.propose_application(db, {'vacancyId': vacancy_id, 'candidateId': cid})
-                app = db.execute('SELECT id FROM cp_applications WHERE vacancy_id=? AND candidate_id=?',
+                app = db.execute('SELECT id FROM cp_applications WHERE vacancy_id=? AND candidate_id=? AND archived_at IS NULL',
                                  (vacancy_id, cid)).fetchone()
                 require(app is not None, 'Не удалось сохранить участие кандидата.', 500)
             aid = app[0]
@@ -392,7 +394,7 @@ def _application_row(db, workspace_id, application_id):
     _workspace(db, workspace_id)
     row = db.execute('''SELECT a.id,a.candidate_id,a.vacancy_id,a.status,a.approved_automatically,
       r.state,r.queue_order,r.skip_count,r.source,r.source_version,r.batch_id,r.rank,r.reason,
-      r.selected_at,r.rejected_at,p.profile,r.created_at,r.updated_at
+      r.selected_at,r.rejected_at,p.profile,r.created_at,r.updated_at,a.archived_at
       FROM cp_applications a JOIN em_reviews r ON r.application_id=a.id
       JOIN em_vacancies v ON v.vacancy_id=a.vacancy_id JOIN cp_candidates p ON p.id=a.candidate_id
       WHERE a.id=? AND r.workspace_id=? AND v.workspace_id=? AND v.archived_at IS NULL''',
@@ -412,7 +414,11 @@ def application(db, workspace_id, application_id, include_rejected=False, includ
             'queueOrder': row[6], 'skipCount': row[7], 'source': row[8], 'sourceVersion': row[9],
             'batchId': row[10], 'rank': row[11], 'reason': row[12], 'selectedAt': row[13],
             'rejectedAt': row[14], 'profile': {key: profile[key] for key in PROFILE_FIELDS if key in profile},
-            'createdAt': row[16], 'updatedAt': row[17]}
+            'createdAt': row[16], 'updatedAt': row[17], 'archivedAt': row[18]}
+
+
+def require_active(app):
+    require(app['archivedAt'] is None, 'Этот подбор завершён после остановки поиска кандидатом.', 409)
 
 
 def applications(db, workspace_id, view='all', vacancy_id=None):
@@ -424,6 +430,7 @@ def applications(db, workspace_id, view='all', vacancy_id=None):
       JOIN em_reviews r ON r.application_id=a.id JOIN em_vacancies v ON v.vacancy_id=a.vacancy_id
       JOIN cp_candidates p ON p.id=a.candidate_id
       WHERE v.workspace_id=? AND r.workspace_id=? AND v.archived_at IS NULL
+      AND a.archived_at IS NULL AND p.searching=1
       AND (? IS NULL OR a.vacancy_id=?) AND r.state!='rejected'
       ORDER BY r.queue_order,r.created_at,a.id''',
                       (workspace_id, workspace_id, vacancy_id, vacancy_id)).fetchall()
@@ -439,6 +446,7 @@ def review_candidates(db, workspace_id, vacancy_id, view='proposed'):
 def skip(db, workspace_id, application_id, request_id=None, expected_revision=None):
     with _atomic(db):
         app = application(db, workspace_id, application_id)
+        require_active(app)
         current = ensure_open(db, workspace_id, app['vacancyId'])
         payload = {'applicationId': application_id, 'revision': expected_revision}
         saved, digest = _command(db, workspace_id, request_id, 'review.skip', payload)
@@ -458,6 +466,7 @@ def skip(db, workspace_id, application_id, request_id=None, expected_revision=No
 def reject(db, workspace_id, application_id, request_id=None, expected_revision=None):
     with _atomic(db):
         app = application(db, workspace_id, application_id, include_rejected=True)
+        require_active(app)
         payload = {'applicationId': application_id, 'revision': expected_revision}
         saved, digest = _command(db, workspace_id, request_id, 'review.reject', payload)
         if saved is not None:
@@ -477,6 +486,7 @@ def mark_selected(db, workspace_id, application_id, meeting_id):
     """Called in the transaction which successfully persists the meeting proposal."""
     with _atomic(db):
         app = application(db, workspace_id, application_id)
+        require_active(app)
         ensure_open(db, workspace_id, app['vacancyId'])
         meeting = db.execute('SELECT id,status FROM cp_meetings WHERE id=? AND application_id=?',
                              (meeting_id, application_id)).fetchone()

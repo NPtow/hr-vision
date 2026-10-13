@@ -79,6 +79,20 @@ class CandidateBot:
     def _menu(self, config):
         return {'inline_keyboard': [[{'text': 'Открыть кабинет', 'url': self._url(config)}]]}
 
+    def _searching(self, db, cid):
+        return self.notifications._candidate_searching(db, cid)
+
+    def _paused_content(self, config):
+        return {'text': 'Поиск работы приостановлен. Предыдущие отклики и встречи остались в архиве. '
+                       'Возобновить поиск можно в кабинете — старые отклики останутся в архиве.',
+                'reply_markup': self._menu(config)}
+
+    def _require_active_application(self, db, cid, application):
+        require(self._searching(db, cid), 'Поиск приостановлен. Возобновите его в кабинете.', 409)
+        require(not application.get('archivedAt') and
+                not self.notifications._application_delivery_error(db, cid, application['id']),
+                'Отклик в архиве. Откройте /vacancies для новых предложений.', 409)
+
     def _role_content(self, config, role='menu'):
         if role == 'candidate':
             text = ('Пройдите одно интервью с нашим рекрутером — дальше выбирайте подходящие вакансии в личном кабинете.\n\n'
@@ -122,13 +136,17 @@ class CandidateBot:
         if description:
             text += '\n\n' + description[:1800] + ('…' if len(description) > 1800 else '')
         rows = []
-        if application['status'] == 'pending' and not workflow['closedBy'] and workflow['decision'] != 'declined':
+        active = not application.get('archivedAt') and self._searching(db, cid) and \
+            not self.notifications._application_delivery_error(db, cid, application['id'])
+        if not active:
+            text += '\nОтклик в архиве или поиск приостановлен.'
+        if active and application['status'] == 'pending' and not workflow['closedBy'] and workflow['decision'] != 'declined':
             snapshot = {'status': 'pending', 'vacancyDigest': _digest(_dump(vacancy))}
             rows.append([self._button(db, cid, chat, 'application.accept', 'Согласиться', tick, application, snapshot=snapshot),
                          self._button(db, cid, chat, 'application.decline', 'Отказаться', tick, application, snapshot=snapshot)])
             text += '\n\nСогласие относится к этой вакансии. Время встречи подтвердите отдельно.'
         rows.extend(self._menu(config)['inline_keyboard'])
-        return {'text': text, 'reply_markup': {'inline_keyboard': rows}}
+        return {'text': text, 'reply_markup': {'inline_keyboard': rows}, 'application_id': application['id']}
 
     def _meeting_card(self, db, cid, chat, application, config, tick):
         meeting, vacancy = application['meeting'], application['vacancy']
@@ -136,23 +154,31 @@ class CandidateBot:
                 _time(meeting['start']) + ' — ' + _time(meeting['end']) + '\n' +
                 MEETING_LABELS.get(meeting['status'], meeting['status']))
         rows = []
-        if meeting['status'] == 'pending':
+        active = not application.get('archivedAt') and self._searching(db, cid) and \
+            not self.notifications._application_delivery_error(db, cid, application['id'])
+        if not active:
+            text += '\nОтклик в архиве или поиск приостановлен.'
+        if active and meeting['status'] == 'pending':
             rows.append([self._button(db, cid, chat, 'meeting.confirm', 'Подтвердить это время', tick, application, meeting),
                          self._button(db, cid, chat, 'meeting.decline', 'Время не подходит', tick, application, meeting)])
             text += '\n\nНажатием вы подтверждаете именно указанные дату и время.'
         rows.extend(self._menu(config)['inline_keyboard'])
-        return {'text': text, 'reply_markup': {'inline_keyboard': rows}}
+        return {'text': text, 'reply_markup': {'inline_keyboard': rows}, 'application_id': application['id']}
 
     def _send(self, db, chat, cid, key, content, config, tick):
         return self.notifications.enqueue_telegram_reply(db, chat, key, content['text'],
-            reply_markup=content.get('reply_markup'), candidate_id=cid, settings=config, now=tick)
+            reply_markup=content.get('reply_markup'), candidate_id=cid, settings=config, now=tick,
+            application_id=content.get('application_id'))
 
     def _vacancies(self, db, cid, chat, config, tick, key, offset=0):
-        total = db.execute('SELECT COUNT(*) FROM cp_applications WHERE candidate_id=?', (cid,)).fetchone()[0]
-        rows = db.execute('''SELECT id FROM cp_applications WHERE candidate_id=?
+        if not self._searching(db, cid):
+            self._send(db, chat, cid, key + ':paused', self._paused_content(config), config, tick)
+            return
+        total = db.execute('SELECT COUNT(*) FROM cp_applications WHERE candidate_id=? AND archived_at IS NULL', (cid,)).fetchone()[0]
+        rows = db.execute('''SELECT id FROM cp_applications WHERE candidate_id=? AND archived_at IS NULL
             ORDER BY created_at DESC,rowid DESC LIMIT ? OFFSET ?''', (cid, PAGE_SIZE, offset)).fetchall()
         if not rows:
-            self._send(db, chat, cid, key + ':empty', {'text': 'Предложений вакансий пока нет. Когда команда предложит вам вакансию, она появится здесь и в кабинете.', 'reply_markup': self._menu(config)}, config, tick)
+            self._send(db, chat, cid, key + ':empty', {'text': 'Активных предложений вакансий пока нет. Когда команда предложит вам вакансию, она появится здесь и в кабинете.', 'reply_markup': self._menu(config)}, config, tick)
         for index, row in enumerate(rows):
             app = self.portal.application(db, row[0], cid)
             self._send(db, chat, cid, key + ':' + str(index), self._application_card(db, cid, chat, app, config, tick), config, tick)
@@ -161,8 +187,11 @@ class CandidateBot:
             self._send(db, chat, cid, key + ':next', {'text': f'Показано {offset + len(rows)} из {total}.', 'reply_markup': {'inline_keyboard': [[button]]}}, config, tick)
 
     def _meetings(self, db, cid, chat, config, tick, key):
+        if not self._searching(db, cid):
+            self._send(db, chat, cid, key + ':paused', self._paused_content(config), config, tick)
+            return
         rows = db.execute('''SELECT DISTINCT a.id FROM cp_applications a JOIN cp_meetings m
-            ON m.application_id=a.id WHERE a.candidate_id=? AND m.status IN ('pending','confirmed','live')
+            ON m.application_id=a.id WHERE a.candidate_id=? AND a.archived_at IS NULL AND m.status IN ('pending','confirmed','live')
             ORDER BY m.start LIMIT 20''', (cid,)).fetchall()
         if not rows:
             self._send(db, chat, cid, key + ':empty', {'text': 'Предстоящих встреч пока нет. Согласие на вакансию не подтверждает время встречи.', 'reply_markup': self._menu(config)}, config, tick)
@@ -179,7 +208,10 @@ class CandidateBot:
         interview = state['interview']
         interview_text = ('Первичное интервью завершено.' if interview and interview['status'] == 'completed'
                           else 'Первичное интервью: ' + _time(interview['start']) if interview else 'Первичное интервью ещё не назначено.')
-        return {'text': onboarding + '\n' + interview_text + '\nПредложений вакансий: ' + str(len(state['applications'])) +
+        searching = state.get('searching', self._searching(db, cid))
+        applications = [item for item in state['applications'] if not item.get('archivedAt')] if searching else []
+        return {'text': ('Поиск работы активен.' if searching else 'Поиск работы приостановлен. Возобновить его можно в кабинете.') +
+                '\n' + onboarding + '\n' + interview_text + '\nАктивных предложений вакансий: ' + str(len(applications)) +
                 '\nАвтосогласование вакансий: ' + ('включено' if state['autoApprove'] else 'выключено') +
                 '\n\n/vacancies — вакансии и решения\n/meetings — время встреч\n/settings — автосогласование\n/status — состояние профиля',
                 'reply_markup': self._menu(config)}
@@ -210,6 +242,7 @@ class CandidateBot:
                 name = action['action']
                 if name.startswith('application.'):
                     app = self.portal.application(db, action['application_id'], cid)
+                    self._require_active_application(db, cid, app)
                     require(app['status'] == snapshot['status'] and _digest(_dump(app['vacancy'])) == snapshot['vacancyDigest'], 'Предложение изменилось. Откройте /vacancies.', 409)
                     workflow = employer_workflow.load(db, app['id'], actor='candidate', candidate_id=cid)
                     require(not workflow['closedBy'] and workflow['decision'] != 'declined', 'Рассмотрение завершено. Откройте /vacancies.', 409)
@@ -217,6 +250,7 @@ class CandidateBot:
                     answer = 'Согласие сохранено. Время встречи подтверждается отдельно.' if name == 'application.accept' else 'Отказ от вакансии сохранён.'
                 elif name.startswith('meeting.'):
                     app = self.portal.application(db, action['application_id'], cid)
+                    self._require_active_application(db, cid, app)
                     meeting = app['meeting']
                     require(meeting and all(meeting[k] == action[v] for k, v in [('id', 'meeting_id'), ('revision', 'revision'), ('start', 'start'), ('end', 'end')]) and meeting['status'] == 'pending', 'Время встречи изменилось. Откройте /meetings.', 409)
                     body = {'applicationId': app['id'], 'meetingId': meeting['id'], 'revision': meeting['revision']}
@@ -228,6 +262,7 @@ class CandidateBot:
                     self.portal.profile(db, cid, {'autoApprove': name == 'settings.auto_on'})
                     answer = 'Автосогласование включено. Время встречи подтверждаете отдельно.' if name == 'settings.auto_on' else 'Автосогласование выключено.'
                 elif name == 'vacancies.page':
+                    require(self._searching(db, cid), 'Поиск приостановлен. Возобновите его в кабинете.', 409)
                     require(type(snapshot.get('offset')) is int and snapshot['offset'] >= 0, 'Откройте /vacancies.', 400)
                     self._vacancies(db, cid, chat, config, tick, key + ':page', snapshot['offset'])
                     answer = 'Следующие предложения'
@@ -242,9 +277,11 @@ class CandidateBot:
                 answer, status = error.message[:200], 'stale_callback'
         # A foreign click never consumes another person's token or exposes its data.
         self.notifications.enqueue_telegram_callback(db, chat, key + ':answer', query['id'], answer[:200],
-            show_alert=status != 'updated', candidate_id=cid, settings=config, now=tick)
+            show_alert=status != 'updated', candidate_id=cid, settings=config, now=tick,
+            application_id=action['application_id'] if status == 'updated' else None)
         if valid and status == 'updated' and action['action'] != 'vacancies.page':
-            self._send(db, chat, cid, key + ':receipt', {'text': answer, 'reply_markup': self._menu(config)}, config, tick)
+            self._send(db, chat, cid, key + ':receipt', {'text': answer, 'reply_markup': self._menu(config),
+                'application_id': action['application_id']}, config, tick)
         return {'status': status}
 
     def handle_update(self, db, update, timestamp, config, binding_result=None):

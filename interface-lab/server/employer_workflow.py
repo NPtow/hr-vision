@@ -96,13 +96,17 @@ def _atomic(db):
 
 def identity(db, application_id, *, candidate_id=None, vacancy_id=None):
     """Canonical identity, never selected by an untrusted actor/candidate field."""
-    row = db.execute('''SELECT a.id,a.candidate_id,a.vacancy_id,a.status,v.body
+    row = db.execute('''SELECT a.id,a.candidate_id,a.vacancy_id,a.status,v.body,a.archived_at
       FROM cp_applications a JOIN cp_vacancies v ON v.id=a.vacancy_id WHERE a.id=?''',
       (application_id,)).fetchone()
     require(row is not None and (candidate_id is None or row[1] == candidate_id)
             and (vacancy_id is None or row[2] == vacancy_id), 'Вакансия не найдена.', 404)
     return {'applicationId': row[0], 'candidateId': row[1], 'vacancyId': row[2],
-            'interest': row[3], 'vacancy': json.loads(row[4])}
+            'interest': row[3], 'vacancy': json.loads(row[4]), 'archivedAt': row[5]}
+
+
+def require_active(info):
+    require(info['archivedAt'] is None, 'Этот подбор завершён после остановки поиска кандидатом.', 409)
 
 
 def _workflow(db, app_id):
@@ -187,7 +191,7 @@ def load(db, application_id, *, actor='manager', candidate_id=None, vacancy_id=N
     require(actor != 'candidate' or candidate_id is not None, 'Войдите в свой кабинет.', 401)
     info = identity(db, application_id, candidate_id=candidate_id if actor == 'candidate' else None,
                     vacancy_id=vacancy_id)
-    state = {key: info[key] for key in ('applicationId', 'candidateId', 'vacancyId', 'interest')}
+    state = {key: info[key] for key in ('applicationId', 'candidateId', 'vacancyId', 'interest', 'archivedAt')}
     state.update(_workflow(db, application_id))
     if _review_rejected(db, application_id):
         state['decision'] = 'declined'
@@ -256,7 +260,7 @@ def prepare_questions(db, application_id, meeting_id, turns, *, vacancy_id=None)
     freezes its questions for the exact completed meeting. Later retries return it.
     """
     with _atomic(db):
-        identity(db, application_id, vacancy_id=vacancy_id)
+        require_active(identity(db, application_id, vacancy_id=vacancy_id))
         _completed_meeting(db, application_id, meeting_id)
         existing = _feedback(db, application_id, meeting_id)
         if existing:
@@ -323,6 +327,7 @@ def _action(db, app_id, action, body, *, actor, actor_id, vacancy_id=None):
     with _atomic(db):
         info = identity(db, app_id, candidate_id=actor_id if actor == 'candidate' else None,
                         vacancy_id=vacancy_id)
+        require_active(info)
         if rid is not None:
             old = db.execute('''SELECT fingerprint FROM cp_workflow_commands
               WHERE application_id=? AND actor_key=? AND request_id=?''', (app_id, actor_key, rid)).fetchone()

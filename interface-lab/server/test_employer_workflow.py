@@ -21,7 +21,7 @@ class WorkflowTest(unittest.TestCase):
               CREATE TABLE cp_candidates(id TEXT PRIMARY KEY, profile TEXT NOT NULL);
               CREATE TABLE cp_vacancies(id TEXT PRIMARY KEY,body TEXT NOT NULL,created_at TEXT NOT NULL);
               CREATE TABLE cp_applications(id TEXT PRIMARY KEY,candidate_id TEXT NOT NULL REFERENCES cp_candidates(id),
-                vacancy_id TEXT NOT NULL REFERENCES cp_vacancies(id),status TEXT NOT NULL);
+                vacancy_id TEXT NOT NULL REFERENCES cp_vacancies(id),status TEXT NOT NULL,archived_at TEXT DEFAULT NULL);
               CREATE TABLE cp_meetings(id TEXT PRIMARY KEY,application_id TEXT NOT NULL REFERENCES cp_applications(id),
                 start TEXT,end TEXT,status TEXT,room TEXT,confirmed_at TEXT,completed_at TEXT);
             ''')
@@ -32,7 +32,7 @@ class WorkflowTest(unittest.TestCase):
                 db.execute('INSERT INTO cp_vacancies VALUES (?,?,?)', (vid, json.dumps({
                     'id': vid, 'role': 'Менеджер', 'status': 'open', 'custom': {'retained': True}}), iso(now())))
             for aid, cid, vid in [('a1', 'c1', 'v1'), ('a2', 'c2', 'v1'), ('a3', 'c1', 'v2'), ('a4', 'c3', 'v3')]:
-                db.execute('INSERT INTO cp_applications VALUES (?,?,?,?)', (aid, cid, vid, 'accepted'))
+                db.execute('INSERT INTO cp_applications(id,candidate_id,vacancy_id,status) VALUES (?,?,?,?)', (aid, cid, vid, 'accepted'))
                 self.add_meeting(db, 'm' + aid[1:], aid)
 
     def tearDown(self):

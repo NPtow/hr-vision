@@ -136,6 +136,38 @@ def migrate_meetings(db):
         db.execute('PRAGMA foreign_keys=' + str(foreign_keys))
 
 
+def migrate_search(db):
+    """Preserve application IDs and foreign keys across successive search periods."""
+    if 'searching' not in {row[1] for row in db.execute('PRAGMA table_info(cp_candidates)')}:
+        db.execute('ALTER TABLE cp_candidates ADD COLUMN searching INTEGER NOT NULL DEFAULT 1 CHECK(searching IN (0,1))')
+    if 'archived_at' not in {row[1] for row in db.execute('PRAGMA table_info(cp_applications)')}:
+        require(not db.in_transaction, 'Миграция поиска требует отдельной транзакции.', 500)
+        foreign_keys = db.execute('PRAGMA foreign_keys').fetchone()[0]
+        db.execute('PRAGMA foreign_keys=OFF')
+        try:
+            db.execute('BEGIN IMMEDIATE')
+            db.execute('''CREATE TABLE cp_applications_next (
+              id TEXT PRIMARY KEY, candidate_id TEXT NOT NULL REFERENCES cp_candidates(id),
+              vacancy_id TEXT NOT NULL REFERENCES cp_vacancies(id), status TEXT NOT NULL,
+              approved_automatically INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL,
+              decided_at TEXT, archived_at TEXT)''')
+            db.execute('''INSERT INTO cp_applications_next
+              SELECT id,candidate_id,vacancy_id,status,approved_automatically,created_at,decided_at,NULL
+              FROM cp_applications''')
+            db.execute('DROP TABLE cp_applications')
+            db.execute('ALTER TABLE cp_applications_next RENAME TO cp_applications')
+            require(not db.execute('PRAGMA foreign_key_check').fetchall(), 'Нарушена целостность подборов.', 500)
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.execute('PRAGMA foreign_keys=' + str(foreign_keys))
+    db.execute('CREATE INDEX IF NOT EXISTS cp_application_candidate ON cp_applications(candidate_id)')
+    db.execute('''CREATE UNIQUE INDEX IF NOT EXISTS cp_application_one_active
+      ON cp_applications(candidate_id,vacancy_id) WHERE archived_at IS NULL''')
+
+
 @contextmanager
 def meeting_transaction(db):
     """Serialize calendar reads and keep a failed mutation atomic in its caller."""
@@ -278,6 +310,7 @@ class CandidatePortal:
         ''')
         invites.migrate_accounts(db)
         migrate_meetings(db)
+        migrate_search(db)
         invites.init(db)
         availability.init(db)
         recruiter_access.init(db)
@@ -436,10 +469,10 @@ class CandidatePortal:
                 db.execute('INSERT INTO cp_rate_limits VALUES (?,?,?)', (digest, 1, tick + seconds))
 
     def person(self, db, cid):
-        row = db.execute('SELECT id,email,profile,created_at FROM cp_candidates WHERE id=?', (cid,)).fetchone()
+        row = db.execute('SELECT id,email,profile,created_at,searching FROM cp_candidates WHERE id=?', (cid,)).fetchone()
         require(row is not None, 'Кандидат не найден.', 404)
         return {'id': row[0], 'email': row[1], 'accountActive': row[1] is not None,
-                **json.loads(row[2]), 'createdAt': row[3]}
+                **json.loads(row[2]), 'createdAt': row[3], 'searching': bool(row[4])}
 
     def interview(self, db, cid):
         row = db.execute('''SELECT i.id,i.status,i.room,s.start,s.end,s.recruiter_name,i.completed_at
@@ -460,11 +493,11 @@ class CandidatePortal:
                  'cancellationReason': row[9]} if row else None)
 
     def application(self, db, app_id, cid=None):
-        row = db.execute('''SELECT a.id,a.candidate_id,a.status,a.approved_automatically,v.body
+        row = db.execute('''SELECT a.id,a.candidate_id,a.status,a.approved_automatically,v.body,a.archived_at
           FROM cp_applications a JOIN cp_vacancies v ON a.vacancy_id=v.id WHERE a.id=?''', (app_id,)).fetchone()
         require(row is not None and (cid is None or row[1] == cid), 'Вакансия не найдена.', 404)
         return {'id': row[0], 'candidateId': row[1], 'status': row[2],
-                'approvedAutomatically': bool(row[3]), 'vacancy': json.loads(row[4]),
+                'approvedAutomatically': bool(row[3]), 'vacancy': json.loads(row[4]), 'archivedAt': row[5],
                 'meeting': self.meeting(db, app_id),
                 'meetings': [self.meeting(db, app_id, item[0]) for item in db.execute(
                     'SELECT id FROM cp_meetings WHERE application_id=? ORDER BY revision DESC', (app_id,))]}
@@ -503,6 +536,31 @@ class CandidatePortal:
             profile = db.execute('SELECT body FROM cp_internal_profiles WHERE candidate_id=?', (cid,)).fetchone()
             result['internalProfile'] = json.loads(profile[0]) if profile else None
         return result
+
+    def set_searching(self, db, cid, body):
+        require(isinstance(body, dict) and set(body) == {'searching'} and type(body['searching']) is bool,
+                'Укажите, ищете ли вы работу.', 400)
+        with meeting_transaction(db):
+            person = self.person(db, cid)
+            if not body['searching']:
+                live = db.execute("SELECT 1 FROM cp_interviews WHERE candidate_id=? AND status='live'", (cid,)).fetchone()
+                live = live or db.execute('''SELECT 1 FROM cp_meetings m JOIN cp_applications a ON a.id=m.application_id
+                  WHERE a.candidate_id=? AND m.status='live' ''', (cid,)).fetchone()
+                require(not live, 'Сначала завершите текущий звонок, затем остановите поиск.', 409)
+                changed = iso(now())
+                db.execute('''UPDATE cp_meetings SET status='cancelled',cancelled_at=?,cancellation_reason='search_stopped'
+                  WHERE status IN ('pending','confirmed') AND application_id IN
+                  (SELECT id FROM cp_applications WHERE candidate_id=? AND archived_at IS NULL)''', (changed, cid))
+                db.execute('UPDATE cp_applications SET archived_at=? WHERE candidate_id=? AND archived_at IS NULL', (changed, cid))
+                db.execute('''UPDATE cp_offer_versions SET status='withdrawn' WHERE status='sent'
+                  AND application_id IN (SELECT id FROM cp_applications WHERE candidate_id=? AND archived_at IS NOT NULL)''', (cid,))
+            if person['searching'] != body['searching']:
+                db.execute('UPDATE cp_candidates SET searching=?,updated_at=? WHERE id=?',
+                           (int(body['searching']), iso(now()), cid))
+
+    def require_application_active(self, db, application):
+        require(not application['archivedAt'] and self.person(db, application['candidateId'])['searching'],
+                'Этот подбор завершён после остановки поиска. Новые предложения появятся после возобновления.', 409)
 
     def slots(self, db, internal=False, recruiter_id=None):
         availability.materialize(db)
@@ -569,7 +627,7 @@ class CandidatePortal:
         profile = profile_value({key: value for key, value in body.items() if key in PROFILE_FIELDS})
         require(profile['consentReuse'], 'Подтвердите использование интервью для подбора вакансий.', 400)
         cid, created = uid('person'), iso(now())
-        db.execute('INSERT INTO cp_candidates VALUES (?,?,?,?,?,?)',
+        db.execute('INSERT INTO cp_candidates(id,email,password_hash,profile,created_at,updated_at) VALUES (?,?,?,?,?,?)',
                    (cid, email, password_hash(body.get('password')), dump(profile), created, created))
         db.execute('INSERT INTO cp_consent_log VALUES (?,?,?,?,?,?)',
                    (uid('consent'), cid, created, 1, int(profile['autoApprove']), 'candidate-onboarding-v1'))
@@ -680,7 +738,8 @@ class CandidatePortal:
         require(not interview or interview['status'] == 'completed' or not overlaps(times, interview),
                 'На это время у кандидата уже назначено интервью.', 409)
         for row in db.execute('''SELECT m.id,m.start,m.end FROM cp_meetings m JOIN cp_applications a
-          ON m.application_id=a.id WHERE a.candidate_id=? AND m.status IN ('pending','confirmed','live')''', (cid,)):
+          ON m.application_id=a.id WHERE a.candidate_id=? AND m.status IN ('pending','confirmed','live')
+          AND (a.archived_at IS NULL OR m.status='live')''', (cid,)):
             if row[0] != exclude_meeting_id:
                 require(not overlaps(times, {'start': row[1], 'end': row[2]}), 'Это время кандидата уже занято.', 409)
 
@@ -692,39 +751,46 @@ class CandidatePortal:
         db.execute('INSERT INTO cp_vacancies VALUES (?,?,?)', (vacancy['id'], dump(vacancy), iso(now())))
 
     def propose_application(self, db, body):
-        cid = body.get('candidateId')
-        person = self.person(db, cid)
-        interview = self.interview(db, cid)
-        require(interview is not None and interview['status'] == 'completed', 'Сначала завершите первичное интервью.', 409)
-        require(person['consentReuse'], 'Кандидат не разрешил использовать интервью для новых вакансий.', 409)
-        row = db.execute('SELECT body FROM cp_vacancies WHERE id=?', (body.get('vacancyId'),)).fetchone()
-        require(row is not None, 'Вакансия не найдена.', 404)
-        vacancy = json.loads(row[0])
-        existing = db.execute('SELECT id FROM cp_applications WHERE candidate_id=? AND vacancy_id=?', (cid, vacancy['id'])).fetchone()
-        if existing:
-            return
-        auto = self.auto_matches(person, vacancy)
-        aid = uid('application')
-        db.execute('INSERT INTO cp_applications VALUES (?,?,?,?,?,?,?)',
-                   (aid, cid, vacancy['id'], 'accepted' if auto else 'pending', int(auto), iso(now()), iso(now()) if auto else None))
-        self.event(db, cid, 'application.proposed', aid)
+        with meeting_transaction(db):
+            cid = body.get('candidateId')
+            person = self.person(db, cid)
+            require(person['searching'], 'Кандидат остановил поиск работы.', 409)
+            interview = self.interview(db, cid)
+            require(interview is not None and interview['status'] == 'completed', 'Сначала завершите первичное интервью.', 409)
+            require(person['consentReuse'], 'Кандидат не разрешил использовать интервью для новых вакансий.', 409)
+            row = db.execute('SELECT body FROM cp_vacancies WHERE id=?', (body.get('vacancyId'),)).fetchone()
+            require(row is not None, 'Вакансия не найдена.', 404)
+            vacancy = json.loads(row[0])
+            existing = db.execute('SELECT id FROM cp_applications WHERE candidate_id=? AND vacancy_id=? AND archived_at IS NULL', (cid, vacancy['id'])).fetchone()
+            if existing:
+                return
+            auto = self.auto_matches(person, vacancy)
+            aid = uid('application')
+            db.execute('INSERT INTO cp_applications(id,candidate_id,vacancy_id,status,approved_automatically,created_at,decided_at) VALUES (?,?,?,?,?,?,?)',
+                       (aid, cid, vacancy['id'], 'accepted' if auto else 'pending', int(auto), iso(now()), iso(now()) if auto else None))
+            self.event(db, cid, 'application.proposed', aid)
 
     def decide_application(self, db, cid, body):
-        application = self.application(db, body.get('applicationId'), cid)
-        decision = body.get('decision')
-        require(decision in ('accepted', 'declined'), 'Выберите решение.', 400)
-        if application['status'] == decision:
-            return
-        require(application['status'] == 'pending', 'Решение уже сохранено.', 409)
-        require(decision != 'accepted' or self.person(db, cid)['consentReuse'], 'Подтвердите использование интервью в профиле.', 409)
-        db.execute('UPDATE cp_applications SET status=?,approved_automatically=0,decided_at=? WHERE id=?',
-                   (decision, iso(now()), application['id']))
+        with meeting_transaction(db):
+            application = self.application(db, body.get('applicationId'), cid)
+            self.require_application_active(db, application)
+            decision = body.get('decision')
+            require(decision in ('accepted', 'declined'), 'Выберите решение.', 400)
+            if application['status'] == decision:
+                return
+            require(application['status'] == 'pending', 'Решение уже сохранено.', 409)
+            require(decision != 'accepted' or self.person(db, cid)['consentReuse'], 'Подтвердите использование интервью в профиле.', 409)
+            db.execute('UPDATE cp_applications SET status=?,approved_automatically=0,decided_at=? WHERE id=?',
+                       (decision, iso(now()), application['id']))
 
     def _application_open_for_meeting(self, db, application):
+        self.require_application_active(db, application)
         require(application['status'] == 'accepted', 'Сначала кандидат должен согласовать вакансию.', 409)
         person = self.person(db, application['candidateId'])
         require(person['consentReuse'], 'Кандидат не разрешил использовать интервью для вакансий.', 409)
         workflow = employer_workflow.load(db, application['id'])
+        require(workflow['afterInterest'] != 'no',
+                'Кандидат отказался продолжать после встречи. Новое назначение недоступно без его согласия.', 409)
         require(workflow['decision'] != 'declined' and not workflow['closedBy']
                 and application['vacancy'].get('status') not in ('closed', 'archived'),
                 'Работа по вакансии завершена.', 409)
@@ -739,8 +805,9 @@ class CandidatePortal:
         require(any(timestamp(slot['start']) <= timestamp(times['start']) and timestamp(slot['end']) >= timestamp(times['end'])
                     for slot in person['availability']), 'Выберите время из доступности кандидата.', 409)
         self.ensure_candidate_free(db, person['id'], times, exclude_meeting_id)
-        for row in db.execute('''SELECT id,start,end FROM cp_meetings
-          WHERE manager_id=? AND status IN ('pending','confirmed','live')''', (manager_id,)):
+        for row in db.execute('''SELECT m.id,m.start,m.end FROM cp_meetings m JOIN cp_applications a ON a.id=m.application_id
+          WHERE m.manager_id=? AND m.status IN ('pending','confirmed','live')
+          AND (a.archived_at IS NULL OR m.status='live')''', (manager_id,)):
             if row[0] != exclude_meeting_id:
                 require(not overlaps(times, {'start': row[1], 'end': row[2]}), 'У нанимающего уже есть встреча на это время.', 409)
         return times
@@ -792,6 +859,7 @@ class CandidatePortal:
     def cancel_meeting(self, db, body, *, manager_id='recruiter:team'):
         with meeting_transaction(db):
             application = self.application(db, body.get('applicationId'))
+            self.require_application_active(db, application)
             meeting = application['meeting']
             self._meeting_revision(meeting, body, required=True)
             owner = db.execute('SELECT manager_id FROM cp_meetings WHERE id=?', (meeting['id'],)).fetchone()
@@ -820,6 +888,7 @@ class CandidatePortal:
     def decline_meeting(self, db, cid, body):
         with meeting_transaction(db):
             application = self.application(db, body.get('applicationId'), cid)
+            self.require_application_active(db, application)
             meeting = application['meeting']
             self._meeting_revision(meeting, body)
             if meeting['status'] == 'declined':
@@ -949,6 +1018,8 @@ class CandidatePortal:
         with self.lock, self.connect() as db:
             if access_check:
                 access_check(db)
+            if application_id:
+                self.require_application_active(db, self.application(db, application_id, cid))
             current = db.execute(f'SELECT status FROM {table} WHERE id=?', (mid,)).fetchone()
             allowed = ('confirmed', 'live') if application_id else ('booked', 'live')
             require(current and current[0] in allowed, 'Интервью уже завершено.', 409)
@@ -1059,7 +1130,7 @@ class CandidatePortal:
                 access_check(db)
             self.person(db, cid)
             if application_id:
-                self.application(db, application_id, cid)
+                self.require_application_active(db, self.application(db, application_id, cid))
                 meeting = self.meeting(db, application_id, meeting_id)
             else:
                 meeting = self.interview(db, cid)
@@ -1283,6 +1354,8 @@ class CandidatePortal:
                 return {'ok': True}, {'Set-Cookie': self.clear_session(db, headers)}
             elif path == '/api/hr/candidate/profile':
                 self.profile(db, cid, body)
+            elif path == '/api/hr/candidate/search':
+                self.set_searching(db, cid, body)
             elif path == '/api/hr/candidate/resume':
                 self.save_resume(db, cid, parsed_resume)
             elif path == '/api/hr/candidate/book':
@@ -1390,7 +1463,9 @@ class CandidatePortal:
             else:
                 require(self.session_candidate(db, headers) == cid, 'Войдите в свой кабинет.', 401)
             if '/meeting/' in path:
-                self.application(db, body.get('applicationId'), cid)
+                application = self.application(db, body.get('applicationId'), cid)
+                if not path.endswith('/materials'):
+                    self.require_application_active(db, application)
 
         if path.endswith('/join'):
             return self.join(cid, body.get('applicationId') if '/meeting/' in path else None,

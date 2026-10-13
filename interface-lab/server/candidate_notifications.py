@@ -413,23 +413,108 @@ def _enqueue_telegram(db, chat_id, event_key, event_type, payload, candidate_id,
     return _safe(_dict(db.execute('SELECT * FROM cn_outbox WHERE id=?', (rid,))))
 
 
-def enqueue_telegram_reply(db, chat_id, event_key, text, reply_markup=None, candidate_id=None, settings=None, now=None):
+def enqueue_telegram_reply(db, chat_id, event_key, text, reply_markup=None, candidate_id=None, settings=None, now=None,
+                           application_id=None):
     """Internal bot hook; callers must validate the originating private update.
 
     Without a candidate_id only generic onboarding/error prompts are permitted.
     Candidate-specific content must pass the linked owner for dispatch revalidation.
     No provider I/O occurs until the caller transaction commits and a worker claims it.
     """
-    return _enqueue_telegram(db, chat_id, event_key, 'telegram.reply', _telegram_message(text, reply_markup),
+    payload = _telegram_message(text, reply_markup)
+    _tag_application(payload, application_id, candidate_id)
+    return _enqueue_telegram(db, chat_id, event_key, 'telegram.reply', payload,
                              candidate_id, _config(settings), _now(now))
 
 
 def enqueue_telegram_callback(db, chat_id, event_key, callback_query_id, text='', show_alert=False,
-                              candidate_id=None, settings=None, now=None):
+                              candidate_id=None, settings=None, now=None, application_id=None):
     """Queue a callback acknowledgement in the same durable delivery outbox."""
-    return _enqueue_telegram(db, chat_id, event_key, 'telegram.callback',
-                             _telegram_callback(callback_query_id, text, show_alert),
+    payload = _telegram_callback(callback_query_id, text, show_alert)
+    _tag_application(payload, application_id, candidate_id)
+    return _enqueue_telegram(db, chat_id, event_key, 'telegram.callback', payload,
                              candidate_id, _config(settings), _now(now))
+
+
+def _tag_application(payload, application_id, candidate_id):
+    if application_id is not None:
+        require(isinstance(application_id, str) and 1 <= len(application_id) <= 160 and candidate_id,
+                'Не указана вакансия кандидата.', 400)
+        # Private dispatch metadata is never forwarded to Telegram.
+        payload['application_id'] = application_id
+
+
+def _columns(db, table):
+    # Only module-owned table names reach this helper.
+    return {row[1] for row in db.execute('PRAGMA table_info(' + table + ')')}
+
+
+def _candidate_searching(db, candidate_id):
+    if 'searching' not in _columns(db, 'cp_candidates'):
+        return True  # Standalone notification stores predate canonical search state.
+    row = db.execute('SELECT searching FROM cp_candidates WHERE id=?', (candidate_id,)).fetchone()
+    return bool(row and row[0])
+
+
+def _application_delivery_error(db, candidate_id, application_id):
+    if 'archived_at' not in _columns(db, 'cp_applications'):
+        return None
+    row = db.execute('SELECT archived_at FROM cp_applications WHERE id=? AND candidate_id=?',
+                     (application_id, candidate_id)).fetchone()
+    if not row or row[0] is not None:
+        return 'application_archived'
+    return None if _candidate_searching(db, candidate_id) else 'search_stopped'
+
+
+def _delivery_block_reason(db, row):
+    """Revalidate record-bound notifications while holding the dispatch claim.
+
+    Account/verification messages and plain bot navigation remain usable while
+    searching is paused. A blocked row stays terminal even after search resumes.
+    """
+    if not row['candidate_id'] or 'archived_at' not in _columns(db, 'cp_applications'):
+        return None
+    kind, candidate_id = row['event_type'], row['candidate_id']
+    if kind in BOT_EVENTS:
+        payload = json.loads(row['payload_json'])
+        if payload.get('application_id') is not None:
+            return _application_delivery_error(db, candidate_id, payload['application_id'])
+        # Old durable replies predate the explicit record metadata. Resolve their
+        # opaque buttons against the existing action registry before releasing.
+        markup = payload.get('reply_markup') or {}
+        for buttons in markup.get('inline_keyboard', []):
+            for button in buttons:
+                data = button.get('callback_data')
+                match = re.fullmatch(r'cb:([A-Za-z0-9_-]{32})', data) if isinstance(data, str) else None
+                if not match:
+                    continue
+                if not _columns(db, 'cb_actions'):
+                    return 'application_archived'
+                action = db.execute('SELECT candidate_id,application_id,action FROM cb_actions WHERE digest=?',
+                                    (_hash(match[1]),)).fetchone()
+                if not action or action[0] != candidate_id:
+                    return 'application_archived'
+                if action[1]:
+                    reason = _application_delivery_error(db, candidate_id, action[1])
+                    if reason:
+                        return reason
+                elif action[2] == 'vacancies.page' and not _candidate_searching(db, candidate_id):
+                    return 'search_stopped'
+        return None
+    if kind == 'application.proposed':
+        application_id = row['event_key'][len(kind) + 1:] if row['event_key'].startswith(kind + ':') else None
+    elif kind.startswith('meeting.'):
+        entity = row['event_key'][len(kind) + 1:] if row['event_key'].startswith(kind + ':') else None
+        meeting = db.execute('SELECT application_id FROM cp_meetings WHERE id=?', (entity,)).fetchone() \
+            if _columns(db, 'cp_meetings') else None
+        application_id = meeting[0] if meeting else None
+    elif kind.startswith('offer.') or kind in ('chat.message', 'employer.declined'):
+        event = db.execute('SELECT application_id FROM cp_workflow_events WHERE event_key=? AND candidate_id=?',
+                           (row['event_key'], candidate_id)).fetchone() if _columns(db, 'cp_workflow_events') else None
+        application_id = event[0] if event else None
+    else:
+        return None
+    return _application_delivery_error(db, candidate_id, application_id)
 
 
 def request_email_verification(db, candidate_id, settings=None, now=None):
@@ -559,6 +644,13 @@ def retry(db, notification_id, settings=None, now=None, candidate_id=None):
     require(row['status'] != 'sending', 'Отправка уже выполняется.', 409)
     if row['status'] == 'delivered':
         return _safe(row)
+    if row['status'] == 'error' and row['last_error'] in ('application_archived', 'search_stopped'):
+        return _safe(row)
+    reason = _delivery_block_reason(db, row)
+    if reason:
+        db.execute("UPDATE cn_outbox SET status='error',last_error=?,lease_id=NULL,lease_until=NULL WHERE id=?",
+                   (reason, notification_id))
+        return _safe(_dict(db.execute('SELECT * FROM cn_outbox WHERE id=?', (notification_id,))))
     if row['event_type'] in BOT_EVENTS:
         # Replaying a private reply must never retarget its stored content.
         target = row['recipient']
@@ -743,6 +835,12 @@ def process_pending(connect, settings=None, limit=10, now=None, transport=None, 
             if not row:
                 db.commit()
                 break
+            reason = _delivery_block_reason(db, row)
+            if reason:
+                db.execute("UPDATE cn_outbox SET status='error',last_error=? WHERE id=?", (reason, row['id']))
+                db.commit()
+                counts['error'] += 1
+                continue
             if row['event_type'] in BOT_EVENTS:
                 state = _bot_readiness(db, row['candidate_id'], row['recipient'], config)
             else:

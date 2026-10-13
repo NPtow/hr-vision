@@ -1,0 +1,163 @@
+.cp-schedule { --cps-blue:#2563eb; --cps-ink:#243552; --cps-muted:#68778d; --cps-line:#e9edf3; max-width:1180px; margin:0 auto; padding:38px 40px 64px; color:var(--cps-ink); }
+.cp-schedule :is(button,input,select):focus-visible { outline:2px solid var(--cps-blue); outline-offset:3px; }
+.cp-schedule button { touch-action:manipulation; }
+.cp-schedule button:disabled { opacity:.55; cursor:wait; }
+.cp-schedule .cp-schedule-heading { display:flex; align-items:center; justify-content:space-between; gap:24px; margin-bottom:29px; }
+.cp-schedule .cp-schedule-heading h1 { color:#21324c; font-size:27px; font-weight:600; letter-spacing:-.65px; }
+.cp-schedule .cp-schedule-heading p { margin-top:8px; color:var(--cps-muted); font-size:13px; }
+.cp-schedule .cp-schedule-timezone { display:flex; align-items:center; gap:7px; color:#6b778a; font-size:11px; overflow-wrap:anywhere; }
+.cp-schedule .cp-schedule-sections { display:flex; gap:28px; border-bottom:1px solid var(--cps-line); margin-bottom:25px; }
+.cp-schedule .cp-schedule-sections>button { display:flex; align-items:center; gap:8px; padding:0 1px 14px; color:#728097; background:none; border:0; border-bottom:2px solid transparent; font-size:13px; font-weight:500; }
+.cp-schedule .cp-schedule-sections>button[aria-pressed=true] { color:var(--cps-blue); border-bottom-color:var(--cps-blue); }
+.cp-schedule .cp-schedule-viewbar { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:27px; }
+.cp-schedule .cp-schedule-segment { display:inline-flex; align-items:center; padding:3px; border-radius:9px; background:#f5f7fa; gap:3px; }
+.cp-schedule .cp-schedule-segment>button { display:flex; align-items:center; justify-content:center; gap:7px; min-height:33px; padding:7px 13px; border:0; border-radius:7px; background:none; color:#758198; font-size:11px; font-weight:500; white-space:nowrap; }
+.cp-schedule .cp-schedule-segment>button[aria-pressed=true] { background:#fff; color:#2c4468; box-shadow:0 1px 3px #152c4910; }
+.cp-schedule .cp-schedule-segment>button>span { font-size:10px; color:#7187ab; }
+.cp-schedule .cp-schedule-link { display:inline-flex; align-items:center; justify-content:center; gap:6px; border:0; padding:5px 0; background:none; color:#426da9; font-size:12px; white-space:nowrap; }
+.cp-schedule .cp-schedule-link:hover { color:var(--cps-blue); }
+.cp-schedule .cp-schedule-toolbar { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:32px; }
+.cp-schedule .cp-schedule-period { display:flex; align-items:center; gap:15px; min-width:0; flex-wrap:wrap; }
+.cp-schedule .cp-schedule-period h2 { color:#2d405f; font-size:17px; font-weight:550; letter-spacing:-.2px; text-transform:capitalize; }
+.cp-schedule .cp-schedule-period>div { display:flex; align-items:center; gap:1px; }
+.cp-schedule .cp-schedule-icon { width:31px; height:33px; padding:0; display:inline-flex; align-items:center; justify-content:center; border:1px solid transparent; border-radius:7px; color:#75859d; background:transparent; flex:none; }
+.cp-schedule .cp-schedule-icon:hover { background:#f4f7fc; color:var(--cps-blue); }
+.cp-schedule .cp-schedule-today { padding:6px 10px; min-height:31px; border:1px solid #e7ecf4; border-radius:7px; background:#fff; color:#617590; font-size:10px; }
+.cp-schedule .cp-schedule-range>button { min-height:29px; padding:5px 10px; }
+.cp-schedule .cp-schedule-agenda { max-width:970px; }
+.cp-schedule .cp-schedule-date-group { display:grid; grid-template-columns:92px minmax(0,1fr); gap:22px; border-bottom:1px solid var(--cps-line); padding-bottom:27px; margin-bottom:27px; }
+.cp-schedule .cp-schedule-date-group:last-child { margin-bottom:0; border-bottom:0; padding-bottom:0; }
+.cp-schedule .cp-schedule-date { display:flex; flex-direction:column; align-items:flex-start; padding-top:7px; }
+.cp-schedule .cp-schedule-date>strong { color:#405470; font-size:37px; font-weight:500; line-height:1.12; letter-spacing:-1px; }
+.cp-schedule .cp-schedule-date>span { margin-top:8px; color:#77859b; font-size:10px; line-height:1.4; }
+.cp-schedule .cp-schedule-date>small { margin-top:7px; font-size:10px; color:var(--cps-blue); }
+.cp-schedule .cp-schedule-date-today>strong { color:var(--cps-blue); }
+.cp-schedule .cp-schedule-date-entries { display:grid; gap:15px; min-width:0; }
+.cp-schedule .cp-schedule-entry { display:grid; grid-template-columns:56px minmax(0,1fr); gap:14px; min-width:0; }
+.cp-schedule .cp-schedule-entry-time { display:flex; flex-direction:column; align-items:flex-start; padding-top:17px; gap:3px; }
+.cp-schedule .cp-schedule-entry-time>strong { font-size:13px; font-weight:550; color:#506582; }
+.cp-schedule .cp-schedule-entry-time>span { font-size:10px; color:#7c889a; }
+.cp-schedule .cp-schedule-card { background:#fff; border:1px solid var(--cps-line); border-radius:15px; padding:17px 20px 16px; min-width:0; }
+.cp-schedule .cp-schedule-card-top { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:15px; }
+.cp-schedule .cp-schedule-status { display:inline-flex; align-items:center; gap:6px; color:#607694; font-size:10px; line-height:1.45; }
+.cp-schedule .cp-schedule-status>i { display:block; flex:none; width:5px; height:5px; border-radius:50%; background:#7394c4; }
+.cp-schedule .cp-schedule-status-pending { color:#9a7426; }
+.cp-schedule .cp-schedule-status-pending>i { background:#cda44f; }
+.cp-schedule .cp-schedule-status-completed { color:#567e68; }
+.cp-schedule .cp-schedule-status-completed>i { background:#77a48a; }
+.cp-schedule .cp-schedule-duration { display:flex; gap:5px; align-items:center; color:#78869a; font-size:10px; white-space:nowrap; }
+.cp-schedule .cp-schedule-card-identity { display:flex; align-items:center; gap:12px; min-width:0; }
+.cp-schedule .cp-schedule-company { display:inline-flex; align-items:center; justify-content:center; height:38px; width:38px; flex:none; border-radius:10px; background:#f0f4fa; color:#6e88ae; font-size:12px; font-weight:550; letter-spacing:.2px; }
+.cp-schedule .cp-schedule-company-recruiter { background:#edf3ff; color:#6a8bc4; }
+.cp-schedule .cp-schedule-card-identity>div { min-width:0; }
+.cp-schedule .cp-schedule-card-identity p { color:#62758f; font-size:11px; margin-bottom:3px; overflow-wrap:anywhere; }
+.cp-schedule .cp-schedule-card-identity h3 { color:#344967; font-size:14px; font-weight:550; line-height:1.45; overflow-wrap:anywhere; }
+.cp-schedule .cp-schedule-card-actions { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-top:17px; }
+.cp-schedule .cp-schedule-card-actions:empty { display:none; }
+.cp-schedule .cp-schedule-card-actions>[data-slot=button] { min-height:32px; padding:7px 10px; border-radius:8px; font-size:10px; gap:6px; }
+.cp-schedule .cp-schedule-card-actions>.cp-schedule-link { margin-left:auto; font-size:10px; }
+.cp-schedule .cp-schedule-total { color:#7a8799; font-size:11px; padding-top:25px; }
+.cp-schedule .cp-schedule-empty { padding:48px 25px; text-align:center; display:flex; flex-direction:column; align-items:center; border:1px dashed #e2e9f1; border-radius:16px; }
+.cp-schedule .cp-schedule-empty>span { display:grid; place-items:center; width:55px; height:55px; border-radius:18px; color:#8ca5c8; background:#f4f7fb; margin-bottom:18px; }
+.cp-schedule .cp-schedule-empty h3 { font-size:16px; font-weight:550; color:#48607e; }
+.cp-schedule .cp-schedule-empty p { margin:9px 0 0; max-width:365px; font-size:12px; line-height:1.7; color:#728197; }
+.cp-schedule .cp-schedule-empty>[data-slot=button] { margin-top:22px; }
+.cp-schedule .cp-schedule-availability { max-width:840px; padding:25px; border:1px solid var(--cps-line); border-radius:16px; }
+.cp-schedule .cp-schedule-availability-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:20px; }
+.cp-schedule .cp-schedule-availability-heading h2 { color:#2f4463; font-size:18px; font-weight:550; }
+.cp-schedule .cp-schedule-availability-heading p { margin-top:8px; color:#6c7d95; font-size:12px; line-height:1.65; max-width:390px; }
+.cp-schedule .cp-schedule-availability-heading>[data-slot=button] { flex:none; min-height:33px; padding:7px 11px; border-radius:8px; font-size:11px; }
+.cp-schedule .cp-schedule-availability-list { display:grid; gap:0; margin-top:25px; }
+.cp-schedule .cp-schedule-availability-list>div { display:flex; align-items:center; gap:10px; padding:16px 0; border-top:1px solid var(--cps-line); color:#8497b2; }
+.cp-schedule .cp-schedule-availability-list>div>strong { color:#4a617f; font-size:12px; font-weight:500; }
+.cp-schedule .cp-schedule-availability-list>div>span { color:#596e89; font-size:12px; margin-left:auto; text-align:right; }
+.cp-schedule .cp-schedule-availability-empty { display:flex; flex-direction:column; align-items:center; text-align:center; padding:36px 20px; color:#8ea3c0; }
+.cp-schedule .cp-schedule-availability-empty h3 { color:#4f6685; font-size:15px; font-weight:500; margin-top:13px; }
+.cp-schedule .cp-schedule-availability-empty p { margin-top:9px; max-width:325px; color:#72829a; font-size:12px; line-height:1.65; }
+.cp-schedule .cp-schedule-availability-empty>[data-slot=button] { margin-top:20px; }
+.cp-schedule .cp-schedule-availability-foot { margin-top:24px; padding-top:17px; border-top:1px solid var(--cps-line); color:#77869c; font-size:11px; line-height:1.65; }
+.cp-schedule .cp-schedule-availability-form { margin-top:26px; }
+.cp-schedule .cp-schedule-availability-form fieldset { border:0; min-width:0; padding:0; margin:0; }
+.cp-schedule .cp-schedule-availability-form .cp-muted { font-size:12px; color:#6d7e95; }
+.cp-schedule .cp-schedule-availability-form .cp-window-list { margin:22px 0; gap:18px; }
+.cp-schedule .cp-schedule-availability-form .cp-window { grid-template-columns:minmax(130px,1.3fr) minmax(95px,1fr) minmax(95px,1fr) 36px; gap:10px; }
+.cp-schedule .cp-schedule-availability-form .cp-window label { color:#63778f; font-size:11px; gap:7px; }
+.cp-schedule .cp-schedule-availability-form .cp-window [data-slot=input] { height:39px; border-radius:8px; color:#425b7a; border-color:#dde5ef; padding:8px 9px; font-size:12px; }
+.cp-schedule .cp-schedule-availability-form [data-slot=button] { min-height:34px; padding:7px 11px; border-radius:8px; font-size:11px; }
+.cp-schedule .cp-schedule-availability-form [data-size=icon] { min-width:34px; padding:7px; }
+.cp-schedule .cp-schedule-cancel { margin-top:12px; }
+.cp-schedule .cp-schedule-saved { display:flex; align-items:center; gap:7px; color:#47755b; font-size:12px; margin-top:20px; }
+@media (max-width:1050px) {
+ .cp-schedule { padding:32px 27px 54px; }
+ .cp-schedule .cp-schedule-toolbar { align-items:flex-start; }
+ .cp-schedule .cp-schedule-period { gap:10px; }
+ .cp-schedule .cp-schedule-period h2 { font-size:16px; }
+ .cp-schedule .cp-schedule-date-group { grid-template-columns:73px minmax(0,1fr); gap:16px; }
+ .cp-schedule .cp-schedule-entry { grid-template-columns:46px minmax(0,1fr); gap:10px; }
+ .cp-schedule .cp-schedule-card { padding:16px; }
+ .cp-schedule .cp-schedule-card-actions>.cp-schedule-link { margin-left:0; }
+}
+@media (max-width:700px) {
+ .cp-schedule { padding:28px 22px 45px; }
+ .cp-schedule .cp-schedule-heading { gap:12px; flex-wrap:wrap; margin-bottom:25px; }
+ .cp-schedule .cp-schedule-heading h1 { font-size:25px; }
+ .cp-schedule .cp-schedule-timezone { font-size:10px; }
+ .cp-schedule .cp-schedule-viewbar { flex-wrap:wrap; gap:12px; margin-bottom:23px; }
+ .cp-schedule .cp-schedule-toolbar { flex-wrap:wrap; gap:13px; margin-bottom:25px; }
+ .cp-schedule .cp-schedule-period { flex:1 1 100%; }
+ .cp-schedule .cp-schedule-period h2 { margin-right:auto; font-size:16px; }
+ .cp-schedule .cp-schedule-range { margin-left:auto; }
+ .cp-schedule .cp-schedule-date-group { grid-template-columns:55px minmax(0,1fr); gap:14px; margin-bottom:22px; padding-bottom:22px; }
+ .cp-schedule .cp-schedule-date>strong { font-size:30px; }
+ .cp-schedule .cp-schedule-date>span { font-size:9px; }
+ .cp-schedule .cp-schedule-entry { grid-template-columns:1fr; gap:7px; }
+ .cp-schedule .cp-schedule-entry-time { padding:0; flex-direction:row; align-items:center; gap:6px; }
+ .cp-schedule .cp-schedule-entry-time>strong { font-size:11px; }
+ .cp-schedule .cp-schedule-entry-time>span { font-size:10px; }
+ .cp-schedule .cp-schedule-entry-time>span:not(:empty):before { content:'— '; }
+ .cp-schedule .cp-schedule-card { padding:14px; }
+ .cp-schedule .cp-schedule-card-top { gap:8px; align-items:flex-start; margin-bottom:12px; }
+ .cp-schedule .cp-schedule-card-identity { gap:9px; }
+ .cp-schedule .cp-schedule-company { width:32px; height:32px; border-radius:8px; font-size:10px; }
+ .cp-schedule .cp-schedule-card-identity h3 { font-size:12px; }
+ .cp-schedule .cp-schedule-card-identity p { font-size:10px; }
+ .cp-schedule .cp-schedule-status { font-size:9px; }
+ .cp-schedule .cp-schedule-duration { font-size:9px; }
+ .cp-schedule .cp-schedule-card-actions { gap:5px 7px; margin-top:13px; }
+ .cp-schedule .cp-schedule-card-actions>[data-slot=button] { min-height:34px; padding:7px 9px; font-size:10px; }
+ .cp-schedule .cp-schedule-card-actions>.cp-schedule-link { flex-basis:100%; justify-content:flex-start; margin-top:4px; }
+ .cp-schedule .cp-schedule-availability { padding:19px; }
+ .cp-schedule .cp-schedule-availability-heading { flex-wrap:wrap; gap:14px; }
+ .cp-schedule .cp-schedule-availability-heading h2 { font-size:17px; }
+ .cp-schedule .cp-schedule-availability-heading p { font-size:11px; }
+ .cp-schedule .cp-schedule-availability-list>div { flex-wrap:wrap; gap:8px; }
+ .cp-schedule .cp-schedule-availability-list>div>span { flex-basis:100%; margin-left:25px; text-align:left; font-size:11px; }
+ .cp-schedule .cp-schedule-availability-form .cp-window { grid-template-columns:minmax(0,1fr) minmax(0,1fr) 34px; }
+ .cp-schedule .cp-schedule-availability-form .cp-window>label:first-child { grid-column:1/3; }
+ .cp-schedule .cp-schedule-availability-form .cp-window>button { grid-column:3; grid-row:1/3; align-self:end; }
+ .cp-schedule .cp-schedule-availability-form .cp-window>label:nth-child(2) { grid-column:1; }
+ .cp-schedule .cp-schedule-availability-form .cp-window>label:nth-child(3) { grid-column:2; }
+}
+@media (max-width:430px) {
+ .cp-schedule { padding:23px 16px 40px; }
+ .cp-schedule .cp-schedule-heading { margin-bottom:21px; }
+ .cp-schedule .cp-schedule-heading>div { flex-basis:100%; }
+ .cp-schedule .cp-schedule-sections { gap:23px; }
+ .cp-schedule .cp-schedule-sections>button { font-size:12px; gap:6px; }
+ .cp-schedule .cp-schedule-period { gap:6px; }
+ .cp-schedule .cp-schedule-period h2 { flex-basis:100%; margin-bottom:4px; }
+ .cp-schedule .cp-schedule-period>div { margin-left:-7px; }
+ .cp-schedule .cp-schedule-toolbar { gap:5px; }
+ .cp-schedule .cp-schedule-range { margin-top:-39px; }
+ .cp-schedule .cp-schedule-date-group { grid-template-columns:40px minmax(0,1fr); gap:10px; }
+ .cp-schedule .cp-schedule-date>strong { font-size:29px; }
+ .cp-schedule .cp-schedule-card { padding:12px; border-radius:12px; }
+ .cp-schedule .cp-schedule-duration>svg { display:none; }
+ .cp-schedule .cp-schedule-card-top { gap:6px; }
+ .cp-schedule .cp-schedule-availability { padding:16px; }
+ .cp-schedule .cp-schedule-empty { padding:34px 18px; }
+ .cp-schedule .cp-schedule-empty h3 { font-size:15px; }
+}
+@media (prefers-reduced-motion:reduce) {
+ .cp-schedule * { animation:none!important; transition:none!important; scroll-behavior:auto!important; }
+}
