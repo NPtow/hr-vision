@@ -34,7 +34,7 @@ http://:8381 {
 		}
 		@publicAssets {
 			host mashadasha.tech
-			path /site-assets/* /assets/roboto-flex.ttf /favicon.ico /favicon.svg /favicon-32.png /favicon-48.png /apple-touch-icon.png /safari-pinned-tab.svg
+			path /site-assets/* /assets/hr-vision.svg /assets/play.svg /assets/roboto-flex.ttf /favicon.ico /favicon.svg /favicon-32.png /favicon-48.png /apple-touch-icon.png /safari-pinned-tab.svg
 		}
 		handle @publicAssets {
 			root * /srv/hr-vision-company-demo/current

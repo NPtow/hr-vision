@@ -100,6 +100,8 @@ database on outreach. `www.mashadasha.tech` redirects to the apex with its URI.
 
 The corporate site has its own release at `/srv/hr-vision-company-demo/current`;
 its built files use `/site-assets/` so they cannot shadow Storybook `/assets/`.
+The logo, play icon and font also have exact public-file routes under `/assets/`;
+the rest of that prefix continues to serve the product release.
 The lab route `/demos/company-v1/` continues to use that release. The main service
 is still published only through GitHub Actions. The CI verification hostname
 remains the explicit legacy service alias.
