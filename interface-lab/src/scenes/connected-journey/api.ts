@@ -17,7 +17,36 @@ export type Questionnaire = { id: string; meetingId: string; questions: Feedback
 export type Meeting = { id: string; revision?: number; start: string; startedAt?: string; endedAt?: string; status: 'pending' | 'confirmed' | 'live' | 'cancelled' | 'completed'; testSkip: boolean; joined: Actor[]; questionnaire?: Questionnaire | null; feedbackDraft?: Record<string, FeedbackAnswer> };
 export type Person = { id: CandidateId; candidateId?: string; applicationId?: string; vacancyId?: string; vacancyRole?: string; reviewState?: string; name: string; role?: string; summary?: string; photo?: string | null; sourceProfile?: SourceProfile; interest: 'pending' | 'accepted' | 'declined'; auto: boolean; slots?: string[]; busy?: string[]; freeSlots: string[]; meeting: Meeting | null; feedback?: { example?: string; doubts?: string; check?: string; at: string; questions?: FeedbackQuestion[]; answers?: Record<string, FeedbackAnswer> } | null; afterInterest: 'pending' | 'yes' | 'no'; decision: 'review' | 'pool' | 'declined'; offer: Offer | null; messages: { id: string; actor: string; text: string; at: string; system: boolean }[] };
 export type Vacancy = { id?: string; company: string; role: string; problem: string; salary: string; format: string; expectations: string; proposedCount?: number; selectedCount?: number };
-export type SharedState = { mode?: 'employer'; workspaceName?: string; scope: Scope; generation: string; revision: number; actor: Actor; actorName: string; closedBy: CandidateId | null; videoConfigured: boolean; vacancy: Vacancy; vacancies?: Vacancy[]; candidates: Partial<Record<CandidateId, Person>>; meetings?: Person[]; offerCandidates?: Person[]; pendingFeedback?: Person[] };
+export type EmployerVacancyDetails = {
+  address: string;
+  employmentType: '' | 'full-time' | 'part-time' | 'project' | 'internship' | 'temporary';
+  schedule: string;
+  salaryMin: number | null;
+  salaryMax: number | null;
+  currency: '' | 'RUB' | 'USD' | 'EUR' | 'KZT' | 'BYN';
+  salaryPeriod: '' | 'month' | 'year' | 'hour' | 'shift';
+  salaryTax: '' | 'gross' | 'net';
+  responsibilities: string;
+  requirements: string;
+  niceToHave: string;
+  benefits: string;
+  experience: string;
+};
+export type EmployerVacancyValues = {
+  title: string; company: string; city: string; remote: boolean; format: string;
+  salary: string; description: string; details: EmployerVacancyDetails; importId?: string;
+};
+export type EmployerVacancyImportInput =
+  | { kind: 'file'; filename: string; contentBase64: string }
+  | { kind: 'url'; url: string; source: 'hh' | 'superjob' | 'other' }
+  | { kind: 'text'; text: string };
+export type EmployerVacancyImport = {
+  fields: EmployerVacancyValues;
+  source: { kind: 'file' | 'url' | 'text'; label: string; url?: string };
+  warnings: string[];
+  importId: string;
+};
+export type SharedState = { mode?: 'employer'; workspaceId?: string; workspaceName?: string; scope: Scope; generation: string; revision: number; actor: Actor; actorName: string; closedBy: CandidateId | null; videoConfigured: boolean; vacancy: Vacancy; vacancies?: Vacancy[]; candidates: Partial<Record<CandidateId, Person>>; meetings?: Person[]; offerCandidates?: Person[]; pendingFeedback?: Person[] };
 export type EmployerCredentials = { email: string; password: string; name?: string; workspaceName?: string };
 type EmployerSession = { token: string; state: SharedState };
 export const sessionKey = 'hr-vision-connected-session';
@@ -53,10 +82,14 @@ export async function request<T>(path: string, token?: string, body?: unknown): 
   }
   const response = await fetch('/api/hr/' + target.path, { method: target.body === undefined ? 'GET' : 'POST',
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(target.body === undefined ? {} : { 'Content-Type': 'application/json' }) },
-    body: target.body === undefined ? undefined : JSON.stringify(target.body), cache: 'no-store', signal: AbortSignal.timeout(target.path.endsWith('/materials') || target.path === 'materials' ? 60000 : 30000) });
+    body: target.body === undefined ? undefined : JSON.stringify(target.body), cache: 'no-store', signal: AbortSignal.timeout(target.path === 'employer/vacancies/import' ? 150000 : target.path.endsWith('/materials') || target.path === 'materials' ? 60000 : 30000) });
   const data = await response.json().catch(() => ({ error: 'Сервис временно недоступен.' }));
   if (!response.ok) throw new RequestError(data.error || 'Не удалось выполнить действие.', response.status);
   return data;
+}
+
+export function importEmployerVacancy(token: string, input: EmployerVacancyImportInput): Promise<EmployerVacancyImport> {
+  return request<EmployerVacancyImport>('employer/vacancies/import', token, input);
 }
 
 export function useEntryAccess(options: { employer?: boolean } = {}) {

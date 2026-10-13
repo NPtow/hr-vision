@@ -21,19 +21,19 @@ BRANCHES = {'service': 'main', 'mockups': 'codex/mockups'}
 BASES = {'service': Path('/srv/hr-vision'), 'mockups': Path('/srv/hr-vision-mockups')}
 API = Path('/opt/hr-vision-api')
 DATABASE = Path('/var/lib/hr-vision-api/journey.sqlite3')
-RUNTIME = {
+PRE_IMPORT_RUNTIME = {
     'app.py', 'browser_access.py', 'candidate_portal.py', 'candidate_resume.py', 'candidate_notifications.py', 'candidate_bot.py',
     'candidate_invites.py', 'recruiter_availability.py', 'hh_recruiting.py', 'hh_routes.py',
     'recruiter_access.py', 'recruiter_sources.py', 'recruiter_notifications.py',
     'employer_access.py', 'employer_store.py', 'employer_workflow.py', 'employer_routes.py',
     'employer_projection.py', 'employer_intake.py', 'daily_media.py', 'domain.py', 'dsa_panel.py', 'feedback.py',
 }
-# Accept the known pre-bot, bot, and personal-recruiter release layouts during
-# coordinated publication. The recruiter modules form one indivisible set;
-# partial layouts remain forbidden, with the same SHA and health checks.
-BOT_RUNTIME = RUNTIME - {'recruiter_access.py', 'recruiter_sources.py', 'recruiter_notifications.py'}
+# Keep complete previous releases available for deployment and rollback. Each
+# feature's modules form one indivisible set; partial layouts are forbidden.
+RUNTIME = PRE_IMPORT_RUNTIME | {'vacancy_import.py', 'vacancy_sources.py'}
+BOT_RUNTIME = PRE_IMPORT_RUNTIME - {'recruiter_access.py', 'recruiter_sources.py', 'recruiter_notifications.py'}
 LEGACY_RUNTIME = BOT_RUNTIME - {'candidate_bot.py'}
-RUNTIME_LAYOUTS = {frozenset(LEGACY_RUNTIME), frozenset(BOT_RUNTIME), frozenset(RUNTIME)}
+RUNTIME_LAYOUTS = {frozenset(LEGACY_RUNTIME), frozenset(BOT_RUNTIME), frozenset(PRE_IMPORT_RUNTIME), frozenset(RUNTIME)}
 MAX_ARCHIVE = 50 * 1024 * 1024
 MAX_CONTENT = 120 * 1024 * 1024
 

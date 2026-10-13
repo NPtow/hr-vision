@@ -46,8 +46,9 @@ class ReceiverTest(unittest.TestCase):
     def test_known_complete_service_layouts_are_accepted(self):
         self.assertEqual(len(r.LEGACY_RUNTIME), 19)
         self.assertEqual(r.BOT_RUNTIME - r.LEGACY_RUNTIME, {'candidate_bot.py'})
-        self.assertEqual(r.RUNTIME - r.BOT_RUNTIME, {'recruiter_access.py', 'recruiter_sources.py', 'recruiter_notifications.py'})
-        for runtime in (r.LEGACY_RUNTIME, r.BOT_RUNTIME, r.RUNTIME):
+        self.assertEqual(r.PRE_IMPORT_RUNTIME - r.BOT_RUNTIME, {'recruiter_access.py', 'recruiter_sources.py', 'recruiter_notifications.py'})
+        self.assertEqual(r.RUNTIME - r.PRE_IMPORT_RUNTIME, {'vacancy_import.py', 'vacancy_sources.py'})
+        for runtime in (r.LEGACY_RUNTIME, r.BOT_RUNTIME, r.PRE_IMPORT_RUNTIME, r.RUNTIME):
             with self.subTest(count=len(runtime)):
                 a, s, m = self.bundle('service', runtime=runtime)
                 self.assertEqual(r.unpack(a, s, 'service'), m)
@@ -62,6 +63,12 @@ class ReceiverTest(unittest.TestCase):
         a, s, _ = self.bundle('service', runtime=r.LEGACY_RUNTIME - {'candidate_notifications.py'})
         with self.assertRaisesRegex(ValueError, 'Incomplete API'):
             r.unpack(a, s, 'service')
+
+    def test_partial_import_layout_is_rejected(self):
+        for name in ('vacancy_import.py', 'vacancy_sources.py'):
+            a, s, _ = self.bundle('service', runtime=r.RUNTIME - {name})
+            with self.assertRaisesRegex(ValueError, 'Incomplete API'):
+                r.unpack(a, s, 'service')
 
     def test_runtime_change_detection_handles_both_layout_directions(self):
         source, api = self.root / 'incoming-api', self.root / 'installed-api'

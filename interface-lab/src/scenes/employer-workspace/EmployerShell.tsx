@@ -5,7 +5,7 @@ import { DropdownMenu } from 'radix-ui';
 import logo from './assets/hr-vision-logo.svg';
 import { COMPANY_SITE_URL } from '../../lib/employer-entry';
 
-export type EmployerPage = 'dsa' | 'tasks' | 'shortlist' | 'intake' | 'book' | 'meetings' | 'meeting' | 'review' | 'pool' | 'offer' | 'chat' | 'vacancies' | 'schedule';
+export type EmployerPage = 'dsa' | 'tasks' | 'create-vacancy' | 'shortlist' | 'intake' | 'book' | 'meetings' | 'meeting' | 'review' | 'pool' | 'offer' | 'chat' | 'vacancies' | 'schedule';
 export type Scope = 'sfera' | 'dsa';
 export function EmployerShell({ enabled = true, page, scope, vacancy, name, hasOffers, candidateContext, onNavigate, onAccount, onLogout, accountBusy, children }: {
   enabled?: boolean; page: EmployerPage; scope: Scope; vacancy: string; name: string; hasOffers: boolean;
@@ -18,7 +18,7 @@ export function EmployerShell({ enabled = true, page, scope, vacancy, name, hasO
   useEffect(() => { if (enabled) window.scrollTo({ top: 0, left: 0, behavior: 'instant' }); setMenuOpen(false); }, [enabled, page, scope, candidateContext]);
   if (!enabled) return <>{children}</>;
   const panel = scope === 'dsa' ? 'dsa' : 'shortlist';
-  const active = page === panel && candidateContext === 'vacancy' ? 'tasks' : page === 'intake' ? panel : ['meeting', 'book', 'review'].includes(page) ? 'meetings' : page === 'offer' ? 'pool' : page;
+  const active = page === 'create-vacancy' || (page === panel && candidateContext === 'vacancy') ? 'tasks' : page === 'intake' ? panel : ['meeting', 'book', 'review'].includes(page) ? 'meetings' : page === 'offer' ? 'pool' : page;
   const navigate = (next: EmployerPage) => { setMenuOpen(false); onNavigate(next); };
   return <div className="ew-shell">
     <header className="ew-topbar">
@@ -38,7 +38,7 @@ export function EmployerShell({ enabled = true, page, scope, vacancy, name, hasO
         </nav>
       </aside>
       <div className="ew-workspace">
-        {page !== 'tasks' && <section className="ew-vacancy-header" aria-label="Текущая вакансия">
+        {page !== 'tasks' && page !== 'create-vacancy' && <section className="ew-vacancy-header" aria-label="Текущая вакансия">
           <div className="ew-vacancy-title"><h1>{vacancy}</h1>{page !== 'intake' && <Button variant="secondary" className="ew-add-candidates" onClick={() => navigate('intake')}><Plus size={16}/>Добавить кандидатов</Button>}</div>
         </section>}
         <div className="ew-content">{children}</div>

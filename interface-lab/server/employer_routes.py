@@ -14,6 +14,7 @@ from feedback import vtt_turns
 import employer_access as access
 import employer_store as store
 import employer_workflow as workflow
+import vacancy_import
 
 
 PREFIX = '/api/hr/employer'
@@ -34,6 +35,7 @@ class EmployerRoutes:
             access.init(db)
             store.init(db)
             intake.init(db)
+            vacancy_import.init(db)
             db.execute('''CREATE TABLE IF NOT EXISTS em_meeting_transcripts (
               meeting_id TEXT PRIMARY KEY REFERENCES cp_meetings(id),
               application_id TEXT NOT NULL REFERENCES cp_applications(id),
@@ -70,6 +72,31 @@ class EmployerRoutes:
         vacancy = store.vacancy(db, principal['workspaceId'], app['vacancyId'])
         require(body.get('generation') == vacancy['generation'], 'Вакансия изменилась. Обновите кабинет.', 409)
         return principal, app, vacancy
+
+    def _vacancy_import(self, headers, body):
+        import vacancy_sources
+        with self.lock, self.connect() as db:
+            principal = access.authenticate(db, headers)
+            config = vacancy_import.ModelConfig.from_env()
+            iid, cached, lease = vacancy_import.reserve(db, principal, body, config)
+        if cached is not None:
+            return cached
+        try:
+            prepared = vacancy_sources.prepare(body)
+            selected, redacted = vacancy_import.chunks(prepared['text'])
+            with self.lock, self.connect() as db:
+                latest = access.authenticate(db, headers)
+                require(latest['workspaceId'] == principal['workspaceId'] and latest['accountId'] == principal['accountId'], 'Нет доступа.', 403)
+                vacancy_import.reserve_tokens(db, principal, iid, selected, lease)
+            fields, evidence, metadata = vacancy_import.extract(selected, config, iid)
+            with self.lock, self.connect() as db:
+                latest = access.authenticate(db, headers)
+                require(latest['workspaceId'] == principal['workspaceId'] and latest['accountId'] == principal['accountId'], 'Нет доступа.', 403)
+                return vacancy_import.finish(db, principal, iid, prepared, selected, fields, evidence, metadata, redacted, lease)
+        except BaseException as error:
+            with self.lock, self.connect() as db:
+                vacancy_import.fail(db, iid, lease, transient=isinstance(error, Problem) and error.status in (401, 403, 429, 502, 503, 504))
+            raise
 
     def _meeting(self, db, app, body, *, current=False):
         mid = text(body.get('meetingId'), 160)
@@ -163,6 +190,8 @@ class EmployerRoutes:
             return self._finish(headers, body), {}
         if route == '/intake' and method == 'POST':
             return self._intake(headers, body), {}
+        if route == '/vacancies/import' and method == 'POST':
+            return self._vacancy_import(headers, body), {}
         with self.lock, self.connect() as db:
             principal = access.authenticate(db, headers)
             wid = principal['workspaceId']

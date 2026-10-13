@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { CalendarDays, Check, ChevronDown, Menu, RefreshCw, UserRound, X } from 'lucide-react';
+import { Check, ChevronDown, UserRound } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import logo from '../employer-workspace/assets/hr-vision-logo.svg';
 import '../employer-workspace/employer.css';
@@ -34,7 +34,6 @@ export function RecruiterPortal() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
   const [callResult, setCallResult] = useState<{ identity: SessionIdentity; value: ActiveCall } | null>(null);
   const activeCall = callResult?.identity === identity ? callResult.value : null;
   const [completedOpen, setCompletedOpen] = useState(false);
@@ -67,7 +66,7 @@ export function RecruiterPortal() {
   useEffect(() => {
     sequence.current++; mutation.current = false; verifyingEmail.current = false;
     setStateResult(null); setCallResult(null); setBusy(false); setSelectedId(''); setPage('interviews'); setError(''); setNotice('');
-    setMenuOpen(false); setCompletedOpen(false); setCompletedFocusId('');
+    setCompletedOpen(false); setCompletedFocusId('');
     void refresh();
     const timer = setInterval(() => { if (document.visibilityState === 'visible') void refresh(); }, 8000);
     return () => { clearInterval(timer); sequence.current++; };
@@ -145,52 +144,41 @@ export function RecruiterPortal() {
       return true;
     }}/>;
 
-  const navigate = (next: 'interviews' | 'profile') => { setPage(next); setMenuOpen(false); setNotice(''); };
+  const navigate = (next: 'interviews' | 'profile') => { setPage(next); setNotice(''); };
   const completed = (state?.candidates || []).filter(candidate => candidate.interview?.status === 'completed')
     .sort((a, b) => Date.parse(b.interview!.start) - Date.parse(a.interview!.start));
   const renderCandidateDetails = (candidate: RecruiterCandidate) => <CandidateDetails key={`${identity.generation}-${candidate.id}`} candidate={candidate} busy={busy} run={run} onNotice={message => { if (isCurrent(identity)) setNotice(message); }} token={token} onUpdated={refresh}/>;
   return <div className="ew-root rp-root">
     <div className="rp-shell" inert={activeCall ? true : undefined} aria-hidden={activeCall ? true : undefined}>
       <header className="ew-topbar rp-topbar">
-        <button className="rp-menu" aria-label={menuOpen ? 'Закрыть меню' : 'Открыть меню'} aria-expanded={menuOpen} aria-controls="rp-navigation" onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? <X size={20}/> : <Menu size={20}/>}</button>
-        <button className="ew-logo" onClick={() => navigate('interviews')} aria-label="HR Vision"><img src={logo} alt="HR Vision"/></button>
-        <button className="rp-personal-account" onClick={() => navigate('profile')} aria-label="Открыть личный кабинет"><UserRound size={18}/>{auth.recruiter.name}</button>
+        <button className="ew-logo" onClick={() => navigate('interviews')} aria-label="К интервью"><img src={logo} alt="HR Vision"/></button>
+        <button className="rp-personal-account" onClick={() => navigate('profile')} aria-label="Открыть личный кабинет" aria-current={page === 'profile' ? 'page' : undefined}><UserRound size={18}/>{auth.recruiter.name}</button>
       </header>
-      <div className="rp-body">
-        <aside className="rp-sidebar" id="rp-navigation" data-open={menuOpen}>
-          <nav aria-label="Рабочее место рекрутера">
-            <button aria-current={page === 'interviews' ? 'page' : undefined} onClick={() => navigate('interviews')}><CalendarDays size={18}/>Интервью</button>
-            <button aria-current={page === 'profile' ? 'page' : undefined} onClick={() => navigate('profile')}><UserRound size={18}/>Личный кабинет</button>
-          </nav>
-        </aside>
-        <main className="rp-main">
-          <header className="rp-page-heading"><h1>{page === 'interviews' ? 'Интервью' : 'Личный кабинет'}</h1><div className="rp-actions">
-            <Button variant="ghost" size="icon" aria-label="Обновить данные" disabled={busy} onClick={() => void refresh()}><RefreshCw size={18}/></Button>
-          </div></header>
-          {(error || auth.error) && <div className="rp-error" role="alert">{error || auth.error}</div>}
-          {notice && <p className="rp-notice" role="status"><Check size={16}/>{notice}</p>}
-          {!state ? <div className="rp-empty"><p>{error ? 'Данные не загрузились.' : 'Загружаем…'}</p>{error && <Button variant="secondary" onClick={() => void refresh()}>Повторить</Button>}</div> : <>
-            {page === 'interviews' && <><InterviewList candidates={state.candidates} busy={busy} videoConfigured={state.videoConfigured}
-              selectedId={selectedId} onDetails={id => setSelectedId(current => current === id ? '' : id)} onCall={setActiveCall}
-              renderDetails={renderCandidateDetails}/>
-              {!!completed.length && <section className="rp-completed-interviews" ref={completedSection} aria-label="Завершённые интервью">
-                <button className="rp-completed-toggle" type="button" aria-expanded={completedOpen} aria-controls="rp-completed-list" onClick={() => setCompletedOpen(open => !open)}><ChevronDown size={16} aria-hidden="true"/>Завершённые интервью <span>{completed.length}</span></button>
-                {completedOpen && <ul id="rp-completed-list" className="rp-completed-list">{completed.map(candidate => {
-                  const expanded = selectedId === candidate.id;
-                  const detailId = `rp-completed-${candidate.interview!.id}`;
-                  return <li key={candidate.interview!.id}>
-                    <button type="button" className="rp-completed-row" aria-expanded={expanded} aria-controls={expanded ? detailId : undefined} onClick={() => setSelectedId(current => current === candidate.id ? '' : candidate.id)}>
-                      <span><strong>{candidate.name || candidate.email || candidate.intake?.contactEmail || 'Кандидат'}</strong><span>{formatDate(candidate.interview!.start)}{candidate.source?.label ? ` · ${candidate.source.label}` : ''}</span></span><ChevronDown size={16} aria-hidden="true"/>
-                    </button>
-                    {expanded && <div id={detailId}>{renderCandidateDetails(candidate)}</div>}
-                  </li>;
-                })}</ul>}
-              </section>}
-            </>}
-            {page === 'profile' && <RecruiterProfile key={identity.generation} recruiter={auth.recruiter} blocks={state.availabilityBlocks || []} busy={busy || auth.busy} run={run} onLogout={() => { void auth.logout(); }} channels={channels} onChannelAction={channelAction}/ >}
+      <main className="rp-main">
+        <header className="rp-page-heading"><h1>{page === 'interviews' ? 'Интервью' : 'Личный кабинет'}</h1></header>
+        {(error || auth.error) && <div className="rp-error" role="alert">{error || auth.error}</div>}
+        {notice && <p className="rp-notice" role="status"><Check size={16}/>{notice}</p>}
+        {!state ? <div className="rp-empty"><p>{error ? 'Данные не загрузились.' : 'Загружаем…'}</p>{error && <Button variant="secondary" onClick={() => void refresh()}>Повторить</Button>}</div> : <>
+          {page === 'interviews' && <><InterviewList candidates={state.candidates} busy={busy} videoConfigured={state.videoConfigured}
+            selectedId={selectedId} onDetails={id => setSelectedId(current => current === id ? '' : id)} onCall={setActiveCall}
+            renderDetails={renderCandidateDetails}/>
+            {!!completed.length && <section className="rp-completed-interviews" ref={completedSection} aria-label="Завершённые интервью">
+              <button className="rp-completed-toggle" type="button" aria-expanded={completedOpen} aria-controls="rp-completed-list" onClick={() => setCompletedOpen(open => !open)}><ChevronDown size={16} aria-hidden="true"/>Завершённые интервью <span>{completed.length}</span></button>
+              {completedOpen && <ul id="rp-completed-list" className="rp-completed-list">{completed.map(candidate => {
+                const expanded = selectedId === candidate.id;
+                const detailId = `rp-completed-${candidate.interview!.id}`;
+                return <li key={candidate.interview!.id}>
+                  <button type="button" className="rp-completed-row" aria-expanded={expanded} aria-controls={expanded ? detailId : undefined} onClick={() => setSelectedId(current => current === candidate.id ? '' : candidate.id)}>
+                    <span><strong>{candidate.name || candidate.email || candidate.intake?.contactEmail || 'Кандидат'}</strong><span>{formatDate(candidate.interview!.start)}{candidate.source?.label ? ` · ${candidate.source.label}` : ''}</span></span><ChevronDown size={16} aria-hidden="true"/>
+                  </button>
+                  {expanded && <div id={detailId}>{renderCandidateDetails(candidate)}</div>}
+                </li>;
+              })}</ul>}
+            </section>}
           </>}
-        </main>
-      </div>
+          {page === 'profile' && <RecruiterProfile key={identity.generation} recruiter={auth.recruiter} blocks={state.availabilityBlocks || []} busy={busy || auth.busy} run={run} onLogout={() => { void auth.logout(); }} channels={channels} onChannelAction={channelAction}/ >}
+        </>}
+      </main>
     </div>
     {activeCall && <RecruiterCall key={`${identity.generation}-${activeCall.kind}-${activeCall.applicationId || activeCall.candidateId}`} active={{ ...activeCall, accountActive: state?.candidates.find(person => person.id === activeCall.candidateId)?.accountActive ?? activeCall.accountActive }} token={token} onClose={() => { setActiveCall(null); void refresh(); }} onJoined={() => void refresh()} onCompleted={() => {
       if (!isCurrent(identity)) return;
