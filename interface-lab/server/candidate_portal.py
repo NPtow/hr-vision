@@ -379,11 +379,12 @@ class CandidatePortal:
                  'cancellationReason': row[9]} if row else None)
 
     def application(self, db, app_id, cid=None):
+        from vacancy_import import candidate_vacancy
         row = db.execute('''SELECT a.id,a.candidate_id,a.status,a.approved_automatically,v.body
           FROM cp_applications a JOIN cp_vacancies v ON a.vacancy_id=v.id WHERE a.id=?''', (app_id,)).fetchone()
         require(row is not None and (cid is None or row[1] == cid), 'Вакансия не найдена.', 404)
         return {'id': row[0], 'candidateId': row[1], 'status': row[2],
-                'approvedAutomatically': bool(row[3]), 'vacancy': json.loads(row[4]),
+                'approvedAutomatically': bool(row[3]), 'vacancy': candidate_vacancy(json.loads(row[4])),
                 'meeting': self.meeting(db, app_id),
                 'meetings': [self.meeting(db, app_id, item[0]) for item in db.execute(
                     'SELECT id FROM cp_meetings WHERE application_id=? ORDER BY revision DESC', (app_id,))]}

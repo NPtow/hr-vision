@@ -21,18 +21,17 @@ BRANCHES = {'service': 'main', 'mockups': 'codex/mockups'}
 BASES = {'service': Path('/srv/hr-vision'), 'mockups': Path('/srv/hr-vision-mockups')}
 API = Path('/opt/hr-vision-api')
 DATABASE = Path('/var/lib/hr-vision-api/journey.sqlite3')
-RUNTIME = {
+PRE_IMPORT_RUNTIME = {
     'app.py', 'browser_access.py', 'candidate_portal.py', 'candidate_resume.py', 'candidate_notifications.py', 'candidate_bot.py',
     'candidate_invites.py', 'recruiter_availability.py', 'hh_recruiting.py', 'hh_routes.py',
     'employer_access.py', 'employer_store.py', 'employer_workflow.py', 'employer_routes.py',
     'employer_projection.py', 'employer_intake.py', 'daily_media.py', 'domain.py', 'dsa_panel.py', 'feedback.py',
 }
-# During the coordinated bot rollout, accept only these two complete, known
-# layouts. This lets the current employer branch finish a baseline release while
-# the receiver is installed ahead of the bot package. Unknown/partial sets remain
-# forbidden, and both layouts still pass branch-SHA and post-activation health.
-LEGACY_RUNTIME = RUNTIME - {'candidate_bot.py'}
-RUNTIME_LAYOUTS = {frozenset(LEGACY_RUNTIME), frozenset(RUNTIME)}
+# Install this receiver before the import release. Accept the two previously
+# shipped complete layouts as well as the new one; no partial import layout.
+RUNTIME = PRE_IMPORT_RUNTIME | {'vacancy_import.py', 'vacancy_sources.py'}
+LEGACY_RUNTIME = PRE_IMPORT_RUNTIME - {'candidate_bot.py'}
+RUNTIME_LAYOUTS = {frozenset(LEGACY_RUNTIME), frozenset(PRE_IMPORT_RUNTIME), frozenset(RUNTIME)}
 MAX_ARCHIVE = 50 * 1024 * 1024
 MAX_CONTENT = 120 * 1024 * 1024
 

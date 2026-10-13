@@ -458,7 +458,7 @@ class Handler(BaseHTTPRequestHandler):
                         self.headers.get('Sec-Fetch-Site') == 'none' and self.headers.get('Origin') == ORIGIN,
                         'Другой источник запроса.', 403)
             size = int(self.headers.get('Content-Length', '0'))
-            if path == '/api/hr/employer/intake':
+            if path in ('/api/hr/employer/intake', '/api/hr/employer/vacancies/import'):
                 with connect() as db:
                     employer_access.authenticate(db, self.headers)
             if path in ('/api/hr/intake', '/api/hr/recruiter/candidates'):
@@ -469,7 +469,8 @@ class Handler(BaseHTTPRequestHandler):
                 with connect() as db:
                     CANDIDATE_PORTAL.session_candidate(db, self.headers)
             limit = (12 * 1024 * 1024 if path in ('/api/hr/intake', '/api/hr/employer/intake') else
-                     7 * 1024 * 1024 if path in ('/api/hr/candidate/resume', '/api/hr/recruiter/candidates') else 32768)
+                     7 * 1024 * 1024 if path in ('/api/hr/candidate/resume', '/api/hr/recruiter/candidates', '/api/hr/employer/vacancies/import') else
+                     128 * 1024 if path in ('/api/hr/employer/vacancies', '/api/hr/employer/vacancies/update') else 32768)
             require(0 < size <= limit, 'Слишком большой запрос.', 413)
             body = json.loads(self.rfile.read(size))
             require(isinstance(body, dict), 'Некорректный запрос.', 400)

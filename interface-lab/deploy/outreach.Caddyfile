@@ -41,6 +41,19 @@ http://:8381 {
 			}
 			reverse_proxy 127.0.0.1:8391
 		}
+		handle /api/hr/employer/vacancies/import {
+			request_body {
+				max_size 7MB
+			}
+			reverse_proxy 127.0.0.1:8391
+		}
+		@vacancyWrite path /api/hr/employer/vacancies /api/hr/employer/vacancies/update
+		handle @vacancyWrite {
+			request_body {
+				max_size 128KB
+			}
+			reverse_proxy 127.0.0.1:8391
+		}
 		handle /api/hr/* {
 			request_body {
 				max_size 32KB

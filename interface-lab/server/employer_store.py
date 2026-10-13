@@ -13,7 +13,7 @@ from domain import Problem, iso, now, require, text
 
 TEAM_WORKSPACE = 'hr-vision-team'
 VACANCY_FIELDS = {'title', 'role', 'company', 'city', 'remote', 'description',
-                  'problem', 'salary', 'format', 'expectations'}
+                  'problem', 'salary', 'format', 'expectations', 'details', 'importId'}
 PROFILE_FIELDS = {'name', 'city', 'desiredRole', 'about', 'geographies', 'availability',
                   'desiredSalary', 'workMode', 'salaryMin', 'salaryMax', 'latestStartDate',
                   'residence', 'employmentType', 'consentReuse', 'autoApprove'}
@@ -148,6 +148,14 @@ def _vacancy_body(body, previous=None, company=''):
         remote = body.get('remote', False)
         require(isinstance(remote, bool), 'Укажите формат вакансии.', 400)
         result['remote'] = remote
+    if 'details' in body:
+        from vacancy_import import validate_details, salary_label
+        result['details'] = validate_details(body['details'])
+        # In the new editor, clearing both bounds explicitly clears legacy pay.
+        result['salary'] = salary_label(result['details'])
+    if 'importId' in body:
+        require(isinstance(body['importId'], str) and 0 < len(body['importId']) <= 100, 'Проверьте источник вакансии.', 400)
+        result['importId'] = body['importId']
     return result
 
 
@@ -178,6 +186,9 @@ def create_vacancy(db, workspace_id, body, request_id=None):
         saved, digest = _command(db, workspace_id, request_id, 'vacancy.create', prepared)
         if saved is not None:
             return vacancy(db, workspace_id, saved['vacancyId'], include_archived=True)
+        if prepared.get('importId'):
+            from vacancy_import import source_for
+            prepared['source'] = source_for(db, workspace_id, prepared['importId'])
         vid, created = _uid('vacancy'), iso(now())
         prepared['id'] = vid
         db.execute('INSERT INTO cp_vacancies VALUES (?,?,?)', (vid, _dump(prepared), created))
@@ -210,6 +221,9 @@ def update_vacancy(db, workspace_id, vacancy_id, body, expected_revision=None, r
         _check_revision(current, expected_revision)
         row = _vacancy_row(db, workspace_id, vacancy_id)
         updated = _vacancy_body(body, json.loads(row[0]))
+        if body.get('importId'):
+            from vacancy_import import source_for
+            updated['source'] = source_for(db, workspace_id, body['importId'])
         if updated != json.loads(row[0]):
             db.execute('UPDATE cp_vacancies SET body=? WHERE id=?', (_dump(updated), vacancy_id))
             bump_revision(db, workspace_id, vacancy_id)
