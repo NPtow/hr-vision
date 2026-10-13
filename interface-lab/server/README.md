@@ -2,6 +2,44 @@
 
 Публичная статика и API размещены на outreach. API: `hr-vision-api`, loopback 8391, проксируется только отдельным `hr-vision-web` (8381); TLS вход остаётся на dsa. Сборка UI выполняется в GitHub Actions, просмотр/проверка только по публичному HTTPS. Локальный web-сервер не нужен.
 
+## Telegram-бот, 13.10.2026
+
+`/start` показывает публичный выбор «Я кандидат» / «Я работодатель» и ссылку
+на соответствующий кабинет. Выбор роли не создаёт аккаунт и не меняет привязку.
+Одноразовый `/start <token>` сохраняет существующую привязку кандидата;
+`/vacancies`, `/meetings`, `/status`, `/settings` работают с каноническими `cp_*`.
+
+На outreach прямое подключение Telegram к webhook и прямой исходящий Bot API
+дали timeout. Для этого хоста используется polling через **существующий** Xray
+на `127.0.0.1:10808`, только в Telegram transport. Закрытое
+`/etc/hr-vision/api.env` (root,0600) содержит token/username и:
+
+```dotenv
+HR_NOTIFICATIONS_ENABLED=1
+HR_TELEGRAM_POLLING=1
+HR_TELEGRAM_PROXY_URL=socks5h://127.0.0.1:10808
+```
+
+`HR_TELEGRAM_PROXY_URL` допускает только loopback SOCKS5h. Адаптер вызывает
+существующий `/usr/bin/curl`: URL с токеном и JSON передаются через stdin,
+ответ ограничен размером/таймаутом, ошибки не содержат URL или тела провайдера.
+Глобальные `HTTP_PROXY`/`HTTPS_PROXY`, Xray и остальные интеграции не меняются.
+Без этой переменной остаётся прежний прямой urllib transport.
+
+Получение обновлений должно быть одно: webhook **либо** polling. Перед переходом
+на polling оператор удаляет webhook методом `deleteWebhook` с
+`drop_pending_updates=false`, сохраняя входящие события; затем API читает
+обновлённое окружение при согласованном перезапуске с проверкой активных звонков
+и резервной копией. Не запускать отдельный `candidate_notifications.py --loop`
+рядом с API: интерактивный handler подключён к единственному daemon в app.py.
+После polling обновления ответы сразу отправляются тем же worker.
+
+Проверять нужно не только health: наличие processed updates, свежий outbox
+`delivered` с provider_ref, состояние polling offset и фактический ответ человеку.
+Старые disabled события не активируются автоматически. `getWebhookInfo` с пустым
+URL подтверждает отсутствие webhook, но сам по себе не доказывает работу polling.
+Нельзя печатать токены, chat IDs или полный payload для эксплуатационной проверки.
+
 ## Состояние и доступ
 
 SQLite `/var/lib/hr-vision-api/journey.sqlite3`, режим WAL, все команды под `BEGIN IMMEDIATE`. Перезапуск приложения/выкладка не сбрасывает прогресс. Права процесса `hr-vision`, MemoryMax 256M. Выпуски `/opt/hr-vision-api/releases/`, указатель `current`.

@@ -12,6 +12,8 @@ Environment (all off until HR_NOTIFICATIONS_ENABLED=1):
   HR_SMTP_HOST, HR_SMTP_PORT (587), HR_SMTP_FROM, HR_SMTP_USER, HR_SMTP_PASSWORD,
   HR_SMTP_SECURITY=starttls|ssl. TLS and certificate validation cannot be disabled.
   HR_TELEGRAM_BOT_TOKEN, HR_TELEGRAM_BOT_USERNAME.
+  HR_TELEGRAM_PROXY_URL: optional loopback socks5h URL, for example
+  socks5h://127.0.0.1:10808. Uses /usr/bin/curl only for Telegram requests.
   HR_TELEGRAM_WEBHOOK_SECRET: 32+ URL-safe characters. The HTTP adapter must pass the
   X-Telegram-Bot-Api-Secret-Token header to handle_telegram_update, never form input.
   Or HR_TELEGRAM_POLLING=1 for this worker to read updates directly from Telegram.
@@ -56,6 +58,8 @@ import secrets
 import smtplib
 import sqlite3
 import ssl
+import subprocess
+import tempfile
 import threading
 import time
 import urllib.error
@@ -127,6 +131,7 @@ class Settings:
     smtp_password: str = field(default='', repr=False)
     smtp_security: str = 'starttls'
     telegram_token: str = field(default='', repr=False)
+    telegram_proxy_url: str = field(default='', repr=False)
     telegram_username: str = ''
     telegram_webhook_secret: str = field(default='', repr=False)
     telegram_polling: bool = False
@@ -165,6 +170,7 @@ def settings(env=None):
         smtp_from=env.get('HR_SMTP_FROM', ''), smtp_user=env.get('HR_SMTP_USER', ''),
         smtp_password=env.get('HR_SMTP_PASSWORD', ''), smtp_security=security,
         telegram_token=env.get('HR_TELEGRAM_BOT_TOKEN', ''),
+        telegram_proxy_url=env.get('HR_TELEGRAM_PROXY_URL', ''),
         telegram_username=env.get('HR_TELEGRAM_BOT_USERNAME', '').lstrip('@'),
         telegram_webhook_secret=env.get('HR_TELEGRAM_WEBHOOK_SECRET', ''),
         telegram_polling=env.get('HR_TELEGRAM_POLLING') == '1',
@@ -612,11 +618,17 @@ class Transport:
             raise DeliveryFailure('smtp_delivery_uncertain') from None
 
     def telegram_request(self, method, payload):
-        request = urllib.request.Request('https://api.telegram.org/bot' + self.config.telegram_token + '/' + method,
-            data=json.dumps(payload).encode(), headers={'Content-Type': 'application/json'}, method='POST')
+        if not isinstance(method, str) or not re.fullmatch(r'[A-Za-z][A-Za-z0-9]{0,63}', method):
+            raise DeliveryFailure('telegram_request_invalid')
+        url = 'https://api.telegram.org/bot' + self.config.telegram_token + '/' + method
         try:
-            with urllib.request.urlopen(request, timeout=15) as response:
-                raw = response.read(1024 * 1024 + 1)
+            if self.config.telegram_proxy_url:
+                raw = self._telegram_proxy_response(url, payload)
+            else:
+                request = urllib.request.Request(url, data=json.dumps(payload).encode(),
+                    headers={'Content-Type': 'application/json'}, method='POST')
+                with urllib.request.urlopen(request, timeout=15) as response:
+                    raw = response.read(1024 * 1024 + 1)
             if len(raw) > 1024 * 1024:
                 raise DeliveryFailure('telegram_response_invalid')
             body = json.loads(raw)
@@ -633,6 +645,56 @@ class Transport:
             code = body.get('error_code', 0) if isinstance(body, dict) else 0
             raise DeliveryFailure('telegram_rejected', code == 429 or (isinstance(code, int) and code >= 500))
         return body.get('result')
+
+    def _telegram_proxy_response(self, url, payload):
+        proxy = self.config.telegram_proxy_url
+        match = re.fullmatch(r'socks5h://(?:127\.0\.0\.1|\[::1\]):([0-9]{1,5})', proxy) if isinstance(proxy, str) else None
+        if not match or not 1 <= int(match[1]) <= 65535:
+            raise DeliveryFailure('telegram_proxy_invalid')
+        if not isinstance(payload, dict) or '\0' in url:
+            raise DeliveryFailure('telegram_request_invalid')
+
+        def quoted(value):
+            # curl --config has its own quoting rules, independent of shell/JSON.
+            escaped = (value.replace('\\', '\\\\').replace('"', '\\"').replace('\t', '\\t')
+                       .replace('\n', '\\n').replace('\r', '\\r').replace('\v', '\\v'))
+            return '"' + escaped + '"'
+
+        config = '\n'.join(key + ' = ' + quoted(value) for key, value in (
+            ('url', url), ('proxy', proxy), ('request', 'POST'),
+            ('header', 'Content-Type: application/json'), ('data', json.dumps(payload, ensure_ascii=True)))) + '\n'
+        # -q must be the first option: user curlrc could otherwise enable tracing,
+        # redirects or additional requests. Secrets and request data use stdin;
+        # the subprocess also gets no inherited credentials/proxy/TLS-debug env.
+        command = ['/usr/bin/curl', '--disable', '--config', '-', '--silent', '--show-error',
+                   '--max-time', '15', '--connect-timeout', '5', '--fail-with-body',
+                   '--max-filesize', str(1024 * 1024), '--noproxy', '', '--globoff',
+                   '--proto', '=https', '--write-out', '\n%{http_code}']
+        try:
+            with tempfile.TemporaryFile() as response:
+                result = subprocess.run(command, input=config.encode('utf-8'), stdout=response,
+                    stderr=subprocess.DEVNULL, timeout=20, check=False,
+                    env={'PATH': '/usr/bin:/bin', 'LANG': 'C', 'LC_ALL': 'C'})
+                if result.returncode == 63:
+                    raise DeliveryFailure('telegram_response_invalid')
+                if result.returncode not in (0, 22):
+                    raise DeliveryFailure('telegram_delivery_uncertain')
+                size = response.seek(0, os.SEEK_END)
+                if size < 4 or size > 1024 * 1024 + 4:
+                    raise DeliveryFailure('telegram_response_invalid')
+                response.seek(0)
+                raw = response.read(1024 * 1024 + 4)
+        except (OSError, subprocess.SubprocessError):
+            raise DeliveryFailure('telegram_delivery_uncertain') from None
+        if not re.fullmatch(rb'\n[0-9]{3}', raw[-4:]):
+            raise DeliveryFailure('telegram_response_invalid')
+        code = int(raw[-3:])
+        if not 200 <= code < 300:
+            raise DeliveryFailure('telegram_http_' + str(code), code == 429 or code >= 500,
+                                  60 if code == 429 else 0)
+        if result.returncode != 0:
+            raise DeliveryFailure('telegram_response_invalid')
+        return raw[:-4]
 
     def send_telegram(self, recipient, content, reply_markup=None):
         payload = _telegram_message(content, reply_markup)
@@ -803,6 +865,13 @@ def start_worker(connect, interval=5, stop_event=None, update_handler=None, tele
                         return
                     counts = process_pending(connect, settings=config, limit=5, telegram_renderer=telegram_renderer)
                     polled = poll_telegram_updates(connect, settings=config, update_handler=update_handler)
+                    if polled.get('processed', 0) > 0:
+                        # Commands enqueue replies in the polling transaction.
+                        # Drain them in this same cycle so callbacks do not wait
+                        # for the worker's next interval behind a loading spinner.
+                        replies = process_pending(connect, settings=config, limit=5, telegram_renderer=telegram_renderer)
+                        for state, count in replies.items():
+                            counts[state] = counts.get(state, 0) + count
                     if any(counts.values()) or polled.get('processed'):
                         print(json.dumps({'worker': 'candidate_notifications', 'outbox': counts,
                                           'telegram': polled}), flush=True)

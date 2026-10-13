@@ -1,9 +1,12 @@
 import copy
+from dataclasses import replace
 import json
 from pathlib import Path
 import sqlite3
 import tempfile
+import threading
 import unittest
+import urllib.parse
 from unittest.mock import patch
 
 import candidate_notifications as notifications
@@ -397,6 +400,148 @@ class CandidateBotTransportTest(unittest.TestCase):
         with patch.object(adapter, 'telegram_request', return_value={'unexpected': True}):
             with self.assertRaises(notifications.DeliveryFailure):
                 adapter.answer_callback_query('query-1')
+
+    def test_worker_drains_polled_replies_immediately_and_aggregates_delivery_counts(self):
+        for processed in (0, 1):
+            with self.subTest(processed=processed):
+                stop = threading.Event()
+                steps = []
+                handler, renderer = object(), object()
+                drains = []
+
+                def drain(connect, **kwargs):
+                    steps.append('drain')
+                    drains.append(kwargs)
+                    if len(drains) == 2:
+                        stop.set()
+                    return {'delivered': len(drains), 'pending': 0, 'error': 0,
+                            'disabled': 0, 'unverified': 0, 'unbound': 0}
+
+                def poll(connect, **kwargs):
+                    steps.append('poll')
+                    if not processed:
+                        stop.set()
+                    return {'status': 'ready', 'processed': processed}
+
+                with patch('candidate_notifications.settings', return_value=self.config), \
+                     patch('candidate_notifications.process_pending', side_effect=drain), \
+                     patch('candidate_notifications.poll_telegram_updates', side_effect=poll) as polling, \
+                     patch('builtins.print') as output:
+                    worker = notifications.start_worker(self.connect, interval=60, stop_event=stop,
+                                                         update_handler=handler, telegram_renderer=renderer)
+                    try:
+                        worker.join(2)
+                        self.assertFalse(worker.is_alive(), 'Worker waited for interval before draining replies')
+                    finally:
+                        stop.set()
+                        worker.join(2)
+                self.assertEqual(steps, ['drain', 'poll', 'drain'] if processed else ['drain', 'poll'])
+                self.assertTrue(all(item == {'settings': self.config, 'limit': 5, 'telegram_renderer': renderer}
+                                    for item in drains))
+                self.assertEqual(polling.call_args.kwargs, {'settings': self.config, 'update_handler': handler})
+                summary = json.loads(output.call_args.args[0])
+                self.assertEqual(summary['outbox']['delivered'], 3 if processed else 1)
+                self.assertEqual(summary['telegram']['processed'], processed)
+
+    def test_socks_proxy_keeps_token_and_escaped_payload_on_stdin_only(self):
+        config = replace(self.config, telegram_proxy_url='socks5h://127.0.0.1:10808')
+        adapter = notifications.Transport(config)
+        payload = {'chat_id': '1001', 'text': 'Кавычки "\\"\nновая строка\r\nurl = "https://untrusted.invalid"',
+                   'reply_markup': self.keyboard}
+        calls = []
+
+        def run(command, **kwargs):
+            calls.append((command, kwargs))
+            kwargs['stdout'].write(b'{"ok":true,"result":{"message_id":123}}\n200')
+            return notifications.subprocess.CompletedProcess(command, 0)
+
+        with patch('candidate_notifications.subprocess.run', side_effect=run), \
+             patch.dict('os.environ', {'HR_TELEGRAM_BOT_TOKEN': config.telegram_token,
+                                      'ALL_PROXY': 'http://untrusted.invalid', 'SSLKEYLOGFILE': '/tmp/untrusted'}):
+            self.assertEqual(adapter.telegram_request('sendMessage', payload), {'message_id': 123})
+        command, kwargs = calls[0]
+        self.assertEqual(command[:4], ['/usr/bin/curl', '--disable', '--config', '-'])
+        self.assertNotIn(config.telegram_token, repr(command) + repr(kwargs['env']))
+        self.assertNotIn(payload['text'], repr(command) + repr(kwargs['env']))
+        self.assertEqual(kwargs['env'], {'PATH': '/usr/bin:/bin', 'LANG': 'C', 'LC_ALL': 'C'})
+        self.assertEqual(kwargs['stderr'], notifications.subprocess.DEVNULL)
+        self.assertEqual(kwargs['timeout'], 20)
+        self.assertEqual(command[command.index('--max-time') + 1], '15')
+        self.assertEqual(command[command.index('--connect-timeout') + 1], '5')
+        self.assertNotIn('--location', command)
+        lines = kwargs['input'].decode().splitlines()
+        self.assertEqual(len(lines), 5, 'Payload injected an additional curl config line')
+        parsed = {key.strip(): json.loads(value.strip()) for key, value in (line.split('=', 1) for line in lines)}
+        self.assertEqual(json.loads(parsed['data']), payload)
+        self.assertEqual(urllib.parse.urlsplit(parsed['url']).hostname, 'api.telegram.org')
+        self.assertEqual(parsed['url'], 'https://api.telegram.org/bot' + config.telegram_token + '/sendMessage')
+        self.assertEqual(parsed['proxy'], config.telegram_proxy_url)
+        self.assertNotIn(config.telegram_proxy_url, repr(config))
+        self.assertEqual(notifications.settings({'HR_TELEGRAM_PROXY_URL': config.telegram_proxy_url}).telegram_proxy_url,
+                         config.telegram_proxy_url)
+
+    def test_proxy_rejects_non_loopback_or_credential_urls_without_subprocess(self):
+        invalid = ['http://127.0.0.1:10808', 'socks5://127.0.0.1:10808', 'socks5h://proxy.example:10808',
+                   'socks5h://localhost:10808', 'socks5h://user:secret@127.0.0.1:10808',
+                   'socks5h://127.0.0.1:10808/', 'socks5h://127.0.0.1:10808?q=1',
+                   'socks5h://127.0.0.1:10808#fragment', 'socks5h://127.0.0.1:0',
+                   'socks5h://127.0.0.1:65536', 'socks5h://127.0.0.1:10808\n']
+        for proxy in invalid:
+            with self.subTest(proxy=proxy), patch('candidate_notifications.subprocess.run') as run:
+                adapter = notifications.Transport(replace(self.config, telegram_proxy_url=proxy))
+                with self.assertRaises(notifications.DeliveryFailure) as error:
+                    adapter.telegram_request('getMe', {})
+                self.assertEqual(error.exception.code, 'telegram_proxy_invalid')
+                self.assertFalse(error.exception.retryable)
+                run.assert_not_called()
+        adapter = notifications.Transport(replace(self.config, telegram_proxy_url='socks5h://127.0.0.1:10808'))
+        with patch('candidate_notifications.subprocess.run') as run:
+            with self.assertRaises(notifications.DeliveryFailure):
+                adapter.telegram_request('../untrusted?url=https://untrusted.invalid', {})
+            run.assert_not_called()
+
+    def test_proxy_http_errors_retry_only_explicit_rejections_and_never_expose_body(self):
+        adapter = notifications.Transport(replace(self.config, telegram_proxy_url='socks5h://127.0.0.1:10808'))
+        for status, code, retry in ((429, 22, True), (503, 22, True), (403, 22, False), (302, 0, False)):
+            def run(command, **kwargs):
+                kwargs['stdout'].write(b'secret-provider-body\n' + str(status).encode())
+                return notifications.subprocess.CompletedProcess(command, code)
+            with self.subTest(status=status), patch('candidate_notifications.subprocess.run', side_effect=run):
+                with self.assertRaises(notifications.DeliveryFailure) as error:
+                    adapter.telegram_request('getUpdates', {})
+                self.assertEqual(error.exception.code, 'telegram_http_' + str(status))
+                self.assertEqual(error.exception.retryable, retry)
+                self.assertEqual(error.exception.retry_after, 60 if status == 429 else 0)
+                self.assertNotIn('secret-provider-body', str(error.exception))
+
+    def test_proxy_network_timeout_or_subprocess_failure_is_uncertain_without_auto_retry(self):
+        adapter = notifications.Transport(replace(self.config, telegram_proxy_url='socks5h://127.0.0.1:10808'))
+        failures = [OSError('token=private'), notifications.subprocess.TimeoutExpired('secret-command', 20)]
+        for failure in failures:
+            with self.subTest(failure=type(failure).__name__), \
+                 patch('candidate_notifications.subprocess.run', side_effect=failure):
+                with self.assertRaises(notifications.DeliveryFailure) as error:
+                    adapter.telegram_request('sendMessage', {'text': 'test'})
+                self.assertEqual(str(error.exception), 'telegram_delivery_uncertain')
+                self.assertFalse(error.exception.retryable)
+        with patch('candidate_notifications.subprocess.run',
+                   return_value=notifications.subprocess.CompletedProcess([], 28)):
+            with self.assertRaises(notifications.DeliveryFailure) as error:
+                adapter.telegram_request('sendMessage', {'text': 'test'})
+            self.assertEqual(error.exception.code, 'telegram_delivery_uncertain')
+            self.assertFalse(error.exception.retryable)
+
+    def test_proxy_response_size_and_status_trailer_are_validated_before_json(self):
+        adapter = notifications.Transport(replace(self.config, telegram_proxy_url='socks5h://127.0.0.1:10808'))
+        for output in (b'x' * (1024 * 1024 + 1) + b'\n200', b'{}', b'{}\nsecret', b'not-json\n200'):
+            def run(command, **kwargs):
+                kwargs['stdout'].write(output)
+                return notifications.subprocess.CompletedProcess(command, 0)
+            with self.subTest(size=len(output)), patch('candidate_notifications.subprocess.run', side_effect=run):
+                with self.assertRaises(notifications.DeliveryFailure) as error:
+                    adapter.telegram_request('getUpdates', {})
+                self.assertEqual(error.exception.code, 'telegram_response_invalid')
+                self.assertFalse(error.exception.retryable)
 
 
 if __name__ == '__main__':

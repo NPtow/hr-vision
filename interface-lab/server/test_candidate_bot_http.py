@@ -194,6 +194,23 @@ class CandidateBotHTTPTest(unittest.TestCase):
         return [button for method, payload in self.sent if method == 'sendMessage'
                 for row in payload.get('reply_markup', {}).get('inline_keyboard', []) for button in row]
 
+    def assert_role_menu(self):
+        self.assertEqual({(button['text'], button.get('callback_data')) for button in self.buttons()},
+                         {('Я кандидат', 'role:candidate'), ('Я работодатель', 'role:employer')})
+
+    def assert_role_entry(self, role):
+        self.assertTrue(any(button.get('callback_data') == 'role:menu' for button in self.buttons()))
+        links = [urllib.parse.urlsplit(button['url']) for button in self.buttons() if 'url' in button]
+        self.assertEqual(len(links), 1)
+        link = links[0]
+        self.assertEqual((link.scheme, link.netloc, link.path, link.fragment),
+                         ('https', 'portal.example.test', '/iframe.html', ''))
+        expected = {'id': ['hr-vision-product--candidate' if role == 'candidate' else 'hr-vision-product--manager'],
+                    'viewMode': ['story']}
+        if role == 'candidate':
+            expected['telegram'] = ['connect']
+        self.assertEqual(urllib.parse.parse_qs(link.query), expected)
+
     def action(self, name, application=None, meeting=None):
         # Select an actually delivered button, then verify its durable identity.
         for button in reversed(self.buttons()):
@@ -214,6 +231,11 @@ class CandidateBotHTTPTest(unittest.TestCase):
         self.message(10001, '/start')
         self.assertEqual(self.sent, [], 'HTTP hooks must only queue Telegram delivery')
         self.drain()
+        self.assert_role_menu()
+        self.sent.clear()
+        self.callback(10001, 'role:candidate')
+        self.drain()
+        self.assert_role_entry('candidate')
         links = [button['url'] for button in self.buttons() if 'url' in button]
         self.assertTrue(any(urllib.parse.parse_qs(urllib.parse.urlsplit(url).query).get('telegram') == ['connect']
                             for url in links), links)
@@ -241,8 +263,70 @@ class CandidateBotHTTPTest(unittest.TestCase):
             update['message']['chat']['type'] = kind
             update['message']['from']['id'] = sender
             self.assertEqual(self.webhook(update)[0], 200)
+        # Public role buttons are still restricted to validated private senders.
+        for index, (kind, sender) in enumerate((('group', 10001), ('private', 10002)), start=103):
+            role_update = {'update_id': index, 'callback_query': {
+                'id': 'invalid-private-role-' + str(index), 'data': 'role:employer',
+                'from': {'id': sender, 'is_bot': False},
+                'message': {'message_id': 1, 'chat': {'id': 10001, 'type': kind}}}}
+            self.assertEqual(self.webhook(role_update)[0], 200)
         self.drain()
         self.assertEqual(self.sent, [])
+
+    def test_unbound_role_navigation_is_repeatable_and_creates_no_profiles_or_actions(self):
+        tables = ('cp_candidates', 'cp_sessions', 'cp_consent_log', 'cp_applications',
+                  'cn_recipients', 'cb_actions', 'em_accounts', 'em_workspaces')
+        with self.app.connect() as db:
+            before = {table: db.execute('SELECT COUNT(*) FROM ' + table).fetchone()[0] for table in tables}
+        self.message(10001, '/start')
+        self.drain()
+        self.assert_role_menu()
+        for role in ('candidate', 'employer', 'candidate', 'employer'):
+            self.sent.clear()
+            self.callback(10001, 'role:' + role)
+            self.drain()
+            self.assert_role_entry(role)
+            self.sent.clear()
+            self.callback(10001, 'role:menu')
+            self.drain()
+            self.assert_role_menu()
+        with self.app.connect() as db:
+            for table in tables:
+                self.assertEqual(db.execute('SELECT COUNT(*) FROM ' + table).fetchone()[0], before[table], table)
+
+    def test_linked_start_and_role_switch_preserve_binding_profile_and_candidate_actions(self):
+        owner = self.register(10001)
+        application = self.application(owner, 'PRESERVED_AFTER_ROLE_SWITCH')
+        self.drain()
+        with self.app.connect() as db:
+            profile_before = db.execute('SELECT * FROM cp_candidates WHERE id=?', (owner['id'],)).fetchone()
+            recipient_before = db.execute('SELECT * FROM cn_recipients WHERE candidate_id=?', (owner['id'],)).fetchone()
+            employers_before = db.execute('SELECT COUNT(*) FROM em_accounts').fetchone()[0]
+        self.sent.clear()
+        self.message(10001, '/start')
+        self.drain()
+        self.assert_role_menu()
+        for role in ('employer', 'candidate'):
+            self.sent.clear()
+            self.callback(10001, 'role:' + role)
+            self.drain()
+            self.assert_role_entry(role)
+            self.sent.clear()
+            self.callback(10001, 'role:menu')
+            self.drain()
+            self.assert_role_menu()
+        with self.app.connect() as db:
+            self.assertEqual(db.execute('SELECT * FROM cp_candidates WHERE id=?', (owner['id'],)).fetchone(), profile_before)
+            self.assertEqual(db.execute('SELECT * FROM cn_recipients WHERE candidate_id=?', (owner['id'],)).fetchone(), recipient_before)
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM cp_candidates').fetchone()[0], 1)
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM em_accounts').fetchone()[0], employers_before)
+        self.assertTrue(self.state(owner)['channels']['telegram']['linked'])
+        self.assertEqual(self.application_state(owner, application)['status'], 'pending')
+        self.sent.clear()
+        self.message(10001, '/vacancies')
+        self.drain()
+        self.callback(10001, self.action('application.accept', application))
+        self.assertEqual(self.application_state(owner, application)['status'], 'accepted')
 
     def test_vacancies_contains_only_real_assigned_applications(self):
         owner, other = self.register(10001), self.register(10002)

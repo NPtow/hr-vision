@@ -79,6 +79,27 @@ class CandidateBot:
     def _menu(self, config):
         return {'inline_keyboard': [[{'text': 'Открыть кабинет', 'url': self._url(config)}]]}
 
+    def _role_content(self, config, role='menu'):
+        if role == 'candidate':
+            text = ('Пройдите одно интервью с нашим рекрутером — дальше выбирайте подходящие вакансии в личном кабинете.\n\n'
+                    'Вы решаете, каким компаниям передать профиль. Предложения и приглашения можно получать здесь. '
+                    'Время каждой встречи подтверждаете отдельно.')
+            button = {'text': 'Открыть кабинет кандидата', 'url': self._url(config, True)}
+        elif role == 'employer':
+            text = ('Создайте вакансию и получайте подборки кандидатов с готовыми интервью. '
+                    'Просматривайте профили, приглашайте на встречи и отправляйте офферы в кабинете работодателя.')
+            parts = urllib.parse.urlsplit(config.public_url)
+            url = urllib.parse.urlunsplit((parts.scheme, parts.netloc, '/iframe.html',
+                urllib.parse.urlencode({'id': 'hr-vision-product--manager', 'viewMode': 'story'}), ''))
+            button = {'text': 'Открыть кабинет работодателя', 'url': url}
+        else:
+            return {'text': 'HR Vision помогает кандидатам находить работу, а компаниям — знакомиться с подходящими людьми по готовым профилям и интервью.\n\nКак вы хотите пользоваться сервисом?',
+                'reply_markup': {'inline_keyboard': [[
+                    {'text': 'Я кандидат', 'callback_data': 'role:candidate'},
+                    {'text': 'Я работодатель', 'callback_data': 'role:employer'}]]}}
+        return {'text': text, 'reply_markup': {'inline_keyboard': [[button],
+            [{'text': 'Выбрать другую роль', 'callback_data': 'role:menu'}]]}}
+
     def _application_card(self, db, cid, chat, application, config, tick):
         vacancy = application['vacancy']
         workflow = employer_workflow.load(db, application['id'], actor='candidate', candidate_id=cid)
@@ -235,19 +256,27 @@ class CandidateBot:
         key = 'bot:' + str(update['update_id'])
         db.execute('DELETE FROM cb_actions WHERE expires_at<?', (timestamp - ACTION_SECONDS,))
         if isinstance(query, dict):
+            if query.get('data') in ('role:candidate', 'role:employer', 'role:menu'):
+                # Public navigation only: it never selects an account, binds a
+                # profile or grants application access. Private sender is checked
+                # by the notification dispatcher, just like every other callback.
+                role = query['data'].split(':', 1)[1]
+                self.notifications.enqueue_telegram_callback(db, chat, key + ':answer', query['id'],
+                    candidate_id=cid, settings=config, now=timestamp)
+                self._send(db, chat, cid, key + ':role', self._role_content(config, role), config, timestamp)
+                return {'status': 'replied'}
             return self._callback(db, update, cid, chat, config, timestamp, key)
         if binding_result and binding_result['status'] != 'linked':
             messages = {'invalid_link': 'Ссылка привязки истекла или уже использована. Войдите в кабинет и нажмите «Подключить Telegram» снова.',
                         'chat_already_linked': 'Этот Telegram уже привязан к другому кабинету. Войдите в свой кабинет.'}
             self._send(db, chat, cid, key + ':binding', {'text': messages.get(binding_result['status'], 'Откройте кабинет и повторите привязку.'), 'reply_markup': self._menu(config)}, config, timestamp)
             return binding_result
-        if not cid:
-            self._send(db, chat, None, key + ':register', {'text': 'Я помогу отвечать на вакансии и подтверждать встречи HR Vision.\n\nСоздайте аккаунт или войдите в кабинет. Для регистрации нужны резюме и проверка его данных. В кабинете нажмите «Подключить Telegram» и вернитесь сюда по ссылке — тогда я покажу ваши предложения.\n\nАккаунт и согласие создаются в форме; запуск бота их не заменяет.',
-                'reply_markup': {'inline_keyboard': [[{'text': 'Регистрация / вход и привязка', 'url': self._url(config, True)}]]}}, config, timestamp)
-            return {'status': 'replied'}
         text = message.get('text', '')
         parts = text.split() if isinstance(text, str) else []
         command = parts[0].split('@')[0] if parts else ''
+        if not cid or (command == '/start' and not binding_result):
+            self._send(db, chat, cid, key + ':roles', self._role_content(config), config, timestamp)
+            return {'status': 'replied'}
         if binding_result and binding_result['status'] == 'linked':
             self._send(db, chat, cid, key + ':linked', {'text': 'Telegram подключён к вашему кабинету HR Vision. Решения здесь сразу сохраняются в кабинете.\n\n/vacancies — вакансии\n/meetings — время встреч\n/status — состояние профиля\n/settings — автосогласование', 'reply_markup': self._menu(config)}, config, timestamp)
             self._vacancies(db, cid, chat, config, timestamp, key + ':vacancies')
