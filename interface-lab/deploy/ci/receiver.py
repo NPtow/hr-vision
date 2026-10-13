@@ -22,11 +22,17 @@ BASES = {'service': Path('/srv/hr-vision'), 'mockups': Path('/srv/hr-vision-mock
 API = Path('/opt/hr-vision-api')
 DATABASE = Path('/var/lib/hr-vision-api/journey.sqlite3')
 RUNTIME = {
-    'app.py', 'browser_access.py', 'candidate_portal.py', 'candidate_resume.py', 'candidate_notifications.py',
+    'app.py', 'browser_access.py', 'candidate_portal.py', 'candidate_resume.py', 'candidate_notifications.py', 'candidate_bot.py',
     'candidate_invites.py', 'recruiter_availability.py', 'hh_recruiting.py', 'hh_routes.py',
     'employer_access.py', 'employer_store.py', 'employer_workflow.py', 'employer_routes.py',
     'employer_projection.py', 'employer_intake.py', 'daily_media.py', 'domain.py', 'dsa_panel.py', 'feedback.py',
 }
+# During the coordinated bot rollout, accept only these two complete, known
+# layouts. This lets the current employer branch finish a baseline release while
+# the receiver is installed ahead of the bot package. Unknown/partial sets remain
+# forbidden, and both layouts still pass branch-SHA and post-activation health.
+LEGACY_RUNTIME = RUNTIME - {'candidate_bot.py'}
+RUNTIME_LAYOUTS = {frozenset(LEGACY_RUNTIME), frozenset(RUNTIME)}
 MAX_ARCHIVE = 50 * 1024 * 1024
 MAX_CONTENT = 120 * 1024 * 1024
 
@@ -81,7 +87,8 @@ def unpack(archive, destination, target):
                         or rel.endswith('.LICENSE.txt'), 'Unexpected public file')
         require({'ui/index.html', 'ui/iframe.html', 'ui/index.json', 'ui/deployment.json'} <= files.keys(), 'Missing UI files')
         if target == 'service':
-            require({'api/' + name for name in RUNTIME} <= files.keys(), 'Incomplete API')
+            runtime = frozenset(name[4:] for name in files if name.startswith('api/'))
+            require(runtime in RUNTIME_LAYOUTS, 'Incomplete API')
         entries = json.loads(files['ui/index.json'])['entries']
         if target == 'service':
             require(set(entries) == {'hr-vision-product--start', 'hr-vision-product--manager', 'hr-vision-product--candidate'}, 'Service contains mockup stories')
@@ -133,7 +140,13 @@ def switch(base, name, value):
 
 
 def api_changed(source):
-    return any(not (API / 'current' / name).is_file() or (source / name).read_bytes() != (API / 'current' / name).read_bytes() for name in RUNTIME)
+    incoming = frozenset(path.name for path in source.iterdir() if path.is_file())
+    require(incoming in RUNTIME_LAYOUTS, 'Incomplete API')
+    installed = {name for name in RUNTIME if (API / 'current' / name).is_file()}
+    # Adding or removing the bot module is an API change even if every shared
+    # file is byte-identical; rollback/backup/restart must cover both directions.
+    return installed != incoming or any(
+        (source / name).read_bytes() != (API / 'current' / name).read_bytes() for name in incoming)
 
 
 def guard_live_interviews(db):

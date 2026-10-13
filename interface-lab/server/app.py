@@ -23,6 +23,7 @@ import browser_access
 from dsa_panel import DsaPanel
 from candidate_portal import CandidatePortal, ClosingConnection
 import candidate_notifications
+from candidate_bot import CandidateBot
 from hh_routes import HHRecruiterRoutes
 from employer_routes import EmployerRoutes
 import employer_access
@@ -77,6 +78,7 @@ with connect() as db:
     db.execute('CREATE TABLE IF NOT EXISTS intake_batches (id TEXT PRIMARY KEY, digest TEXT NOT NULL)')
 os.chmod(DB, 0o600)
 CANDIDATE_PORTAL = CandidatePortal(connect, LOCK, MEDIA, ORIGIN, candidate_notifications)
+CANDIDATE_BOT = CandidateBot(CANDIDATE_PORTAL, candidate_notifications)
 HH_ROUTES = HHRecruiterRoutes(connect, CANDIDATE_PORTAL)
 CANDIDATE_PORTAL.invitation_lookup = HH_ROUTES.existing_invitation
 EMPLOYER_ROUTES = EmployerRoutes(connect, LOCK, CANDIDATE_PORTAL, MEDIA, ORIGIN)
@@ -482,7 +484,8 @@ class Handler(BaseHTTPRequestHandler):
                 with LOCK, connect() as db:
                     db.execute('BEGIN IMMEDIATE')
                     result = candidate_notifications.handle_telegram_update(db, body,
-                        supplied_secret=self.headers.get('X-Telegram-Bot-Api-Secret-Token', ''))
+                        supplied_secret=self.headers.get('X-Telegram-Bot-Api-Secret-Token', ''),
+                        update_handler=CANDIDATE_BOT.handle_update)
                 return self.answer(200, result)
             if CANDIDATE_PORTAL.handles(urllib.parse.urlsplit(self.path).path):
                 result, headers = CANDIDATE_PORTAL.handle('POST', self.path, self.headers, body,
@@ -558,6 +561,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == '__main__':
-    candidate_notifications.start_worker(connect)
+    candidate_notifications.start_worker(connect, update_handler=CANDIDATE_BOT.handle_update,
+        telegram_renderer=CANDIDATE_BOT.render_notification)
     HH_ROUTES.start_worker()
     ThreadingHTTPServer(('127.0.0.1', int(os.environ.get('HR_PORT', '8391'))), Handler).serve_forever()

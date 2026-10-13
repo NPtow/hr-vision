@@ -1,0 +1,7 @@
+.cp-telegram-handoff { display:flex; align-items:center; gap:16px; margin:24px auto; padding:20px 24px; max-width:960px; border-radius:20px; background:#f5f7fa; }
+.cp-telegram-handoff>svg { flex-shrink:0; color:#315f9d; }
+.cp-telegram-handoff>div { flex:1; min-width:0; }
+.cp-telegram-handoff h2 { margin:0; font-size:16px; line-height:1.4; }
+.cp-telegram-handoff p { margin:4px 0 0; font-size:14px; }
+.cp-telegram-handoff>a { flex-shrink:0; display:flex; align-items:center; gap:8px; }
+@media(max-width:620px) { .cp-telegram-handoff { flex-wrap:wrap; margin:16px; padding:18px; } .cp-telegram-handoff>div { flex-basis:calc(100% - 42px); } .cp-telegram-handoff>button,.cp-telegram-handoff>a { margin-left:37px; } }

@@ -47,7 +47,7 @@ const deployment = JSON.stringify({ target, branch, sha, run }) + '\n';
 writeFileSync(`${stage}/ui/deployment.json`, deployment);
 files['ui/deployment.json'] = digest(deployment);
 if (target === 'service') for (const name of [
-  'app.py', 'browser_access.py', 'candidate_portal.py', 'candidate_resume.py', 'candidate_notifications.py',
+  'app.py', 'browser_access.py', 'candidate_portal.py', 'candidate_resume.py', 'candidate_notifications.py', 'candidate_bot.py',
   'candidate_invites.py', 'recruiter_availability.py', 'hh_recruiting.py', 'hh_routes.py',
   'employer_access.py', 'employer_store.py', 'employer_workflow.py', 'employer_routes.py',
   'employer_projection.py', 'employer_intake.py', 'daily_media.py', 'domain.py', 'dsa_panel.py', 'feedback.py',

@@ -9,6 +9,7 @@ import { ResumeUpload } from './ResumeUpload';
 import { AvailabilityForm } from './AvailabilityForm';
 import { InterviewRoom } from './InterviewRoom';
 import { InvitationPortal } from './InvitationPortal';
+import { TelegramHandoff } from './TelegramHandoff';
 import '../agency-product/theme.css';
 import './candidate-portal.css';
 
@@ -46,6 +47,7 @@ function AuthenticatedCandidatePortal() {
   const [loadError, setLoadError] = useState('');
   const [notice, setNotice] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [telegramEntry, setTelegramEntry] = useState(() => new URLSearchParams(location.search).get('telegram') === 'connect');
   const [credentials, setCredentials] = useState({ email: '', password: '' });
   const [registrationConsent, setRegistrationConsent] = useState(false);
   const [meetingApplicationId, setMeetingApplicationId] = useState(() => new URLSearchParams(location.search).get('application') || '');
@@ -144,6 +146,13 @@ function AuthenticatedCandidatePortal() {
   const activePage = ['calendar', 'interview'].includes(page) ? 'home' : page === 'meeting' ? 'vacancies' : page;
   const pendingCount = candidate?.applications.filter(application => application.status === 'pending' || application.meeting?.status === 'pending').length || 0;
   const currentMeeting = candidate?.applications.find(application => application.id === meetingApplicationId);
+  const telegramChannel = typeof channels.telegram === 'object' ? channels.telegram : undefined;
+  useEffect(() => {
+    if (!telegramEntry || !telegramChannel?.linked) return;
+    const url = new URL(location.href); url.searchParams.delete('telegram');
+    history.replaceState(history.state, '', url);
+    setTelegramEntry(false); setNotice('Telegram подключён. Вакансии и встречи будут приходить в бот.');
+  }, [telegramEntry, telegramChannel?.linked]);
   return <div className="agency-product-theme cp-root">
     <header className="cp-topbar">
       {showNavigation && <button className="cp-menu-toggle" aria-label={menuOpen ? 'Закрыть меню' : 'Открыть меню'} aria-expanded={menuOpen} aria-controls="candidate-navigation" onClick={() => setMenuOpen(value => !value)}>{menuOpen ? <X size={21}/> : <Menu size={21}/>}</button>}
@@ -156,6 +165,7 @@ function AuthenticatedCandidatePortal() {
         {loading ? <div className="cp-loading" role="status"><span className="cp-spinner"/>Открываем кабинет…</div> : <>
           {(error || loadError) && <div className="cp-message cp-error" role="alert"><span>{error || loadError}</span><Button size="sm" variant="ghost" onClick={() => { setError(''); void (candidate ? refresh() : session()); }}>Повторить</Button></div>}
           {notice && <div className="cp-message cp-success" role="status"><Check size={17}/>{notice}<button aria-label="Закрыть сообщение" onClick={() => setNotice('')}><X size={16}/></button></div>}
+          {candidate && telegramEntry && !telegramChannel?.linked && !['interview', 'meeting'].includes(page) && <TelegramHandoff key={candidate.id} available={telegramChannel?.canLink === true || channels.telegramBindingAvailable === true}/>}
           {!candidate && page === 'welcome' && <Welcome onStart={() => go('register')}/>}
           {!candidate && (page === 'login' || authenticatedPage(page)) && <section className="cp-auth-card"><h1>С возвращением</h1><p className="cp-muted">Войдите в свой кабинет HR Vision.</p><form className="cp-auth-form" onSubmit={async event => { event.preventDefault(); const next = await mutate('login', { email: credentials.email.trim(), password: credentials.password }); if (next) { setCredentials(value => ({ ...value, password: '' })); go(destination(next), true); } }}>
             <label htmlFor="cp-login-email">Почта<Input id="cp-login-email" type="email" autoComplete="username" required value={credentials.email} onChange={event => setCredentials(value => ({ ...value, email: event.target.value }))}/></label>

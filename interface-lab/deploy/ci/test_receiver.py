@@ -17,14 +17,14 @@ class ReceiverTest(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.addCleanup(self.temp.cleanup)
 
-    def bundle(self, target='mockups', mutate=None, extra=None):
+    def bundle(self, target='mockups', mutate=None, extra=None, runtime=None):
         sha, run = 'a' * 40, '12.1'
         entries = {'hr-vision-employer-menu--gallery': {}} if target == 'mockups' else {f'hr-vision-product--{name}': {} for name in ['start', 'manager', 'candidate']}
         files = {'ui/index.html': b'<html/>', 'ui/iframe.html': b'<html/>',
                  'ui/index.json': json.dumps({'entries': entries}).encode(),
                  'ui/deployment.json': json.dumps({'target': target, 'branch': r.BRANCHES[target], 'sha': sha, 'run': run}).encode()}
         if target == 'service':
-            files.update({'api/' + name: b'# runtime' for name in r.RUNTIME})
+            files.update({'api/' + name: b'# runtime' for name in (r.RUNTIME if runtime is None else runtime)})
         m = {'version': 1, 'target': target, 'branch': r.BRANCHES[target], 'sha': sha, 'run': run, 'release': sha + '-' + run, 'files': {name: r.digest(data) for name, data in files.items()}}
         if mutate:
             mutate(m, files)
@@ -42,6 +42,54 @@ class ReceiverTest(unittest.TestCase):
         for target in r.BRANCHES:
             a, s, m = self.bundle(target)
             self.assertEqual(r.unpack(a, s, target), m)
+
+    def test_both_known_complete_service_layouts_are_accepted(self):
+        self.assertEqual(len(r.LEGACY_RUNTIME), 19)
+        self.assertEqual(r.RUNTIME - r.LEGACY_RUNTIME, {'candidate_bot.py'})
+        for runtime in (r.LEGACY_RUNTIME, r.RUNTIME):
+            with self.subTest(count=len(runtime)):
+                a, s, m = self.bundle('service', runtime=runtime)
+                self.assertEqual(r.unpack(a, s, 'service'), m)
+
+    def test_partial_legacy_layout_is_rejected(self):
+        a, s, _ = self.bundle('service', runtime=r.LEGACY_RUNTIME - {'candidate_notifications.py'})
+        with self.assertRaisesRegex(ValueError, 'Incomplete API'):
+            r.unpack(a, s, 'service')
+
+    def test_runtime_change_detection_handles_both_layout_directions(self):
+        source, api = self.root / 'incoming-api', self.root / 'installed-api'
+        source.mkdir()
+        (api / 'current').mkdir(parents=True)
+        for name in r.LEGACY_RUNTIME:
+            (source / name).write_text('# same')
+            (api / 'current' / name).write_text('# same')
+        with patch.object(r, 'API', api):
+            self.assertFalse(r.api_changed(source))
+            (source / 'candidate_bot.py').write_text('# bot')
+            self.assertTrue(r.api_changed(source))
+            (api / 'current' / 'candidate_bot.py').write_text('# bot')
+            self.assertFalse(r.api_changed(source))
+            (source / 'candidate_bot.py').unlink()
+            self.assertTrue(r.api_changed(source))
+
+    def test_legacy_runtime_still_checks_health_and_rolls_back(self):
+        a, s, m = self.bundle('service', runtime=r.LEGACY_RUNTIME)
+        r.unpack(a, s, 'service')
+        base, api = self.root / 'site', self.root / 'api'
+        base.mkdir(); (base / 'current').symlink_to('releases/old-ui')
+        api.mkdir(); (api / 'current').symlink_to('releases/old-api')
+        with patch.dict(r.BASES, service=base), patch.object(r, 'API', api), \
+                patch.object(r, 'current_branch_sha', return_value=m['sha']), \
+                patch.object(r, 'guard_and_backup') as backup, \
+                patch.object(r, 'restart_api') as restart, \
+                patch.object(r, 'check_origin', side_effect=RuntimeError('unhealthy')) as health:
+            with self.assertRaisesRegex(RuntimeError, 'unhealthy'):
+                r.activate(s, m)
+            backup.assert_called_once_with(m['release'])
+            health.assert_called_once_with('service', m['sha'])
+            self.assertEqual(restart.call_count, 2)
+        self.assertEqual(r.pointer(base), 'releases/old-ui')
+        self.assertEqual(r.pointer(api), 'releases/old-api')
 
     def test_rejects_wrong_destination(self):
         a, s, _ = self.bundle()
