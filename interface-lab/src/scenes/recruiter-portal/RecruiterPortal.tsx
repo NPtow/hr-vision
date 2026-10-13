@@ -154,8 +154,10 @@ export function RecruiterPortal() {
         <button className="ew-logo" onClick={() => navigate('interviews')} aria-label="К интервью"><img src={logo} alt="HR Vision"/></button>
         <button className="rp-personal-account" onClick={() => navigate('profile')} aria-label="Открыть личный кабинет" aria-current={page === 'profile' ? 'page' : undefined}><UserRound size={18}/>{auth.recruiter.name}</button>
       </header>
-      <main className="rp-main">
-        <header className="rp-page-heading"><h1>{page === 'interviews' ? 'Интервью' : 'Личный кабинет'}</h1></header>
+      <main className="rp-main" aria-labelledby="rp-page-title">
+        {page === 'interviews'
+          ? <h1 id="rp-page-title" className="rp-visually-hidden">Интервью</h1>
+          : <header className="rp-page-heading"><h1 id="rp-page-title">Личный кабинет</h1></header>}
         {(error || auth.error) && <div className="rp-error" role="alert">{error || auth.error}</div>}
         {notice && <p className="rp-notice" role="status"><Check size={16}/>{notice}</p>}
         {!state ? <div className="rp-empty"><p>{error ? 'Данные не загрузились.' : 'Загружаем…'}</p>{error && <Button variant="secondary" onClick={() => void refresh()}>Повторить</Button>}</div> : <>
