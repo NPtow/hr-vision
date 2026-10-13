@@ -7,6 +7,8 @@ export type EmployerMeeting = { id: string; start: string; end: string; status: 
 export type Application = { id: string; vacancy: Vacancy; status: 'pending' | 'accepted' | 'declined'; approvedAutomatically: boolean; meeting: EmployerMeeting | null };
 export type InternalProfile = { summary: string; evaluation: string; updatedAt?: string };
 export type RecruiterCandidate = {
+  source?: { kind: 'hh' | 'manual' | 'registration'; label: string };
+  sourceApplications?: { id: string; title: string; company: string; url: string }[];
   id: string; email: string | null; accountActive?: boolean; intake?: { source: 'manual' | 'hh'; contactEmail: string }; resume?: CandidateResume | null; name: string; city: string; desiredRole: string; about: string; telegram: string;
   desiredSalary?: string; workMode?: 'office' | 'hybrid' | 'remote' | 'any';
   geographies: string[]; availability: Availability[]; consentReuse: boolean; autoApprove: boolean;
@@ -20,15 +22,19 @@ export type Materials = { status: 'processing' | 'ready'; recordings: { id: stri
 export type Room = { url: string; token: string };
 export type TranscriptTurn = { id: string; text: string; seconds: number; speaker?: string };
 
+export class RecruiterRequestError extends Error {
+  constructor(message: string, public status: number) { super(message); }
+}
+
 export async function recruiterRequest<T>(path: string, token: string, body?: unknown): Promise<T> {
   const response = await fetch('/api/hr/recruiter/' + path, {
     method: body === undefined ? 'GET' : 'POST',
-    headers: { Authorization: `Bearer ${token}`, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
     body: body === undefined ? undefined : JSON.stringify(body),
     cache: 'no-store', signal: AbortSignal.timeout(path === 'hh/responses/import' ? 180000 : path === 'interview/start' ? 60000 : 30000),
   });
   const data = await response.json().catch(() => ({ error: 'Сервис временно недоступен.' }));
-  if (!response.ok) throw new Error(data.error || 'Не удалось выполнить действие.');
+  if (!response.ok) throw new RecruiterRequestError(data.error || 'Не удалось выполнить действие.', response.status);
   return data as T;
 }
 export const formatDate = (iso: string) => new Intl.DateTimeFormat('ru-RU', { timeZone: 'Europe/Moscow', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }).format(new Date(iso)) + ' МСК';

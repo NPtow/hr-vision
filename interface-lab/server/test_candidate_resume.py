@@ -159,7 +159,11 @@ class CandidateCVOnboardingTest(unittest.TestCase):
     def slot(self):
         state, _ = self.call('recruiter/slots', {'start': iso(now() + dt.timedelta(minutes=5)),
              'recruiterName': 'Рекрутер'}, manager=True)
-        return state['slots'][0]
+        slot = state['slots'][0]
+        from test_candidate_portal import assign_fixture_slot
+        with self.connect() as db:
+            assign_fixture_slot(db, slot)
+        return slot
 
     def test_registration_creates_identity_before_cv_and_resumes_after_login(self):
         self.assertIsNone(self.person['resume'])

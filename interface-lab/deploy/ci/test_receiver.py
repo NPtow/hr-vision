@@ -43,14 +43,21 @@ class ReceiverTest(unittest.TestCase):
             a, s, m = self.bundle(target)
             self.assertEqual(r.unpack(a, s, target), m)
 
-    def test_both_known_complete_service_layouts_are_accepted(self):
+    def test_known_complete_service_layouts_are_accepted(self):
         self.assertEqual(len(r.LEGACY_RUNTIME), 19)
-        self.assertEqual(r.PRE_IMPORT_RUNTIME - r.LEGACY_RUNTIME, {'candidate_bot.py'})
+        self.assertEqual(r.BOT_RUNTIME - r.LEGACY_RUNTIME, {'candidate_bot.py'})
+        self.assertEqual(r.PRE_IMPORT_RUNTIME - r.BOT_RUNTIME, {'recruiter_access.py', 'recruiter_sources.py', 'recruiter_notifications.py'})
         self.assertEqual(r.RUNTIME - r.PRE_IMPORT_RUNTIME, {'vacancy_import.py', 'vacancy_sources.py'})
-        for runtime in (r.LEGACY_RUNTIME, r.PRE_IMPORT_RUNTIME, r.RUNTIME):
+        for runtime in (r.LEGACY_RUNTIME, r.BOT_RUNTIME, r.PRE_IMPORT_RUNTIME, r.RUNTIME):
             with self.subTest(count=len(runtime)):
                 a, s, m = self.bundle('service', runtime=runtime)
                 self.assertEqual(r.unpack(a, s, 'service'), m)
+
+    def test_partial_recruiter_layout_is_rejected(self):
+        for module in r.RUNTIME - r.BOT_RUNTIME:
+            a, s, _ = self.bundle('service', runtime=r.RUNTIME - {module})
+            with self.assertRaisesRegex(ValueError, 'Incomplete API'):
+                r.unpack(a, s, 'service')
 
     def test_partial_legacy_layout_is_rejected(self):
         a, s, _ = self.bundle('service', runtime=r.LEGACY_RUNTIME - {'candidate_notifications.py'})

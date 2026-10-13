@@ -510,6 +510,11 @@ def _consume_telegram_update(db, update, timestamp, settings=None, update_handle
             and chat['id'] == sender.get('id') and not sender.get('is_bot')):
         return {'status': 'ignored'}
     content = message.get('text', '') if callback is None else ''
+    if isinstance(content, str) and re.fullmatch(r'/start(?:@[A-Za-z0-9_]+)? rc_[A-Za-z0-9_-]{43}', content):
+        # One bot/polling offset, separate identity namespaces and link tokens.
+        # Recruiter capabilities must not reach candidate binding or bot commands.
+        import recruiter_notifications
+        return recruiter_notifications.consume_telegram_update(db, update, timestamp)
     match = re.fullmatch(r'/start(?:@[A-Za-z0-9_]+)? ([A-Za-z0-9_-]{40,64})', content) if isinstance(content, str) else None
     binding_result = _consume_telegram_link(db, match[1], chat['id'], timestamp) if match else None
     if update_handler is not None:
@@ -864,6 +869,8 @@ def start_worker(connect, interval=5, stop_event=None, update_handler=None, tele
                     if not config.enabled:
                         return
                     counts = process_pending(connect, settings=config, limit=5, telegram_renderer=telegram_renderer)
+                    import recruiter_notifications
+                    recruiter_counts = recruiter_notifications.process_pending(connect, limit=5)
                     polled = poll_telegram_updates(connect, settings=config, update_handler=update_handler)
                     if polled.get('processed', 0) > 0:
                         # Commands enqueue replies in the polling transaction.
@@ -872,9 +879,9 @@ def start_worker(connect, interval=5, stop_event=None, update_handler=None, tele
                         replies = process_pending(connect, settings=config, limit=5, telegram_renderer=telegram_renderer)
                         for state, count in replies.items():
                             counts[state] = counts.get(state, 0) + count
-                    if any(counts.values()) or polled.get('processed'):
+                    if any(counts.values()) or any(recruiter_counts.values()) or polled.get('processed'):
                         print(json.dumps({'worker': 'candidate_notifications', 'outbox': counts,
-                                          'telegram': polled}), flush=True)
+                                          'recruiterOutbox': recruiter_counts, 'telegram': polled}), flush=True)
                 except Exception:
                     # Provider/SQLite exception reprs may contain contacts, auth, URLs.
                     # Keep the worker alive and emit at most one generic error/minute.
@@ -903,19 +910,22 @@ def main():
     try:
         with db:
             init(db)
+            import recruiter_notifications
+            recruiter_notifications.init(db)
     finally:
         db.close()
     os.chmod(args.db, 0o600)
     while True:
         config = settings()
         counts = process_pending(connect, settings=config)
+        recruiter_counts = recruiter_notifications.process_pending(connect)
         try:
             polled = poll_telegram_updates(connect, settings=config)
         except DeliveryFailure as failure:
             polled = {'status': 'error', 'code': failure.code}
         # Safe counters only. No identities, URLs, token, email, provider response or credential.
-        if not args.loop or any(counts.values()) or polled.get('processed') or polled.get('status') == 'error':
-            print(json.dumps({'outbox': counts, 'telegram': polled}), flush=True)
+        if not args.loop or any(counts.values()) or any(recruiter_counts.values()) or polled.get('processed') or polled.get('status') == 'error':
+            print(json.dumps({'outbox': counts, 'recruiterOutbox': recruiter_counts, 'telegram': polled}), flush=True)
         if not args.loop:
             break
         time.sleep(max(2, min(args.interval, 60)))

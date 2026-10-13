@@ -23,6 +23,8 @@ from candidate_resume import parse_upload, salary_value, start_date_value
 import candidate_invites as invites
 import recruiter_availability as availability
 import employer_workflow
+import recruiter_access
+import recruiter_notifications
 
 COOKIE = '__Host-hr_candidate'
 SESSION_SECONDS = 30 * 86400
@@ -278,6 +280,8 @@ class CandidatePortal:
         migrate_meetings(db)
         invites.init(db)
         availability.init(db)
+        recruiter_access.init(db)
+        recruiter_notifications.init(db)
         db.execute('''CREATE UNIQUE INDEX IF NOT EXISTS cp_meeting_one_active
           ON cp_meetings(application_id) WHERE status IN ('pending','confirmed','live')''')
         db.execute('CREATE UNIQUE INDEX IF NOT EXISTS cp_meeting_revision ON cp_meetings(application_id,revision)')
@@ -293,6 +297,83 @@ class CandidatePortal:
     @staticmethod
     def handles(path):
         return path.startswith('/api/hr/candidate/') or path.startswith('/api/hr/recruiter/')
+
+    @staticmethod
+    def recruiter_principal(db, headers, manager_actor):
+        """Return a named recruiter or the explicitly authenticated legacy team.
+
+        Callers still enforce candidate and schedule scope; a named identity is
+        never silently translated into the legacy manager's global authority.
+        """
+        recruiter = recruiter_access.authenticate(db, headers, required=False)
+        if recruiter:
+            return {**recruiter, 'legacy': False}
+        # Invalid or revoked recruiter credentials cannot fall back to a broad
+        # team credential retained elsewhere in the same browser.
+        if recruiter_access.token(headers):
+            raise Problem('Войдите в кабинет рекрутера.', 401)
+        require(manager_actor(db) == 'manager', 'Доступно только команде рекрутинга.', 403)
+        return {'id': 'recruiter:team', 'name': 'Команда HR Vision', 'email': None, 'legacy': True}
+
+    @staticmethod
+    def recruiter_candidate(db, principal, cid, *, allow_prepared=False):
+        if principal['legacy']:
+            return
+        row = db.execute('''SELECT i.id FROM cp_interviews i
+            JOIN cp_recruiter_slot_owners o ON o.slot_id=i.slot_id
+            WHERE i.candidate_id=? AND o.recruiter_id=?''', (cid, principal['id'])).fetchone()
+        if not row and allow_prepared:
+            row = db.execute('''SELECT candidate_id FROM cp_recruiter_prepared_owners
+                WHERE candidate_id=? AND recruiter_id=? AND NOT EXISTS (
+                SELECT 1 FROM cp_interviews WHERE candidate_id=?)''', (cid, principal['id'], cid)).fetchone()
+        require(row, 'Интервью не найдено.', 404)
+
+    @staticmethod
+    def recruiter_slot(db, principal, slot_id):
+        if not principal['legacy']:
+            require(db.execute('SELECT 1 FROM cp_recruiter_slot_owners WHERE slot_id=? AND recruiter_id=?',
+                               (slot_id, principal['id'])).fetchone(), 'Слот не найден.', 404)
+
+    def recruiter_auth(self, method, path, headers, body, ip, manager_actor, team_grant):
+        route = 'accounts' if path == '/api/hr/recruiter/accounts' else path.removeprefix('/api/hr/recruiter/auth/')
+        require((method == 'GET' and route == 'session') or
+                (method == 'POST' and route in ('register', 'login', 'logout', 'profile', 'accounts', 'activate')),
+                'Не найдено.', 404)
+
+        def can_register(db):
+            if team_grant is True:
+                return True
+            try:
+                return manager_actor(db) == 'manager'
+            except Problem:
+                return False
+
+        if route in ('register', 'login', 'accounts', 'activate'):
+            # Commit attempt counters independently from a failed password check.
+            with self.lock, self.connect() as db:
+                recruiter_access.consume_auth_limits(db, route, body, ip)
+            with self.lock, self.connect() as db:
+                allowed = can_register(db)
+                if route == 'accounts':
+                    return recruiter_access.provision(db, body, self.origin, authorized=allowed), {}
+                if route == 'register':
+                    result = recruiter_access.register(db, body, authorized=allowed)
+                else:
+                    result = getattr(recruiter_access, route)(db, body)
+                result['registrationAllowed'] = allowed
+                result['canManageAccounts'] = allowed
+                return result, {'Set-Cookie': recruiter_access.session_cookie(result['token'])}
+        with self.lock, self.connect() as db:
+            if route == 'logout':
+                require(not body, 'Проверьте поля выхода.', 400)
+                return {'ok': True}, {'Set-Cookie': recruiter_access.logout(db, headers)}
+            if route == 'profile':
+                result = recruiter_access.update_profile(db, headers, body)
+            else:
+                result = recruiter_access.session(db, headers)
+            result['registrationAllowed'] = can_register(db)
+            result['canManageAccounts'] = result['registrationAllowed']
+            return result, {}
 
     def event(self, db, cid, event_type, entity_id):
         active = db.execute('SELECT email FROM cp_candidates WHERE id=?', (cid,)).fetchone()
@@ -389,7 +470,7 @@ class CandidatePortal:
                 'meetings': [self.meeting(db, app_id, item[0]) for item in db.execute(
                     'SELECT id FROM cp_meetings WHERE application_id=? ORDER BY revision DESC', (app_id,))]}
 
-    def candidate_state(self, db, cid, internal=False):
+    def candidate_state(self, db, cid, internal=False, *, recruiter_view=False):
         result = self.person(db, cid)
         result['interview'] = self.interview(db, cid)
         result['resume'] = self.resume_metadata(db, cid)
@@ -397,7 +478,9 @@ class CandidatePortal:
         if result['interview']:
             result['interview'].pop('room', None)
         result['applications'] = []
-        for row in db.execute('SELECT id FROM cp_applications WHERE candidate_id=? ORDER BY created_at DESC,rowid DESC', (cid,)):
+        applications = [] if recruiter_view else db.execute(
+            'SELECT id FROM cp_applications WHERE candidate_id=? ORDER BY created_at DESC,rowid DESC', (cid,))
+        for row in applications:
             application = self.application(db, row[0], cid)
             application.pop('candidateId', None)
             if application['meeting']:
@@ -415,26 +498,49 @@ class CandidatePortal:
             application['workflowRevision'] = workflow['revision']
             result['applications'].append(application)
         result['videoConfigured'] = self.media.configured
-        result['channels'] = self.channels(db, cid)
+        result['channels'] = {'email': False, 'telegram': False} if recruiter_view else self.channels(db, cid)
         if internal:
             result['intake'] = invites.intake(db, cid)
             profile = db.execute('SELECT body FROM cp_internal_profiles WHERE candidate_id=?', (cid,)).fetchone()
             result['internalProfile'] = json.loads(profile[0]) if profile else None
         return result
 
-    def slots(self, db, internal=False):
+    def slots(self, db, internal=False, recruiter_id=None):
         availability.materialize(db)
-        rows = db.execute('SELECT id,start,end,recruiter_name,candidate_id FROM cp_recruiter_slots ORDER BY start')
+        rows = db.execute('''SELECT s.id,s.start,s.end,COALESCE(a.name,s.recruiter_name),s.candidate_id
+            FROM cp_recruiter_slots s LEFT JOIN cp_recruiter_slot_owners o ON o.slot_id=s.id
+            LEFT JOIN rc_accounts a ON a.id=o.recruiter_id
+            WHERE ''' + ('(o.recruiter_id IS NULL OR a.active=1)' if internal else 'a.active=1') +
+            (' AND o.recruiter_id=?' if recruiter_id else '') + ' ORDER BY s.start',
+            (recruiter_id,) if recruiter_id else ())
         return [{'id': row[0], 'start': row[1], 'end': row[2], 'recruiterName': row[3],
                  **({'booked': bool(row[4]), 'candidateId': row[4]} if internal else {})}
                 for row in rows if internal or (not row[4] and timestamp(row[1]) > now())]
 
-    def recruiter_state(self, db):
-        return {'candidates': [self.candidate_state(db, row[0], internal=True)
-                               for row in db.execute('SELECT id FROM cp_candidates ORDER BY created_at DESC,rowid DESC')],
-                'slots': self.slots(db, internal=True),
-                'availabilityBlocks': availability.blocks(db),
-                'vacancies': [json.loads(row[0]) for row in db.execute('SELECT body FROM cp_vacancies ORDER BY created_at DESC,rowid DESC')],
+    def recruiter_state(self, db, principal=None):
+        personal = principal and not principal['legacy']
+        if personal:
+            rows = db.execute('''SELECT c.id FROM cp_candidates c JOIN cp_interviews i ON i.candidate_id=c.id
+                JOIN cp_recruiter_slot_owners o ON o.slot_id=i.slot_id WHERE o.recruiter_id=?
+                ORDER BY c.created_at DESC,c.rowid DESC''', (principal['id'],)).fetchall()
+        else:
+            rows = db.execute('SELECT id FROM cp_candidates ORDER BY created_at DESC,rowid DESC').fetchall()
+        candidates = []
+        for row in rows:
+            candidate = self.candidate_state(db, row[0], internal=True, recruiter_view=bool(personal))
+            from recruiter_sources import candidate_sources
+            candidate.update(candidate_sources(db, row[0]))
+            candidates.append(candidate)
+        if personal:
+            vacancy_ids = {app['vacancy']['id'] for person in candidates for app in person['applications']}
+            vacancies = [json.loads(row[0]) for row in db.execute('SELECT body FROM cp_vacancies WHERE id IN (' +
+                ','.join('?' for _ in vacancy_ids) + ')', tuple(vacancy_ids))] if vacancy_ids else []
+        else:
+            vacancies = [json.loads(row[0]) for row in db.execute('SELECT body FROM cp_vacancies ORDER BY created_at DESC,rowid DESC')]
+        return {'candidates': candidates,
+                'slots': self.slots(db, internal=True, recruiter_id=principal['id'] if personal else None),
+                'availabilityBlocks': availability.blocks(db, recruiter_id=principal['id'] if personal else None),
+                'vacancies': vacancies,
                 'videoConfigured': self.media.configured}
 
     @staticmethod
@@ -525,24 +631,34 @@ class CandidatePortal:
         require(row, 'Резюме ещё не загружено.', 404)
         return {'filename': row[0], 'mime': row[1], 'contentBase64': base64.b64encode(row[2]).decode('ascii')}
 
-    def add_slot(self, db, body):
+    def add_slot(self, db, body, *, principal=None):
         availability.materialize(db)
         times = interval(body.get('start'), future=True)
-        recruiter = text(body.get('recruiterName'), 140)
-        for row in db.execute('SELECT start,end,recruiter_name FROM cp_recruiter_slots'):
-            require(normalize_city(row[2]) != normalize_city(recruiter) or not overlaps(times, {'start': row[0], 'end': row[1]}),
+        personal = principal and not principal['legacy']
+        recruiter = principal['name'] if personal else text(body.get('recruiterName'), 140)
+        for row in db.execute('''SELECT s.start,s.end,s.recruiter_name,o.recruiter_id FROM cp_recruiter_slots s
+            LEFT JOIN cp_recruiter_slot_owners o ON o.slot_id=s.id'''):
+            same = row[3] == principal['id'] if personal else normalize_city(row[2]) == normalize_city(recruiter)
+            require(not same or not overlaps(times, {'start': row[0], 'end': row[1]}),
                     'У рекрутера уже есть слот на это время.', 409)
+        slot_id = uid('slot')
         db.execute('INSERT INTO cp_recruiter_slots VALUES (?,?,?,?,NULL)',
-                   (uid('slot'), times['start'], times['end'], recruiter))
+                   (slot_id, times['start'], times['end'], recruiter))
+        if personal:
+            db.execute('INSERT INTO cp_recruiter_slot_owners VALUES (?,?)', (slot_id, principal['id']))
 
     def book(self, db, cid, body, *, prepared=False):
         availability.materialize(db)
         slot = db.execute('SELECT id,start,end,candidate_id FROM cp_recruiter_slots WHERE id=?', (body.get('slotId'),)).fetchone()
         require(slot is not None, 'Слот не найден.', 404)
+        owner = db.execute('''SELECT o.recruiter_id,a.active FROM cp_recruiter_slot_owners o
+            JOIN rc_accounts a ON a.id=o.recruiter_id WHERE o.slot_id=?''', (slot[0],)).fetchone()
         existing = db.execute('SELECT slot_id FROM cp_interviews WHERE candidate_id=?', (cid,)).fetchone()
         if existing:
             require(existing[0] == slot[0], 'Вы уже записаны. Для переноса свяжитесь с командой.', 409)
             return
+        require((owner and owner[1] == 1) or (prepared and not owner),
+                'Это время уже недоступно. Выберите другое.', 409)
         person = self.candidate_state(db, cid)
         require(person['resume'] is not None, 'Сначала загрузите резюме.', 409)
         if prepared:
@@ -555,6 +671,8 @@ class CandidatePortal:
         iid = uid('interview')
         db.execute('UPDATE cp_recruiter_slots SET candidate_id=? WHERE id=? AND candidate_id IS NULL', (cid, slot[0]))
         db.execute('INSERT INTO cp_interviews VALUES (?,?,?,\'booked\',NULL,?,NULL)', (iid, cid, slot[0], iso(now())))
+        if owner:
+            recruiter_notifications.enqueue_booking(db, owner[0], iid)
         if person['accountActive']:
             self.event(db, cid, 'interview.booked', iid)
 
@@ -842,6 +960,9 @@ class CandidatePortal:
             prepared_intro = not application_id and invites.intake(db, cid) is not None
             can_record = not prepared_intro or invites.recording(db, mid)['startRequested']
         room = self.media.room(mid, recordable=can_record)
+        if access_check:
+            with self.connect() as db:
+                access_check(db)
         token = self.media.request('/meeting-tokens', {'properties': {
             'room_name': room['name'], 'user_name': (owner_name or 'Рекрутер HR Vision') if owner else (person['name'] or 'Кандидат'),
             'user_id': owner_id if owner else cid, 'is_owner': bool(owner and can_record),
@@ -878,16 +999,20 @@ class CandidatePortal:
                            (mid, cid, iso(now()), 'recording-v1'))
         return {'url': room['url'], 'token': token['token']}
 
-    def start_interview(self, cid, oral_consent, *, retry_recording=False, retry_transcription=False):
+    def start_interview(self, cid, oral_consent, *, retry_recording=False, retry_transcription=False, access_check=None):
         require(oral_consent is True, 'Сначала подтвердите полученное устное согласие.', 400)
         require(type(retry_recording) is bool and type(retry_transcription) is bool, 'Проверьте команду запуска записи.', 400)
         with self.connect() as db:
+            if access_check:
+                access_check(db)
             meeting = self.interview(db, cid)
             require(meeting and meeting['status'] == 'live' and meeting['room'], 'Сначала войдите в комнату интервью.', 409)
             mid = meeting['id']
         with self.media_operation(mid):
             with self.lock, self.connect() as db:
                 db.execute('BEGIN IMMEDIATE')
+                if access_check:
+                    access_check(db)
                 meeting = self.interview(db, cid)
                 require(meeting and meeting['status'] == 'live', 'Интервью уже завершено.', 409)
                 person = self.person(db, cid)
@@ -912,14 +1037,21 @@ class CandidatePortal:
             room_path = '/rooms/' + urllib.parse.quote(room_name, safe='')
             self.media.request(room_path, {'properties': {'enable_recording': 'cloud',
                                'enable_transcription_storage': True, 'enable_live_captions_ui': True}})
+            with self.connect() as db:
+                if access_check:
+                    access_check(db)
             if not control['recordingRequested']:
                 self.media.request(room_path + '/recordings/start', {'type': 'cloud',
                                    'instanceId': str(uuid.uuid5(uuid.NAMESPACE_URL, 'hr-vision:' + mid)), 'maxDuration': 3600})
                 with self.lock, self.connect() as db:
+                    if access_check:
+                        access_check(db)
                     db.execute('UPDATE cp_recording_control SET recording_requested=1 WHERE interview_id=?', (mid,))
             if not control['transcriptionRequested']:
                 self.media.request(room_path + '/transcription/start', {'language': 'ru', 'model': 'nova-2'})
                 with self.lock, self.connect() as db:
+                    if access_check:
+                        access_check(db)
                     db.execute('UPDATE cp_recording_control SET transcription_requested=1 WHERE interview_id=?', (mid,))
 
     def complete(self, cid, application_id=None, meeting_id=None, *, access_check=None):
@@ -1042,7 +1174,7 @@ class CandidatePortal:
                            (mid, kind, room_key, dump(metadata), result['checkedAt']))
             return result
 
-    def handle(self, method, raw_path, headers, body, ip, manager_actor):
+    def handle(self, method, raw_path, headers, body, ip, manager_actor, *, team_grant=False):
         path = urllib.parse.urlsplit(raw_path).path
         require(self.handles(path), 'Не найдено.', 404)
         require(method in ('GET', 'POST'), 'Метод не поддерживается.', 405)
@@ -1051,8 +1183,24 @@ class CandidatePortal:
                     'Другой источник запроса.', 403)
             require(headers.get('Content-Type', '').split(';', 1)[0].strip() == 'application/json', 'Нужен JSON.', 415)
             require(isinstance(body, dict), 'Некорректный запрос.', 400)
+        if path.startswith('/api/hr/recruiter/auth/') or path == '/api/hr/recruiter/accounts':
+            return self.recruiter_auth(method, path, headers, body, ip, manager_actor, team_grant)
         auth = path.rsplit('/', 1)[-1]
         is_recruiter = path.startswith('/api/hr/recruiter/')
+        principal = None
+        if is_recruiter:
+            with self.connect() as db:
+                principal = self.recruiter_principal(db, headers, manager_actor)
+            if not principal['legacy']:
+                require(path in {
+                    '/api/hr/recruiter/state', '/api/hr/recruiter/slots', '/api/hr/recruiter/availability',
+                    '/api/hr/recruiter/candidates', '/api/hr/recruiter/interview/book',
+                    '/api/hr/recruiter/invitations', '/api/hr/recruiter/invitations/revoke',
+                    '/api/hr/recruiter/profile', '/api/hr/recruiter/interview/join',
+                    '/api/hr/recruiter/interview/complete', '/api/hr/recruiter/interview/start',
+                    '/api/hr/recruiter/interview/materials', '/api/hr/recruiter/notifications',
+                    '/api/hr/recruiter/notifications/email/request', '/api/hr/recruiter/notifications/email/verify',
+                    '/api/hr/recruiter/notifications/telegram/link'}, 'Доступно только команде HR Vision.', 403)
         capability_paths = ('/api/hr/candidate/guest/state', '/api/hr/candidate/guest/join',
                             '/api/hr/candidate/claim/state', '/api/hr/candidate/claim/resume', '/api/hr/candidate/claim')
         if path in capability_paths:
@@ -1070,8 +1218,8 @@ class CandidatePortal:
         elif method == 'POST':
             with self.connect() as db:
                 if is_recruiter:
-                    require(manager_actor(db) == 'manager', 'Доступно только команде рекрутинга.', 403)
-                    rate_identity = 'recruiter'
+                    principal = self.recruiter_principal(db, headers, manager_actor)
+                    rate_identity = principal['id']
                 else:
                     rate_identity = self.session_candidate(db, headers)
             self.rate_limit('write-account:' + rate_identity, 240, 60)
@@ -1090,8 +1238,16 @@ class CandidatePortal:
             if method == 'POST':
                 db.execute('BEGIN IMMEDIATE')
             if is_recruiter:
-                require(manager_actor(db) == 'manager', 'Доступно только команде рекрутинга.', 403)
+                principal = self.recruiter_principal(db, headers, manager_actor)
                 cid = body.get('candidateId') if body else None
+                if path in {
+                    '/api/hr/recruiter/interview/book', '/api/hr/recruiter/invitations',
+                    '/api/hr/recruiter/invitations/revoke', '/api/hr/recruiter/profile',
+                    '/api/hr/recruiter/interview/join', '/api/hr/recruiter/interview/start',
+                    '/api/hr/recruiter/interview/complete', '/api/hr/recruiter/interview/materials'}:
+                    self.recruiter_candidate(db, principal, cid,
+                        allow_prepared=path in ('/api/hr/recruiter/interview/book', '/api/hr/recruiter/invitations',
+                                                '/api/hr/recruiter/invitations/revoke', '/api/hr/recruiter/profile'))
             else:
                 cid = self.session_candidate(db, headers, required=path not in (
                     '/api/hr/candidate/session', '/api/hr/candidate/register', '/api/hr/candidate/login'))
@@ -1108,7 +1264,10 @@ class CandidatePortal:
                 if path == '/api/hr/candidate/notifications':
                     return self.channels(db, cid), {}
                 if path == '/api/hr/recruiter/state':
-                    return self.recruiter_state(db), {}
+                    return self.recruiter_state(db, principal), {}
+                if path == '/api/hr/recruiter/notifications':
+                    require(not principal['legacy'], 'Войдите в свой кабинет рекрутера.', 401)
+                    return recruiter_notifications.public_status(db, principal['id']), {}
                 raise Problem('Не найдено.', 404)
 
             if path == '/api/hr/candidate/register':
@@ -1148,13 +1307,28 @@ class CandidatePortal:
                 require(self.notifications, 'Почта пока не подключена.', 503)
                 return self.notifications.verify_email(db, cid, body.get('token')), {}
             elif path == '/api/hr/recruiter/slots':
-                self.add_slot(db, body)
+                self.add_slot(db, body, principal=principal)
             elif path == '/api/hr/recruiter/availability':
-                availability.add_block(db, body)
+                availability.add_block(db, body, recruiter=principal if not principal['legacy'] else None)
+            elif path in ('/api/hr/recruiter/notifications/email/request', '/api/hr/recruiter/notifications/email/verify',
+                          '/api/hr/recruiter/notifications/telegram/link'):
+                require(not principal['legacy'], 'Войдите в свой кабинет рекрутера.', 401)
+                if path.endswith('/email/request'):
+                    require(not body, 'Проверьте поля запроса.', 400)
+                    return recruiter_notifications.request_email_verification(db, principal['id']), {}
+                if path.endswith('/email/verify'):
+                    require(set(body) == {'token'}, 'Проверьте поля подтверждения.', 400)
+                    return recruiter_notifications.verify_email(db, principal['id'], body.get('token')), {}
+                require(not body, 'Проверьте поля запроса.', 400)
+                return recruiter_notifications.create_telegram_link(db, principal['id']), {}
             elif path == '/api/hr/recruiter/candidates':
                 cid = self.create_prepared(db, parsed_resume, body.get('contactEmail', ''))
-                return {'candidate': self.candidate_state(db, cid, internal=True), 'state': self.recruiter_state(db)}, {}
+                if not principal['legacy']:
+                    db.execute('INSERT INTO cp_recruiter_prepared_owners VALUES (?,?)', (cid, principal['id']))
+                return {'candidate': self.candidate_state(db, cid, internal=True, recruiter_view=not principal['legacy']),
+                        'state': self.recruiter_state(db, principal)}, {}
             elif path == '/api/hr/recruiter/interview/book':
+                self.recruiter_slot(db, principal, body.get('slotId'))
                 self.book(db, cid, body, prepared=True)
             elif path == '/api/hr/recruiter/invitations':
                 replace = body.get('replace', False)
@@ -1207,11 +1381,13 @@ class CandidatePortal:
             else:
                 raise Problem('Не найдено.', 404)
             if not provider_action:
-                return (self.recruiter_state(db) if is_recruiter else self.candidate_state(db, cid)), response_headers
+                return (self.recruiter_state(db, principal) if is_recruiter else self.candidate_state(db, cid)), response_headers
 
         def provider_access(db):
             if is_recruiter:
-                require(manager_actor(db) == 'manager', 'Доступно только команде рекрутинга.', 403)
+                current_principal = self.recruiter_principal(db, headers, manager_actor)
+                require(current_principal['id'] == principal['id'], 'Войдите в кабинет рекрутера.', 401)
+                self.recruiter_candidate(db, current_principal, cid)
             else:
                 require(self.session_candidate(db, headers) == cid, 'Войдите в свой кабинет.', 401)
             if '/meeting/' in path:
@@ -1220,16 +1396,20 @@ class CandidatePortal:
         if path.endswith('/join'):
             return self.join(cid, body.get('applicationId') if '/meeting/' in path else None,
                              body.get('consent'), owner=is_recruiter, meeting_id=body.get('meetingId'),
+                             owner_name=principal['name'] if principal and not principal['legacy'] else None,
+                             owner_id=principal['id'] if principal and not principal['legacy'] else 'recruiter',
                              access_check=provider_access), {}
         if path.endswith('/materials'):
             return self.materials(cid, body.get('applicationId') if '/meeting/' in path else None,
                                   body.get('meetingId'), access_check=provider_access), {}
         if path.endswith('/start'):
             self.start_interview(cid, body.get('oralConsent'), retry_recording=body.get('retryRecording', False),
-                                 retry_transcription=body.get('retryTranscription', False))
+                                 retry_transcription=body.get('retryTranscription', False), access_check=provider_access)
             with self.connect() as db:
-                return self.recruiter_state(db), {}
+                provider_access(db)
+                return self.recruiter_state(db, principal), {}
         self.complete(cid, body.get('applicationId') if '/meeting/' in path else None, body.get('meetingId'),
                       access_check=provider_access)
         with self.connect() as db:
-            return self.recruiter_state(db), {}
+            provider_access(db)
+            return self.recruiter_state(db, principal), {}

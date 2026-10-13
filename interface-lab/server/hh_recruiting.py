@@ -394,7 +394,8 @@ class HHRecruiting:
         items = self.pages(actor_id, connection_id, f"/employers/{row['employer_id']}/vacancies/active?all_accessible=true")
         require(all(isinstance(item, dict) for item in items), 'invalid_vacancy_response', 502)
         normalized = [(identifier(item.get('id')), {'id': identifier(item.get('id')), 'title': short(item.get('name')),
-                       'url': short(item.get('alternate_url'), 500), 'city': short((item.get('area') or {}).get('name'), 120)})
+                       'url': short(item.get('alternate_url'), 500), 'city': short((item.get('area') or {}).get('name'), 120),
+                       'company': short(item['employer'].get('name')) if isinstance(item.get('employer'), dict) else ''})
                       for item in items if isinstance(item, dict)]
         with self.db(write=True) as db:
             self.owned(db, actor_id, connection_id)
