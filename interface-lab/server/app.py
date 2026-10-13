@@ -24,6 +24,8 @@ from dsa_panel import DsaPanel
 from candidate_portal import CandidatePortal, ClosingConnection
 import candidate_notifications
 from hh_routes import HHRecruiterRoutes
+from employer_routes import EmployerRoutes
+import employer_access
 
 ROOT = Path(os.environ.get('HR_DATA_DIR', '/var/lib/hr-vision-api'))
 ROOT.mkdir(parents=True, exist_ok=True)
@@ -77,6 +79,7 @@ os.chmod(DB, 0o600)
 CANDIDATE_PORTAL = CandidatePortal(connect, LOCK, MEDIA, ORIGIN, candidate_notifications)
 HH_ROUTES = HHRecruiterRoutes(connect, CANDIDATE_PORTAL)
 CANDIDATE_PORTAL.invitation_lookup = HH_ROUTES.existing_invitation
+EMPLOYER_ROUTES = EmployerRoutes(connect, LOCK, CANDIDATE_PORTAL, MEDIA, ORIGIN)
 
 
 def read(db, scope='sfera'):
@@ -204,9 +207,10 @@ class Handler(BaseHTTPRequestHandler):
         pass  # No request URLs, bearer tokens or transcripts in journal.
 
     def answer(self, code, data, headers=None):
-        content = json.dumps(data, ensure_ascii=False).encode()
+        content = data if isinstance(data, bytes) else json.dumps(data, ensure_ascii=False).encode()
         self.send_response(code)
-        self.send_header('Content-Type', 'application/json; charset=utf-8')
+        if not (headers and 'Content-Type' in headers):
+            self.send_header('Content-Type', 'application/octet-stream' if isinstance(data, bytes) else 'application/json; charset=utf-8')
         self.send_header('Cache-Control', 'no-store')
         self.send_header('X-Content-Type-Options', 'nosniff')
         self.send_header('Content-Length', str(len(content)))
@@ -387,6 +391,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         try:
+            if EMPLOYER_ROUTES.handles(self.path):
+                result, headers = EMPLOYER_ROUTES.handle('GET', self.path, self.headers,
+                    ip=client_identity(self.client_address[0], self.headers), team_grant=self.browser_access())
+                return self.answer(200, result, headers)
             if HH_ROUTES.handles(self.path):
                 result, headers = HH_ROUTES.handle('GET', self.path, self.headers, None, self.actor)
                 return self.answer(200, result, headers)
@@ -443,7 +451,14 @@ class Handler(BaseHTTPRequestHandler):
             require(self.headers.get('Origin') in (None, ORIGIN), 'Другой источник запроса.', 403)
             require(self.headers.get('Content-Type', '').startswith('application/json'), 'Нужен JSON.', 415)
             path = urllib.parse.urlsplit(self.path).path
+            if EMPLOYER_ROUTES.handles(path):
+                require(self.headers.get('Sec-Fetch-Site') not in ('cross-site', 'none') or
+                        self.headers.get('Sec-Fetch-Site') == 'none' and self.headers.get('Origin') == ORIGIN,
+                        'Другой источник запроса.', 403)
             size = int(self.headers.get('Content-Length', '0'))
+            if path == '/api/hr/employer/intake':
+                with connect() as db:
+                    employer_access.authenticate(db, self.headers)
             if path in ('/api/hr/intake', '/api/hr/recruiter/candidates'):
                 with connect() as db:
                     require(self.actor(db) == 'manager', 'Кандидатов добавляет работодатель.', 403)
@@ -451,11 +466,15 @@ class Handler(BaseHTTPRequestHandler):
                 # Authenticate before reading a potentially large private file.
                 with connect() as db:
                     CANDIDATE_PORTAL.session_candidate(db, self.headers)
-            limit = (12 * 1024 * 1024 if path == '/api/hr/intake' else
+            limit = (12 * 1024 * 1024 if path in ('/api/hr/intake', '/api/hr/employer/intake') else
                      7 * 1024 * 1024 if path in ('/api/hr/candidate/resume', '/api/hr/recruiter/candidates') else 32768)
             require(0 < size <= limit, 'Слишком большой запрос.', 413)
             body = json.loads(self.rfile.read(size))
             require(isinstance(body, dict), 'Некорректный запрос.', 400)
+            if EMPLOYER_ROUTES.handles(self.path):
+                result, headers = EMPLOYER_ROUTES.handle('POST', self.path, self.headers, body,
+                    ip=client_identity(self.client_address[0], self.headers), team_grant=self.browser_access())
+                return self.answer(200, result, headers)
             if HH_ROUTES.handles(self.path):
                 result, headers = HH_ROUTES.handle('POST', self.path, self.headers, body, self.actor)
                 return self.answer(200, result, headers)

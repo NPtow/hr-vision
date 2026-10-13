@@ -7,8 +7,8 @@ import { parseMeetingTranscript } from './transcript';
 type MaterialData = {
   recordings: { id: string; url: string; expires?: number }[];
   transcripts: { id: string; text: string }[];
-  video?: { status: 'ready' | 'processing' | 'absent' | 'error' | 'unavailable'; error?: string };
-  transcription?: { status: 'ready' | 'processing' | 'absent' | 'error' | 'unavailable'; error?: string };
+  video?: { status: 'ready' | 'processing' | 'absent' | 'not_recorded' | 'error' | 'unavailable'; error?: string };
+  transcription?: { status: 'ready' | 'processing' | 'absent' | 'not_recorded' | 'error' | 'unavailable'; error?: string };
 };
 
 export function Materials({ person, journey }: { person: Person; journey: Journey }) {
@@ -47,7 +47,7 @@ function MeetingMaterials({ person, journey }: { person: Person; journey: Journe
   const emptyMessage = meeting.testSkip
     ? 'Звонок был пропущен в тесте. Записи и расшифровки у этой встречи нет.'
     : !available ? 'Видеосервис ещё не подключён. Здесь будет запись именно этой встречи.'
-    : data?.video?.status === 'absent' ? 'Видеосервис не вернул запись этой встречи.'
+    : data?.video?.status === 'absent' || data?.video?.status === 'not_recorded' ? 'Видеосервис не вернул запись этой встречи.'
     : data?.video?.status === 'error' || data?.video?.status === 'unavailable' ? 'Сейчас не удалось получить запись. Можно проверить ещё раз.'
     : 'Запись обрабатывается. Проверьте готовность материалов через некоторое время.';
   const recordings = data?.recordings || [];

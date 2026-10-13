@@ -1,7 +1,9 @@
 import io
 import json
+import os
 import sqlite3
 from pathlib import Path
+import subprocess
 import tarfile
 import tempfile
 import unittest
@@ -67,6 +69,44 @@ class ReceiverTest(unittest.TestCase):
             f['api/app.py'] = b'pass'; m['files']['api/app.py'] = r.digest(b'pass')
         a, s, _ = self.bundle(mutate=mutate)
         with self.assertRaisesRegex(ValueError, 'API'): r.unpack(a, s, 'mockups')
+
+    def test_service_requires_new_workflow_runtime(self):
+        def mutate(m, f):
+            del f['api/employer_workflow.py']
+            del m['files']['api/employer_workflow.py']
+        a, s, _ = self.bundle('service', mutate=mutate)
+        with self.assertRaisesRegex(ValueError, 'Incomplete API'):
+            r.unpack(a, s, 'service')
+
+    def test_service_runtime_allowlist_stays_closed(self):
+        def mutate(m, f):
+            f['api/employer_private_keys.py'] = b'not allowed'
+            m['files']['api/employer_private_keys.py'] = r.digest(f['api/employer_private_keys.py'])
+        a, s, _ = self.bundle('service', mutate=mutate)
+        with self.assertRaisesRegex(ValueError, 'Unexpected API file'):
+            r.unpack(a, s, 'service')
+
+    def test_actual_packager_and_receiver_agree_on_complete_api(self):
+        # Exercise the JS release producer against the Python receiver rather than
+        # duplicating either allowlist in a test-only parser.
+        fixture = self.root / 'package-input'
+        (fixture / 'server').mkdir(parents=True)
+        (fixture / 'storybook-static').mkdir()
+        for name in r.RUNTIME:
+            (fixture / 'server' / name).write_text('# synthetic runtime fixture\n')
+        for name in ('index.html', 'iframe.html'):
+            (fixture / 'storybook-static' / name).write_text('<html/>')
+        entries = {f'hr-vision-product--{name}': {} for name in ('start', 'manager', 'candidate')}
+        (fixture / 'storybook-static' / 'index.json').write_text(json.dumps({'entries': entries}))
+        script = Path(__file__).resolve().parents[2] / 'scripts' / 'package-release.mjs'
+        environment = {**os.environ, 'HR_BUILD_TARGET': 'service', 'GITHUB_REF_NAME': 'main',
+                       'GITHUB_SHA': 'b' * 40, 'GITHUB_RUN_ID': '13', 'GITHUB_RUN_ATTEMPT': '1'}
+        subprocess.run(['node', str(script)], cwd=fixture, env=environment, check=True,
+                       capture_output=True, text=True, timeout=30)
+        stage = self.root / 'producer-stage'
+        stage.mkdir()
+        manifest = r.unpack(fixture / 'release.tgz', stage, 'service')
+        self.assertEqual({p[4:] for p in manifest['files'] if p.startswith('api/')}, r.RUNTIME)
 
     def test_rejects_sensitive_public_file(self):
         def mutate(m, f):

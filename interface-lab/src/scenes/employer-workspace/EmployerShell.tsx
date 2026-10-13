@@ -5,16 +5,17 @@ import logo from './assets/hr-vision-logo.svg';
 
 export type EmployerPage = 'dsa' | 'tasks' | 'shortlist' | 'intake' | 'book' | 'meetings' | 'meeting' | 'review' | 'pool' | 'offer' | 'chat' | 'vacancies' | 'schedule';
 export type Scope = 'sfera' | 'dsa';
-export function EmployerShell({ enabled = true, page, scope, vacancy, name, hasOffers, onNavigate, onAccount, children }: {
+export function EmployerShell({ enabled = true, page, scope, vacancy, name, hasOffers, candidateContext, onNavigate, onAccount, children }: {
   enabled?: boolean; page: EmployerPage; scope: Scope; vacancy: string; name: string; hasOffers: boolean;
+  candidateContext?: 'vacancy' | 'queue';
   onNavigate: (page: EmployerPage) => void; onAccount: () => void; children: ReactNode;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuId = useId();
-  useEffect(() => { if (enabled) window.scrollTo({ top: 0, left: 0, behavior: 'instant' }); setMenuOpen(false); }, [enabled, page, scope]);
+  useEffect(() => { if (enabled) window.scrollTo({ top: 0, left: 0, behavior: 'instant' }); setMenuOpen(false); }, [enabled, page, scope, candidateContext]);
   if (!enabled) return <>{children}</>;
   const panel = scope === 'dsa' ? 'dsa' : 'shortlist';
-  const active = page === 'intake' ? panel : ['meeting', 'book', 'review'].includes(page) ? 'meetings' : page === 'offer' ? 'pool' : page;
+  const active = page === panel && candidateContext === 'vacancy' ? 'tasks' : page === 'intake' ? panel : ['meeting', 'book', 'review'].includes(page) ? 'meetings' : page === 'offer' ? 'pool' : page;
   const navigate = (next: EmployerPage) => { setMenuOpen(false); onNavigate(next); };
   return <div className="ew-shell">
     <header className="ew-topbar">

@@ -22,6 +22,7 @@ from domain import Problem, require, text, timestamp, iso, now
 from candidate_resume import parse_upload, salary_value, start_date_value
 import candidate_invites as invites
 import recruiter_availability as availability
+import employer_workflow
 
 COOKIE = '__Host-hr_candidate'
 SESSION_SECONDS = 30 * 86400
@@ -94,6 +95,64 @@ def interval(start, end=None, *, future=False):
 
 def overlaps(a, b):
     return timestamp(a['start']) < timestamp(b['end']) and timestamp(b['start']) < timestamp(a['end'])
+
+
+def migrate_meetings(db):
+    """Retain every meeting ID while removing the former one-per-application cap.
+
+    Run only during startup, outside request transactions. Rebuilding the parent
+    under its original name keeps feedback/media references pointed at the same
+    immutable IDs. A failed migration restores both table and FK enforcement.
+    """
+    columns = {row[1] for row in db.execute('PRAGMA table_info(cp_meetings)')}
+    if 'manager_id' in columns:
+        return
+    require(not db.in_transaction, 'Миграция встреч требует отдельной транзакции.', 500)
+    foreign_keys = db.execute('PRAGMA foreign_keys').fetchone()[0]
+    require(not db.execute('PRAGMA foreign_key_check').fetchall(), 'Нарушена целостность встреч.', 500)
+    db.execute('PRAGMA foreign_keys=OFF')
+    try:
+        db.execute('BEGIN IMMEDIATE')
+        db.execute('''CREATE TABLE cp_meetings_next (
+          id TEXT PRIMARY KEY, application_id TEXT NOT NULL REFERENCES cp_applications(id),
+          start TEXT NOT NULL, end TEXT NOT NULL, status TEXT NOT NULL, room TEXT,
+          confirmed_at TEXT, completed_at TEXT,
+          manager_id TEXT NOT NULL DEFAULT 'recruiter:team',
+          revision INTEGER NOT NULL DEFAULT 1 CHECK(revision>0), created_at TEXT NOT NULL,
+          cancelled_at TEXT, cancellation_reason TEXT)''')
+        db.execute('''INSERT INTO cp_meetings_next
+          (id,application_id,start,end,status,room,confirmed_at,completed_at,created_at)
+          SELECT id,application_id,start,end,status,room,confirmed_at,completed_at,start FROM cp_meetings''')
+        db.execute('DROP TABLE cp_meetings')
+        db.execute('ALTER TABLE cp_meetings_next RENAME TO cp_meetings')
+        require(not db.execute('PRAGMA foreign_key_check').fetchall(), 'Нарушена целостность встреч.', 500)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.execute('PRAGMA foreign_keys=' + str(foreign_keys))
+
+
+@contextmanager
+def meeting_transaction(db):
+    """Serialize calendar reads and keep a failed mutation atomic in its caller."""
+    started = not db.in_transaction
+    if started:
+        db.execute('BEGIN IMMEDIATE')
+    name = 'meeting_' + secrets.token_hex(8)
+    db.execute('SAVEPOINT ' + name)
+    try:
+        db.execute('UPDATE cp_meetings SET status=status WHERE 0')
+        yield
+    except Exception:
+        db.execute('ROLLBACK TO ' + name)
+        db.execute('RELEASE ' + name)
+        if started:
+            db.rollback()
+        raise
+    else:
+        db.execute('RELEASE ' + name)
 
 
 def profile_value(body, previous=None):
@@ -216,8 +275,18 @@ class CandidatePortal:
         CREATE INDEX IF NOT EXISTS cp_application_candidate ON cp_applications(candidate_id);
         ''')
         invites.migrate_accounts(db)
+        migrate_meetings(db)
         invites.init(db)
         availability.init(db)
+        db.execute('''CREATE UNIQUE INDEX IF NOT EXISTS cp_meeting_one_active
+          ON cp_meetings(application_id) WHERE status IN ('pending','confirmed','live')''')
+        db.execute('CREATE UNIQUE INDEX IF NOT EXISTS cp_meeting_revision ON cp_meetings(application_id,revision)')
+        db.execute('CREATE INDEX IF NOT EXISTS cp_meeting_calendar ON cp_meetings(manager_id,status,start,end)')
+        employer_workflow.init(db)
+        db.execute('''CREATE TABLE IF NOT EXISTS cp_workflow_events (
+          event_key TEXT PRIMARY KEY, candidate_id TEXT NOT NULL REFERENCES cp_candidates(id),
+          application_id TEXT NOT NULL REFERENCES cp_applications(id),
+          body TEXT NOT NULL, created_at TEXT NOT NULL)''')
         if self.notifications:
             self.notifications.init(db)
 
@@ -300,10 +369,14 @@ class CandidatePortal:
                 'start': row[3], 'end': row[4], 'recruiterName': row[5], 'completedAt': row[6],
                 'recording': invites.recording(db, row[0])}
 
-    def meeting(self, db, app_id):
-        row = db.execute('SELECT id,start,end,status,room,completed_at FROM cp_meetings WHERE application_id=?', (app_id,)).fetchone()
+    def meeting(self, db, app_id, meeting_id=None):
+        row = db.execute('''SELECT id,start,end,status,room,completed_at,revision,confirmed_at,cancelled_at,cancellation_reason
+          FROM cp_meetings WHERE application_id=?''' + (' AND id=?' if meeting_id is not None else '') +
+          ' ORDER BY revision DESC LIMIT 1', (app_id, meeting_id) if meeting_id is not None else (app_id,)).fetchone()
         return ({'id': row[0], 'start': row[1], 'end': row[2], 'status': row[3],
-                 'room': json.loads(row[4]) if row[4] else None, 'completedAt': row[5]} if row else None)
+                 'room': json.loads(row[4]) if row[4] else None, 'completedAt': row[5],
+                 'revision': row[6], 'confirmedAt': row[7], 'cancelledAt': row[8],
+                 'cancellationReason': row[9]} if row else None)
 
     def application(self, db, app_id, cid=None):
         row = db.execute('''SELECT a.id,a.candidate_id,a.status,a.approved_automatically,v.body
@@ -311,7 +384,9 @@ class CandidatePortal:
         require(row is not None and (cid is None or row[1] == cid), 'Вакансия не найдена.', 404)
         return {'id': row[0], 'candidateId': row[1], 'status': row[2],
                 'approvedAutomatically': bool(row[3]), 'vacancy': json.loads(row[4]),
-                'meeting': self.meeting(db, app_id)}
+                'meeting': self.meeting(db, app_id),
+                'meetings': [self.meeting(db, app_id, item[0]) for item in db.execute(
+                    'SELECT id FROM cp_meetings WHERE application_id=? ORDER BY revision DESC', (app_id,))]}
 
     def candidate_state(self, db, cid, internal=False):
         result = self.person(db, cid)
@@ -326,6 +401,17 @@ class CandidatePortal:
             application.pop('candidateId', None)
             if application['meeting']:
                 application['meeting'].pop('room', None)
+                # Existing candidate/recruiter cards know only active/completed
+                # meetings. Keep cancelled rows in history, not as a confirmed
+                # appointment in those cards; no interface change is required.
+                if application['meeting']['status'] in ('cancelled', 'declined'):
+                    application['meeting'] = None
+            for meeting in application['meetings']:
+                meeting.pop('room', None)
+            workflow = employer_workflow.load(db, row[0], actor='manager' if internal else 'candidate', candidate_id=cid)
+            application['workflow'] = workflow
+            application.update({key: workflow[key] for key in ('offer', 'decision', 'afterInterest', 'messages')})
+            application['workflowRevision'] = workflow['revision']
             result['applications'].append(application)
         result['videoConfigured'] = self.media.configured
         result['channels'] = self.channels(db, cid)
@@ -471,13 +557,14 @@ class CandidatePortal:
         if person['accountActive']:
             self.event(db, cid, 'interview.booked', iid)
 
-    def ensure_candidate_free(self, db, cid, times):
+    def ensure_candidate_free(self, db, cid, times, exclude_meeting_id=None):
         interview = self.interview(db, cid)
         require(not interview or interview['status'] == 'completed' or not overlaps(times, interview),
                 'На это время у кандидата уже назначено интервью.', 409)
-        for row in db.execute('''SELECT m.start,m.end FROM cp_meetings m JOIN cp_applications a
+        for row in db.execute('''SELECT m.id,m.start,m.end FROM cp_meetings m JOIN cp_applications a
           ON m.application_id=a.id WHERE a.candidate_id=? AND m.status IN ('pending','confirmed','live')''', (cid,)):
-            require(not overlaps(times, {'start': row[0], 'end': row[1]}), 'Это время кандидата уже занято.', 409)
+            if row[0] != exclude_meeting_id:
+                require(not overlaps(times, {'start': row[1], 'end': row[2]}), 'Это время кандидата уже занято.', 409)
 
     def add_vacancy(self, db, body):
         vacancy = {key: text(body.get(key, ''), limit, required=key != 'description')
@@ -515,32 +602,123 @@ class CandidatePortal:
         db.execute('UPDATE cp_applications SET status=?,approved_automatically=0,decided_at=? WHERE id=?',
                    (decision, iso(now()), application['id']))
 
-    def propose_meeting(self, db, body):
-        application = self.application(db, body.get('applicationId'))
+    def _application_open_for_meeting(self, db, application):
         require(application['status'] == 'accepted', 'Сначала кандидат должен согласовать вакансию.', 409)
-        require(application['meeting'] is None, 'Встреча уже назначена. Для переноса свяжитесь с кандидатом.', 409)
-        times = interval(body.get('start'), future=True)
         person = self.person(db, application['candidateId'])
+        require(person['consentReuse'], 'Кандидат не разрешил использовать интервью для вакансий.', 409)
+        workflow = employer_workflow.load(db, application['id'])
+        require(workflow['decision'] != 'declined' and not workflow['closedBy']
+                and application['vacancy'].get('status') not in ('closed', 'archived'),
+                'Работа по вакансии завершена.', 409)
+        return person
+
+    def _meeting_time(self, db, application, body, manager_id, exclude_meeting_id=None):
+        person = self._application_open_for_meeting(db, application)
+        require(isinstance(manager_id, str) and 1 <= len(manager_id) <= 200, 'Не определён календарь работодателя.', 400)
+        times = interval(body.get('start'), body.get('end'), future=True)
+        require((timestamp(times['end']) - timestamp(times['start'])).total_seconds() == 1800,
+                'Встреча длится 30 минут.', 400)
         require(any(timestamp(slot['start']) <= timestamp(times['start']) and timestamp(slot['end']) >= timestamp(times['end'])
                     for slot in person['availability']), 'Выберите время из доступности кандидата.', 409)
-        self.ensure_candidate_free(db, person['id'], times)
-        for row in db.execute("SELECT start,end FROM cp_meetings WHERE status IN ('pending','confirmed','live')"):
-            require(not overlaps(times, {'start': row[0], 'end': row[1]}), 'У нанимающего уже есть встреча на это время.', 409)
+        self.ensure_candidate_free(db, person['id'], times, exclude_meeting_id)
+        for row in db.execute('''SELECT id,start,end FROM cp_meetings
+          WHERE manager_id=? AND status IN ('pending','confirmed','live')''', (manager_id,)):
+            if row[0] != exclude_meeting_id:
+                require(not overlaps(times, {'start': row[1], 'end': row[2]}), 'У нанимающего уже есть встреча на это время.', 409)
+        return times
+
+    @staticmethod
+    def _meeting_revision(meeting, body, *, required=False):
+        require(meeting and meeting['id'] == body.get('meetingId'), 'Встреча изменилась. Обновите кабинет.', 409)
+        if required or 'revision' in body:
+            require(type(body.get('revision')) is int and body['revision'] == meeting['revision'],
+                    'Время встречи изменилось. Обновите кабинет.', 409)
+
+    def _insert_meeting(self, db, application, times, manager_id):
+        revision = db.execute('SELECT COALESCE(MAX(revision),0)+1 FROM cp_meetings WHERE application_id=?',
+                              (application['id'],)).fetchone()[0]
         mid = uid('meeting')
-        db.execute("INSERT INTO cp_meetings VALUES (?,?,?,?, 'pending',NULL,NULL,NULL)",
-                   (mid, application['id'], times['start'], times['end']))
-        self.event(db, person['id'], 'meeting.proposed', mid)
+        db.execute('''INSERT INTO cp_meetings
+          (id,application_id,start,end,status,manager_id,revision,created_at)
+          VALUES (?,?,?,?,'pending',?,?,?)''',
+          (mid, application['id'], times['start'], times['end'], manager_id, revision, iso(now())))
+        return self.meeting(db, application['id'], mid)
+
+    def propose_meeting(self, db, body, *, manager_id='recruiter:team'):
+        with meeting_transaction(db):
+            application = self.application(db, body.get('applicationId'))
+            require(not application['meeting'] or application['meeting']['status'] in ('completed', 'cancelled', 'declined'),
+                    'Встреча уже назначена. Используйте перенос встречи.', 409)
+            times = self._meeting_time(db, application, body, manager_id)
+            meeting = self._insert_meeting(db, application, times, manager_id)
+            self.event(db, application['candidateId'], 'meeting.proposed', meeting['id'])
+            return meeting
+
+    def reschedule_meeting(self, db, body, *, manager_id='recruiter:team'):
+        with meeting_transaction(db):
+            application = self.application(db, body.get('applicationId'))
+            meeting = application['meeting']
+            self._meeting_revision(meeting, body, required=True)
+            owner = db.execute('SELECT manager_id FROM cp_meetings WHERE id=?', (meeting['id'],)).fetchone()
+            require(owner and owner[0] == manager_id, 'Встреча не найдена.', 404)
+            require(meeting['status'] in ('pending', 'confirmed'), 'Эту встречу уже нельзя перенести.', 409)
+            times = self._meeting_time(db, application, body, manager_id, meeting['id'])
+            if times['start'] == meeting['start'] and times['end'] == meeting['end']:
+                return meeting
+            db.execute('''UPDATE cp_meetings SET status='cancelled',cancelled_at=?,cancellation_reason='rescheduled'
+              WHERE id=?''', (iso(now()), meeting['id']))
+            next_meeting = self._insert_meeting(db, application, times, manager_id)
+            self.event(db, application['candidateId'], 'meeting.rescheduled', next_meeting['id'])
+            return next_meeting
+
+    def cancel_meeting(self, db, body, *, manager_id='recruiter:team'):
+        with meeting_transaction(db):
+            application = self.application(db, body.get('applicationId'))
+            meeting = application['meeting']
+            self._meeting_revision(meeting, body, required=True)
+            owner = db.execute('SELECT manager_id FROM cp_meetings WHERE id=?', (meeting['id'],)).fetchone()
+            require(owner and owner[0] == manager_id, 'Встреча не найдена.', 404)
+            if meeting['status'] == 'cancelled':
+                return meeting
+            require(meeting['status'] in ('pending', 'confirmed'), 'Текущую встречу уже нельзя отменить.', 409)
+            db.execute('''UPDATE cp_meetings SET status='cancelled',cancelled_at=?,cancellation_reason='manager'
+              WHERE id=?''', (iso(now()), meeting['id']))
+            self.event(db, application['candidateId'], 'meeting.cancelled', meeting['id'])
+            return self.meeting(db, application['id'], meeting['id'])
 
     def confirm_meeting(self, db, cid, body):
-        application = self.application(db, body.get('applicationId'), cid)
-        meeting = application['meeting']
-        require(meeting is not None and meeting['id'] == body.get('meetingId'), 'Встреча изменилась. Обновите кабинет.', 409)
-        require(application['status'] == 'accepted', 'Сначала согласуйте вакансию.', 409)
-        if meeting['status'] == 'confirmed':
-            return
-        require(meeting['status'] == 'pending' and timestamp(meeting['start']) > now(), 'Это время уже недоступно.', 409)
-        db.execute("UPDATE cp_meetings SET status='confirmed',confirmed_at=? WHERE id=?", (iso(now()), meeting['id']))
-        self.event(db, cid, 'meeting.confirmed', meeting['id'])
+        with meeting_transaction(db):
+            application = self.application(db, body.get('applicationId'), cid)
+            meeting = application['meeting']
+            self._meeting_revision(meeting, body)
+            self._application_open_for_meeting(db, application)
+            if meeting['status'] == 'confirmed':
+                return
+            require(meeting['status'] == 'pending' and timestamp(meeting['start']) > now(), 'Это время уже недоступно.', 409)
+            self.ensure_candidate_free(db, cid, meeting, meeting['id'])
+            db.execute("UPDATE cp_meetings SET status='confirmed',confirmed_at=? WHERE id=?", (iso(now()), meeting['id']))
+            self.event(db, cid, 'meeting.confirmed', meeting['id'])
+
+    def decline_meeting(self, db, cid, body):
+        with meeting_transaction(db):
+            application = self.application(db, body.get('applicationId'), cid)
+            meeting = application['meeting']
+            self._meeting_revision(meeting, body)
+            if meeting['status'] == 'declined':
+                return
+            require(meeting['status'] in ('pending', 'confirmed') and timestamp(meeting['start']) > now(),
+                    'Это время уже недоступно.', 409)
+            db.execute('''UPDATE cp_meetings SET status='declined',cancelled_at=?,cancellation_reason='candidate'
+              WHERE id=?''', (iso(now()), meeting['id']))
+            self.event(db, cid, 'meeting.declined', meeting['id'])
+
+    def workflow_events(self, db, events):
+        """Durable events share the caller transaction; no delivery is implied."""
+        for event in events:
+            inserted = db.execute('INSERT OR IGNORE INTO cp_workflow_events VALUES (?,?,?,?,?)',
+              (event['eventKey'], event['candidateId'], event['applicationId'], dump(event), iso(now())))
+            if inserted.rowcount and event.get('audience', 'candidate') == 'candidate':
+                self.event(db, event['candidateId'], event['type'], event['entityId'])
 
     def create_prepared(self, db, resume, contact_email=''):
         contact_email = email_value(contact_email) if contact_email else ''
@@ -620,14 +798,20 @@ class CandidatePortal:
                 return self.candidate_state(db, cid), {'Set-Cookie': self.session_cookie(db, cid)}
         return self.join(cid, None, None, guest_token=token), {}
 
-    def join(self, cid, application_id, consent, owner=False, guest_token=None):
+    def join(self, cid, application_id, consent, owner=False, guest_token=None,
+             meeting_id=None, owner_name=None, owner_id='recruiter', access_check=None):
         require(owner or guest_token is not None or consent is True, 'Подтвердите запись разговора.', 400)
         # Provider I/O is deliberately outside the shared SQLite transaction.
         with self.lock, self.connect() as db:
+            if access_check:
+                access_check(db)
             person = self.person(db, cid)
             if application_id:
                 application = self.application(db, application_id, cid)
+                self._application_open_for_meeting(db, application)
                 meeting = application['meeting']
+                require(meeting_id is None or meeting and meeting['id'] == meeting_id,
+                        'Встреча изменилась. Обновите кабинет.', 409)
                 require(application['status'] == 'accepted' and meeting and meeting['status'] in ('confirmed', 'live'),
                         'Кандидат должен подтвердить время встречи.', 409)
             else:
@@ -637,12 +821,16 @@ class CandidatePortal:
                     'Комната откроется за 15 минут до встречи.', 409)
             mid = meeting['id']
         with self.media_operation(mid):
-            return self._join_room(cid, application_id, owner, mid, person, consent, guest_token)
+            return self._join_room(cid, application_id, owner, mid, person, consent, guest_token,
+                                   owner_name, owner_id, access_check)
 
-    def _join_room(self, cid, application_id, owner, mid, person, consent, guest_token):
+    def _join_room(self, cid, application_id, owner, mid, person, consent, guest_token,
+                   owner_name=None, owner_id='recruiter', access_check=None):
         table = 'cp_meetings' if application_id else 'cp_interviews'
         token_expires = int(time.time()) + 3600
         with self.lock, self.connect() as db:
+            if access_check:
+                access_check(db)
             current = db.execute(f'SELECT status FROM {table} WHERE id=?', (mid,)).fetchone()
             allowed = ('confirmed', 'live') if application_id else ('booked', 'live')
             require(current and current[0] in allowed, 'Интервью уже завершено.', 409)
@@ -654,8 +842,8 @@ class CandidatePortal:
             can_record = not prepared_intro or invites.recording(db, mid)['startRequested']
         room = self.media.room(mid, recordable=can_record)
         token = self.media.request('/meeting-tokens', {'properties': {
-            'room_name': room['name'], 'user_name': 'Рекрутер HR Vision' if owner else (person['name'] or 'Кандидат'),
-            'user_id': 'recruiter' if owner else cid, 'is_owner': bool(owner and can_record),
+            'room_name': room['name'], 'user_name': (owner_name or 'Рекрутер HR Vision') if owner else (person['name'] or 'Кандидат'),
+            'user_id': owner_id if owner else cid, 'is_owner': bool(owner and can_record),
             'permissions': {'canAdmin': bool(owner and can_record)},
             'enable_recording_ui': bool(owner and can_record),
             'enable_live_captions_ui': bool(owner and can_record),
@@ -664,9 +852,16 @@ class CandidatePortal:
         require(isinstance(token.get('token'), str) and token['token'], 'Видеосервис не выдал доступ.', 502)
         with self.lock, self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
+            if access_check:
+                access_check(db)
             table = 'cp_meetings' if application_id else 'cp_interviews'
             current = db.execute(f'SELECT status FROM {table} WHERE id=?', (mid,)).fetchone()
-            require(current and current[0] != 'completed', 'Интервью уже завершено.', 409)
+            require(current and current[0] in allowed, 'Встреча изменилась или завершена.', 409)
+            if application_id:
+                application = self.application(db, application_id, cid)
+                self._application_open_for_meeting(db, application)
+                require(application['status'] == 'accepted' and application['meeting']['id'] == mid,
+                        'Встреча изменилась. Обновите кабинет.', 409)
             if guest_token:
                 # Rotation/revocation during provider I/O must not issue access.
                 invites.resolve(db, guest_token, 'call')
@@ -726,20 +921,28 @@ class CandidatePortal:
                 with self.lock, self.connect() as db:
                     db.execute('UPDATE cp_recording_control SET transcription_requested=1 WHERE interview_id=?', (mid,))
 
-    def complete(self, cid, application_id=None):
+    def complete(self, cid, application_id=None, meeting_id=None, *, access_check=None):
         with self.lock, self.connect() as db:
+            if access_check:
+                access_check(db)
             self.person(db, cid)
-            meeting = self.application(db, application_id, cid)['meeting'] if application_id else self.interview(db, cid)
+            if application_id:
+                self.application(db, application_id, cid)
+                meeting = self.meeting(db, application_id, meeting_id)
+            else:
+                meeting = self.interview(db, cid)
             require(meeting is not None, 'Интервью не найдено.', 404)
             if meeting['status'] == 'completed':
                 return
             require(meeting['status'] == 'live' and meeting.get('room'), 'Сначала проведите интервью на платформе.', 409)
             mid, room = meeting['id'], meeting['room']
         with self.media_operation(mid):
-            return self._complete_room(cid, application_id, mid)
+            return self._complete_room(cid, application_id, mid, access_check)
 
-    def _complete_room(self, cid, application_id, mid):
+    def _complete_room(self, cid, application_id, mid, access_check=None):
         with self.lock, self.connect() as db:
+            if access_check:
+                access_check(db)
             table = 'cp_meetings' if application_id else 'cp_interviews'
             row = db.execute(f'SELECT status,room FROM {table} WHERE id=?', (mid,)).fetchone()
             require(row, 'Интервью не найдено.', 404)
@@ -759,23 +962,35 @@ class CandidatePortal:
         self.media.finish(room)
         with self.lock, self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
+            if access_check:
+                access_check(db)
             table = 'cp_meetings' if application_id else 'cp_interviews'
             changed = db.execute(f"UPDATE {table} SET status='completed',completed_at=? WHERE id=? AND status='live'",
                                  (iso(now()), mid)).rowcount
             if changed and not application_id:
                 self.event(db, cid, 'interview.completed', mid)
 
-    def materials(self, cid, application_id=None, meeting_id=None):
+    def materials(self, cid, application_id=None, meeting_id=None, *, access_check=None):
         kind = 'meeting' if application_id else 'interview'
         with self.connect() as db:
+            if access_check:
+                access_check(db)
             self.person(db, cid)
-            meeting = self.application(db, application_id, cid)['meeting'] if application_id else self.interview(db, cid)
+            if application_id:
+                self.application(db, application_id, cid)
+                meeting = self.meeting(db, application_id, meeting_id)
+            else:
+                meeting = self.interview(db, cid)
             require(meeting and meeting['status'] == 'completed', 'Материалы доступны после встречи.', 409)
             require(meeting_id is None or meeting['id'] == meeting_id, 'Встреча изменилась. Обновите кабинет.', 409)
             mid = meeting['id']
         with self.media_operation(mid):
             with self.connect() as db:
-                current = self.application(db, application_id, cid)['meeting'] if application_id else self.interview(db, cid)
+                if access_check:
+                    access_check(db)
+                if application_id:
+                    self.application(db, application_id, cid)
+                current = self.meeting(db, application_id, mid) if application_id else self.interview(db, cid)
                 require(current and current['id'] == mid and current['status'] == 'completed',
                         'Встреча изменилась. Обновите кабинет.', 409)
                 room = current['room']
@@ -814,7 +1029,11 @@ class CandidatePortal:
                         'status': result['status'], 'checkedAt': result['checkedAt']}
             with self.lock, self.connect() as db:
                 db.execute('BEGIN IMMEDIATE')
-                latest = self.application(db, application_id, cid)['meeting'] if application_id else self.interview(db, cid)
+                if access_check:
+                    access_check(db)
+                if application_id:
+                    self.application(db, application_id, cid)
+                latest = self.meeting(db, application_id, mid) if application_id else self.interview(db, cid)
                 require(latest and latest['id'] == mid and latest['status'] == 'completed' and latest['room'] == room,
                         'Встреча изменилась. Обновите кабинет.', 409)
                 db.execute('''INSERT INTO cp_media_state VALUES (?,?,?,?,?) ON CONFLICT(meeting_id)
@@ -913,6 +1132,11 @@ class CandidatePortal:
                 self.decide_application(db, cid, body)
             elif path == '/api/hr/candidate/meeting/confirm':
                 self.confirm_meeting(db, cid, body)
+            elif path == '/api/hr/candidate/meeting/decline':
+                self.decline_meeting(db, cid, body)
+            elif path == '/api/hr/candidate/workflow':
+                result = employer_workflow.candidate_action(db, cid, body.get('applicationId'), body.get('action'), body)
+                self.workflow_events(db, result['events'])
             elif path == '/api/hr/candidate/telegram/link':
                 require(self.notifications, 'Telegram пока не подключён.', 503)
                 return self.notifications.create_telegram_link(db, cid), {}
@@ -950,6 +1174,10 @@ class CandidatePortal:
                 self.propose_application(db, body)
             elif path == '/api/hr/recruiter/meetings':
                 self.propose_meeting(db, body)
+            elif path == '/api/hr/recruiter/meeting/reschedule':
+                self.reschedule_meeting(db, body)
+            elif path == '/api/hr/recruiter/meeting/cancel':
+                self.cancel_meeting(db, body)
             elif path == '/api/hr/recruiter/profile':
                 self.person(db, cid)
                 profile = {'summary': text(body.get('summary', ''), 12000, required=False),
@@ -967,8 +1195,10 @@ class CandidatePortal:
                     require(not is_recruiter or cid is None or cid == application['candidateId'], 'Кандидат не найден.', 404)
                     cid = application['candidateId']
                     if not is_recruiter or path.endswith('/materials') or 'meetingId' in body:
-                        require(application['meeting'] and application['meeting']['id'] == body.get('meetingId'),
+                        exact = self.meeting(db, application['id'], body.get('meetingId')) if path.endswith('/materials') else application['meeting']
+                        require(exact and exact['id'] == body.get('meetingId'),
                                 'Встреча изменилась. Обновите кабинет.', 409)
+                        self._meeting_revision(exact, body)
                 else:
                     self.person(db, cid)
                 # The external provider work below does not hold the state lock.
@@ -978,17 +1208,27 @@ class CandidatePortal:
             if not provider_action:
                 return (self.recruiter_state(db) if is_recruiter else self.candidate_state(db, cid)), response_headers
 
+        def provider_access(db):
+            if is_recruiter:
+                require(manager_actor(db) == 'manager', 'Доступно только команде рекрутинга.', 403)
+            else:
+                require(self.session_candidate(db, headers) == cid, 'Войдите в свой кабинет.', 401)
+            if '/meeting/' in path:
+                self.application(db, body.get('applicationId'), cid)
+
         if path.endswith('/join'):
             return self.join(cid, body.get('applicationId') if '/meeting/' in path else None,
-                             body.get('consent'), owner=is_recruiter), {}
+                             body.get('consent'), owner=is_recruiter, meeting_id=body.get('meetingId'),
+                             access_check=provider_access), {}
         if path.endswith('/materials'):
             return self.materials(cid, body.get('applicationId') if '/meeting/' in path else None,
-                                  body.get('meetingId')), {}
+                                  body.get('meetingId'), access_check=provider_access), {}
         if path.endswith('/start'):
             self.start_interview(cid, body.get('oralConsent'), retry_recording=body.get('retryRecording', False),
                                  retry_transcription=body.get('retryTranscription', False))
             with self.connect() as db:
                 return self.recruiter_state(db), {}
-        self.complete(cid, body.get('applicationId') if '/meeting/' in path else None)
+        self.complete(cid, body.get('applicationId') if '/meeting/' in path else None, body.get('meetingId'),
+                      access_check=provider_access)
         with self.connect() as db:
             return self.recruiter_state(db), {}

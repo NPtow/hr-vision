@@ -24,13 +24,46 @@ export type CandidateResume = { filename: string; mime: string; size: number; up
 export type RecruiterSlot = { id: string; start: string; end: string; recruiterName: string };
 export type InterviewRecording = { consentReceived: boolean; consentSource: 'recruiter_oral' | null; startRequested: boolean; recordingRequested: boolean; transcriptionRequested: boolean };
 export type CandidateInterview = RecruiterSlot & { status: 'booked' | 'live' | 'completed'; recording?: InterviewRecording };
-export type CandidateMeeting = { id: string; start: string; end: string; status: 'pending' | 'confirmed' | 'live' | 'completed' };
+export type CandidateMeeting = { id: string; start: string; end: string; status: 'pending' | 'confirmed' | 'live' | 'completed'; revision?: number; completedAt?: string | null };
+export type CandidateMeetingHistory = Omit<CandidateMeeting, 'status'> & {
+  status: CandidateMeeting['status'] | 'cancelled' | 'declined';
+  cancelledAt?: string | null;
+  cancellationReason?: 'manager' | 'candidate' | 'rescheduled' | null;
+};
+export type CandidateOffer = {
+  id: string; version: number; status: 'sent' | 'accepted' | 'declined' | 'superseded' | 'withdrawn';
+  role: string; compensation: string; format: string; expectations: string; startDate: string;
+  createdAt: string; sentAt: string | null; answeredAt: string | null; answeredBy: string | null;
+};
+export type CandidateMessage = { id: string; actor: string; actorId: string; text: string; at: string; system: boolean };
+export type CandidateApplicationWorkflow = {
+  applicationId: string; candidateId: string; vacancyId: string;
+  interest: 'pending' | 'accepted' | 'declined'; revision: number;
+  decision: 'review' | 'pool' | 'declined'; afterInterest: 'pending' | 'yes' | 'no';
+  closedBy: string | null;
+  meeting: Pick<CandidateMeetingHistory, 'id' | 'status' | 'start' | 'end' | 'completedAt'> | null;
+  offer: CandidateOffer | null;
+  messages: CandidateMessage[];
+};
+export type CandidateWorkflowCommand = { applicationId: string; requestId?: string; expectedRevision?: number } & (
+  { action: 'after' | 'after.interest'; meetingId: string; value: 'yes' | 'no' }
+  | { action: 'offer.reply'; version: number; value: 'accepted' | 'declined' }
+  | { action: 'chat'; text: string }
+);
+export type CandidateMeetingReference = { applicationId: string; meetingId: string; revision?: number };
 export type CandidateApplication = {
   id: string;
   vacancy: { id: string; title: string; company: string; city: string; remote: boolean; description: string };
   status: 'pending' | 'accepted' | 'declined';
   approvedAutomatically: boolean;
   meeting: CandidateMeeting | null;
+  meetings?: CandidateMeetingHistory[];
+  workflow?: CandidateApplicationWorkflow;
+  offer?: CandidateOffer | null;
+  decision?: CandidateApplicationWorkflow['decision'];
+  afterInterest?: CandidateApplicationWorkflow['afterInterest'];
+  messages?: CandidateMessage[];
+  workflowRevision?: number;
 };
 export type DeliveryStatus = { id: string; status: string; event_type?: string; attempts?: number; delivered_at?: number | null; last_error?: string | null };
 export type Channels = {
@@ -97,6 +130,10 @@ export async function candidateRequest<T>(path: string, body?: unknown): Promise
     throw new CandidateApiError(error instanceof Error && error.name === 'AbortError' ? 'Сервер не ответил. Проверьте соединение и попробуйте ещё раз.' : 'Не удалось связаться с сервером. Проверьте соединение.', 0);
   } finally { clearTimeout(timeout); }
 }
+
+export const candidateWorkflowRequest = (body: CandidateWorkflowCommand) => candidateRequest<CandidateState>('workflow', body);
+export const candidateMeetingReply = (action: 'confirm' | 'decline', body: CandidateMeetingReference) =>
+  candidateRequest<CandidateState>(`meeting/${action}`, body);
 
 export const dateLabel = (value: string) => new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', weekday: 'short' }).format(new Date(value));
 export const timeLabel = (value: string) => new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' }).format(new Date(value));
