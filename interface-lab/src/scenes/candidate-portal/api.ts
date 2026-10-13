@@ -54,7 +54,7 @@ export type CandidateMeetingReference = { applicationId: string; meetingId: stri
 export type CandidateApplication = {
   id: string;
   archivedAt?: string | null;
-  vacancy: { id: string; title: string; company: string; city: string; remote: boolean; description: string };
+  vacancy: { id: string; title: string; company: string; city: string; remote: boolean; description: string; salary?: string };
   status: 'pending' | 'accepted' | 'declined';
   approvedAutomatically: boolean;
   meeting: CandidateMeeting | null;

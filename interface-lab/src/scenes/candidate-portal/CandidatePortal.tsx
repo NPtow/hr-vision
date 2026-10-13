@@ -12,7 +12,7 @@ import { TelegramHandoff } from './TelegramHandoff';
 import { CandidateSearch } from './CandidateSearch';
 import { CandidateSchedule } from './CandidateSchedule';
 import { CandidateProfile } from './CandidateProfile';
-import { applicationGroup, currentApplicationMeeting, type ApplicationGroup } from './workspace-model';
+import { applicationGroup, currentApplicationMeeting } from './workspace-model';
 import '@fontsource-variable/inter';
 import '../agency-product/theme.css';
 import './candidate-portal.css';
@@ -21,7 +21,6 @@ import './candidate-cabinet.css';
 type Page = 'welcome' | 'login' | 'register' | 'resume' | 'preferences' | 'home' | 'calendar' | 'booking' | 'profile' | 'vacancies' | 'interview' | 'meeting';
 const pages: Page[] = ['welcome', 'login', 'register', 'resume', 'preferences', 'home', 'calendar', 'booking', 'profile', 'vacancies', 'interview', 'meeting'];
 const readPage = (): Page => { const value = new URLSearchParams(location.search).get('cp') as Page; return pages.includes(value) ? value : 'welcome'; };
-const readFilter = (): ApplicationGroup => { const value = new URLSearchParams(location.search).get('filter'); return value === 'process' || value === 'history' ? value : 'new'; };
 const authenticatedPage = (page: Page) => !['welcome', 'login', 'register'].includes(page);
 function setupPage(candidate: CandidateState, newBooking = false): 'resume' | 'preferences' | null {
   if (candidate.interview && !newBooking) return null;
@@ -59,7 +58,6 @@ function AuthenticatedCandidatePortal() {
   const [meetingApplicationId, setMeetingApplicationId] = useState(() => new URLSearchParams(location.search).get('application') || '');
   const [meetingId, setMeetingId] = useState(() => new URLSearchParams(location.search).get('meeting') || '');
   const [selectedId, setSelectedId] = useState(() => new URLSearchParams(location.search).get('application') || '');
-  const [searchFilter, setSearchFilter] = useState<ApplicationGroup>(readFilter);
   const workflowRequests = useRef(new Map<string, string>());
   const verifying = useRef(false);
   const alive = useRef(true);
@@ -67,7 +65,7 @@ function AuthenticatedCandidatePortal() {
   const refreshSequence = useRef(0);
   const mutating = useRef(false);
   const go = useCallback((next: Page, replace = false, applicationId?: string, targetMeetingId?: string) => {
-    const url = new URL(location.href); url.searchParams.set('cp', next);
+    const url = new URL(location.href); url.searchParams.set('cp', next); url.searchParams.delete('filter');
     if (applicationId) url.searchParams.set('application', applicationId); else url.searchParams.delete('application');
     if (targetMeetingId) url.searchParams.set('meeting', targetMeetingId); else url.searchParams.delete('meeting');
     history[replace ? 'replaceState' : 'pushState']({}, '', url);
@@ -99,9 +97,6 @@ function AuthenticatedCandidatePortal() {
       setChannels(result.channels || {});
       if (result.authenticated && result.candidate) {
         apply(result.candidate);
-        const params = new URLSearchParams(location.search);
-        const requestedApplication = result.candidate.applications.find(application => application.id === params.get('application'));
-        if (requestedApplication && !params.has('filter')) setSearchFilter(applicationGroup(requestedApplication));
         const nextPage = destination(result.candidate, readPage());
         if (nextPage !== readPage()) go(nextPage, true);
       } else { setCandidate(null); if (authenticatedPage(readPage())) go('login', true); }
@@ -110,7 +105,7 @@ function AuthenticatedCandidatePortal() {
   }, [apply, go]);
   useEffect(() => { alive.current = true; void session(); return () => { alive.current = false; }; }, [session]);
   useEffect(() => {
-    const onPop = () => { const next = readPage(); setPage(next); setSearchFilter(readFilter()); setMeetingApplicationId(new URLSearchParams(location.search).get('application') || ''); setMeetingId(new URLSearchParams(location.search).get('meeting') || ''); setSelectedId(new URLSearchParams(location.search).get('application') || ''); setMenuOpen(false); setError(''); setLoadError(''); };
+    const onPop = () => { const next = readPage(); setPage(next); setMeetingApplicationId(new URLSearchParams(location.search).get('application') || ''); setMeetingId(new URLSearchParams(location.search).get('meeting') || ''); setSelectedId(new URLSearchParams(location.search).get('application') || ''); setMenuOpen(false); setError(''); setLoadError(''); };
     window.addEventListener('popstate', onPop); return () => window.removeEventListener('popstate', onPop);
   }, []);
   useEffect(() => {
@@ -164,21 +159,13 @@ function AuthenticatedCandidatePortal() {
   const currentMeeting = meetingId
     ? currentApplication?.meetings?.find(meeting => meeting.id === meetingId) ?? (currentApplication?.meeting?.id === meetingId ? currentApplication.meeting : undefined)
     : currentApplication?.meeting;
-  function selectFilter(value: ApplicationGroup) {
-    setSearchFilter(value);
-    const url = new URL(location.href); url.searchParams.set('filter', value); history.replaceState({}, '', url);
-  }
   function openVacancy(applicationId: string) {
-    const application = candidate?.applications.find(value => value.id === applicationId);
-    if (application) selectFilter(applicationGroup(application));
     setSelectedId(applicationId); go('home', false, applicationId);
   }
   async function decide(applicationId: string, decision: 'accepted' | 'declined') {
     const next = await mutate('application/decision', { applicationId, decision });
     if (!next) { await refresh(); return false; }
     setSelectedId(applicationId);
-    const application = next.applications.find(value => value.id === applicationId);
-    if (application) selectFilter(applicationGroup(application));
     return true;
   }
   async function replyToMeeting(application: CandidateApplication, action: 'confirm' | 'decline') {
@@ -196,14 +183,12 @@ function AuthenticatedCandidatePortal() {
     if (!next) { await refresh(); return false; }
     workflowRequests.current.delete(fingerprint);
     setSelectedId(command.applicationId);
-    const application = next.applications.find(value => value.id === command.applicationId);
-    if (application) selectFilter(applicationGroup(application));
     return true;
   }
   async function changeSearch(searching: boolean) {
     const next = await mutate('search', { searching });
     if (!next) return false;
-    selectFilter('new'); setSelectedId(''); go('home');
+    setSelectedId(''); go('home');
     return true;
   }
   const telegramChannel = typeof channels.telegram === 'object' ? channels.telegram : undefined;
@@ -213,7 +198,7 @@ function AuthenticatedCandidatePortal() {
     history.replaceState(history.state, '', url);
     setTelegramEntry(false); setNotice('Telegram подключён. Вакансии и встречи будут приходить в бот.');
   }, [telegramEntry, telegramChannel?.linked]);
-  return <div className={`agency-product-theme cp-root ${showNavigation ? 'cp-cabinet' : ''}`}>
+  return <div className={`agency-product-theme cp-root ${showNavigation ? 'cp-cabinet' : ''} ${candidate?.interview?.status === 'completed' && ['welcome', 'login', 'register', 'home', 'vacancies'].includes(page) ? 'cp-search-feed' : ''}`}>
     <header className="cp-topbar">
       <button className="cp-logo" aria-label="HR Vision · главная" onClick={() => go(candidate ? destination(candidate) : 'welcome')}><img src={logo} alt="HR Vision"/></button>
       {candidate ? <div className="cp-account">{showNavigation && <button className="cp-avatar" aria-current={page === 'profile' ? 'page' : undefined} aria-label="Открыть профиль" onClick={() => go('profile')}>{initials(candidate.name) || <UserRound size={18}/>}</button>}<Button variant="ghost" size="icon" aria-label="Выйти из кабинета" title="Выйти" disabled={busy} onClick={logout}><LogOut size={18}/></Button></div> : <Button className="cp-login-link" variant="ghost" disabled={loading} onClick={() => go(page === 'login' ? 'register' : 'login')}>{page === 'login' ? 'Создать кабинет' : 'Войти'}</Button>}
@@ -239,7 +224,7 @@ function AuthenticatedCandidatePortal() {
           </form><p className="cp-auth-foot">Уже есть кабинет? <button onClick={() => go('login')}>Войти</button></p></section>}
           {candidate && page === 'resume' && <section className="cp-form-page"><div className="cp-page-heading"><h1>Загрузите резюме</h1><p>Заполним профиль из файла. Вы проверите данные и дополните недостающие.</p></div><ResumeUpload resume={candidate.resume} busy={busy} onUpload={async payload => { const next = await mutate('resume', payload); if (!next) return false; go(setupPage(next, true) || 'booking', true); return true; }}/></section>}
           {candidate && page === 'preferences' && <section className="cp-form-page"><div className="cp-page-heading"><h1>Проверьте данные</h1><p>Заполнили из резюме. Можно исправить и дополнить.</p></div><PreferencesForm key={candidate.id} initial={candidate} missingFields={candidate.onboarding.missingFields} busy={busy} onSubmit={async profile => { const next = await mutate('profile', profile); if (next) go(setupPage(next, true) || 'booking', true); }}/></section>}
-          {candidate && ['welcome', 'login', 'register', 'home', 'vacancies'].includes(page) && <CandidateSearch candidate={candidate} busy={busy} filter={searchFilter} setFilter={selectFilter} selectedId={selectedId} onSelect={setSelectedId} onDecision={decide} onMeetingReply={replyToMeeting} onWorkflow={workflow} onJoin={(applicationId, targetMeetingId) => go('meeting', false, applicationId, targetMeetingId)} onRefresh={refresh} onBookInterview={() => go('booking')} onInterview={() => go('interview')} onProfile={() => go('profile')} onResumeSearch={() => changeSearch(true)}/>}
+          {candidate && ['welcome', 'login', 'register', 'home', 'vacancies'].includes(page) && <CandidateSearch candidate={candidate} busy={busy} selectedId={selectedId} onSelect={setSelectedId} onDecision={decide} onMeetingReply={replyToMeeting} onWorkflow={workflow} onJoin={(applicationId, targetMeetingId) => go('meeting', false, applicationId, targetMeetingId)} onBookInterview={() => go('booking')} onInterview={() => go('interview')} onResumeSearch={() => changeSearch(true)}/>}
           {candidate && page === 'calendar' && <CandidateSchedule candidate={candidate} busy={busy} onAvailability={async availability => !!await mutate('profile', { availability }, 'Доступность сохранена.')} onMeetingReply={replyToMeeting} onOpenVacancy={openVacancy} onJoin={(applicationId, targetMeetingId) => go('meeting', false, applicationId, targetMeetingId)} onInterview={() => go('interview')} onBookInterview={() => go('booking')}/>}
           {candidate && page === 'booking' && <RecruiterCalendar candidate={candidate} busy={busy} onBack={() => go('calendar')} onBook={async slotId => { if (await mutate('book', { slotId })) go('home'); }}/>}
           {candidate && page === 'profile' && <CandidateProfile candidate={candidate} busy={busy} onSave={async profile => !!await mutate('profile', profile, 'Изменения сохранены.')} onUpload={async payload => !!await mutate('resume', payload, 'Резюме сохранено.')} onSearchChange={changeSearch} contacts={<ContactSettings candidate={candidate} channels={channels} onRefresh={refresh}/>} onBack={() => go('home')}/>}
