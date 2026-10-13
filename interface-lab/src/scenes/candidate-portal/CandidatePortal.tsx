@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, Briefcase, CalendarDays, Check, Clock3, Home, LogOut, Mail, RefreshCw, Send, UserRound, Video, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Briefcase, CalendarDays, Check, Home, LogOut, Mail, RefreshCw, Send, UserRound, Video, X } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import logo from '../employer-workspace/assets/hr-vision-logo.svg';
@@ -239,7 +239,17 @@ function AuthenticatedCandidatePortal() {
 }
 
 function Welcome({ onStart }: { onStart: () => void }) {
-  return <section className="cp-welcome"><div className="cp-welcome-copy"><h1>Одно интервью —<br/>больше подходящих<br className="cp-desktop-break"/> вакансий</h1><p>Расскажите о себе рекрутеру один раз. Мы подберём вакансии и с вашего согласия передадим работодателям материалы интервью.</p><Button size="lg" onClick={onStart}>Начать<ArrowRight size={18}/></Button><span className="cp-welcome-duration"><Clock3 size={16}/>Интервью займёт 30 минут</span></div><div className="cp-journey-card"><div className="cp-journey-item"><span><UserRound size={22}/></span><div><h2>Загрузите резюме</h2><p>Заполним профиль из файла. Вы дополните недостающие данные.</p></div></div><div className="cp-journey-item"><span><Video size={22}/></span><div><h2>Познакомьтесь с рекрутером</h2><p>Живой разговор на нашем сайте, с телефона или компьютера.</p></div></div><div className="cp-journey-item"><span><Briefcase size={22}/></span><div><h2>Выбирайте вакансии</h2><p>Предложения и встречи — в одном кабинете. Каждое время подтверждаете вы.</p></div></div></div></section>;
+  return <section className="cp-welcome">
+    <div className="cp-welcome-copy">
+      <h1>Одно интервью —<br/>больше подходящих<br className="cp-desktop-break"/> вакансий</h1>
+      <Button size="lg" onClick={onStart}>Начать<ArrowRight size={18}/></Button>
+    </div>
+    <div className="cp-journey-card">
+      <div className="cp-journey-item"><span><UserRound size={22}/></span><h2>Загрузите резюме</h2></div>
+      <div className="cp-journey-item"><span><Video size={22}/></span><h2>Познакомьтесь с рекрутером</h2></div>
+      <div className="cp-journey-item"><span><Briefcase size={22}/></span><h2>Выбирайте вакансии</h2></div>
+    </div>
+  </section>;
 }
 
 function RecruiterCalendar({ candidate, busy, onBook, onBack }: { candidate: CandidateState; busy: boolean; onBook: (slotId: string) => Promise<void>; onBack: () => void }) {
