@@ -9,3 +9,36 @@
 @media(max-width:600px){.cps-grid{grid-template-columns:1fr}.cps-card:nth-child(n){margin-top:0}.cps-search .cps-heading h1{font-size:31px}.cps-recruiter{flex-wrap:wrap}.cps-recruiter>.cps-button{margin-left:54px}.cps-paused-note{flex-wrap:wrap}.cps-tabs{gap:23px}.cps-tabs>button{font-size:11px}}
 @media(prefers-reduced-motion:reduce){.cps-search *,.cps-search *:before{animation:none!important;transition:none!important;scroll-behavior:auto!important}.cps-button:active:not(:disabled){transform:none}}
 .cps-history-section{margin-top:20px}.cps-search .cps-history-section>h4{font-size:9px;font-weight:550;line-height:1.5;letter-spacing:.04em;color:#98a6bd;text-transform:uppercase}.cps-history-section>ol{margin-top:13px}.cps-history-snapshots li:before{display:none}.cps-search .cps-about p{margin-top:10px}.cps-search .cps-heading p{margin-top:13px}.cps-search .cps-offer-confirm>p{margin-top:7px}.cps-search .cps-recruiter p{margin-top:4px}.cps-search .cps-empty>p{margin-top:13px}.cps-search .cps-paused>p{margin-top:18px}
+
+.cps-search.cps-interview-start h1 {
+  margin: 18px 0 32px;
+  font-size: clamp(30px, 3vw, 40px);
+  font-weight: 560;
+  line-height: 1.2;
+  letter-spacing: -.04em;
+}
+.cps-search .cps-interview-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  width: 100%;
+  min-height: 280px;
+  padding: 40px 24px;
+  border: 1px solid #e7edf8;
+  border-radius: 24px;
+  background: #f7f9fd;
+  color: #385eab;
+  font-size: 20px;
+  font-weight: 500;
+  text-align: center;
+  transition: background .18s, border-color .18s;
+}
+.cps-interview-choice > svg { color: #83a0d9; }
+.cps-search .cps-interview-choice:hover:not(:disabled) { background: #edf3fc; border-color: #d8e3f7; }
+.cps-search .cps-interview-choice:active:not(:disabled) { background: #e7effc; }
+@media (max-width: 760px) {
+  .cps-search.cps-interview-start h1 { margin: 16px 0 26px; font-size: 29px; }
+  .cps-search .cps-interview-choice { min-height: 248px; border-radius: 20px; font-size: 18px; }
+}

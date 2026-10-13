@@ -169,6 +169,13 @@ export function CandidateSearch(props: CandidateSearchProps) {
     try { await onRefresh(); } catch (cause) { setRefreshError(cause instanceof Error ? cause.message : 'Не удалось обновить предложения.'); }
     finally { refreshLock.current = false; setRefreshing(false); }
   }
+  if (!candidate.interview && !paused) return <section className="cps-search cps-interview-start" aria-labelledby={`${scope}-interview-title`}>
+    <h1 id={`${scope}-interview-title`}>Начнём со знакомства</h1>
+    <button type="button" className="cps-interview-choice" disabled={busy} onClick={props.onBookInterview}>
+      <CalendarDays size={32} aria-hidden="true"/>
+      <span>Выбрать время интервью</span>
+    </button>
+  </section>;
   return <MotionConfig reducedMotion="user" transition={{ duration: reduced ? 0 : .24, ease: [.2, .75, .25, 1] }}><LayoutGroup id={`${scope}-search`}><section className="cps-search">
     <div className="cps-tabs" role="tablist" aria-label="Вакансии по статусу">{filters.map((item, index) => <button type="button" key={item.value} role="tab" id={`${scope}-tab-${item.value}`} aria-selected={filter === item.value} aria-controls={`${scope}-results`} tabIndex={filter === item.value ? 0 : -1} onClick={() => setFilter(item.value)} onKeyDown={event => {
       let next = index;
