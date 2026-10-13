@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, Briefcase, CalendarDays, Check, Home, LogOut, Mail, RefreshCw, Send, UserRound, Video, X } from 'lucide-react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { ArrowLeft, ArrowRight, Briefcase, CalendarDays, Check, Home, LogOut, Mail, Menu, RefreshCw, Send, UserRound, Video, X } from 'lucide-react';
+import { Tooltip } from 'radix-ui';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import logo from '../employer-workspace/assets/hr-vision-logo.svg';
@@ -18,6 +19,7 @@ import '@fontsource-variable/inter';
 import '../agency-product/theme.css';
 import './candidate-portal.css';
 import './candidate-cabinet.css';
+import './candidate-surfaces.css';
 
 type Page = 'welcome' | 'login' | 'register' | 'resume' | 'preferences' | 'home' | 'calendar' | 'booking' | 'profile' | 'vacancies' | 'interview' | 'meeting';
 const pages: Page[] = ['welcome', 'login', 'register', 'resume', 'preferences', 'home', 'calendar', 'booking', 'profile', 'vacancies', 'interview', 'meeting'];
@@ -54,6 +56,8 @@ function AuthenticatedCandidatePortal() {
   const [loadError, setLoadError] = useState('');
   const [notice, setNotice] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
+  const menuId = useId();
+  const menuToggle = useRef<HTMLButtonElement>(null);
   const [telegramEntry, setTelegramEntry] = useState(() => new URLSearchParams(location.search).get('telegram') === 'connect');
   const [credentials, setCredentials] = useState({ email: '', password: '' });
   const [registrationConsent, setRegistrationConsent] = useState(false);
@@ -110,6 +114,16 @@ function AuthenticatedCandidatePortal() {
     const onPop = () => { const next = readPage(); setPage(next); setMeetingApplicationId(new URLSearchParams(location.search).get('application') || ''); setMeetingId(new URLSearchParams(location.search).get('meeting') || ''); setSelectedId(new URLSearchParams(location.search).get('application') || ''); setMenuOpen(false); setError(''); setLoadError(''); };
     window.addEventListener('popstate', onPop); return () => window.removeEventListener('popstate', onPop);
   }, []);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setMenuOpen(false);
+      menuToggle.current?.focus();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [menuOpen]);
   useEffect(() => {
     if (!candidate) return;
     const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void refresh(); }, 12000);
@@ -200,13 +214,25 @@ function AuthenticatedCandidatePortal() {
     history.replaceState(history.state, '', url);
     setTelegramEntry(false); setNotice('Telegram подключён. Вакансии и встречи будут приходить в бот.');
   }, [telegramEntry, telegramChannel?.linked]);
-  return <div className={`agency-product-theme cp-root ${showNavigation ? 'cp-cabinet' : ''} ${candidate?.interview?.status === 'completed' && ['welcome', 'login', 'register', 'home', 'vacancies'].includes(page) ? 'cp-search-feed' : ''}`}>
+  return <div className={`agency-product-theme cp-root cp-surfaces ${showNavigation ? 'cp-cabinet' : ''} ${candidate?.interview?.status === 'completed' && ['welcome', 'login', 'register', 'home', 'vacancies'].includes(page) ? 'cp-search-feed' : ''}`}>
     <header className="cp-topbar">
+      {showNavigation && <button ref={menuToggle} className="cp-menu-toggle" aria-label={menuOpen ? 'Закрыть меню' : 'Открыть меню'} aria-expanded={menuOpen} aria-controls={menuId} onClick={() => setMenuOpen(open => !open)}>{menuOpen ? <X size={20}/> : <Menu size={20}/>}</button>}
       <button className="cp-logo" aria-label="HR Vision · главная" onClick={() => go(candidate ? destination(candidate) : 'welcome')}><img src={logo} alt="HR Vision"/></button>
       {candidate ? <div className="cp-account">{showNavigation && <button className="cp-avatar" aria-current={page === 'profile' ? 'page' : undefined} aria-label="Открыть профиль" onClick={() => go('profile')}>{initials(candidate.name) || <UserRound size={18}/>}</button>}<Button variant="ghost" size="icon" aria-label="Выйти из кабинета" title="Выйти" disabled={busy} onClick={logout}><LogOut size={18}/></Button></div> : <Button className="cp-login-link" variant="ghost" disabled={loading} onClick={() => go(page === 'login' ? 'register' : 'login')}>{page === 'login' ? 'Создать кабинет' : 'Войти'}</Button>}
     </header>
     <div className={`cp-body ${showNavigation ? 'cp-authenticated' : ''}`}>
-      {showNavigation && <aside id="candidate-navigation" className="cp-sidebar" data-open={menuOpen}><nav aria-label="Кабинет кандидата">{nav.map(([key, label, Icon]) => <button key={key} aria-current={activePage === key ? 'page' : undefined} onClick={() => go(key)}><Icon size={19}/>{label}{key === 'home' && pendingCount > 0 && <span className="cp-count">{pendingCount}</span>}</button>)}</nav>{safeSupportEmail(channels) && <a className="cp-support" href={`mailto:${safeSupportEmail(channels)}`}><Mail size={17}/>Поддержка</a>}</aside>}
+      {showNavigation && <aside id={menuId} className="cp-sidebar" data-open={menuOpen} aria-label="Разделы кандидата">
+        <Tooltip.Provider delayDuration={200} skipDelayDuration={100}>
+          <nav aria-label="Кабинет кандидата">{nav.map(([key, label, Icon]) => <Tooltip.Root key={key}>
+            <Tooltip.Trigger asChild><button aria-label={label} aria-current={activePage === key ? 'page' : undefined} onClick={() => go(key)}><Icon size={21} aria-hidden="true"/></button></Tooltip.Trigger>
+            <Tooltip.Portal><Tooltip.Content className="cp-navigation-tooltip" side="right" sideOffset={12} collisionPadding={12}>{label}{key === 'home' && pendingCount > 0 ? ` · ${pendingCount}` : ''}</Tooltip.Content></Tooltip.Portal>
+          </Tooltip.Root>)}</nav>
+          {safeSupportEmail(channels) && <Tooltip.Root>
+            <Tooltip.Trigger asChild><a className="cp-support" aria-label="Поддержка" href={`mailto:${safeSupportEmail(channels)}`}><Mail size={21} aria-hidden="true"/></a></Tooltip.Trigger>
+            <Tooltip.Portal><Tooltip.Content className="cp-navigation-tooltip" side="right" sideOffset={12} collisionPadding={12}>Поддержка</Tooltip.Content></Tooltip.Portal>
+          </Tooltip.Root>}
+        </Tooltip.Provider>
+      </aside>}
       <main className="cp-main" id="candidate-main" aria-busy={loading}>
         {loading ? <div className="cp-loading" role="status"><span className="cp-spinner"/>Открываем кабинет…</div> : <>
           {(error || loadError) && <div className="cp-message cp-error" role="alert"><span>{error || loadError}</span><Button size="sm" variant="ghost" onClick={() => { setError(''); void (candidate ? refresh() : session()); }}>Повторить</Button></div>}
