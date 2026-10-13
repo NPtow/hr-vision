@@ -17,6 +17,7 @@ import { CandidateIntake, IntakeDetail } from '../employer-workspace/CandidateIn
 import { useIntake } from '../employer-workspace/intake';
 import { MeetingScheduler } from '../employer-workspace/MeetingScheduler';
 import { EmployerAgenda } from '../employer-workspace/EmployerAgenda';
+import { CandidateStageWorkspace } from '../employer-workspace/CandidateStageWorkspace';
 import { DsaCandidates } from './DsaCandidates';
 import { MeetingPanel } from './MeetingPanel';
 import { Materials } from './MeetingMaterials';
@@ -62,6 +63,9 @@ export function ConnectedJourney({ initialRole = 'start' }: { initialRole?: 'sta
   const [intakeSelected, setIntakeSelected] = useState('');
   const [vacancyLoading, setVacancyLoading] = useState(false);
   const vacancySwitch = useRef(false);
+  const historyTarget = useRef<URL | null>(null);
+  const historyRestoring = useRef(false);
+  const [historyVersion, setHistoryVersion] = useState(0);
   const [selected, setSelected] = useState<CandidateId>(realEmployer ? new URLSearchParams(location.search).get('applicationId') || '' : 'anna');
   const [resetOpen, setResetOpen] = useState(false);
   const [callActive, setCallActive] = useState(false);
@@ -75,6 +79,7 @@ export function ConnectedJourney({ initialRole = 'start' }: { initialRole?: 'sta
     const url = new URL(location.href);
     url.searchParams.set('screen', 'create-vacancy');
     url.searchParams.delete('applicationId'); url.searchParams.delete('pool');
+    url.searchParams.delete('stageId'); url.searchParams.delete('meetingId');
     history.replaceState(history.state, '', url);
   }
   useEffect(() => {
@@ -126,23 +131,22 @@ export function ConnectedJourney({ initialRole = 'start' }: { initialRole?: 'sta
   const people = state ? personList(journey) : [];
   const panelPeople = realEmployer ? people.filter(p => p.reviewState === panelMode) : people;
   const shownPeople = realEmployer && page === 'shortlist' ? panelPeople : people;
-  const person = state ? shownPeople.find(p => p.id === (manager ? selected : state.actor as CandidateId)) || shownPeople[0] : undefined;
+  const person = state ? (realEmployer && manager && selected ? shownPeople.find(p => p.id === selected)
+    : shownPeople.find(p => p.id === (manager ? selected : state.actor as CandidateId)) || shownPeople[0]) : undefined;
+  const stageWorkspace = realEmployer && manager && ((page === 'shortlist' && panelMode === 'selected') || ['meeting', 'review', 'offer'].includes(page));
   const select = (id: CandidateId, next: Page) => {
     setSelected(id); setPage(next);
     if (realEmployer) {
-      const url = new URL(location.href); url.searchParams.set('applicationId', id); url.searchParams.set('screen', next);
+      const url = new URL(location.href);
+      if (id) url.searchParams.set('applicationId', id); else url.searchParams.delete('applicationId');
+      url.searchParams.set('screen', next); url.searchParams.delete('stageId'); url.searchParams.delete('meetingId');
       history.replaceState(history.state, '', url);
     }
   };
   const meetings = realEmployer ? state?.meetings || [] : people.filter(p => p.meeting && p.meeting.status !== 'cancelled').sort((a,b) => a.meeting!.start.localeCompare(b.meeting!.start));
   const pool = realEmployer ? state?.offerCandidates || [] : people.filter(p => p.decision === 'pool');
-  const pendingFeedback = manager ? (realEmployer && state?.pendingFeedback ? state.pendingFeedback : people.filter(p => p.meeting?.status === 'completed' && !p.feedback).sort((a, b) => (a.meeting!.endedAt || a.meeting!.start).localeCompare(b.meeting!.endedAt || b.meeting!.start))) : [];
-  const feedbackPerson = !callActive && page !== 'create-vacancy' && (!realEmployer || pendingFeedback[0]?.vacancyId === state?.vacancy.id) ? pendingFeedback[0] : undefined;
-  useEffect(() => {
-    const next = pendingFeedback[0];
-    if (!realEmployer || !manager || callActive || picker || busy || page === 'create-vacancy' || !next?.vacancyId || next.vacancyId === state?.vacancy.id) return;
-    void journey.openVacancy(next.vacancyId).then(opened => { if (opened) { setSelected(next.id); setPage('review'); } });
-  }, [realEmployer, manager, callActive, picker, busy, page, state?.vacancy.id, pendingFeedback[0]?.id]);
+  const pendingFeedback = manager && !realEmployer ? people.filter(p => p.meeting?.status === 'completed' && !p.feedback).sort((a, b) => (a.meeting!.endedAt || a.meeting!.start).localeCompare(b.meeting!.endedAt || b.meeting!.start)) : [];
+  const feedbackPerson = !callActive && page !== 'create-vacancy' ? pendingFeedback[0] : undefined;
   const inEmployer = !!manager && (realEmployer || !picker);
   const panel: Page = scope === 'dsa' ? 'dsa' : 'shortlist';
   const vacancyOptions = realEmployer ? (state?.vacancies || []).flatMap(v => v.id ? [{ id: v.id, role: v.role }] : []) : [];
@@ -155,20 +159,29 @@ export function ConnectedJourney({ initialRole = 'start' }: { initialRole?: 'sta
       setPanelMode('proposed'); setPage('shortlist');
       const url = new URL(location.href);
       url.searchParams.set('screen', 'shortlist'); url.searchParams.set('pool', 'proposed');
-      url.searchParams.delete('applicationId');
+      url.searchParams.delete('applicationId'); url.searchParams.delete('stageId'); url.searchParams.delete('meetingId');
       history.replaceState(history.state, '', url);
     } finally { vacancySwitch.current = false; setVacancyLoading(false); }
   }
   async function openTask(vacancy: Vacancy) {
     if (!vacancy.id || !await journey.openVacancy(vacancy.id)) return;
-    const mode = vacancy.selectedCount ? 'selected' : 'proposed';
+    const mode = 'selected';
     setPanelMode(mode); setIntakeSelected(''); select('', 'shortlist');
     const url = new URL(location.href); url.searchParams.set('pool', mode);
     history.replaceState(history.state, '', url);
   }
   async function openPerson(person: Person, next: Page) {
     if (realEmployer && person.vacancyId && person.vacancyId !== state?.vacancy.id && !await journey.openVacancy(person.vacancyId)) return;
+    if (realEmployer) setPanelMode('selected');
     select(person.id, next);
+    if (realEmployer) {
+      const url = new URL(location.href); url.searchParams.set('pool', 'selected');
+      if (next === 'meeting' && person.meeting) {
+        url.searchParams.set('meetingId', person.meeting.id); url.searchParams.set('stageId', `meeting:${person.meeting.id}`);
+      }
+      if (next === 'offer' && person.offer?.id) url.searchParams.set('stageId', `offer:${person.offer.id}`);
+      history.replaceState(history.state, '', url);
+    }
   }
   const navigate = async (next: Page) => {
     if (busy) return;
@@ -190,6 +203,38 @@ export function ConnectedJourney({ initialRole = 'start' }: { initialRole?: 'sta
     }
     setIntakeSelected(''); setPage(next);
   };
+  useEffect(() => {
+    if (!realEmployer) return;
+    const restore = () => {
+      historyTarget.current = new URL(location.href);
+      setHistoryVersion(version => version + 1);
+    };
+    window.addEventListener('popstate', restore);
+    return () => window.removeEventListener('popstate', restore);
+  }, [realEmployer]);
+  useEffect(() => {
+    const target = historyTarget.current;
+    if (!target || busy || callActive || historyRestoring.current) return;
+    historyRestoring.current = true; setVacancyLoading(true);
+    void (async () => {
+      try {
+        const query = target.searchParams;
+        const vacancyId = query.get('vacancyId');
+        // A historic URL must load its own application scope before opening a card.
+        // Do not overwrite the URL: another Back/Forward may arrive during the read.
+        const opened = !vacancyId || vacancyId === state?.vacancy.id || await journey.openVacancy(vacancyId, { updateLocation: false });
+        if (historyTarget.current !== target) return;
+        const screen = query.get('screen');
+        setPage(opened ? screen === 'panel' ? 'shortlist' : ['create-vacancy', 'shortlist', 'meetings', 'meeting', 'review', 'pool', 'offer', 'chat', 'book'].includes(screen || '') ? screen as Page : 'tasks' : 'shortlist');
+        setPanelMode(!opened || query.get('pool') === 'selected' ? 'selected' : 'proposed');
+        setSelected(opened ? query.get('applicationId') || '' : '__unavailable_history__');
+        setIntakeSelected(''); historyTarget.current = null; setVacancyLoading(false);
+      } finally {
+        historyRestoring.current = false;
+        if (historyTarget.current && historyTarget.current !== target) setHistoryVersion(version => version + 1);
+      }
+    })();
+  }, [historyVersion, busy, callActive]);
   if (realEmployer && journey.initializing) return <div className="ew-auth"><main className="ew-auth-main"><p className="ew-auth-card" role="status">Открываем кабинет…</p></main></div>;
   if (realEmployer && !state) return <EmployerAuth initialMode={siteEntry?.mode} busy={busy} error={error} onModeChange={() => setError('')} onSubmit={async (mode, values) => {
     if (!await journey.authenticate(mode, values)) return false;
@@ -197,9 +242,9 @@ export function ConnectedJourney({ initialRole = 'start' }: { initialRole?: 'sta
     if (page === 'create-vacancy' || siteEntry?.createVacancy) openVacancyEditor(); else setPage('tasks');
     return true;
   }}/>;
-  return <InterviewMediaProvider><div className={`agency-product agency-product-theme cj-app ${inEmployer ? 'ew-root' : ''}`}><EmployerShell enabled={inEmployer} page={page} scope={scope} vacancy={state?.vacancy.role || (realEmployer ? 'Кандидаты' : 'Менеджер по работе с клиентами')} vacancyId={state?.vacancy.id} vacancies={vacancyOptions} onVacancyChange={realEmployer ? id => { void switchVacancy(id); } : undefined} navigationBusy={busy || vacancyLoading || callActive} name={state?.actorName || ''} hasOffers={pool.length > 0} candidateContext={realEmployer ? panelMode === 'selected' ? 'vacancy' : 'queue' : undefined} onNavigate={navigate} onAccount={() => setPicker(true)} accountBusy={busy || callActive} onLogout={realEmployer ? async () => { if (await journey.logout()) { finishSiteEntry(); setSiteEntry({ mode: 'login', createVacancy: false, description: '' }); setPage('tasks'); setSelected(''); setIntakeSelected(''); setToast(''); } } : undefined}>
+  return <InterviewMediaProvider><div className={`agency-product agency-product-theme cj-app ${inEmployer ? 'ew-root' : ''}`}><EmployerShell enabled={inEmployer} page={page} scope={scope} vacancy={state?.vacancy.role || (realEmployer ? 'Кандидаты' : 'Менеджер по работе с клиентами')} vacancyId={state?.vacancy.id} vacancies={vacancyOptions} onVacancyChange={realEmployer ? id => { void switchVacancy(id); } : undefined} navigationBusy={busy || vacancyLoading || callActive} name={state?.actorName || ''} hasOffers={pool.length > 0} candidateContext={realEmployer ? stageWorkspace ? 'vacancy' : 'queue' : undefined} candidateNavigation={stageWorkspace && people.filter(p => p.reviewState === 'selected').length > 0 ? <nav className="esc-candidate-nav" aria-label="Кандидаты в работе">{people.filter(p => p.reviewState === 'selected').map(p => <button type="button" className="esc-candidate-switch" key={p.id} aria-label={p.name} title={p.name} aria-pressed={person?.id === p.id} disabled={busy || callActive} onClick={() => { setPanelMode('selected'); select(p.id, 'shortlist'); }}><Avatar name={p.name} photo={p.photo}/></button>)}</nav> : undefined} onNavigate={navigate} onAccount={() => setPicker(true)} accountBusy={busy || callActive} onLogout={realEmployer ? async () => { if (await journey.logout()) { finishSiteEntry(); setSiteEntry({ mode: 'login', createVacancy: false, description: '' }); setPage('tasks'); setSelected(''); setIntakeSelected(''); setToast(''); } } : undefined}>
     <header className="cj-header"><button className="cj-brand" onClick={() => setPicker(true)}>HR Vision<span>.</span></button>{state && !picker && <button className="cj-account" onClick={() => setPicker(true)}><span className="cj-avatar">{initials(state.actorName)}</span>{state.actorName}<ChevronRight size={14}/></button>}</header>
-    {error && page !== 'create-vacancy' && <div className="cj-error" role="alert"><span>{error}</span><Button variant="ghost" size="icon-sm" aria-label="Закрыть ошибку" onClick={() => setError('')}><X size={16}/></Button></div>}
+    {error && page !== 'create-vacancy' && !stageWorkspace && <div className="cj-error" role="alert"><span>{error}</span><Button variant="ghost" size="icon-sm" aria-label="Закрыть ошибку" onClick={() => setError('')}><X size={16}/></Button></div>}
     {(picker || !state) ? <main className="cj-start">
       <h1>Выберите аккаунт</h1>
       {access.status === 'checking' && <p role="status">Открываем аккаунты…</p>}
@@ -220,14 +265,15 @@ export function ConnectedJourney({ initialRole = 'start' }: { initialRole?: 'sta
         <div className="cj-section-heading ew-tasks-heading"><h1>Задачи найма</h1>{realEmployer && <Button disabled={busy} onClick={openVacancyEditor}><Plus size={16}/>Создать вакансию</Button>}</div>
         {realEmployer ? (state.vacancies?.length ? state.vacancies.map(vacancy => <article className="cj-task" key={vacancy.id}><div><small>{vacancy.company}</small><h2>{vacancy.problem || vacancy.role}</h2>{vacancy.problem && <p>{vacancy.role}</p>}</div><Button disabled={busy} onClick={() => { void openTask(vacancy); }}>{vacancy.selectedCount ? 'Посмотреть выбранных кандидатов' : 'Посмотреть кандидатов'}<ArrowRight size={16}/></Button></article>) : <section className="cj-empty"><h2>Пока нет вакансий</h2><p>Создайте первую вакансию, чтобы начать подбор.</p></section>) : <><article className="cj-task"><div><small>ДСА Инжиниринг</small><h2>Менеджер по работе с клиентами</h2></div><Button disabled={busy} onClick={() => navigate('dsa')}>Открыть кандидатов ДСА<ArrowRight size={16}/></Button></article><article className="cj-task"><div><small>Сфера</small><h2>Вернуть клиентов к повторным покупкам</h2><p>Менеджер по работе с клиентами</p></div><Button disabled={busy} onClick={() => navigate('shortlist')}>Открыть подборку<ArrowRight size={16}/></Button></article></>}
       </main>}
-      {manager && page === 'shortlist' && (realEmployer && !state.vacancy.id ? <main className="cj-main"><section className="cj-empty"><h2>Пока нет вакансий</h2><p>Создайте вакансию, чтобы посмотреть кандидатов.</p><Button onClick={openVacancyEditor}>Создать вакансию</Button></section></main> : vacancyLoading || (intake.loading && !intake.people.length) ? <main className="cj-main ew-vacancy-loading" role="status" aria-live="polite">Загружаем кандидатов…</main> : <Shortlist key={state.vacancy.id || scope} journey={journey} person={person} people={panelPeople} select={select} go={setPage} intake={intake} intakeSelected={intakeSelected} onIntakeSelect={setIntakeSelected}/>)}
+      {manager && page === 'shortlist' && !stageWorkspace && (realEmployer && !state.vacancy.id ? <main className="cj-main"><section className="cj-empty"><h2>Пока нет вакансий</h2><p>Создайте вакансию, чтобы посмотреть кандидатов.</p><Button onClick={openVacancyEditor}>Создать вакансию</Button></section></main> : vacancyLoading || (intake.loading && !intake.people.length) ? <main className="cj-main ew-vacancy-loading" role="status" aria-live="polite">Загружаем кандидатов…</main> : <Shortlist key={state.vacancy.id || scope} journey={journey} person={person} people={panelPeople} select={select} go={setPage} intake={intake} intakeSelected={intakeSelected} onIntakeSelect={setIntakeSelected}/>)}
+      {stageWorkspace && (vacancyLoading ? <main className="cj-main" role="status">Загружаем кандидата…</main> : person ? <CandidateStageWorkspace key={`${state.generation}:${person.id}`} journey={journey} person={person} source={sourceFor(person)} entry={page === 'meeting' || page === 'review' || page === 'offer' ? page : undefined} callActive={callActive} onCallChange={setCallActive} onChat={() => select(person.id, 'chat')}/> : <main className="cj-main"><section className="esc-card esc-unavailable"><h2>{selected ? 'Кандидат недоступен' : 'Выбранных кандидатов пока нет'}</h2><p>{selected ? error || 'Этого кандидата нет в выбранной вакансии.' : 'После приглашения на встречу кандидат появится здесь со своей историей этапов.'}</p><Button onClick={() => { void navigate('shortlist'); }}>К подборке кандидатов</Button></section></main>)}
       {manager && page === 'intake' && <CandidateIntake token={journey.token} scope={scope} vacancy={state.vacancy.role} onBack={() => setPage(scope === 'dsa' ? 'dsa' : 'shortlist')} onSaved={id => { setIntakeSelected(id); if (realEmployer) { setPanelMode('proposed'); void journey.refresh(); } void intake.refresh(); setPage(scope === 'dsa' ? 'dsa' : 'shortlist'); setToast('Кандидаты добавлены'); }}/>}
       {manager && page === 'book' && <MeetingScheduler journey={journey} person={person} onSelect={setSelected} onBack={() => setPage(panel)} onBooked={() => { if (realEmployer) { setPanelMode('selected'); select(person?.id || '', 'shortlist'); const url = new URL(location.href); url.searchParams.set('pool', 'selected'); history.replaceState(history.state, '', url); } else setPage('meeting'); }}/>}
       {manager && page === 'meetings' && <EmployerAgenda people={meetings} busy={busy} fallbackVacancy={realEmployer ? undefined : state.vacancy.role} onOpen={person => { void openPerson(person, 'meeting'); }} onChooseCandidate={() => { void navigate(panel); }}/>}
-      {page === 'meeting' && person?.meeting && <main className="cj-main">{manager && <Button className="cj-interview-back" variant="ghost" onClick={() => setPage('meetings')}><ArrowLeft size={14}/>Все встречи</Button>}<MeetingPanel key={person.meeting.id} journey={journey} person={person} onCallChange={setCallActive} onReschedule={() => setPage(manager ? 'book' : 'schedule')} onComplete={manager ? () => setPage('review') : undefined}/>{!manager && person.meeting.status === 'completed' && <CandidateAfter journey={journey} person={person}/>}</main>}
-      {manager && page === 'review' && person && <Review journey={journey} person={person} go={next => setPage(next === 'shortlist' ? panel : next)}/>}
+      {page === 'meeting' && !stageWorkspace && person?.meeting && <main className="cj-main">{manager && <Button className="cj-interview-back" variant="ghost" onClick={() => setPage('meetings')}><ArrowLeft size={14}/>Все встречи</Button>}<MeetingPanel key={person.meeting.id} journey={journey} person={person} onCallChange={setCallActive} onReschedule={() => setPage(manager ? 'book' : 'schedule')} onComplete={manager ? () => setPage('review') : undefined}/>{!manager && person.meeting.status === 'completed' && <CandidateAfter journey={journey} person={person}/>}</main>}
+      {manager && page === 'review' && !stageWorkspace && person && <Review journey={journey} person={person} go={next => setPage(next === 'shortlist' ? panel : next)}/>}
       {manager && page === 'pool' && <main className="cj-main"><h1>Пул для оффера</h1><p>Предложение отправляется одному человеку. Если он откажется, можно перейти к следующему.</p>{pool.map(p => <button key={p.id} className="cj-list-row" onClick={() => { void openPerson(p,'offer'); }}><span className="cj-avatar">{initials(p.name)}</span><div><strong>{p.name}</strong><small>{status(p)}{p.afterInterest === 'no' ? ' · кандидат не хочет продолжать' : ''}{realEmployer && p.vacancyRole ? ` · ${p.vacancyRole}` : ''}</small></div><ChevronRight size={17}/></button>)}</main>}
-      {page === 'offer' && person && <OfferPanel key={person.id} person={person} journey={journey} onChat={() => setPage('chat')}/>}
+      {page === 'offer' && !stageWorkspace && person && <OfferPanel key={person.id} person={person} journey={journey} onChat={() => setPage('chat')}/>}
       {page === 'chat' && person && <Chat key={person.id} person={person} journey={journey}/>}
       {!manager && page === 'vacancies' && person && <Vacancies journey={journey} person={person} go={setPage}/>}
       {!manager && page === 'schedule' && person && <Schedule journey={journey} person={person}/>}

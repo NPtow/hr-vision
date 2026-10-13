@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RecordingChapter } from '../interview-review/InterviewReview';
+import type { CandidateStage } from '../employer-workspace/candidate-stage-types';
 export type Scope = 'sfera' | 'dsa';
 export type CandidateId = string;
 export type Actor = CandidateId | 'manager';
@@ -10,12 +11,12 @@ export type SourceProfile = {
   shortChapters: RecordingChapter[]; fullChapters: RecordingChapter[]; shortSummary: string;
   profile: { label: string; value: string }[]; cv: string; conclusion: string[]; questions: string[];
 };
-export type Offer = { status: 'draft' | 'sent' | 'accepted' | 'declined'; role: string; compensation: string; format: string; expectations: string; startDate: string; version: number };
+export type Offer = { id?: string; createdAt?: string; status: 'draft' | 'sent' | 'accepted' | 'declined' | 'withdrawn' | 'superseded'; role: string; compensation: string; format: string; expectations: string; startDate: string; version: number };
 export type FeedbackQuestion = { id: string; question: string; seconds: number | null; source: 'live' | 'transcript' | 'manual' };
 export type FeedbackAnswer = { rating: 'clear' | 'unclear' | 'unanswered' | 'not_asked'; comment: string };
 export type Questionnaire = { id: string; meetingId: string; questions: FeedbackQuestion[] };
 export type Meeting = { id: string; revision?: number; start: string; end?: string; startedAt?: string; endedAt?: string; status: 'pending' | 'confirmed' | 'live' | 'cancelled' | 'completed'; testSkip: boolean; joined: Actor[]; questionnaire?: Questionnaire | null; feedbackDraft?: Record<string, FeedbackAnswer> };
-export type Person = { id: CandidateId; candidateId?: string; applicationId?: string; vacancyId?: string; vacancyRole?: string; reviewState?: string; name: string; role?: string; summary?: string; photo?: string | null; sourceProfile?: SourceProfile; interest: 'pending' | 'accepted' | 'declined'; auto: boolean; slots?: string[]; busy?: string[]; freeSlots: string[]; meeting: Meeting | null; feedback?: { example?: string; doubts?: string; check?: string; at: string; questions?: FeedbackQuestion[]; answers?: Record<string, FeedbackAnswer> } | null; afterInterest: 'pending' | 'yes' | 'no'; decision: 'review' | 'pool' | 'declined'; offer: Offer | null; messages: { id: string; actor: string; text: string; at: string; system: boolean }[] };
+export type Person = { id: CandidateId; candidateId?: string; applicationId?: string; vacancyId?: string; vacancyRole?: string; reviewState?: string; name: string; role?: string; summary?: string; photo?: string | null; sourceProfile?: SourceProfile; interest: 'pending' | 'accepted' | 'declined'; auto: boolean; slots?: string[]; busy?: string[]; freeSlots: string[]; meeting: Meeting | null; meetings?: Meeting[]; offers?: Offer[]; stages?: CandidateStage[]; workflowRevision?: number; feedback?: { example?: string; doubts?: string; check?: string; at: string; questions?: FeedbackQuestion[]; answers?: Record<string, FeedbackAnswer> } | null; afterInterest: 'pending' | 'yes' | 'no'; decision: 'review' | 'pool' | 'declined'; offer: Offer | null; messages: { id: string; actor: string; text: string; at: string; system: boolean }[] };
 export type Vacancy = { id?: string; company: string; role: string; problem: string; salary: string; format: string; expectations: string; proposedCount?: number; selectedCount?: number };
 export type EmployerVacancyDetails = {
   address: string;
@@ -158,6 +159,7 @@ export function useJourney(scope: Scope = 'sfera', options: { employer?: boolean
   busyRef.current = busy;
   const sequence = useRef(0);
   const vacancyCommand = useRef<{ payload: string; requestId: string } | null>(null);
+  const candidateCommand = useRef<{ intent: string; body: Record<string, unknown>; requestId: string } | null>(null);
   const acceptState = useCallback((data: SharedState, auth: string) => {
     if (employer) {
       vacancyId.current = data.vacancy.id || '';
@@ -223,7 +225,7 @@ export function useJourney(scope: Scope = 'sfera', options: { employer?: boolean
   }
   const clearLocation = () => {
     const url = new URL(location.href);
-    for (const key of ['vacancyId', 'applicationId', 'screen', 'pool', 'task']) url.searchParams.delete(key);
+    for (const key of ['vacancyId', 'applicationId', 'screen', 'pool', 'task', 'stageId', 'meetingId']) url.searchParams.delete(key);
     history.replaceState(history.state, '', url);
   };
   async function authenticate(mode: 'register' | 'login', credentials: EmployerCredentials) {
@@ -232,7 +234,7 @@ export function useJourney(scope: Scope = 'sfera', options: { employer?: boolean
     sequence.current++; setBusy(true); setError('');
     try {
       const next = await request<EmployerSession>('employer/' + mode, undefined, credentials);
-      sequence.current++; clearLocation(); vacancyCommand.current = null;
+      sequence.current++; clearLocation(); vacancyCommand.current = null; candidateCommand.current = null;
       if (token) employerContexts.delete(token);
       sessionStorage.setItem(employerSessionKey, next.token);
       acceptState(next.state, next.token);
@@ -246,7 +248,7 @@ export function useJourney(scope: Scope = 'sfera', options: { employer?: boolean
     sequence.current++; setBusy(true); setError('');
     try {
       await request('employer/logout', token, {});
-      sequence.current++; clearLocation(); vacancyCommand.current = null;
+      sequence.current++; clearLocation(); vacancyCommand.current = null; candidateCommand.current = null;
       employerContexts.delete(token); vacancyId.current = '';
       sessionStorage.removeItem(employerSessionKey); sessionStorage.removeItem(employerVacancyKey);
       setSession({ key: employerSessionKey, token: '' }); setState(null); return true;
@@ -275,11 +277,22 @@ export function useJourney(scope: Scope = 'sfera', options: { employer?: boolean
     sequence.current++; setBusy(true); setError('');
     try {
       const person = candidate ? state.candidates[candidate] : undefined;
-      const data = await request<SharedState>(employer ? 'employer/action' : 'action', token, { action, candidate, generation: state.generation, ...(employer ? { vacancyId: state.vacancy.id, applicationId: person?.applicationId, ...(action.startsWith('offer.') && person?.offer ? { version: person.offer.version } : {}), ...(action.startsWith('meeting.') && person?.meeting ? { meetingId: person.meeting.id, revision: person.meeting.revision } : {}) } : {}), ...values });
+      const payload = { action, candidate, generation: state.generation, ...(employer ? { vacancyId: state.vacancy.id, applicationId: person?.applicationId, ...(action.startsWith('offer.') && person?.offer ? { version: person.offer.version } : {}), ...(action.startsWith('meeting.') && person?.meeting ? { meetingId: person.meeting.id, revision: person.meeting.revision } : {}) } : {}), ...values };
+      if (employer) {
+        // A retry after a lost response must not append the same stage twice.
+        // Retain the original version as polling may already see the committed write.
+        const intent = JSON.stringify({ action, candidate, generation: state.generation, vacancyId: state.vacancy.id, values });
+        if (candidateCommand.current?.intent !== intent) candidateCommand.current = { intent, body: payload, requestId: typeof values.requestId === 'string' ? values.requestId : crypto.randomUUID() };
+      }
+      const data = await request<SharedState>(employer ? 'employer/action' : 'action', token, employer ? { ...candidateCommand.current!.body, requestId: candidateCommand.current!.requestId } : payload);
+      candidateCommand.current = null;
       sequence.current++; acceptState(data, token); return true;
-    } catch (e) { setError((e as Error).message); return false; } finally { operation.current = false; setBusy(false); }
+    } catch (e) {
+      if (e instanceof RequestError && e.status < 500) candidateCommand.current = null;
+      setError((e as Error).message); return false;
+    } finally { operation.current = false; setBusy(false); }
   }
-  async function openVacancy(id: string) {
+  async function openVacancy(id: string, { updateLocation = true }: { updateLocation?: boolean } = {}) {
     if (!employer || !token || operation.current) return false;
     operation.current = true;
     const seq = ++sequence.current; setBusy(true); setError('');
@@ -287,8 +300,10 @@ export function useJourney(scope: Scope = 'sfera', options: { employer?: boolean
       const data = await request<SharedState>('employer/state?vacancyId=' + encodeURIComponent(id), token);
       if (seq !== sequence.current) return false;
       acceptState(data, token);
-      const url = new URL(location.href); url.searchParams.set('vacancyId', id);
-      history.replaceState(history.state, '', url);
+      if (updateLocation) {
+        const url = new URL(location.href); url.searchParams.set('vacancyId', id);
+        history.replaceState(history.state, '', url);
+      }
       return true;
     } catch (e) { if (seq === sequence.current) setError((e as Error).message); return false; }
     finally { operation.current = false; setBusy(false); }
@@ -302,5 +317,5 @@ export const initials = (name: string) => name.split(' ').slice(0, 2).map(part =
 export const actorName = (state: SharedState, actor: string) => (state.mode === 'employer' && actor === 'manager' ? state.actorName : undefined)
   || state.candidates[actor]?.name || Object.values(state.candidates).find(person => person?.candidateId === actor)?.name || names[actor] || state.actorName;
 export const meetingLabels = { pending: 'Ждём подтверждения', confirmed: 'Встреча подтверждена', live: 'Идёт встреча', cancelled: 'Нужно новое время', completed: 'Встреча завершена' };
-export const offerLabels = { draft: 'Черновик оффера', sent: 'Оффер отправлен', accepted: 'Оффер принят', declined: 'Отказ от оффера' };
+export const offerLabels = { draft: 'Черновик оффера', sent: 'Оффер отправлен', accepted: 'Оффер принят', declined: 'Отказ от оффера', withdrawn: 'Оффер отозван', superseded: 'Предыдущая версия оффера' };
 export const candidateStatus = (p: Person) => p.offer ? offerLabels[p.offer.status] : p.decision === 'pool' ? 'В пуле для оффера' : p.decision === 'declined' ? 'Не продолжаем' : p.meeting ? meetingLabels[p.meeting.status] : 'Готов знакомиться';

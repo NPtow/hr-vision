@@ -299,6 +299,9 @@ class EmployerRoutes:
             self._reject(db, principal, app, body)
         elif action in ('meeting.propose', 'meeting.reschedule', 'meeting.cancel'):
             store.ensure_open(db, wid, app['vacancyId'])
+            if 'expectedRevision' in body:
+                workflow.check_revision(db, aid, body['expectedRevision'])
+            workflow.register_stages(db, aid, vacancy_id=app['vacancyId'])
             command = {**body, 'applicationId': aid}
             if body.get('previousMeetingId') is not None:
                 require(body.get('meetingId') in (None, body['previousMeetingId']),
@@ -317,6 +320,8 @@ class EmployerRoutes:
                     self._meeting(db, app, command, current=True)
                 meeting = self.portal.propose_meeting(db, command, manager_id=manager_id)
                 store.mark_selected(db, wid, aid, meeting['id'])
+            if self.portal.meeting(db, aid) != current:
+                workflow.meeting_changed(db, aid)
             store.bump_revision(db, wid, app['vacancyId'])
         elif action in ('meeting.joined', 'meeting.transcript'):
             meeting = self._meeting(db, app, body, current=True)

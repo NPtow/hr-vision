@@ -87,11 +87,8 @@ def _free_slots(db, candidate_id, workspace_id, profile):
     return sorted(slots)
 
 
-def person(db, principal, portal, record, vacancy):
-    aid, cid = record['applicationId'], record['candidateId']
-    profile = record['profile']
-    state = workflow.load(db, aid, actor='manager', vacancy_id=vacancy['id'])
-    meeting = portal.meeting(db, aid)
+def _safe_meeting(db, principal, portal, aid, meeting_id, saved):
+    meeting = portal.meeting(db, aid, meeting_id)
     if meeting:
         meeting.pop('room', None)
         # A declined proposal is an ended appointment in the existing component.
@@ -104,10 +101,23 @@ def person(db, principal, portal, record, vacancy):
                                 (meeting['id'], aid, principal['workspaceId'])).fetchone()
             if joined and joined[0]:
                 meeting.update(joined=['manager'], startedAt=joined[0])
-        saved = state.get('meeting') or {}
         for key in ('questionnaire', 'feedbackDraft'):
             if key in saved:
                 meeting[key] = saved[key]
+    return meeting
+
+
+def person(db, principal, portal, record, vacancy):
+    aid, cid = record['applicationId'], record['candidateId']
+    profile = record['profile']
+    state = workflow.load(db, aid, actor='manager', vacancy_id=vacancy['id'])
+    stages = state['stages']
+    for stage in stages:
+        if stage['kind'] == 'meeting':
+            stage['meeting'] = _safe_meeting(db, principal, portal, aid, stage['meetingId'], stage['meeting'])
+    meetings = [stage['meeting'] for stage in stages if stage['kind'] == 'meeting']
+    latest = state.get('meeting')
+    meeting = next((item for item in meetings if latest and item['id'] == latest['id']), None)
     messages = [{**message, 'actor': 'manager' if message['actor'] == 'manager' else aid}
                 for message in state['messages']]
     return {
@@ -122,6 +132,7 @@ def person(db, principal, portal, record, vacancy):
         'slots': [], 'busy': [],
         'freeSlots': _free_slots(db, cid, principal['workspaceId'], profile),
         'meeting': meeting, 'feedback': state['feedback'],
+        'meetings': meetings, 'stages': stages, 'offers': state['offers'],
         'afterInterest': state['afterInterest'], 'decision': state['decision'],
         'offer': state['offer'], 'messages': messages, 'workflowRevision': state['revision'],
     }

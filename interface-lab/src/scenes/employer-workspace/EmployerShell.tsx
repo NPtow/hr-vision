@@ -10,11 +10,12 @@ import './shell-navigation.css';
 export type EmployerPage = 'dsa' | 'tasks' | 'create-vacancy' | 'shortlist' | 'intake' | 'book' | 'meetings' | 'meeting' | 'review' | 'pool' | 'offer' | 'chat' | 'vacancies' | 'schedule';
 export type Scope = 'sfera' | 'dsa';
 export type EmployerVacancyOption = { id: string; role: string };
-export function EmployerShell({ enabled = true, page, scope, vacancy, vacancyId, vacancies = [], onVacancyChange, navigationBusy, name, hasOffers, candidateContext, onNavigate, onAccount, onLogout, accountBusy, children }: {
+export function EmployerShell({ enabled = true, page, scope, vacancy, vacancyId, vacancies = [], onVacancyChange, navigationBusy, name, hasOffers, candidateContext, candidateNavigation, onNavigate, onAccount, onLogout, accountBusy, children }: {
   enabled?: boolean; page: EmployerPage; scope: Scope; vacancy: string; name: string; hasOffers: boolean;
   vacancyId?: string; vacancies?: EmployerVacancyOption[];
   onVacancyChange?: (id: string) => void; navigationBusy?: boolean;
   candidateContext?: 'vacancy' | 'queue';
+  candidateNavigation?: ReactNode;
   onLogout?: () => void; accountBusy?: boolean;
   onNavigate: (page: EmployerPage) => void; onAccount: () => void; children: ReactNode;
 }) {
@@ -23,10 +24,10 @@ export function EmployerShell({ enabled = true, page, scope, vacancy, vacancyId,
   useEffect(() => { if (enabled) window.scrollTo({ top: 0, left: 0, behavior: 'instant' }); setMenuOpen(false); }, [enabled, page, scope, candidateContext]);
   if (!enabled) return <>{children}</>;
   const panel: EmployerPage = scope === 'dsa' ? 'dsa' : 'shortlist';
-  const active = page === 'create-vacancy' || (page === panel && candidateContext === 'vacancy') ? 'tasks' : page === 'intake' ? panel : ['meeting', 'book', 'review'].includes(page) ? 'meetings' : page === 'offer' ? 'pool' : page;
+  const active = page === 'create-vacancy' || candidateContext === 'vacancy' ? 'tasks' : page === 'intake' ? panel : ['meeting', 'book', 'review'].includes(page) ? 'meetings' : page === 'offer' ? 'pool' : page;
   const navigate = (next: EmployerPage) => { setMenuOpen(false); onNavigate(next); };
   const canChooseVacancy = page === panel && candidateContext !== 'vacancy' && !!onVacancyChange && vacancies.length > 0;
-  const canAddCandidates = page !== 'intake' && (!onVacancyChange || !!vacancyId);
+  const canAddCandidates = page !== 'intake' && candidateContext !== 'vacancy' && (!onVacancyChange || !!vacancyId);
   const sections = [
     { page: 'tasks' as const, label: 'Задачи', Icon: ClipboardList },
     { page: panel, label: 'Кандидаты', Icon: Users },
@@ -61,7 +62,7 @@ export function EmployerShell({ enabled = true, page, scope, vacancy, vacancyId,
                 </DropdownMenu.RadioGroup>
               </DropdownMenu.Content></DropdownMenu.Portal>
             </DropdownMenu.Root> : vacancy}</h1>
-            {canAddCandidates && <Button variant="secondary" className="ew-add-candidates" aria-label="Добавить кандидатов" disabled={navigationBusy} onClick={() => navigate('intake')}><Plus size={16}/><span className="ew-add-candidates-label">Добавить кандидатов</span></Button>}
+            {candidateNavigation || (canAddCandidates && <Button variant="secondary" className="ew-add-candidates" aria-label="Добавить кандидатов" disabled={navigationBusy} onClick={() => navigate('intake')}><Plus size={16}/><span className="ew-add-candidates-label">Добавить кандидатов</span></Button>)}
           </div>
         </section>}
         <div className="ew-content">{children}</div>

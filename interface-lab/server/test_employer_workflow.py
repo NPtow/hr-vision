@@ -204,9 +204,9 @@ class WorkflowTest(unittest.TestCase):
         self.sent()
         self.assert_problem(409, lambda: self.candidate('after', {'meetingId': 'm1', 'value': 'no'}))
 
-    def test_pool_requires_feedback_and_decline_is_terminal(self):
-        self.assert_problem(409, lambda: self.manager('decision', {'value': 'pool'}))
-        self.feedback()
+    def test_pool_does_not_require_feedback_and_decline_is_terminal(self):
+        self.assertEqual(self.manager('decision', {'value': 'pool'})['state']['decision'], 'pool')
+        self.assertIsNone(self.state()['feedback'])
         result = self.manager('decision', {'value': 'declined'})
         self.assertEqual(result['events'][0]['type'], 'employer.declined')
         self.assertTrue(self.manager('decision', {'value': 'declined'})['replayed'])
