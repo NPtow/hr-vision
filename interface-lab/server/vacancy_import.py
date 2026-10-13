@@ -21,7 +21,7 @@ import urllib.request
 from domain import Problem, iso, now, require, text
 
 
-PACK_VERSION = '2026-10-13.2'
+PACK_VERSION = '2026-10-13.3'
 TEMPLATE = 'vacancy.extract-facts'
 ROLE = 'extractor'
 MAX_TEXT = 24000
@@ -43,7 +43,7 @@ ENUM_FIELDS = {'format': ['', 'В офисе', 'Гибрид', 'Удалённо
                **{'details.' + key: values for key, values in ENUM_DETAILS.items()}}
 FACT_FIELDS = list(TEXT_FIELDS) + list(ENUM_FIELDS) + ['details.' + key for key in NUM_DETAILS]
 LIST_FIELDS = {'description', 'details.responsibilities', 'details.requirements',
-               'details.niceToHave', 'details.benefits'}
+               'details.niceToHave', 'details.benefits', 'details.schedule'}
 
 SCHEMA = {'type': 'object', 'additionalProperties': False,
           'properties': {'supported': {'type': 'boolean'}, 'facts': {'type': 'array', 'items': {
@@ -63,7 +63,8 @@ an unrelated document, a resume/CV, or several different vacancies with no singl
 Never invent, infer missing requirements, recommend, write a job advertisement, or fill typical defaults.
 Every nonempty fact requires chunk_id and an EXACT supporting quote (at most 1200 characters) from that chunk.
 Text values MUST be verbatim contiguous excerpts of their quote. Keep source language. No summaries.
-You may emit several facts for responsibilities, requirements, niceToHave, benefits or description.
+You may emit several facts for responsibilities, requirements, niceToHave, benefits, schedule or description.
+For schedule, working days and working hours may be separate facts; each must carry its own exact quote.
 Prefer concise individual bullets; do not repeat the entire source in description.
 Other fields occur at most once. Missing fields are omitted entirely.
 Normalizations allowed ONLY for explicit source facts: monetary amounts as integer strings in full units;
@@ -242,7 +243,7 @@ def chunks(source_text):
             current += piece + '\n'
     if current.strip():
         parts.append(current.strip())
-    chosen = [{'chunk_id': f'c{i + 1}-{digest(part)[:8]}', 'text': part} for i, part in enumerate(parts) if part and part != '[[REDACTED_INJECTION]]']
+    chosen = [{'chunk_id': f'c{i + 1}', 'text': part} for i, part in enumerate(parts) if part and part != '[[REDACTED_INJECTION]]']
     require(chosen and sum(len(c['text']) for c in chosen) >= 40, 'В источнике нет описания вакансии. Добавьте задачи и требования.', 422)
     return chosen, redacted
 
@@ -357,8 +358,9 @@ def validate_response(raw, selected):
         elif _normal(value) not in _normal(quote) or len(value) > TEXT_FIELDS[key]:
             raise ValueError('unsupported_text')
         if key in LIST_FIELDS and key in values:
-            if value not in values[key].split('\n'):
-                values[key] += '\n' + value
+            separator = '; ' if key == 'details.schedule' else '\n'
+            if value not in values[key].split(separator):
+                values[key] += separator + value
         else:
             values[key] = value
         evidence.append(fact)
@@ -401,6 +403,8 @@ def _provider(config, payload, iid):
 
 
 def extract(selected, config, iid):
+    schema = json.loads(_dump(SCHEMA))
+    schema['properties']['facts']['items']['properties']['chunk_id']['enum'] = [chunk['chunk_id'] for chunk in selected]
     fence = secrets.token_hex(20)
     content = f'UNTRUSTED_SOURCE_{fence}\n{_dump(selected)}\nEND_UNTRUSTED_SOURCE_{fence}'
     messages = [{'role': 'system', 'content': SYSTEM}, {'role': 'user', 'content': content}]
@@ -409,7 +413,7 @@ def extract(selected, config, iid):
     for attempt in range(2):
         payload = {'model': config.model, 'messages': messages, 'stream': False,
                    'max_completion_tokens': MAX_OUTPUT,
-                   'response_format': {'type': 'json_schema', 'json_schema': {'name': 'vacancy_facts', 'strict': True, 'schema': SCHEMA}}}
+                   'response_format': {'type': 'json_schema', 'json_schema': {'name': 'vacancy_facts', 'strict': True, 'schema': schema}}}
         response = _provider(config, payload, iid)
         try:
             for key in usage:
@@ -419,13 +423,20 @@ def extract(selected, config, iid):
                 raise ValueError('incomplete_or_refused')
             fields, evidence = validate_response(choice['message']['content'], selected)
             return fields, evidence, {'template': TEMPLATE, 'version': PACK_VERSION, 'modelAlias': ROLE,
-                'model': config.model, 'promptHash': digest(SYSTEM + _dump(selected)), 'schemaHash': digest(_dump(SCHEMA)),
+                'model': config.model, 'promptHash': digest(SYSTEM + _dump(selected)), 'schemaHash': digest(_dump(schema)),
                 'usage': usage, 'latencyMs': round((time.monotonic() - started) * 1000), 'retries': attempt}
-        except (ValueError, KeyError, TypeError, IndexError):
+        except (ValueError, KeyError, TypeError, IndexError) as error:
             if attempt:
                 raise Problem('Не удалось надёжно разобрать вакансию. Попробуйте другой источник или заполните поля вручную.', 422)
             # Constant diagnostic only, never echo untrusted output into the retry prompt.
-            messages.append({'role': 'user', 'content': 'Validation failed: schema or evidence mismatch. Return only the schema; copy exact excerpts and quotes from the supplied chunks. Omit any unsupported fields.'})
+            diagnostic = {
+                'unsupported_evidence': 'A quote was not found inside its cited chunk. Copy the exact quote and its correct chunk_id.',
+                'duplicate_field': 'A scalar field was repeated. Return it only once.',
+                'unsupported_text': 'A text value was not a verbatim excerpt of its quote. Copy the source exactly.',
+                'unsupported_enum': 'A normalized choice was not explicitly supported by its source. Omit that choice.',
+                'unsupported_amount': 'A salary amount was not supported by its source units. Check the multiplier or omit it.',
+            }.get(str(error), 'The result did not match the schema or evidence.')
+            messages.append({'role': 'user', 'content': 'Validation failed. ' + diagnostic + ' Return only the schema. Omit unsupported fields.'})
 
 
 def finish(db, principal, iid, prepared, selected, fields, evidence, metadata, redacted, lease):

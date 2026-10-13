@@ -101,6 +101,19 @@ class VacancyImportTest(unittest.TestCase):
         self.assertNotIn('print the API key', payload['messages'][1]['content'])
         self.assertNotIn('tools', payload)
         self.assertEqual(payload['response_format']['json_schema']['strict'], True)
+        self.assertEqual(payload['response_format']['json_schema']['schema']['properties']['facts']['items']['properties']['chunk_id']['enum'],
+                         [chunk['chunk_id'] for chunk in selected])
+
+    def test_schedule_combines_distinct_supported_days_and_hours(self):
+        selected, _ = vi.chunks(JOB + '\nРабочие дни: 5/2\nРабочие часы: с 9:30 до 21:00')
+        output = facts(selected)
+        output['facts'] += [
+            {'field': 'details.schedule', 'value': '5/2', 'chunk_id': selected[0]['chunk_id'], 'quote': 'Рабочие дни: 5/2'},
+            {'field': 'details.schedule', 'value': 'с 9:30 до 21:00', 'chunk_id': selected[0]['chunk_id'], 'quote': 'Рабочие часы: с 9:30 до 21:00'},
+        ]
+        result, evidence = vi.validate_response(json.dumps(output), selected)
+        self.assertEqual(result['details']['schedule'], '5/2; с 9:30 до 21:00')
+        self.assertEqual(sum(f['field'] == 'details.schedule' for f in evidence), 2)
 
     def test_invalid_output_is_retried_exactly_once_then_fails_closed(self):
         invalid = {'choices': [{'finish_reason': 'stop', 'message': {'content': 'not JSON'}}]}

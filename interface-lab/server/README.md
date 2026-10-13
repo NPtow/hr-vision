@@ -27,7 +27,7 @@ tesseract-ocr-rus antiword python3-pil`. Скрипты и макросы не �
 
 Разбор использует текущий серверный CPA через `HR_LLM_BASE_URL`, `HR_LLM_API_KEY`
 и `HR_LLM_MODEL` в закрытом `/etc/hr-vision/api.env`. Никаких ключей во фронтенде.
-Prompt pack `vacancy.extract-facts`, версия `2026-10-13.2`, находится в
+Prompt pack `vacancy.extract-facts`, версия `2026-10-13.3`, находится в
 `vacancy_import.py` под Git. Роль — только extractor: strict JSON Schema,
 выдержки из ограниченных chunks, проверка точных цитат/значений, один повтор при
 нарушении схемы или evidence. Нет генерации недостающих условий или fallback-модели.
