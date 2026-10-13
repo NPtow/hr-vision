@@ -4,6 +4,7 @@ import { Button } from '../../components/ui/button';
 import { DropdownMenu } from 'radix-ui';
 import logo from './assets/hr-vision-logo.svg';
 import { COMPANY_SITE_URL } from '../../lib/employer-entry';
+import './candidate-surfaces.css';
 
 export type EmployerPage = 'dsa' | 'tasks' | 'create-vacancy' | 'shortlist' | 'intake' | 'book' | 'meetings' | 'meeting' | 'review' | 'pool' | 'offer' | 'chat' | 'vacancies' | 'schedule';
 export type Scope = 'sfera' | 'dsa';
@@ -20,7 +21,7 @@ export function EmployerShell({ enabled = true, page, scope, vacancy, name, hasO
   const panel = scope === 'dsa' ? 'dsa' : 'shortlist';
   const active = page === 'create-vacancy' || (page === panel && candidateContext === 'vacancy') ? 'tasks' : page === 'intake' ? panel : ['meeting', 'book', 'review'].includes(page) ? 'meetings' : page === 'offer' ? 'pool' : page;
   const navigate = (next: EmployerPage) => { setMenuOpen(false); onNavigate(next); };
-  return <div className="ew-shell">
+  return <div className={`ew-shell${page === 'shortlist' || page === 'dsa' ? ' ew-candidates-view' : ''}`}>
     <header className="ew-topbar">
       <button className="ew-menu-toggle" aria-label={menuOpen ? 'Закрыть меню' : 'Открыть меню'} aria-expanded={menuOpen} aria-controls={menuId} onClick={() => setMenuOpen(open => !open)}>{menuOpen ? <X size={20}/> : <Menu size={20}/>}</button>
       <button className="ew-logo" onClick={() => onNavigate('tasks')} aria-label="HR Vision · задачи найма"><img src={logo} alt="HR Vision"/></button>
