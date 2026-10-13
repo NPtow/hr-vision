@@ -163,6 +163,39 @@ class RecruiterAccessTest(unittest.TestCase):
         self.request('auth/profile', {'name': 'Переименован'}, one)
         self.expect(409, 'availability', {**body, 'startTime': '16:30', 'endTime': '17:30'}, one)
 
+    def test_availability_edit_uses_account_owner_and_preserves_booked_interview(self):
+        one, two = self.recruiter('one'), self.recruiter('two')
+        body = {'recruiterName': 'Имя клиента не определяет владельца',
+                'startDate': (self.tick + dt.timedelta(days=1)).date().isoformat(),
+                'weekdays': list(range(7)), 'startTime': '16:00', 'endTime': '17:00',
+                'timezone': 'Europe/Moscow'}
+        initial, _ = self.request('availability', body, one)
+        other, _ = self.request('availability', body, two)
+        block = initial['availabilityBlocks'][0]
+        booked = initial['slots'][0]
+        person, cookie = self.register_candidate()
+        self.book(person, cookie, booked)
+        update = {**body, 'blockId': block['id'], 'startTime': '18:00', 'endTime': '19:00'}
+        self.expect(404, 'availability', update, two)
+        self.expect(401, 'availability', update, manager=True)
+        edited, _ = self.request('availability', update, one)
+        self.assertEqual(edited['availabilityBlocks'][0]['id'], block['id'])
+        self.assertEqual(len(edited['availabilityBlocks']), 1)
+        self.assertEqual(edited['candidates'][0]['id'], person['id'])
+        self.assertEqual(next(slot for slot in edited['slots'] if slot['id'] == booked['id'])['candidateId'], person['id'])
+        self.assertEqual(self.state(two)['slots'], other['slots'])
+        public, _ = self.call('candidate/slots', cookie=cookie)
+        retired = {slot['id'] for slot in initial['slots']}
+        self.assertTrue(retired.isdisjoint(slot['id'] for slot in public['slots']))
+        repeated, _ = self.request('availability', update, one)
+        self.assertEqual(repeated['slots'], edited['slots'])
+        self.assertEqual(repeated['availabilityBlocks'], edited['availabilityBlocks'])
+        # A second existing rule causes a 409 without a partial edit or slot loss.
+        self.request('availability', {**body, 'startTime': '20:00', 'endTime': '21:00'}, one)
+        before_conflict = self.state(one)
+        self.expect(409, 'availability', {**update, 'startTime': '20:00', 'endTime': '21:00'}, one)
+        self.assertEqual(self.state(one), before_conflict)
+
     def test_only_booked_interviews_appear_and_foreign_ids_are_rejected(self):
         one, two = self.recruiter('one'), self.recruiter('two')
         person, cookie = self.register_candidate()

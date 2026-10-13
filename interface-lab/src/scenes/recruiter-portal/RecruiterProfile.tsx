@@ -56,6 +56,7 @@ export function RecruiterProfile({ recruiter, blocks, busy, run, onLogout, chann
       <div><h2>{recruiter.name}</h2><p>{recruiter.email}</p></div>
       <div className="rp-profile-actions"><Button type="button" variant="ghost" disabled={busy || channelBusy !== null} onClick={onLogout}>Выйти</Button></div>
     </section>
+    <AvailabilitySchedule key={recruiter.id} recruiterName={recruiter.name} blocks={blocks} busy={busy} run={run}/>
     {channels && <section className="rp-profile-channels" aria-labelledby="rp-profile-channels-title">
       <h2 id="rp-profile-channels-title">Уведомления об интервью</h2>
       <div className="rp-profile-channel"><div><h3>Почта</h3><p>{channels.email.verified && channels.email.configured ? 'Подключена' : channels.email.configured ? 'Нужно подтвердить почту' : 'Уведомления пока недоступны'}</p></div>
@@ -68,6 +69,5 @@ export function RecruiterProfile({ recruiter, blocks, busy, run, onLogout, chann
       {channelMessage && <p className="rp-profile-channel-message" role="status">{channelMessage}</p>}
       {channelError && <p className="rp-error" role="alert">{channelError}</p>}
     </section>}
-    <AvailabilitySchedule key={recruiter.id} recruiterName={recruiter.name} blocks={blocks} busy={busy} run={run}/>
   </div>;
 }

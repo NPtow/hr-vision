@@ -16,6 +16,9 @@ class RecruiterAvailabilityTest(unittest.TestCase):
         self.db.execute('''CREATE TABLE cp_recruiter_slots (
           id TEXT PRIMARY KEY, start TEXT NOT NULL, end TEXT NOT NULL,
           recruiter_name TEXT NOT NULL, candidate_id TEXT UNIQUE REFERENCES cp_candidates(id))''')
+        self.db.execute('CREATE TABLE rc_accounts (id TEXT PRIMARY KEY)')
+        self.db.execute('''CREATE TABLE cp_interviews (
+          id TEXT PRIMARY KEY, slot_id TEXT REFERENCES cp_recruiter_slots(id))''')
         availability.init(self.db)
         self.db.commit()
         self.clock = patch('recruiter_availability.now', return_value=timestamp('2026-10-11T12:00:00Z'))
@@ -199,6 +202,109 @@ class RecruiterAvailabilityTest(unittest.TestCase):
         self.add(recruiterName='АЛЕНА  ИВАНОВА')
         availability.materialize(self.db)
         self.assertEqual([(row[0], row[1]) for row in self.slots()], before)
+
+    def owned(self, owner='one', **changes):
+        self.db.execute('INSERT OR IGNORE INTO rc_accounts VALUES (?)', (owner,))
+        return availability.add_block(self.db, self.payload(**changes), recruiter={'id': owner, 'name': 'Никита'})
+
+    def edit(self, block, owner='one', **changes):
+        return availability.add_block(
+            self.db, {**{key: block[key] for key in availability.FIELDS}, 'blockId': block['id'], **changes},
+            recruiter={'id': owner, 'name': 'Никита'})
+
+    def snapshot(self):
+        return {table: self.db.execute('SELECT * FROM ' + table + ' ORDER BY 1').fetchall()
+                for table in ('cp_availability_blocks', 'cp_generated_slots', 'cp_recruiter_slots',
+                              'cp_recruiter_block_owners', 'cp_recruiter_slot_owners', 'cp_interviews')}
+
+    def test_owned_edit_and_repeated_request_keep_block_and_matching_slot_ids(self):
+        block = self.owned()
+        availability.materialize(self.db)
+        original = self.snapshot()
+        self.assertEqual(self.edit(block), block)
+        self.assertEqual(availability.materialize(self.db), 0)
+        self.assertEqual(self.snapshot(), original)
+        edited = self.edit(block, startTime='16:30', endTime='17:30')
+        availability.materialize(self.db)
+        self.assertEqual(edited['id'], block['id'])
+        self.assertEqual(edited['createdAt'], block['createdAt'])
+        old_matching = {row for row in original['cp_recruiter_slots'] if row[1][11:16] == '13:30'}
+        self.assertTrue(old_matching.issubset(set(self.slots())))
+        self.assertTrue(all(row[1][11:16] in ('13:30', '14:00') for row in self.slots()))
+        after = self.snapshot()
+        self.edit(block, startTime='16:30', endTime='17:30')
+        self.assertEqual(availability.materialize(self.db), 0)
+        self.assertEqual(self.snapshot(), after)
+        self.assertEqual(self.db.execute('PRAGMA foreign_key_check').fetchall(), [])
+
+    def test_edit_preserves_bookings_history_manual_slots_and_other_recruiters(self):
+        block = self.owned()
+        other = self.owned('two')
+        availability.materialize(self.db)
+        # A first interview already happened; the second time remains booked.
+        mine = self.db.execute('''SELECT s.id FROM cp_recruiter_slots s JOIN cp_recruiter_slot_owners o
+          ON o.slot_id=s.id WHERE o.recruiter_id='one' ORDER BY s.start''').fetchall()
+        past, booked = mine[0][0], mine[1][0]
+        self.db.execute("INSERT INTO cp_candidates VALUES ('candidate-a')")
+        self.db.execute('UPDATE cp_recruiter_slots SET candidate_id=? WHERE id=?', ('candidate-a', booked))
+        self.db.execute('INSERT INTO cp_interviews VALUES (?,?)', ('interview-a', booked))
+        self.db.execute('INSERT INTO cp_recruiter_slots VALUES (?,?,?,?,NULL)',
+                        ('manual-owned', '2026-10-13T16:00:00Z', '2026-10-13T16:30:00Z', 'Никита'))
+        self.db.execute('INSERT INTO cp_recruiter_slot_owners VALUES (?,?)', ('manual-owned', 'one'))
+        self.now.return_value = timestamp('2026-10-12T13:15:00Z')
+        before = self.snapshot()
+        self.edit(block, startTime='18:00', endTime='19:00')
+        availability.materialize(self.db)
+        protected_ids = {past, booked, 'manual-owned'} | {row[0] for row in before['cp_recruiter_slot_owners'] if row[1] == 'two'}
+        self.assertTrue({row for row in before['cp_recruiter_slots'] if row[0] in protected_ids}.issubset(set(self.slots())))
+        self.assertIn((booked, block['id']), self.snapshot()['cp_generated_slots'])
+        self.assertIn((other['id'], 'two'), self.snapshot()['cp_recruiter_block_owners'])
+        self.assertEqual(self.db.execute('PRAGMA foreign_key_check').fetchall(), [])
+        # Releasing that booking after the edit must not expose retired times.
+        self.db.execute('DELETE FROM cp_interviews WHERE id=?', ('interview-a',))
+        self.db.execute('UPDATE cp_recruiter_slots SET candidate_id=NULL WHERE id=?', (booked,))
+        availability.materialize(self.db)
+        self.assertNotIn(booked, {row[0] for row in self.slots()})
+        self.assertIn(past, {row[0] for row in self.slots()})
+
+    def test_edit_conflict_or_foreign_owner_leaves_every_row_unchanged(self):
+        block = self.owned()
+        self.owned(startTime='18:00', endTime='19:00')
+        self.owned('two')
+        availability.materialize(self.db)
+        before = self.snapshot()
+        for owner, changes, status in [('two', {'startTime': '17:00', 'endTime': '18:00'}, 404),
+                                       ('one', {'startTime': '18:00', 'endTime': '19:00'}, 409),
+                                       ('one', {'weekdays': []}, 400)]:
+            with self.subTest(owner=owner, changes=changes):
+                with self.assertRaises(Problem) as raised:
+                    self.edit(block, owner, **changes)
+                self.assertEqual(raised.exception.status, status)
+                self.assertEqual(self.snapshot(), before)
+        with self.assertRaises(Problem) as raised:
+            availability.add_block(self.db, self.payload(blockId=block['id']))
+        self.assertEqual(raised.exception.status, 401)
+        self.assertEqual(self.snapshot(), before)
+
+    def test_recreating_original_schedule_after_edit_does_not_reuse_edited_block_id(self):
+        block = self.owned()
+        self.edit(block, startTime='18:00', endTime='19:00')
+        recreated = self.owned()
+        self.assertNotEqual(recreated['id'], block['id'])
+        self.assertEqual(self.owned(), recreated)
+        availability.materialize(self.db)
+        self.assertEqual(len(self.slots()), 80)
+
+    def test_transaction_rollback_restores_edit_and_reconciled_slots(self):
+        block = self.owned()
+        availability.materialize(self.db)
+        self.db.commit()
+        before = self.snapshot()
+        self.db.execute('BEGIN IMMEDIATE')
+        self.edit(block, startTime='18:00', endTime='19:00')
+        availability.materialize(self.db)
+        self.db.rollback()
+        self.assertEqual(self.snapshot(), before)
 
 
 if __name__ == '__main__':
