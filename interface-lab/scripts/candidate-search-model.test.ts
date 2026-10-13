@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { CandidateApplication, CandidateApplicationWorkflow, CandidateMeetingHistory, CandidateOffer } from '../src/scenes/candidate-portal/api.ts';
-import { applicationCardTone, applicationMeetingIsJoinable, orderedSearchApplications } from '../src/scenes/candidate-portal/candidate-search-model.ts';
+import { applicationCardTone, applicationMeetingIsJoinable, expandedSearchApplications, orderedSearchApplications, vacancyCardDetails } from '../src/scenes/candidate-portal/candidate-search-model.ts';
 
 const NOW = Date.parse('2026-10-13T12:00:00.000Z');
 const MINUTE = 60_000;
@@ -47,12 +47,12 @@ test('closed workflow decisions and answered offers never become actionable', ()
     { status: 'declined' as const }, { decision: 'declined' as const }, { afterInterest: 'no' as const },
     { workflow: workflow({ closedBy: 'other-candidate', meeting: meeting({ status: 'live' }) }) },
     { workflow: workflow({ decision: 'declined', offer: offer() }) },
-    { offer: offer({ status: 'accepted' }) }, { offer: offer({ status: 'declined' }) },
+    { offer: offer({ status: 'declined' }) },
   ]) assert.equal(applicationCardTone(application('closed', overrides), NOW), 'closed');
 });
 
-test('sent offers need action while withdrawn offers and unscheduled applications wait', () => {
-  assert.equal(applicationCardTone(application('sent', { workflow: workflow({ offer: offer() }) }), NOW), 'action');
+test('offers have a separate tone while withdrawn offers and unscheduled applications wait', () => {
+  assert.equal(applicationCardTone(application('sent', { workflow: workflow({ offer: offer() }) }), NOW), 'offer');
   assert.equal(applicationCardTone(application('withdrawn', { offer: offer({ status: 'withdrawn' }) }), NOW), 'progress');
   assert.equal(applicationCardTone(application('waiting'), NOW), 'progress');
 });
@@ -115,7 +115,7 @@ test('stale live meetings fall behind new cards while independent sent offers ke
   const active = application('active-live', { workflow: workflow({ meeting: meeting({ status: 'live' }) }) });
   const newItem = application('new', { status: 'pending' });
   assert.equal(applicationCardTone(stale, NOW), 'progress');
-  assert.equal(applicationCardTone(staleWithOffer, NOW), 'action');
+  assert.equal(applicationCardTone(staleWithOffer, NOW), 'offer');
   assert.equal(applicationMeetingIsJoinable(staleWithOffer, NOW), false);
   assert.deepEqual(orderedSearchApplications([stale, offerOnly, staleWithOffer, newItem, active], NOW).map(item => item.id), [
     'active-live', 'offer-only', 'stale-with-offer', 'new', 'stale-live',
@@ -176,4 +176,45 @@ test('empty and already ordered inputs return independent arrays', () => {
   const single = Object.freeze([item]);
   assert.deepEqual(orderedSearchApplications(single, NOW), single);
   assert.notEqual(orderedSearchApplications(single, NOW), single);
+});
+
+
+test('accepted offers keep their colour but archives and explicit closure remain neutral', () => {
+  const accepted = application('hired', { workflow: workflow({ offer: offer({ status: 'accepted' }), closedBy: 'candidate-1' }) });
+  assert.equal(applicationCardTone(accepted, NOW), 'offer');
+  assert.equal(applicationMeetingIsJoinable(accepted, NOW), false);
+  assert.equal(applicationCardTone({ ...accepted, workflow: { ...accepted.workflow!, closedBy: 'another-candidate' } }, NOW), 'closed');
+  assert.equal(applicationCardTone({ ...accepted, archivedAt: '2026-10-14T10:00:00Z' }, NOW), 'closed');
+  assert.equal(applicationCardTone({ ...accepted, status: 'declined' }, NOW), 'closed');
+  const waiting = application('waiting');
+  assert.deepEqual(orderedSearchApplications([accepted, waiting], NOW).map(item => item.id), ['waiting', 'hired']);
+  assert.equal(applicationCardTone(application('new-with-stale-offer', { status: 'pending', offer: offer() }), NOW), 'new');
+});
+
+test('wide expansion starts at the selected row while preserving sibling identities', () => {
+  const items = Object.freeze(['a', 'b', 'c', 'd', 'e', 'f'].map(id => Object.freeze(application(id))));
+  assert.deepEqual(expandedSearchApplications(items, 'b', 3).map(item => item.id), ['b', 'a', 'c', 'd', 'e', 'f']);
+  assert.deepEqual(expandedSearchApplications(items, 'e', 3).map(item => item.id), ['a', 'b', 'c', 'e', 'd', 'f']);
+  assert.deepEqual(expandedSearchApplications(items, 'd', 2).map(item => item.id), ['a', 'b', 'd', 'c', 'e', 'f']);
+  for (const [id, columns] of [['e', 1], ['', 3], ['missing', 3]] as const) {
+    const result = expandedSearchApplications(items, id, columns);
+    assert.deepEqual(result, items);
+    assert.notEqual(result, items);
+    result.forEach((item, index) => assert.equal(item, items[index]));
+  }
+});
+
+test('structured vacancy facts remove only their legacy projection, keeping original prose', () => {
+  const vacancy = { ...application('job').vacancy, format: 'Гибрид', salary: '150 000 ₽',
+    details: { responsibilities: 'Развивать продукт', requirements: 'Опыт в B2B', employmentType: 'full-time' as const, benefits: 'ДМС' },
+    description: 'Небольшая команда.\n\nЗарплата\n150 000 ₽\n\nФормат работы\nГибрид\n\nЗанятость\nПолная занятость\n\nЗадачи\nРазвивать продукт\n\nТребования\nОпыт в B2B\n\nУсловия\nДМС' };
+  const result = vacancyCardDetails(vacancy);
+  assert.equal(result.description, 'Небольшая команда.');
+  assert.deepEqual(result.sections.map(section => section.text), ['Развивать продукт', 'Опыт в B2B', 'ДМС']);
+  assert.deepEqual(result.facts, [{ label: 'Формат', value: 'Гибрид · Москва' }, { label: 'Занятость', value: 'Полная занятость' }]);
+  const embedded = vacancyCardDetails({ ...vacancy, description: 'Небольшая команда. ДМС и обучение.' });
+  assert.equal(embedded.description, 'Небольшая команда. ДМС и обучение.');
+  assert.ok(!embedded.sections.some(section => section.text === 'ДМС'));
+  assert.equal(vacancyCardDetails({ ...vacancy, details: undefined }).description, vacancy.description);
+  assert.deepEqual(vacancyCardDetails({ ...vacancy, description: '', details: {}, city: '', format: '', remote: false }), { description: '', facts: [], sections: [] });
 });

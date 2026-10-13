@@ -51,10 +51,21 @@ export type CandidateWorkflowCommand = { applicationId: string; requestId?: stri
   | { action: 'chat'; text: string }
 );
 export type CandidateMeetingReference = { applicationId: string; meetingId: string; revision?: number };
+export type CandidateVacancy = {
+  id: string; title: string; company: string; city: string; remote: boolean; description: string; salary?: string;
+  format?: string;
+  details?: {
+    address?: string; schedule?: string; responsibilities?: string; requirements?: string;
+    niceToHave?: string; benefits?: string; experience?: string;
+    employmentType?: '' | 'full-time' | 'part-time' | 'project' | 'internship' | 'temporary';
+    salaryMin?: number | null; salaryMax?: number | null; currency?: string;
+    salaryPeriod?: '' | 'month' | 'year' | 'hour' | 'shift'; salaryTax?: '' | 'gross' | 'net';
+  };
+};
 export type CandidateApplication = {
   id: string;
   archivedAt?: string | null;
-  vacancy: { id: string; title: string; company: string; city: string; remote: boolean; description: string; salary?: string };
+  vacancy: CandidateVacancy;
   status: 'pending' | 'accepted' | 'declined';
   approvedAutomatically: boolean;
   meeting: CandidateMeeting | null;
