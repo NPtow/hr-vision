@@ -5,3 +5,14 @@ hr-vision.158-160-179-53.sslip.io {
 		header_up X-HR-Client-IP {remote_host}
 	}
 }
+
+# Public site, candidate and employer; recruiter keeps the legacy hostname.
+mashadasha.tech {
+	reverse_proxy 10.130.0.18:8381 {
+		header_up X-HR-Client-IP {remote_host}
+	}
+}
+
+www.mashadasha.tech {
+	redir https://mashadasha.tech{uri} permanent
+}

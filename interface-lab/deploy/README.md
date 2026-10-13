@@ -91,3 +91,43 @@ bash scripts/deploy-yc.sh
 Для отката первой миграции недостаточно менять указатель outreach: требуется вернуть сохранённый HR Vision site block dsa после проверки, что другие настройки не изменились. Нельзя слепо восстанавливать полный старый Caddyfile поверх более поздних чужих правок.
 
 Ёмкость dsa остаётся ограничением HTTPS-входа: после очистки в 21:13:30 МСК свободно около 224 MiB. Для остановки потока журналов ClickHouse временно применён уровень fatal без перезапуска; системные диагностические таблицы занимают около 8.16 GB и в этой работе не очищались. На outreach после выпуска около 25 GB свободно. [Действия, границы и восстановление](../../output/operations/yc-cleanup-20261004.md).
+# Public domain, 14 October 2026
+
+`mashadasha.tech` is the public company site. `/candidate` serves the candidate
+landing, `/account/candidate` opens the existing candidate cabinet and `/employer`
+opens employer sign-in. Both cabinets still use the same service release and API
+database on outreach. `www.mashadasha.tech` redirects to the apex with its URI.
+
+The corporate site has its own release at `/srv/hr-vision-company-demo/current`;
+its built files use `/site-assets/` so they cannot shadow Storybook `/assets/`.
+The lab route `/demos/company-v1/` continues to use that release. The main service
+is still published only through GitHub Actions. The CI verification hostname
+remains the explicit legacy service alias.
+
+Recruiters continue to use
+`https://hr-vision.158-160-179-53.sslip.io/iframe.html?id=hr-vision-product--manager&viewMode=story&workspace=recruiter`.
+Links with `workspace=recruiter` on the new domain redirect to that host. Old
+candidate/employer links also remain functional; no database reseeding occurs.
+
+Runtime configuration in the private `/etc/hr-vision/api.env`:
+
+```dotenv
+HR_ORIGIN=https://mashadasha.tech
+HR_ADDITIONAL_ORIGINS=https://hr-vision.158-160-179-53.sslip.io
+HR_RECRUITER_ORIGIN=https://hr-vision.158-160-179-53.sslip.io
+HR_RECRUITER_PUBLIC_URL=https://hr-vision.158-160-179-53.sslip.io/iframe.html?id=hr-vision-product--manager&viewMode=story&workspace=recruiter
+```
+
+The allowlist is exact, without wildcard CORS. Existing sent HH invitations are
+reused from either approved origin. Candidate notification links use the new
+canonical origin; recruiter invitations use the explicit recruiter origin.
+Browser cookies and storage are host-specific, so moving to the new domain
+requires signing in once with the same account. No login token is sent between
+the domains in a query string.
+
+DNS in REG.RU: only apex and `www` A records change to `158.160.179.53`. Existing
+MX, SPF, DKIM, DMARC and name servers are retained. Caddy configuration updates
+must preserve neighbouring sites, validate first, compare the previous hash and
+take a backup before graceful reload. If rollback is needed, restore the saved
+Caddy/env files, then return the two A records to their saved values. Database
+snapshots are recovery material; never restore them merely to revert routing.

@@ -1,0 +1,198 @@
+.candidate-site {
+  --cs-ink: #171a1d;
+  --cs-muted: #606973;
+  --cs-blue: #2e6dbd;
+  color: var(--cs-ink);
+  background: #f7f7f2;
+  min-width: 0;
+}
+
+.candidate-site :is(a, button, [tabindex]):focus-visible {
+  outline: 3px solid #2168bc;
+  outline-offset: 5px;
+}
+
+.candidate-site em { font-style: normal; color: var(--cs-blue); }
+
+.candidate-site .cs-header {
+  position: absolute;
+  z-index: 10;
+  inset: 22px 32px auto;
+  min-height: 66px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.candidate-site .cs-brand { display: flex; align-items: center; min-height: 44px; }
+.candidate-site .cs-brand img { width: 150px; height: 24px; }
+.candidate-site .cs-header nav { margin-left: auto; display: flex; align-items: center; gap: 30px; font-size: 15px; }
+.candidate-site .cs-header nav a { display: inline-flex; min-height: 44px; align-items: center; }
+.candidate-site .cs-employer-link { color: #56616b; }
+.candidate-site .cs-login { padding: 0 24px; border-radius: 14px; background: #ffffffc2; }
+.candidate-site .cs-header nav a:hover { color: var(--cs-blue); }
+
+.candidate-site .cs-hero {
+  min-height: 100svh;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 156px 28px 125px;
+  isolation: isolate;
+  text-align: center;
+}
+
+.candidate-site .cs-hero-light {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 22% 56%, #e0ebf072, transparent 55%), radial-gradient(ellipse at 81% 48%, #e5e3f27a, transparent 50%);
+}
+
+.candidate-site .cs-hero-content { width: 100%; max-width: 1120px; }
+.candidate-site h1 { font-size: clamp(48px, 6.8vw, 100px); line-height: 1.035; letter-spacing: -.049em; font-weight: 570; font-variation-settings: 'opsz' 48, 'wdth' 108; text-wrap: balance; }
+.candidate-site .cs-hero-content > p { margin-top: 32px; color: var(--cs-muted); font-size: clamp(17px, 1.8vw, 22px); line-height: 1.5; letter-spacing: -.2px; }
+.candidate-site .cs-primary { margin-top: 34px; min-height: 56px; padding: 16px 30px; border-radius: 14px; font-size: 16px; }
+.candidate-site .cs-how-link { width: fit-content; display: flex; align-items: center; min-height: 44px; margin: 14px auto 0; color: #596979; font-size: 14px; }
+.candidate-site .cs-how-link:hover { color: var(--cs-blue); }
+.candidate-site .cs-hero-caption { position: absolute; bottom: 42px; display: flex; justify-content: center; flex-wrap: wrap; gap: 40px; font-size: 13px; color: #747c83; }
+
+.candidate-site .cs-journey { padding: 120px 7vw 145px; background: #f8f4ed; scroll-margin-top: 0; }
+.candidate-site .cs-section-heading { text-align: center; }
+.candidate-site h2 { font-size: clamp(39px, 4.65vw, 66px); font-weight: 560; letter-spacing: -.04em; line-height: 1.08; font-variation-settings: 'opsz' 40, 'wdth' 108; text-wrap: balance; }
+.candidate-site .cs-journey-layout { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(48px, 7vw, 105px); align-items: center; max-width: 1120px; margin: 75px auto 0; }
+.candidate-site .cs-steps { display: flex; flex-direction: column; gap: 14px; }
+.candidate-site .cs-step { display: flex; align-items: flex-start; gap: 18px; border: 0; background: transparent; border-radius: 20px; padding: 20px; text-align: left; color: #59646d; transition: background .18s, color .18s, transform .12s; }
+.candidate-site .cs-step:hover { background: #ffffff75; color: var(--cs-ink); }
+.candidate-site .cs-step:active { transform: scale(.988); }
+.candidate-site .cs-step.is-current { color: var(--cs-ink); background: #fff; box-shadow: 0 7px 25px -20px #3f425e50; }
+.candidate-site .cs-step-number { display: flex; align-items: center; height: 25px; flex: 0 0 25px; font-size: 12px; color: #7e8a94; font-variant-numeric: tabular-nums; }
+.candidate-site .cs-step.is-current .cs-step-number { color: var(--cs-blue); }
+.candidate-site .cs-step strong { display: block; font-size: clamp(17px, 1.65vw, 21px); font-weight: 550; line-height: 1.3; letter-spacing: -.35px; }
+.candidate-site .cs-step-description { display: block; margin-top: 9px; font-size: 14px; line-height: 1.6; font-weight: 400; color: var(--cs-muted); }
+.candidate-site .cs-step:not(.is-current) .cs-step-description { display: none; }
+.candidate-site .cs-journey-picture { width: 100%; aspect-ratio: 1; max-width: 480px; display: grid; place-items: center; border-radius: 34px; background: #fff; box-shadow: 0 4px 12px #40392c04, 0 28px 55px -30px #40576a32; transition: background .22s; }
+.candidate-site .cs-journey-picture-interview { background: #edf3f9; }
+.candidate-site .cs-journey-picture-vacancies { background: #f0f5ec; }
+.candidate-site .cs-journey-picture-meeting { background: #efedf8; }
+.candidate-site .cs-picture-content { width: 100%; padding: clamp(30px, 3.5vw, 52px); }
+.candidate-site .cs-document-icon { color: #6278a1; margin-bottom: 25px; }
+.candidate-site .cs-picture-content h3 { font-size: clamp(28px, 3vw, 40px); font-weight: 540; letter-spacing: -1.2px; line-height: 1.08; }
+.candidate-site .cs-resume-row { display: flex; justify-content: space-between; align-items: center; gap: 20px; font-size: 14px; margin-top: 27px; }
+.candidate-site .cs-resume-row > span:last-child { display: flex; align-items: center; gap: 8px; color: #62756b; font-size: 13px; }
+.candidate-site .cs-resume-note { margin-top: 34px; padding: 16px 18px; background: #f4f5f7; border-radius: 14px; font-size: 13px; line-height: 1.4; color: #617083; }
+.candidate-site .cs-interview-picture { text-align: center; }
+.candidate-site .cs-interview-people { display: flex; align-items: center; justify-content: center; gap: 22px; color: #6983a6; }
+.candidate-site .cs-interview-people > span { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; background: #fff9; }
+.candidate-site .cs-interview-picture > strong { display: flex; align-items: baseline; justify-content: center; gap: 14px; margin: 17px 0 16px; font-size: clamp(90px, 9vw, 130px); font-weight: 500; letter-spacing: -6px; line-height: 1.1; color: #345f94; }
+.candidate-site .cs-interview-picture > strong > span { font-size: 20px; letter-spacing: -.5px; font-weight: 400; }
+.candidate-site .cs-picture-content p { font-size: 15px; line-height: 1.6; color: var(--cs-muted); }
+.candidate-site .cs-picture-kicker { display: block; margin-bottom: 16px; font-size: 13px; color: #687567; }
+.candidate-site .cs-vacancies-picture ul { list-style: none; margin: 28px 0; padding: 0; display: flex; flex-direction: column; gap: 18px; font-size: 15px; }
+.candidate-site .cs-vacancies-picture li { display: flex; gap: 12px; align-items: center; }
+.candidate-site .cs-vacancies-picture li svg { color: #67866b; }
+.candidate-site .cs-vacancies-picture p { font-size: 13px; }
+.candidate-site .cs-calendar-icon { color: #7c78a2; margin-bottom: 28px; }
+.candidate-site .cs-meeting-picture .cs-picture-kicker { color: #736e91; }
+.candidate-site .cs-meeting-picture p { margin-top: 25px; }
+
+.candidate-site .cs-choice { padding: 125px 28px 135px; text-align: center; background: linear-gradient(#edf3f3, #f7f7f2); }
+.candidate-site .cs-choice-notes { margin: 45px auto 0; display: flex; justify-content: center; gap: 65px; color: var(--cs-muted); }
+.candidate-site .cs-choice-notes p { font-size: 16px; line-height: 1.6; }
+.candidate-site .cs-choice .cs-primary { margin-top: 42px; }
+.candidate-site .cs-footer { position: static; display: flex; gap: 32px; align-items: center; padding: 30px 48px 40px; font-size: 13px; color: #68747b; }
+.candidate-site .cs-footer > img { width: 125px; height: auto; margin-right: auto; transform: none; }
+.candidate-site .cs-footer > a { display: flex; align-items: center; min-height: 44px; font-size: 13px; }
+.candidate-site .cs-footer > a:hover { color: var(--cs-blue); }
+
+@media (max-width: 800px) {
+  .candidate-site .cs-header { inset: 14px 16px auto; padding: 0; gap: 16px; }
+  .candidate-site .cs-brand img { width: 125px; height: auto; }
+  .candidate-site .cs-header nav { gap: 16px; font-size: 13px; }
+  .candidate-site .cs-login { padding: 0 16px; }
+  .candidate-site .cs-hero { padding: 138px 24px 115px; min-height: 820px; min-height: min(900px, 100svh); }
+  .candidate-site h1 { font-size: clamp(49px, 7.8vw, 74px); }
+  .candidate-site .cs-hero-content > p { font-size: 18px; margin-top: 27px; }
+  .candidate-site .cs-hero-caption { gap: 22px; bottom: 33px; font-size: 12px; }
+  .candidate-site .cs-journey { padding: 80px 24px 90px; }
+  .candidate-site .cs-journey-layout { gap: 26px; margin-top: 48px; grid-template-columns: 1fr 1fr; }
+  .candidate-site .cs-step { padding: 15px 12px; gap: 10px; }
+  .candidate-site .cs-step-number { flex-basis: 19px; }
+  .candidate-site .cs-step strong { font-size: 17px; }
+  .candidate-site .cs-step-description { font-size: 13px; }
+  .candidate-site .cs-picture-content { padding: 26px; }
+  .candidate-site .cs-journey-picture { min-height: 325px; }
+  .candidate-site .cs-resume-row { flex-wrap: wrap; gap: 7px; margin-top: 20px; }
+  .candidate-site .cs-resume-note { margin-top: 25px; padding: 14px; }
+  .candidate-site .cs-interview-picture > strong { font-size: 88px; }
+  .candidate-site .cs-interview-people { gap: 15px; }
+  .candidate-site .cs-interview-people > span { width: 53px; height: 53px; }
+  .candidate-site .cs-choice { padding: 85px 24px 90px; }
+  .candidate-site .cs-choice-notes { gap: 35px; margin-top: 32px; }
+  .candidate-site .cs-choice-notes p { font-size: 14px; }
+  .candidate-site .cs-footer { padding: 25px 24px 32px; gap: 22px; }
+}
+
+@media (max-width: 560px) {
+  .candidate-site .cs-header nav { gap: 14px; font-size: 12px; }
+  .candidate-site .cs-brand img { width: 105px; }
+  .candidate-site .cs-login { padding: 0 13px; }
+  .candidate-site .cs-hero { min-height: 750px; min-height: max(730px, 94svh); padding: 136px 22px 110px; }
+  .candidate-site h1 { font-size: clamp(46px, 11.6vw, 65px); line-height: 1.055; letter-spacing: -.045em; }
+  .candidate-site h1 em { display: inline-block; margin-top: 8px; }
+  .candidate-site .cs-hero-content > p { font-size: 17px; line-height: 1.55; max-width: 340px; margin-inline: auto; }
+  .candidate-site .cs-desktop-break { display: none; }
+  .candidate-site .cs-primary { min-height: 54px; margin-top: 29px; }
+  .candidate-site .cs-hero-caption { gap: 17px; font-size: 11px; }
+  .candidate-site .cs-journey { padding: 70px 20px 80px; }
+  .candidate-site h2 { font-size: clamp(37px, 9.1vw, 48px); }
+  .candidate-site .cs-journey-layout { grid-template-columns: minmax(0, 1fr); gap: 32px; margin-top: 36px; }
+  .candidate-site .cs-steps { gap: 5px; }
+  .candidate-site .cs-step { padding: 16px; gap: 15px; border-radius: 18px; }
+  .candidate-site .cs-step strong { font-size: 18px; }
+  .candidate-site .cs-step-description { font-size: 14px; line-height: 1.55; }
+  .candidate-site .cs-journey-picture { max-width: 420px; margin-inline: auto; min-height: 330px; aspect-ratio: 1.12; border-radius: 28px; }
+  .candidate-site .cs-picture-content { padding: 34px; }
+  .candidate-site .cs-picture-content h3 { font-size: 34px; }
+  .candidate-site .cs-resume-row { flex-wrap: nowrap; }
+  .candidate-site .cs-interview-picture > strong { margin: 13px 0; font-size: 104px; }
+  .candidate-site .cs-choice { padding: 80px 22px; }
+  .candidate-site .cs-choice-notes { flex-direction: column; gap: 24px; }
+  .candidate-site .cs-choice-notes p { font-size: 16px; }
+  .candidate-site .cs-footer { flex-wrap: wrap; gap: 8px 24px; padding: 24px 22px; }
+  .candidate-site .cs-footer > img { width: 113px; flex-basis: auto; margin-right: 0; }
+  .candidate-site .cs-footer > a { margin-left: auto; font-size: 12px; }
+  .candidate-site .cs-footer > a:last-child { flex-basis: 100%; justify-content: flex-end; }
+}
+
+@media (max-width: 360px) {
+  .candidate-site .cs-header { inset-inline: 12px; gap: 10px; }
+  .candidate-site .cs-brand img { width: 87px; }
+  .candidate-site .cs-header nav { gap: 10px; }
+  .candidate-site .cs-login { padding-inline: 11px; }
+  .candidate-site .cs-hero { padding-inline: 18px; }
+  .candidate-site h1 { font-size: 44px; }
+  .candidate-site .cs-picture-content { padding: 28px; }
+}
+
+@media (hover: none) {
+  .candidate-site .story-button:hover:not(:active) { transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html:has(.candidate-site) { scroll-behavior: auto; }
+  .candidate-site *, .candidate-site *::before, .candidate-site *::after { scroll-behavior: auto; animation: none !important; transition: none !important; }
+}
+
+@media (prefers-contrast: more) {
+  .candidate-site .cs-step.is-current, .candidate-site .cs-journey-picture, .candidate-site .cs-login { outline: 1px solid #4a5461; }
+}
+
+@media (forced-colors: active) {
+  .candidate-site .cs-step.is-current, .candidate-site .cs-journey-picture, .candidate-site .cs-primary, .candidate-site .cs-login { border: 1px solid ButtonText; }
+  .candidate-site .cs-step.is-current { outline: 2px solid Highlight; }
+}

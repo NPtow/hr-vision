@@ -3,7 +3,7 @@ import { useMotionValue } from 'motion/react';
 import { CountdownButton } from './CountdownButton';
 import { ctaProgressAt } from './cta-offer';
 
-export function SiteCountdownButton({ onStart, startAtSection }: { onStart: () => void; startAtSection: string }) {
+export function SiteCountdownButton({ onStart, startAtSection, label }: { onStart: () => void; startAtSection: string; label?: string }) {
   const progress = useMotionValue(0);
   const startedAt = useRef<number | null>(null);
   useEffect(() => {
@@ -39,5 +39,5 @@ export function SiteCountdownButton({ onStart, startAtSection }: { onStart: () =
     };
   }, [progress, startAtSection]);
 
-  return <div className="cta-button-wrap"><CountdownButton progress={progress} onStart={onStart}/></div>;
+  return <div className="cta-button-wrap"><CountdownButton progress={progress} onStart={onStart} label={label}/></div>;
 }

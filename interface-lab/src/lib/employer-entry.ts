@@ -1,5 +1,5 @@
-export const COMPANY_SITE_URL = 'https://hr-vision-lab.158-160-179-53.sslip.io/demos/company-v1/';
-export const EMPLOYER_URL = 'https://hr-vision.158-160-179-53.sslip.io/iframe.html?id=hr-vision-product--manager&viewMode=story';
+export const COMPANY_SITE_URL = 'https://mashadasha.tech/';
+export const EMPLOYER_URL = 'https://mashadasha.tech/iframe.html?id=hr-vision-product--manager&viewMode=story';
 export const EMPLOYER_ENTRY_KEY = 'hr-vision-employer-entry';
 const MAX_BRIEF_LENGTH = 2000;
 const ENTRY_LIFETIME = 24 * 60 * 60 * 1000;

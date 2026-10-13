@@ -308,7 +308,7 @@ export function CompanySite() {
   }, []);
   return <MotionConfig reducedMotion="user"><div className={`company-site ${reduced ? 'reduced-motion motion-paused' : ''}`}>
     <a className="skip-link" href="#needs">Перейти к задаче</a>
-    <header className="site-header"><a className="brand" href="#top" aria-label="HR Vision — в начало"><img src={LOGO_URL} width="150" height="24" alt="HR Vision"/></a><nav aria-label="Кабинет работодателя"><a className="employer-login" href={employerEntryUrl('login')}>Войти</a><SiteCountdownButton startAtSection="calendar" onStart={startHiring}/></nav></header>
+    <header className="site-header"><a className="brand" href="#top" aria-label="HR Vision — в начало"><img src={LOGO_URL} width="150" height="24" alt="HR Vision"/></a><nav aria-label="Выберите, что вы ищете"><a className="employer-login" href="/candidate">Ищу работу</a><SiteCountdownButton startAtSection="calendar" onStart={startHiring} label="Ищу сотрудника"/></nav></header>
     <main>
       <Chapter id="top" className="intro-chapter">{p=><Intro progress={p}/>}</Chapter>
       <Chapter id="needs" className="needs-chapter">{p=><Needs progress={p} need={need} setNeed={editNeed} onNext={startHiring} nextLabel="Начать подбор"/>}</Chapter>
