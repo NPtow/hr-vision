@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { CalendarDays, Check, ChevronDown, Menu, RefreshCw, UserRound, X } from 'lucide-react';
+import { CalendarDays, Check, ChevronDown, Menu, UserRound, X } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import logo from '../employer-workspace/assets/hr-vision-logo.svg';
 import '../employer-workspace/employer.css';
@@ -164,9 +164,7 @@ export function RecruiterPortal() {
           </nav>
         </aside>
         <main className="rp-main">
-          <header className="rp-page-heading"><h1>{page === 'interviews' ? 'Интервью' : 'Личный кабинет'}</h1><div className="rp-actions">
-            <Button variant="ghost" size="icon" aria-label="Обновить данные" disabled={busy} onClick={() => void refresh()}><RefreshCw size={18}/></Button>
-          </div></header>
+          <header className="rp-page-heading"><h1>{page === 'interviews' ? 'Интервью' : 'Личный кабинет'}</h1></header>
           {(error || auth.error) && <div className="rp-error" role="alert">{error || auth.error}</div>}
           {notice && <p className="rp-notice" role="status"><Check size={16}/>{notice}</p>}
           {!state ? <div className="rp-empty"><p>{error ? 'Данные не загрузились.' : 'Загружаем…'}</p>{error && <Button variant="secondary" onClick={() => void refresh()}>Повторить</Button>}</div> : <>
