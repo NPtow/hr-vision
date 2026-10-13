@@ -25,7 +25,12 @@ def _salary(profile):
 def _profile(db, candidate_id, profile, portal):
     row = db.execute('SELECT body FROM cp_internal_profiles WHERE candidate_id=?', (candidate_id,)).fetchone()
     internal = json.loads(row[0]) if row else {}
-    resume = db.execute('SELECT text_content FROM cp_resumes WHERE candidate_id=?', (candidate_id,)).fetchone()
+    resume = db.execute('''SELECT text_content,filename,mime,length(content),uploaded_at
+      FROM cp_resumes WHERE candidate_id=?''', (candidate_id,)).fetchone()
+    account = db.execute('SELECT email,profile FROM cp_candidates WHERE id=?', (candidate_id,)).fetchone()
+    saved_profile = json.loads(account[1]) if account else {}
+    contact_values = {'email': account[0] if account and account[0] else saved_profile.get('email'),
+                      'phone': saved_profile.get('phone'), 'telegram': saved_profile.get('telegram')}
     interview = portal.interview(db, candidate_id)
     fields = [
         ('Город', profile.get('city')), ('Место проживания', profile.get('residence')),
@@ -47,6 +52,9 @@ def _profile(db, candidate_id, profile, portal):
         'shortSummary': internal.get('summary', ''),
         'profile': [{'label': label, 'value': str(value)} for label, value in fields if value],
         'cv': resume[0] if resume else '',
+        'resume': {'filename': resume[1], 'mime': resume[2], 'size': resume[3], 'uploadedAt': resume[4]} if resume else None,
+        'contacts': [{'kind': kind, 'value': value.strip()} for kind, value in contact_values.items()
+                     if isinstance(value, str) and value.strip()],
         'conclusion': [internal['evaluation']] if internal.get('evaluation') else [],
         'questions': [],
     }
@@ -132,6 +140,7 @@ def person(db, principal, portal, record, vacancy):
         'slots': [], 'busy': [],
         'freeSlots': _free_slots(db, cid, principal['workspaceId'], profile),
         'meeting': meeting, 'feedback': state['feedback'],
+        'screeningComments': state['screeningComments'], 'reviewRejection': state['reviewRejection'],
         'meetings': meetings, 'stages': stages, 'offers': state['offers'],
         'afterInterest': state['afterInterest'], 'decision': state['decision'],
         'offer': state['offer'], 'messages': messages, 'workflowRevision': state['revision'],

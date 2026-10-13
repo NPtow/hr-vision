@@ -79,3 +79,64 @@
 .ir-lab-media .ir-lab-error { color:#a9364a; margin-top:10px; }
 @container (min-width:680px) { .ir-materials { grid-template-columns:minmax(210px,.8fr) minmax(0,1.2fr); gap:22px; } }
 @container (max-width:360px) { .ir-review .ir-mode button { font-size:11px; padding:7px 8px; gap:4px; } .ir-mode { width:100%; } .ir-mode button { flex:1; } .ir-media-missing,.ir-media-error { padding:16px; } .ir-media-missing p { font-size:11px; } .ir-player-caption { font-size:9px; } .ir-excerpt { padding:13px; } }
+
+/* Employer candidate review. The existing stage-card/panel appearances stay unchanged. */
+.ir-review.ir-candidate-review { --ir-ink:#121212; --ir-muted:#757575; --ir-purple:#2072d0; display:grid; gap:20px; margin:0; font-family:inherit; }
+.ir-candidate-interview { display:grid; grid-template-columns:minmax(0,1fr); gap:24px; padding:16px; border-radius:20px; background:#f8f8f9; }
+.ir-candidate-main,.ir-candidate-chapters { min-width:0; }
+.ir-candidate-heading { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px 12px; margin-bottom:8px; }
+.ir-review.ir-candidate-review h3 { margin:0; font-size:18px; line-height:28px; font-weight:600; }
+.ir-candidate-heading .ir-mode { margin:0; padding:0; background:transparent; }
+.ir-candidate-heading .ir-mode button { min-height:36px; padding:7px 10px; border-radius:999px; }
+.ir-candidate-player { position:relative; min-width:0; overflow:hidden; border-radius:22px; background:#252935; }
+.ir-candidate-review .ir-player { min-height:0; border-radius:22px; background:#252935; }
+.ir-candidate-review .ir-player:has(> .ir-media-missing) { aspect-ratio:auto; }
+.ir-candidate-review .ir-media-missing { position:relative; min-height:220px; padding-bottom:88px; overflow-wrap:anywhere; }
+.ir-candidate-controls { position:absolute; bottom:0; left:0; right:0; padding:20px 8px 2px; color:#fff; background:linear-gradient(transparent,#000b); }
+.ir-candidate-track { position:relative; height:24px; }
+.ir-candidate-track>input { display:block; width:100%; height:24px; padding:0; margin:0; accent-color:#3195e1; cursor:pointer; }
+.ir-candidate-track>input:disabled { opacity:.3; cursor:default; }
+.ir-candidate-track .ir-timeline-markers { inset:0 8px auto; height:24px; }
+.ir-candidate-track .ir-timeline-markers button { height:24px; width:20px; }
+.ir-candidate-track .ir-timeline-markers button::before { background:#58b6ff; height:8px; width:4px; border-radius:2px; }
+.ir-candidate-control-row { display:flex; gap:4px; align-items:center; }
+.ir-candidate-review .ir-candidate-control-row>button { display:grid; place-items:center; border:0; width:40px; height:40px; flex:none; padding:0; background:transparent; color:#fff; border-radius:10px; }
+.ir-candidate-control-row>button img { display:block; max-width:none; }
+.ir-candidate-control-row>span { font-size:12px; font-variant-numeric:tabular-nums; }
+.ir-candidate-review .ir-candidate-control-row>button:hover { background:#ffffff18; }
+.ir-candidate-review .ir-candidate-control-row>button:disabled { cursor:default; opacity:.4; }
+.ir-candidate-control-row>.ir-candidate-fullscreen { margin-left:auto; }
+.ir-candidate-review :is(button,input):focus-visible { outline:2px solid #6554e8; outline-offset:2px; }
+.ir-candidate-controls :is(button,input):focus-visible { outline-color:white; }
+.ir-review.ir-candidate-review .ir-candidate-chapters>h3 { margin-bottom:8px; }
+.ir-candidate-chapters>ol { display:grid; align-content:start; gap:4px; margin:0; padding:0 4px 4px; list-style:none; max-height:440px; overflow-y:auto; overscroll-behavior:contain; scrollbar-width:thin; }
+.ir-candidate-chapters li { min-width:0; border-radius:12px; padding:0 0 4px; }
+.ir-candidate-chapters li[data-selected=true] { background:#eeedf1; }
+.ir-candidate-chapter-row { display:flex; align-items:center; gap:4px; min-width:0; }
+.ir-candidate-review .ir-candidate-chapter { display:grid; gap:4px; flex:1; min-width:0; width:100%; padding:12px; border:0; border-radius:12px; color:#121212; background:transparent; text-align:left; }
+.ir-candidate-chapter strong { font-size:14px; line-height:20px; font-weight:500; overflow-wrap:anywhere; }
+.ir-candidate-chapter span { font-size:12px; line-height:16px; color:#757575; }
+.ir-candidate-review .ir-candidate-repeat { display:grid; place-items:center; width:44px; height:44px; flex:none; padding:0; border:0; border-radius:12px; background:transparent; }
+.ir-candidate-repeat img { display:block; max-width:none; }
+.ir-candidate-review :is(.ir-candidate-repeat,.ir-candidate-chapter):hover { background:#e6e5eb; }
+.ir-candidate-transcript,.ir-candidate-recruiter { display:grid; gap:12px; padding:16px; border-radius:20px; background:#f8f8f9; }
+.ir-candidate-transcript { width:100%; max-width:900px; }
+.ir-candidate-transcript pre { margin:0; font:inherit; font-size:14px; line-height:24px; white-space:pre-wrap; overflow-wrap:anywhere; }
+.ir-candidate-review .ir-candidate-transcript>p,.ir-candidate-review .ir-candidate-recruiter p { color:#121212; font-size:14px; line-height:24px; white-space:pre-wrap; overflow-wrap:anywhere; }
+.ir-candidate-transcript h4 { font-size:14px; line-height:20px; font-weight:500; }
+.ir-candidate-transcript-speech { display:grid; gap:16px; }
+.ir-candidate-transcript-speech strong { display:block; color:#757575; font-size:12px; line-height:20px; font-weight:500; }
+.ir-candidate-review .ir-candidate-transcript-speech p { color:#121212; font-size:14px; line-height:24px; white-space:pre-wrap; overflow-wrap:anywhere; }
+.ir-candidate-source { color:#757575; font-size:12px; line-height:18px; overflow-wrap:anywhere; }
+.ir-candidate-time-comment { display:grid; gap:12px; margin-top:8px; }
+.ir-candidate-comment-times { display:flex; flex-wrap:wrap; gap:4px; }
+.ir-candidate-review .ir-candidate-comment-button { display:inline-flex; align-items:center; justify-self:start; gap:6px; padding:6px 10px; border:0; border-radius:10px; background:transparent; color:#757575; font-size:12px; line-height:20px; min-height:36px; }
+.ir-candidate-comment-button:disabled { cursor:default; opacity:.6; }
+@container(min-width:760px) { .ir-candidate-interview { grid-template-columns:minmax(0,2.2fr) minmax(250px,1fr); } }
+@container(max-width:360px) {
+  .ir-candidate-interview { padding:12px; gap:20px; }
+  .ir-review.ir-candidate-review h3 { font-size:16px; line-height:24px; }
+  .ir-candidate-control-row>span { font-size:10px; }
+  .ir-candidate-chapters>ol { max-height:400px; }
+}
+@media(forced-colors:active) { .ir-candidate-interview,.ir-candidate-transcript,.ir-candidate-recruiter { outline:1px solid CanvasText; } .ir-candidate-chapters li[data-selected=true] { outline:2px solid Highlight; outline-offset:-2px; } }

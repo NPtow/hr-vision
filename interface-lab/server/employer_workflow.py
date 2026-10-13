@@ -11,6 +11,7 @@ import copy
 import datetime as dt
 import hashlib
 import json
+import math
 import secrets
 import sqlite3
 import urllib.parse
@@ -65,6 +66,16 @@ def init(db):
       application_id TEXT NOT NULL REFERENCES cp_applications(id), actor_key TEXT NOT NULL,
       request_id TEXT NOT NULL, fingerprint TEXT NOT NULL, created_at TEXT NOT NULL,
       PRIMARY KEY(application_id,actor_key,request_id));
+    CREATE TABLE IF NOT EXISTS cp_screening_comments (
+      id TEXT PRIMARY KEY, application_id TEXT NOT NULL REFERENCES cp_applications(id),
+      interview_id TEXT NOT NULL, recording_id TEXT, seconds REAL NOT NULL,
+      chapter_title TEXT NOT NULL DEFAULT '', text TEXT NOT NULL,
+      created_by TEXT NOT NULL, created_at TEXT NOT NULL);
+    CREATE INDEX IF NOT EXISTS cp_screening_comments_application
+      ON cp_screening_comments(application_id,interview_id);
+    CREATE TABLE IF NOT EXISTS cp_review_rejections (
+      application_id TEXT PRIMARY KEY REFERENCES cp_applications(id),
+      answers TEXT NOT NULL, created_by TEXT NOT NULL, created_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS cp_test_assignments (
       id TEXT PRIMARY KEY, application_id TEXT NOT NULL REFERENCES cp_applications(id),
       title TEXT NOT NULL, instructions TEXT NOT NULL DEFAULT '',
@@ -198,6 +209,60 @@ def _current_offer(db, app_id):
 
 def _table_exists(db, name):
     return bool(db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)).fetchone())
+
+
+def screening_comments(db, application_id):
+    """Private append-only annotations; caller checks the employer's workspace."""
+    rows = db.execute('''SELECT id,interview_id,recording_id,seconds,chapter_title,text,created_at
+      FROM cp_screening_comments WHERE application_id=? ORDER BY rowid''', (application_id,))
+    keys = ('id', 'interviewId', 'recordingId', 'seconds', 'chapterTitle', 'text', 'createdAt')
+    return [dict(zip(keys, row)) for row in rows]
+
+
+def review_rejection(db, application_id):
+    row = db.execute('SELECT answers,created_at FROM cp_review_rejections WHERE application_id=?',
+                     (application_id,)).fetchone()
+    return {**json.loads(row[0]), 'createdAt': row[1]} if row else None
+
+
+def _rejection_answers(value):
+    require(isinstance(value, dict) and set(value) <= {'reason', 'missing', 'improve'},
+            'Проверьте ответы о причине отказа.', 400)
+    return {key: text(value.get(key, ''), 4000, required=key == 'reason')
+            for key in ('reason', 'missing', 'improve')}
+
+
+def _screening_comment_source(db, info, body):
+    interview_id = text(body.get('interviewId'), 160)
+    require(_table_exists(db, 'cp_interviews'), 'Интервью не найдено.', 404)
+    row = db.execute('SELECT status,room FROM cp_interviews WHERE id=? AND candidate_id=?',
+                     (interview_id, info['candidateId'])).fetchone()
+    require(row is not None, 'Интервью не найдено.', 404)
+    require(row[0] == 'completed', 'Комментарии доступны после интервью.', 409)
+    seconds = body.get('seconds')
+    require(type(seconds) in (int, float) and math.isfinite(seconds) and 0 <= seconds <= 14400,
+            'Проверьте таймкод комментария.', 400)
+    recording_id = body.get('recordingId')
+    if recording_id is not None:
+        recording_id = text(recording_id, 240)
+    room = json.loads(row[1]) if row[1] else None
+    recordings = []
+    if room and _table_exists(db, 'cp_media_state'):
+        # Cached provider IDs are accepted only for this exact source room. A
+        # caller-supplied URL or a different candidate's recording is never proof.
+        cached = db.execute('SELECT room_id,body FROM cp_media_state WHERE meeting_id=? AND kind=?',
+                            (interview_id, 'interview')).fetchone()
+        if cached and json.loads(cached[0]) == {'id': room['id'], 'name': room['name']}:
+            recordings = json.loads(cached[1]).get('recordings', [])
+    if recording_id is not None:
+        recording = next((item for item in recordings if item.get('id') == recording_id), None)
+        require(recording is not None, 'Запись изменилась. Откройте интервью ещё раз.', 409)
+        duration = recording.get('duration')
+        if type(duration) in (int, float) and math.isfinite(duration) and duration >= 0:
+            require(seconds <= duration, 'Таймкод выходит за пределы записи.', 400)
+    else:
+        require(not recordings, 'Выберите запись для комментария.', 400)
+    return interview_id, recording_id, seconds
 
 
 def _test(db, app_id, test_id):
@@ -358,6 +423,8 @@ def load(db, application_id, *, actor='manager', candidate_id=None, vacancy_id=N
             state['meeting']['feedbackDraft'] = record['draft']
     state['offer'] = _current_offer(db, application_id)
     if actor == 'manager':
+        state['screeningComments'] = screening_comments(db, application_id)
+        state['reviewRejection'] = review_rejection(db, application_id)
         state['stages'] = stage_history(db, application_id, vacancy_id=info['vacancyId'])
         state['meetings'] = [stage['meeting'] for stage in state['stages'] if stage['kind'] == 'meeting']
         state['offers'] = [stage['offer'] for stage in state['stages'] if stage['kind'] == 'offer']
@@ -450,7 +517,7 @@ def prepare_questions(db, application_id, meeting_id, turns, *, vacancy_id=None)
 
 
 MANAGER_ACTIONS = {'feedback.questions', 'feedback.draft', 'feedback', 'decision', 'reject', 'offer.save', 'offer.send',
-                   'chat', 'test.create', 'test.update', 'stage.update'}
+                   'chat', 'test.create', 'test.update', 'stage.update', 'screening.comment.add'}
 CANDIDATE_ACTIONS = {'after', 'offer.reply', 'chat'}
 ALIASES = {'feedback.submit': 'feedback', 'offer.draft': 'offer.save', 'after.interest': 'after'}
 
@@ -466,15 +533,20 @@ def candidate_action(db, candidate_id, application_id, action, body):
     return _action(db, application_id, action, body, actor='candidate', actor_id=candidate_id)
 
 
-def reject(db, application_id, *, manager_id, vacancy_id=None, request_id=None):
+def reject(db, application_id, *, manager_id, vacancy_id=None, request_id=None,
+           rejection_answers=None, expected_revision=None):
     """Explicit early refusal, with cancellation handled by the adapter.
 
     The adapter cancels pending/confirmed meetings before calling this helper and
     updates employer_store visibility afterwards, all in the same transaction.
     A live meeting and an accepted offer cannot be withdrawn by this operation.
     """
-    return manager_action(db, application_id, 'reject',
-                          {'requestId': request_id} if request_id is not None else {},
+    body = {'requestId': request_id} if request_id is not None else {}
+    if rejection_answers is not None:
+        body['rejectionAnswers'] = rejection_answers
+    if expected_revision is not None:
+        body['expectedRevision'] = expected_revision
+    return manager_action(db, application_id, 'reject', body,
                           manager_id=manager_id, vacancy_id=vacancy_id)
 
 
@@ -488,6 +560,8 @@ def _action(db, app_id, action, body, *, actor, actor_id, vacancy_id=None):
     rid = body.get('requestId')
     if rid is not None:
         rid = text(rid, 120)
+    if action == 'screening.comment.add' or (action == 'reject' and 'rejectionAnswers' in body):
+        require(rid is not None, 'Укажите идентификатор запроса.', 400)
     fingerprint = hashlib.sha256(_json({'action': action, 'body': {
         k: v for k, v in body.items() if k != 'requestId'}}).encode()).hexdigest()
     events = []
@@ -504,7 +578,8 @@ def _action(db, app_id, action, body, *, actor, actor_id, vacancy_id=None):
                         'events': [], 'replayed': True}
         state = _workflow(db, app_id)
         hidden = _review_rejected(db, app_id)
-        if action in ('test.create', 'test.update', 'stage.update'):
+        if action in ('test.create', 'test.update', 'stage.update', 'screening.comment.add') or (
+                action == 'reject' and 'rejectionAnswers' in body):
             require('expectedRevision' in body, 'Обновите карточку перед сохранением.', 409)
         if 'expectedRevision' in body:
             check_revision(db, app_id, body['expectedRevision'])
@@ -529,7 +604,16 @@ def _action(db, app_id, action, body, *, actor, actor_id, vacancy_id=None):
 def _apply(db, info, state, action, body, actor, actor_id, events):
     app_id = info['applicationId']
     offer = _current_offer(db, app_id)
-    if action == 'test.create':
+    if action == 'screening.comment.add':
+        _open(db, info)
+        interview_id, recording_id, seconds = _screening_comment_source(db, info, body)
+        words = text(body.get('text'), 4000)
+        chapter = text(body.get('chapterTitle', ''), 240, required=False)
+        db.execute('''INSERT INTO cp_screening_comments
+          (id,application_id,interview_id,recording_id,seconds,chapter_title,text,created_by,created_at)
+          VALUES (?,?,?,?,?,?,?,?,?)''',
+          (_id('screening_comment'), app_id, interview_id, recording_id, seconds, chapter, words, actor_id, iso(now())))
+    elif action == 'test.create':
         _open(db, info)
         tid, stamp = _id('test'), iso(now())
         title = text(body.get('title'), 240)
@@ -644,13 +728,23 @@ def _apply(db, info, state, action, body, actor, actor_id, events):
                            'Компания решила не продолжать подбор с вами по этой вакансии.', system=True)
             events.append(_event(info, 'employer.declined', mid))
     elif action == 'reject':
+        answers = _rejection_answers(body['rejectionAnswers']) if 'rejectionAnswers' in body else None
         if state['decision'] == 'declined':
+            if answers is not None:
+                saved = review_rejection(db, app_id)
+                require(saved and all(saved[key] == value for key, value in answers.items()),
+                        'Причина отказа уже сохранена.', 409)
             return False
+        if answers is not None:
+            _open(db, info)
         require(not db.execute("""SELECT 1 FROM cp_meetings WHERE application_id=?
           AND status IN ('pending','confirmed','live') LIMIT 1""", (app_id,)).fetchone(),
           'Сначала завершите или отмените назначенную встречу.', 409)
         require(not offer or offer['status'] != 'accepted', 'Кандидат уже принял оффер.', 409)
         require(_closed(db, info) != info['candidateId'], 'Кандидат уже принят по этой вакансии.', 409)
+        if answers is not None:
+            db.execute('''INSERT INTO cp_review_rejections(application_id,answers,created_by,created_at)
+              VALUES (?,?,?,?)''', (app_id, _json(answers), actor_id, iso(now())))
         withdrawn = bool(offer and offer['status'] in ('draft', 'sent'))
         if withdrawn:
             db.execute("UPDATE cp_offer_versions SET status='withdrawn' WHERE id=?", (offer['id'],))

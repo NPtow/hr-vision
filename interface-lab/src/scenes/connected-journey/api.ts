@@ -10,13 +10,18 @@ export type SourceProfile = {
   score: number | null; duration: number | null; photo: string | null; video: string | null;
   shortChapters: RecordingChapter[]; fullChapters: RecordingChapter[]; shortSummary: string;
   profile: { label: string; value: string }[]; cv: string; conclusion: string[]; questions: string[];
+  interviewId?: string | null;
+  contacts?: { kind: 'email' | 'phone' | 'telegram'; value: string }[];
+  resume?: { filename: string; mime: string; size: number; uploadedAt: string } | null;
 };
+export type ScreeningComment = { id: string; interviewId: string; recordingId: string | null; seconds: number; chapterTitle?: string; text: string; createdAt: string };
+export type RejectionAnswers = { reason: string; missing: string; improve: string };
 export type Offer = { id?: string; createdAt?: string; status: 'draft' | 'sent' | 'accepted' | 'declined' | 'withdrawn' | 'superseded'; role: string; compensation: string; format: string; expectations: string; startDate: string; version: number };
 export type FeedbackQuestion = { id: string; question: string; seconds: number | null; source: 'live' | 'transcript' | 'manual' };
 export type FeedbackAnswer = { rating: 'clear' | 'unclear' | 'unanswered' | 'not_asked'; comment: string };
 export type Questionnaire = { id: string; meetingId: string; questions: FeedbackQuestion[] };
 export type Meeting = { id: string; revision?: number; start: string; end?: string; startedAt?: string; endedAt?: string; status: 'pending' | 'confirmed' | 'live' | 'cancelled' | 'completed'; testSkip: boolean; joined: Actor[]; questionnaire?: Questionnaire | null; feedbackDraft?: Record<string, FeedbackAnswer> };
-export type Person = { id: CandidateId; candidateId?: string; applicationId?: string; vacancyId?: string; vacancyRole?: string; reviewState?: string; name: string; role?: string; summary?: string; photo?: string | null; sourceProfile?: SourceProfile; interest: 'pending' | 'accepted' | 'declined'; auto: boolean; slots?: string[]; busy?: string[]; freeSlots: string[]; meeting: Meeting | null; meetings?: Meeting[]; offers?: Offer[]; stages?: CandidateStage[]; workflowRevision?: number; feedback?: { example?: string; doubts?: string; check?: string; at: string; questions?: FeedbackQuestion[]; answers?: Record<string, FeedbackAnswer> } | null; afterInterest: 'pending' | 'yes' | 'no'; decision: 'review' | 'pool' | 'declined'; offer: Offer | null; messages: { id: string; actor: string; text: string; at: string; system: boolean }[] };
+export type Person = { id: CandidateId; candidateId?: string; applicationId?: string; vacancyId?: string; vacancyRole?: string; reviewState?: string; name: string; role?: string; summary?: string; photo?: string | null; sourceProfile?: SourceProfile; interest: 'pending' | 'accepted' | 'declined'; auto: boolean; slots?: string[]; busy?: string[]; freeSlots: string[]; meeting: Meeting | null; meetings?: Meeting[]; offers?: Offer[]; stages?: CandidateStage[]; workflowRevision?: number; screeningComments?: ScreeningComment[]; reviewRejection?: (RejectionAnswers & { createdAt?: string }) | null; feedback?: { example?: string; doubts?: string; check?: string; at: string; questions?: FeedbackQuestion[]; answers?: Record<string, FeedbackAnswer> } | null; afterInterest: 'pending' | 'yes' | 'no'; decision: 'review' | 'pool' | 'declined'; offer: Offer | null; messages: { id: string; actor: string; text: string; at: string; system: boolean }[] };
 export type Vacancy = { id?: string; company: string; role: string; problem: string; salary: string; format: string; expectations: string; proposedCount?: number; selectedCount?: number };
 export type EmployerVacancyDetails = {
   address: string;
@@ -225,7 +230,7 @@ export function useJourney(scope: Scope = 'sfera', options: { employer?: boolean
   }
   const clearLocation = () => {
     const url = new URL(location.href);
-    for (const key of ['vacancyId', 'applicationId', 'screen', 'pool', 'task', 'stageId', 'meetingId']) url.searchParams.delete(key);
+    for (const key of ['vacancyId', 'applicationId', 'intakeId', 'screen', 'pool', 'task', 'stageId', 'meetingId']) url.searchParams.delete(key);
     history.replaceState(history.state, '', url);
   };
   async function authenticate(mode: 'register' | 'login', credentials: EmployerCredentials) {

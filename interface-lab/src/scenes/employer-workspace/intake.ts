@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { journeyRequestTarget, request } from '../connected-journey/api';
 import type { Scope } from './EmployerShell';
+import type { RecordingChapter } from '../interview-review/InterviewReview';
 
 export type IntakeFile = { id: string; name: string; size: number };
 export type PreparedProfile = {
@@ -9,8 +10,11 @@ export type PreparedProfile = {
   evaluationUrl?: string;
   recordings: { name: string; publicUrl: string; mime: string; size: number }[];
   sourceLabel: string;
+  transcriptText?: string;
+  chapters?: RecordingChapter[];
 };
-export type IntakePerson = { id: string; name: string; role: string; contact: string; link: string; note: string; scope: Scope; files: IntakeFile[]; createdAt: string; archived: boolean; preparedProfile?: PreparedProfile };
+export type IntakeComment = { id: string; recordingIndex: number; recordingId: string; seconds: number; chapterTitle?: string; text: string; createdAt: string };
+export type IntakePerson = { id: string; name: string; role: string; contact: string; link: string; note: string; scope: Scope; files: IntakeFile[]; createdAt: string; archived: boolean; preparedProfile?: PreparedProfile; screeningComments?: IntakeComment[]; reviewRevision?: number; reviewRejection?: { reason: string; missing: string; improve: string; createdAt?: string } | null };
 export function useIntake(token: string, scope: Scope, vacancyId?: string) {
   const context = JSON.stringify([token, scope, vacancyId || '']);
   const [result, setResult] = useState<{ context: string; people: IntakePerson[]; error: string; loading: boolean } | null>(null);
@@ -27,11 +31,18 @@ export function useIntake(token: string, scope: Scope, vacancyId?: string) {
   const current = result?.context === context ? result : null;
   return { people: current?.people || [], error: current?.error || '', loading: !!token && (!current || current.loading), refresh };
 }
-export async function downloadResume(token: string, file: IntakeFile) {
+export async function downloadResume(token: string, file: IntakeFile, mode: 'download' | 'open' = 'download') {
+  const targetWindow = mode === 'open' ? window.open('about:blank', '_blank') : null;
+  if (targetWindow) targetWindow.opener = null;
   const target = journeyRequestTarget(`intake/files/${encodeURIComponent(file.id)}`, token);
-  const response = await fetch('/api/hr/' + target.path, { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
-  if (!response.ok) throw new Error('Не удалось загрузить резюме. Попробуйте ещё раз.');
-  const url = URL.createObjectURL(await response.blob());
-  const a = document.createElement('a'); a.href = url; a.download = file.name; document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  try {
+    const response = await fetch('/api/hr/' + target.path, { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store', signal: AbortSignal.timeout(30000) });
+    if (!response.ok) throw new Error('Не удалось загрузить резюме. Попробуйте ещё раз.');
+    const url = URL.createObjectURL(await response.blob());
+    if (targetWindow) targetWindow.location.replace(url);
+    else {
+      const a = document.createElement('a'); a.href = url; a.download = file.name; document.body.appendChild(a); a.click(); a.remove();
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (cause) { targetWindow?.close(); throw cause; }
 }

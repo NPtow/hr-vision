@@ -229,9 +229,18 @@ class EmployerRoutes:
             if route == '/intake/archive' and method == 'POST':
                 store.vacancy(db, wid, body.get('vacancyId'))
                 return self.intake.archive(db, wid, body['vacancyId'], body), {}
+            if route == '/intake/comment' and method == 'POST':
+                store.vacancy(db, wid, body.get('vacancyId'))
+                return self.intake.screening_comment(db, wid, body['vacancyId'], body), {}
+            if route == '/intake/review' and method == 'POST':
+                store.vacancy(db, wid, body.get('vacancyId'))
+                return self.intake.review_reject(db, wid, body['vacancyId'], body), {}
             if route.startswith('/intake/files/') and method == 'GET':
                 fid = urllib.parse.unquote(route.removeprefix('/intake/files/'))
                 return self.intake.file(db, wid, fid)
+            if route == '/screening/resume' and method == 'POST':
+                _, app, _ = self._identity(db, headers, body)
+                return self.portal.download_resume(db, app['candidateId']), {}
             if route == '/action' and method == 'POST':
                 return self._action(db, headers, body), {}
             raise Problem('Действие не найдено.', 404)
@@ -367,13 +376,19 @@ class EmployerRoutes:
 
     def _reject(self, db, principal, app, body):
         aid, wid = app['applicationId'], principal['workspaceId']
+        if 'expectedRevision' in body:
+            workflow.check_revision(db, aid, body['expectedRevision'])
+        if 'rejectionAnswers' in body:
+            require(isinstance(body['rejectionAnswers'], dict), 'Проверьте ответы о причине отказа.', 400)
         meeting = self.portal.meeting(db, aid)
         require(not meeting or meeting['status'] != 'live', 'Сначала завершите активную встречу.', 409)
         if meeting and meeting['status'] in ('pending', 'confirmed'):
             self.portal.cancel_meeting(db, {'applicationId': aid, 'meetingId': meeting['id'], 'revision': meeting['revision']},
                                        manager_id='workspace:' + wid)
         result = workflow.reject(db, aid, manager_id='workspace:' + wid,
-                                 vacancy_id=app['vacancyId'], request_id=body.get('requestId'))
+                                 vacancy_id=app['vacancyId'], request_id=body.get('requestId'),
+                                 rejection_answers=body.get('rejectionAnswers'),
+                                 expected_revision=body.get('expectedRevision'))
         self.portal.workflow_events(db, result['events'])
         store.reject(db, wid, aid, request_id=body.get('requestId'), expected_revision=body.get('vacancyRevision'))
 

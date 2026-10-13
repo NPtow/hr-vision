@@ -28,6 +28,6 @@ export function parseMeetingTranscript(text: string): RecordingChapter[] {
     const fragment = spoken.replace(/<[^>]*>/g, '').replace(/&(?:amp|lt|gt|quot|apos|nbsp);/g, s => ({'&amp;':'&','&lt;':'<','&gt;':'>','&quot;':'"','&apos;':"'",'&nbsp;':' '}[s] || s)).trim();
     if (!fragment) return [];
     return [{ title: voice || (fragment.length > 75 ? fragment.slice(0,72) + '…' : fragment),
-      detail: fragment, fragment, seconds: start, source: `${match[1]} · расшифровка встречи` }];
+      detail: fragment, fragment, seconds: start, endSeconds: end, speaker: voice, source: `${match[1]} · расшифровка встречи` }];
   }).sort((a,b) => a.seconds! - b.seconds!);
 }
