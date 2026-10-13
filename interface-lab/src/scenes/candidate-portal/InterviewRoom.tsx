@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, Camera, CameraOff, Mic, PhoneOff, Video } from 'lucide-react';
+import { ArrowLeft, Camera, CameraOff, LoaderCircle, Mic, MicOff, PhoneOff } from 'lucide-react';
 import type { DailyCall } from '@daily-co/daily-js';
 import { Button } from '../../components/ui/button';
 import { candidateRequest, dateTimeLabel, type CallMaterials, type RoomCredentials } from './api';
@@ -17,6 +17,9 @@ export function InterviewRoom({ title, start, completed, configured, application
   const alive = useRef(true);
   const attempt = useRef(0);
   const [camera, setCamera] = useState(true);
+  const [microphone, setMicrophone] = useState(true);
+  const [deviceAttempt, setDeviceAttempt] = useState(0);
+  const [deviceError, setDeviceError] = useState('');
   const [checking, setChecking] = useState(false);
   const [previewReady, setPreviewReady] = useState(false);
   const [opened, setOpened] = useState(false);
@@ -43,19 +46,32 @@ export function InterviewRoom({ title, start, completed, configured, application
     document.body.style.overflow = 'hidden';
     return () => { shell?.removeAttribute('inert'); document.body.style.overflow = previous; };
   }, [opened]);
-  async function checkDevices() {
-    setChecking(true); setError(''); stopPreview(); setPreviewReady(false);
-    try {
-      if (!navigator.mediaDevices?.getUserMedia) throw new Error('Проверка устройств доступна в современном браузере по защищённой ссылке.');
-      const media = await navigator.mediaDevices.getUserMedia({ audio: true, video: camera });
-      if (!alive.current) { media.getTracks().forEach(track => track.stop()); return; }
-      stream.current = media;
-      if (preview.current) { preview.current.srcObject = media; await preview.current.play().catch(() => undefined); }
-      setPreviewReady(true);
-    } catch (cause) {
-      if (alive.current) setError(cause instanceof Error && cause.name === 'NotAllowedError' ? 'Разрешите доступ к микрофону и камере в настройках браузера. Можно также продолжить без камеры.' : cause instanceof Error && cause.name === 'NotFoundError' ? 'Не нашли устройство. Проверьте микрофон и камеру или выберите разговор без камеры.' : 'Не удалось включить устройства. Проверьте разрешения браузера и попробуйте ещё раз.');
-    } finally { if (alive.current) setChecking(false); }
-  }
+  useEffect(() => {
+    let cancelled = false;
+    stopPreview(); setPreviewReady(false); setDeviceError('');
+    if (completed || !configured || opened || joining || (!camera && !microphone)) {
+      setChecking(false);
+      return;
+    }
+    setChecking(true);
+    void (async () => {
+      try {
+        if (!navigator.mediaDevices?.getUserMedia) throw new Error('Устройства недоступны.');
+        const media = await navigator.mediaDevices.getUserMedia({ audio: microphone, video: camera });
+        if (cancelled || !alive.current) { media.getTracks().forEach(track => track.stop()); return; }
+        stream.current = media;
+        if (preview.current) { preview.current.srcObject = media; await preview.current.play().catch(() => undefined); }
+        if (!cancelled && alive.current) setPreviewReady(true);
+      } catch (cause) {
+        if (!cancelled && alive.current) setDeviceError(cause instanceof Error && cause.name === 'NotAllowedError'
+          ? 'Разрешите доступ к камере и микрофону в браузере.'
+          : cause instanceof Error && cause.name === 'NotFoundError'
+            ? 'Устройство не найдено. Проверьте подключение или выключите его ниже.'
+            : 'Не удалось включить устройства. Попробуйте ещё раз.');
+      } finally { if (!cancelled && alive.current) setChecking(false); }
+    })();
+    return () => { cancelled = true; stopPreview(); };
+  }, [camera, microphone, deviceAttempt, completed, configured, opened, joining]);
   async function join() {
     const currentAttempt = ++attempt.current;
     setError(''); setJoining(true); setRecording('unknown'); stopPreview(); setPreviewReady(false);
@@ -83,7 +99,7 @@ export function InterviewRoom({ title, start, completed, configured, application
       call.on('camera-error', () => { if (active()) setError('Не удалось включить камеру или микрофон. Проверьте доступ к устройствам.'); });
       call.on('error', () => { if (active()) { setRecording('unknown'); setError('Соединение прервалось. Проверьте сеть; после выхода можно подключиться снова.'); } });
       call.on('left-meeting', () => { if (active()) { void close(); void onRefresh(); } });
-      await call.join({ url: credentials.url, token: credentials.token, startVideoOff: !camera });
+      await call.join({ url: credentials.url, token: credentials.token, startVideoOff: !camera, startAudioOff: !microphone });
     } catch (cause) {
       if (alive.current && attempt.current === currentAttempt) { setError((cause as Error).message); await close(); }
     } finally { if (alive.current && attempt.current === currentAttempt) setJoining(false); }
@@ -96,17 +112,22 @@ export function InterviewRoom({ title, start, completed, configured, application
         : <MediaPanel identity={applicationId ? `meeting:${applicationId}:${meetingId}` : `interview:${start}`} load={() => candidateRequest<CallMaterials>(applicationId ? 'meeting/materials' : 'interview/materials', applicationId ? { applicationId, meetingId } : {})}/>}
   </section>;
   return <section className="cp-interview-page" ref={host}>
-    <Button className="cp-back" variant="ghost" onClick={onBack}><ArrowLeft size={16}/>{guestToken ? 'К приглашению' : 'В кабинет'}</Button>
-    <div className="cp-page-heading"><h1>{title}</h1><p>{dateTimeLabel(start)} · 30 минут</p></div>
     <div className="cp-precall">
-      <div className="cp-preview"><video ref={preview} autoPlay muted playsInline className={previewReady && camera ? 'is-visible' : ''}/>{(!previewReady || !camera) && <div>{camera ? <Camera size={34}/> : <Mic size={34}/>}<p>{previewReady ? 'Микрофон доступен' : camera ? 'Проверим камеру и микрофон' : 'Разговор без камеры'}</p></div>}</div>
+      <div className="cp-preview">
+        <video ref={preview} autoPlay muted playsInline aria-label="Предпросмотр камеры" className={previewReady && camera ? 'is-visible' : ''}/>
+        {(!previewReady || !camera) && <div className="cp-preview-placeholder" role="status" aria-label={checking ? 'Подключаем устройства' : camera ? 'Камера недоступна' : 'Камера выключена'}>{checking ? <LoaderCircle size={30} className="cp-device-loading"/> : <CameraOff size={34}/>}</div>}
+        <div className="cp-preview-controls">
+          <button type="button" className={`cp-device-toggle${microphone ? '' : ' is-muted'}`} aria-label={microphone ? 'Выключить микрофон' : 'Включить микрофон'} title={microphone ? 'Выключить микрофон' : 'Включить микрофон'} aria-pressed={microphone} disabled={joining} onClick={() => setMicrophone(value => !value)}>{microphone ? <Mic size={21}/> : <MicOff size={21}/>}</button>
+          <button type="button" className={`cp-device-toggle${camera ? '' : ' is-muted'}`} aria-label={camera ? 'Выключить камеру' : 'Включить камеру'} title={camera ? 'Выключить камеру' : 'Включить камеру'} aria-pressed={camera} disabled={joining} onClick={() => setCamera(value => !value)}>{camera ? <Camera size={21}/> : <CameraOff size={21}/>}</button>
+        </div>
+      </div>
       <div className="cp-call-settings">
-        <h2>Перед встречей</h2><p className="cp-muted">Включите камеру. Если не получается — можно голосом.</p>
-        <div className="cp-device-actions"><Button variant="secondary" disabled={checking || joining} onClick={checkDevices}>{checking ? 'Проверяем…' : previewReady ? 'Проверить ещё раз' : 'Проверить устройства'}</Button><Button variant="ghost" disabled={joining || checking} aria-pressed={!camera} onClick={() => { stopPreview(); setPreviewReady(false); setCamera(value => !value); }}>{camera ? <CameraOff size={16}/> : <Camera size={16}/>} {camera ? 'Без камеры' : 'С камерой'}</Button></div>
-        {guestToken ? <p className="cp-muted">Сначала познакомимся без записи. Рекрутер объяснит сервис и включит запись только после вашего согласия.</p> : <label className="cp-check"><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)}/><span>Согласен на запись и расшифровку этой встречи.</span></label>}
+        <div className="cp-page-heading"><h1>{title}</h1><p>{dateTimeLabel(start)}</p></div>
+        {guestToken ? <p className="cp-muted">Запись начнётся после вашего согласия рекрутеру.</p> : <label className="cp-check"><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)}/><span>Согласен на запись и расшифровку встречи.</span></label>}
+        {deviceError && <div className="cp-device-error"><p className="cp-error" role="alert">{deviceError}</p><Button variant="ghost" disabled={checking || joining} onClick={() => setDeviceAttempt(value => value + 1)}>Повторить</Button></div>}
         {error && <p className="cp-error" role="alert">{error}</p>}
         {!configured && <p className="cp-notice">Видеовстреча пока недоступна. Свяжитесь с рекрутером; выбранное время сохранено.</p>}
-        <Button disabled={(!guestToken && !consent) || !configured || joining || checking} onClick={join}><Video size={17}/>{joining ? 'Подключаем…' : 'Войти в интервью'}</Button>
+        <Button className="cp-join-button" disabled={(!guestToken && !consent) || !configured || joining || checking} onClick={join}>{joining ? 'Подключаем…' : 'Присоединиться'}</Button>
       </div>
     </div>
     {opened && createPortal(<div className="agency-product-theme cp-root cp-call-overlay" role="dialog" aria-modal="true" aria-label={title}>

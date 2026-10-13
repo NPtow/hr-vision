@@ -135,6 +135,7 @@ class CandidateInvitationTest(unittest.TestCase):
         self.assertIn('token', result)
         self.assertEqual(self.media.permissions, [False])
         self.assertFalse(self.media.tokens[0]['is_owner'])
+        self.assertIs(self.media.tokens[0]['enable_prejoin_ui'], False)
         self.assertFalse(self.media.tokens[0]['start_cloud_recording'])
         self.assertFalse(self.media.tokens[0]['auto_start_transcription'])
         self.assertFalse(any(path.endswith('/start') for path, _ in self.media.actions))
@@ -177,6 +178,7 @@ class CandidateInvitationTest(unittest.TestCase):
         self.assertEqual(self.media.permissions, [False])
         self.assertFalse(self.media.tokens[-1]['is_owner'])
         self.assertFalse(self.media.tokens[-1]['permissions']['canAdmin'])
+        self.assertNotIn('enable_prejoin_ui', self.media.tokens[-1])
         self.assertFalse(self.media.tokens[-1]['enable_recording_ui'])
         self.assertFalse(any(path.endswith('/start') for path, _ in self.media.actions))
         self.media.fail_transcription = True
