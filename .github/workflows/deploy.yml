@@ -52,6 +52,7 @@ jobs:
         run: |
           npm run typecheck
           node scripts/transcript-check.mjs
+          node --test scripts/employer-entry.test.ts
       - name: Check API against isolated temporary state
         working-directory: interface-lab/server
         env:

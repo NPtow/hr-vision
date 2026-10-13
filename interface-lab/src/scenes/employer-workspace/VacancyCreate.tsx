@@ -22,15 +22,16 @@ type VacancyCreateProps = {
   error: string;
   onCreate: (values: VacancyCreateValues) => Promise<boolean>;
   company?: string;
+  initialDescription?: string;
 };
 
 const emptyValues = (company: string): VacancyCreateValues => ({
   title: '', company, city: '', remote: false, format: '', salary: '', description: '',
 });
 
-export function VacancyCreate({ open, onOpenChange, busy, error, onCreate, company = '' }: VacancyCreateProps) {
+export function VacancyCreate({ open, onOpenChange, busy, error, onCreate, company = '', initialDescription = '' }: VacancyCreateProps) {
   const id = useId();
-  const [values, setValues] = useState(() => emptyValues(company));
+  const [values, setValues] = useState(() => ({ ...emptyValues(company), description: initialDescription }));
   const [companyEdited, setCompanyEdited] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [localError, setLocalError] = useState('');

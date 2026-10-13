@@ -3,6 +3,7 @@ import { CalendarDays, ChevronDown, ClipboardList, FileText, Menu, Plus, Users, 
 import { Button } from '../../components/ui/button';
 import { DropdownMenu } from 'radix-ui';
 import logo from './assets/hr-vision-logo.svg';
+import { COMPANY_SITE_URL } from '../../lib/employer-entry';
 
 export type EmployerPage = 'dsa' | 'tasks' | 'shortlist' | 'intake' | 'book' | 'meetings' | 'meeting' | 'review' | 'pool' | 'offer' | 'chat' | 'vacancies' | 'schedule';
 export type Scope = 'sfera' | 'dsa';
@@ -23,7 +24,7 @@ export function EmployerShell({ enabled = true, page, scope, vacancy, name, hasO
     <header className="ew-topbar">
       <button className="ew-menu-toggle" aria-label={menuOpen ? 'Закрыть меню' : 'Открыть меню'} aria-expanded={menuOpen} aria-controls={menuId} onClick={() => setMenuOpen(open => !open)}>{menuOpen ? <X size={20}/> : <Menu size={20}/>}</button>
       <button className="ew-logo" onClick={() => onNavigate('tasks')} aria-label="HR Vision · задачи найма"><img src={logo} alt="HR Vision"/></button>
-      {onLogout ? <DropdownMenu.Root><DropdownMenu.Trigger asChild><button className="ew-account" disabled={accountBusy} aria-label={`Аккаунт: ${name}`}>{name}<ChevronDown size={16}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content className="ew-root ew-account-menu" align="end" sideOffset={8}><DropdownMenu.Item disabled={accountBusy} onSelect={onLogout}>Выйти из кабинета</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root> : <button className="ew-account" onClick={onAccount}>{name}<ChevronDown size={16}/></button>}
+      {onLogout ? <DropdownMenu.Root><DropdownMenu.Trigger asChild><button className="ew-account" disabled={accountBusy} aria-label={`Аккаунт: ${name}`}>{name}<ChevronDown size={16}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content className="ew-root ew-account-menu" align="end" sideOffset={8}><DropdownMenu.Item asChild><a href={COMPANY_SITE_URL}>На сайт HR Vision</a></DropdownMenu.Item><DropdownMenu.Item disabled={accountBusy} onSelect={onLogout}>Выйти из кабинета</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root> : <button className="ew-account" onClick={onAccount}>{name}<ChevronDown size={16}/></button>}
     </header>
     <div className="ew-body">
       <aside id={menuId} className="ag-sidebar ew-sidebar" data-open={menuOpen} aria-label="Разделы работодателя">
