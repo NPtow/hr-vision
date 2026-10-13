@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { CalendarDays, Check, ChevronDown, Menu, Plus, RefreshCw, UserRound, X } from 'lucide-react';
+import { CalendarDays, Check, ChevronDown, Menu, RefreshCw, UserRound, X } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import logo from '../employer-workspace/assets/hr-vision-logo.svg';
 import '../employer-workspace/employer.css';
@@ -7,7 +7,6 @@ import './recruiter.css';
 import { formatDate, recruiterRequest, RecruiterRequestError, type RecruiterCandidate, type RecruiterState } from './api';
 import { RecruiterCall, type ActiveCall } from './RecruiterCall';
 import { RecruiterAuth } from './RecruiterAuth';
-import { RecruiterInvite } from './RecruiterInvite';
 import { RecruiterProfile, type RecruiterChannels, type RecruiterChannelActionResult } from './RecruiterProfile';
 import { InterviewList } from './InterviewList';
 import { useRecruiterSession } from './session';
@@ -36,8 +35,6 @@ export function RecruiterPortal() {
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [inviteOpen, setInviteOpen] = useState(false);
-  const [inviteError, setInviteError] = useState('');
   const [callResult, setCallResult] = useState<{ identity: SessionIdentity; value: ActiveCall } | null>(null);
   const activeCall = callResult?.identity === identity ? callResult.value : null;
   const [completedOpen, setCompletedOpen] = useState(false);
@@ -70,7 +67,7 @@ export function RecruiterPortal() {
   useEffect(() => {
     sequence.current++; mutation.current = false; verifyingEmail.current = false;
     setStateResult(null); setCallResult(null); setBusy(false); setSelectedId(''); setPage('interviews'); setError(''); setNotice('');
-    setInviteOpen(false); setInviteError(''); setMenuOpen(false); setCompletedOpen(false); setCompletedFocusId('');
+    setMenuOpen(false); setCompletedOpen(false); setCompletedFocusId('');
     void refresh();
     const timer = setInterval(() => { if (document.visibilityState === 'visible') void refresh(); }, 8000);
     return () => { clearInterval(timer); sequence.current++; };
@@ -127,14 +124,6 @@ export function RecruiterPortal() {
       return false;
     } finally { if (isCurrent(captured)) { mutation.current = false; setBusy(false); } }
   }
-  async function createRecruiter(values: { name: string; email: string }) {
-    const captured = identity;
-    if (!isCurrent(captured) || mutation.current) return null;
-    mutation.current = true; setBusy(true); setInviteError('');
-    try { const next = await recruiterRequest<{ activationUrl: string }>('accounts', token, values); return isCurrent(captured) ? next : null; }
-    catch (cause) { if (isCurrent(captured)) setInviteError((cause as Error).message); return null; }
-    finally { if (isCurrent(captured)) { mutation.current = false; setBusy(false); } }
-  }
   async function channelAction(action: 'email' | 'telegram') {
     const captured = identity;
     if (!isCurrent(captured) || !token) return null;
@@ -145,18 +134,16 @@ export function RecruiterPortal() {
     setChannels(updated);
     return next;
   }
-  const invitation = <RecruiterInvite key={identity.generation} open={inviteOpen} onOpenChange={open => { setInviteOpen(open); setInviteError(''); }} busy={busy} error={inviteError} onCreate={createRecruiter}/>;
-  const openInvitation = () => { setInviteError(''); setInviteOpen(true); };
 
   if (auth.loading) return <div className="ew-root rp-root"><main className="rp-access"><img src={logo} alt="HR Vision"/><p role="status">Открываем кабинет…</p></main></div>;
-  if (activationToken || !auth.recruiter) return <><RecruiterAuth busy={auth.busy} error={auth.error} activationToken={activationToken || undefined}
+  if (activationToken || !auth.recruiter) return <RecruiterAuth busy={auth.busy} error={auth.error} activationToken={activationToken || undefined}
     onSubmit={async (_mode, values) => auth.authenticate('login', values)}
     onActivate={async (activation, password) => {
       if (!await auth.authenticate('activate', { token: activation, password })) return false;
       setActivationToken('');
       const url = new URL(location.href); url.searchParams.delete('recruiterActivate'); history.replaceState(history.state, '', url);
       return true;
-    }} canManageAccounts={auth.canManageAccounts} onManageAccounts={openInvitation}/>{invitation}</>;
+    }}/>;
 
   const navigate = (next: 'interviews' | 'profile') => { setPage(next); setMenuOpen(false); setNotice(''); };
   const completed = (state?.candidates || []).filter(candidate => candidate.interview?.status === 'completed')
@@ -178,7 +165,6 @@ export function RecruiterPortal() {
         </aside>
         <main className="rp-main">
           <header className="rp-page-heading"><h1>{page === 'interviews' ? 'Интервью' : 'Личный кабинет'}</h1><div className="rp-actions">
-            {page === 'profile' && auth.canManageAccounts && <Button variant="secondary" disabled={busy} onClick={openInvitation}><Plus size={16}/>Добавить рекрутера</Button>}
             <Button variant="ghost" size="icon" aria-label="Обновить данные" disabled={busy} onClick={() => void refresh()}><RefreshCw size={18}/></Button>
           </div></header>
           {(error || auth.error) && <div className="rp-error" role="alert">{error || auth.error}</div>}
@@ -205,7 +191,6 @@ export function RecruiterPortal() {
           </>}
         </main>
       </div>
-      {invitation}
     </div>
     {activeCall && <RecruiterCall key={`${identity.generation}-${activeCall.kind}-${activeCall.applicationId || activeCall.candidateId}`} active={{ ...activeCall, accountActive: state?.candidates.find(person => person.id === activeCall.candidateId)?.accountActive ?? activeCall.accountActive }} token={token} onClose={() => { setActiveCall(null); void refresh(); }} onJoined={() => void refresh()} onCompleted={() => {
       if (!isCurrent(identity)) return;

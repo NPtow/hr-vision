@@ -8,7 +8,7 @@ import './recruiter-account.css';
 export type RecruiterAuthMode = 'register' | 'login';
 export type RecruiterAuthValues = { name?: string; email: string; password: string };
 
-export function RecruiterAuth({ busy, error, onSubmit, activationToken, onActivate, canManageAccounts = false, onManageAccounts }: {
+export function RecruiterAuth({ busy, error, onSubmit, activationToken, onActivate }: {
   busy: boolean;
   error: string;
   onSubmit: (mode: RecruiterAuthMode, values: RecruiterAuthValues) => Promise<boolean>;
@@ -16,8 +16,6 @@ export function RecruiterAuth({ busy, error, onSubmit, activationToken, onActiva
   initialMode?: RecruiterAuthMode;
   activationToken?: string;
   onActivate?: (token: string, password: string) => Promise<boolean>;
-  canManageAccounts?: boolean;
-  onManageAccounts?: () => void;
 }) {
   const id = useId();
   const [values, setValues] = useState({ email: '', password: '' });
@@ -59,7 +57,6 @@ export function RecruiterAuth({ busy, error, onSubmit, activationToken, onActiva
   return <div className="agency-product-theme rp-auth">
     <header className="rp-auth-header">
       <img className="rp-auth-logo" src={logo} alt="HR Vision"/>
-      {canManageAccounts && onManageAccounts && <Button type="button" variant="ghost" disabled={locked} onClick={onManageAccounts}>Добавить рекрутера</Button>}
     </header>
     <main className="rp-auth-main">
       <section className="rp-auth-card" aria-labelledby={`${id}-title`}>

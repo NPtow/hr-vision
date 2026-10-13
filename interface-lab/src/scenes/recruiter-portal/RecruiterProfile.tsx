@@ -12,7 +12,7 @@ export type RecruiterChannelActionResult = {
   status: string; queued?: boolean; retryAfter?: number; url?: string | null; expiresAt?: number | null;
 };
 
-export function RecruiterProfile({ recruiter, blocks, busy, run, onLogout, channels, onChannelAction, canManageAccounts = false, onManageAccounts }: {
+export function RecruiterProfile({ recruiter, blocks, busy, run, onLogout, channels, onChannelAction }: {
   recruiter: { id: string; name: string; email: string };
   blocks: AvailabilityBlock[];
   busy: boolean;
@@ -20,8 +20,6 @@ export function RecruiterProfile({ recruiter, blocks, busy, run, onLogout, chann
   onLogout: () => void;
   channels?: RecruiterChannels;
   onChannelAction?: (action: 'email' | 'telegram') => Promise<RecruiterChannelActionResult | null>;
-  canManageAccounts?: boolean;
-  onManageAccounts?: () => void;
 }) {
   const [channelBusy, setChannelBusy] = useState<'email' | 'telegram' | null>(null);
   const [channelMessage, setChannelMessage] = useState('');
@@ -56,7 +54,7 @@ export function RecruiterProfile({ recruiter, blocks, busy, run, onLogout, chann
   return <div className="rp-page-content rp-profile">
     <section className="rp-profile-identity" aria-label="Профиль рекрутера">
       <div><h2>{recruiter.name}</h2><p>{recruiter.email}</p></div>
-      <div className="rp-profile-actions">{canManageAccounts && onManageAccounts && <Button type="button" variant="secondary" disabled={busy} onClick={onManageAccounts}>Добавить рекрутера</Button>}<Button type="button" variant="ghost" disabled={busy || channelBusy !== null} onClick={onLogout}>Выйти</Button></div>
+      <div className="rp-profile-actions"><Button type="button" variant="ghost" disabled={busy || channelBusy !== null} onClick={onLogout}>Выйти</Button></div>
     </section>
     {channels && <section className="rp-profile-channels" aria-labelledby="rp-profile-channels-title">
       <h2 id="rp-profile-channels-title">Уведомления об интервью</h2>
