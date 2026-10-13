@@ -264,6 +264,15 @@ class HHRouteTest(unittest.TestCase):
             original = db.execute('SELECT invitation_url FROM hh_outbox').fetchone()[0]
             same = self.routes.existing_invitation(db, cid, 'call')
             self.assertEqual(original, same['url'])
+            # Migrating the canonical host must not revoke an already sent invitation.
+            old_origin = self.portal.origin
+            self.portal.origin = 'https://new.example.test'
+            self.portal.origins = frozenset((old_origin, self.portal.origin))
+            self.assertEqual(original, self.routes.existing_invitation(db, cid, 'call')['url'])
+            self.portal.origins = frozenset((self.portal.origin,))
+            self.assertIsNone(self.routes.existing_invitation(db, cid, 'call'))
+            self.portal.origin = old_origin
+            self.portal.origins = frozenset((old_origin,))
             self.assertIsNone(self.routes.existing_invitation(db, cid, 'claim'))
             self.assertIsNone(self.routes.existing_invitation(db, 'other-person', 'call'))
             expires = db.execute('SELECT expires FROM cp_invitations').fetchone()[0]

@@ -24,7 +24,9 @@ class CandidateHTTPTest(unittest.TestCase):
         cls.data = tempfile.TemporaryDirectory(prefix='hr-candidate-http-')
         cls.env = patch.dict(os.environ, {'HR_DATA_DIR': cls.data.name, 'HR_TEAM_KEY': 'http-test-team-only',
             'HR_VIDEO_ENABLED': '0', 'DAILY_API_KEY': '', 'HR_NOTIFICATIONS_ENABLED': '0',
-            'HR_HH_ENABLED': '0', 'HR_HH_SENDING_ENABLED': '0'})
+            'HR_HH_ENABLED': '0', 'HR_HH_SENDING_ENABLED': '0',
+            'HR_ADDITIONAL_ORIGINS': 'https://legacy.example.test',
+            'HR_RECRUITER_ORIGIN': 'https://legacy.example.test'})
         cls.env.start()
         spec = importlib.util.spec_from_file_location('candidate_http_isolated_app', Path(__file__).with_name('app.py'))
         cls.app = importlib.util.module_from_spec(spec)
@@ -78,6 +80,14 @@ class CandidateHTTPTest(unittest.TestCase):
         self.assertEqual(self.request('candidate/state', token=self.manager)[0], 401)
         self.assertEqual(self.request('candidate/state')[0], 401)
         self.assertEqual(self.request('candidate/session')[1]['authenticated'], False)
+
+    def test_recruiter_activation_stays_on_explicit_legacy_origin(self):
+        status, result, _ = self.request('recruiter/accounts', {
+            'email': str(uuid.uuid4()) + '@example.test', 'name': 'Recruiter migration test'
+        }, token=self.manager)
+        self.assertEqual(status, 200, result)
+        self.assertTrue(result['activationUrl'].startswith('https://legacy.example.test/iframe.html?'))
+        self.assertIn('workspace=recruiter', result['activationUrl'])
 
     def test_real_notification_hooks_are_durable_but_never_fake_delivery(self):
         state = self.request('candidate/notifications', cookie=self.cookie)[1]
@@ -253,6 +263,28 @@ class CandidateHTTPTest(unittest.TestCase):
         self.assertEqual(self.request('candidate/profile', {'id': 'anna'}, cookie=self.cookie)[0], 400)
         self.assertEqual(self.request('candidate/application/decision', {'applicationId': 'another-candidate-app', 'decision': 'accepted'}, cookie=self.cookie)[0], 404)
         self.assertEqual(self.request('candidate/telegram/webhook', {'update_id': 1})[0], 403)
+
+    def test_explicit_legacy_origin_keeps_candidate_login_working(self):
+        for origin in (self.app.ORIGIN, 'https://legacy.example.test'):
+            status, person, _ = self.request('candidate/login', {
+                'email': self.payload['email'], 'password': self.payload['password']},
+                extra_headers={'Origin': origin, 'Sec-Fetch-Site': 'same-origin'})
+            self.assertEqual(status, 200, person)
+            self.assertEqual(person['id'], self.person['id'])
+        for origin in ('https://legacy.example.test.attacker.test', 'https://unlisted.example.test'):
+            self.assertEqual(self.request('candidate/login', self.payload,
+                extra_headers={'Origin': origin})[0], 403)
+        self.assertEqual(self.request('candidate/login', self.payload,
+            extra_headers={'Origin': 'https://legacy.example.test', 'Sec-Fetch-Site': 'cross-site'})[0], 403)
+
+    def test_explicit_legacy_origin_preserves_employer_csrf_guard(self):
+        for origin in (self.app.ORIGIN, 'https://legacy.example.test'):
+            status, response, _ = self.request('employer/login', {
+                'email': self.payload['email'], 'password': self.payload['password']},
+                extra_headers={'Origin': origin, 'Sec-Fetch-Site': 'same-origin'})
+            self.assertEqual(status, 401, response)
+        self.assertEqual(self.request('employer/login', {},
+            extra_headers={'Origin': 'https://legacy.example.test', 'Sec-Fetch-Site': 'cross-site'})[0], 403)
 
     def test_forwarded_ip_requires_explicit_trust_and_loopback_peer(self):
         source = {'X-HR-Client-IP': '203.0.113.9', 'X-Forwarded-For': '198.51.100.9'}

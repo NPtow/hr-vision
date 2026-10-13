@@ -236,8 +236,12 @@ def profile_value(body, previous=None):
 
 
 class CandidatePortal:
-    def __init__(self, connect, lock, media, origin, notifications=None, invitation_lookup=None):
+    def __init__(self, connect, lock, media, origin, notifications=None, invitation_lookup=None, *, origins=None,
+                 recruiter_origin=None):
         self.connect, self.lock, self.media, self.origin = connect, lock, media, origin
+        self.origins = frozenset(origins if origins is not None else (origin,))
+        self.recruiter_origin = recruiter_origin or origin
+        require(self.recruiter_origin in self.origins, 'Recruiter origin must be an allowed product origin.')
         self.notifications = notifications
         self.invitation_lookup = invitation_lookup
         self._media_guard = threading.Lock()
@@ -388,7 +392,7 @@ class CandidatePortal:
             with self.lock, self.connect() as db:
                 allowed = can_register(db)
                 if route == 'accounts':
-                    return recruiter_access.provision(db, body, self.origin, authorized=allowed), {}
+                    return recruiter_access.provision(db, body, self.recruiter_origin, authorized=allowed), {}
                 if route == 'register':
                     result = recruiter_access.register(db, body, authorized=allowed)
                 else:
@@ -1252,7 +1256,8 @@ class CandidatePortal:
         require(self.handles(path), 'Не найдено.', 404)
         require(method in ('GET', 'POST'), 'Метод не поддерживается.', 405)
         if method == 'POST':
-            require(headers.get('Origin') in (None, self.origin) and headers.get('Sec-Fetch-Site') != 'cross-site',
+            require((headers.get('Origin') is None or headers.get('Origin') in self.origins) and
+                    headers.get('Sec-Fetch-Site') != 'cross-site',
                     'Другой источник запроса.', 403)
             require(headers.get('Content-Type', '').split(';', 1)[0].strip() == 'application/json', 'Нужен JSON.', 415)
             require(isinstance(body, dict), 'Некорректный запрос.', 400)

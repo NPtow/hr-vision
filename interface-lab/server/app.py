@@ -33,6 +33,8 @@ ROOT.mkdir(parents=True, exist_ok=True)
 DB = ROOT / 'journey.sqlite3'
 TEAM = os.environ['HR_TEAM_KEY']
 ORIGIN = os.environ.get('HR_ORIGIN', 'https://hr-vision.158-160-179-53.sslip.io')
+ORIGINS = browser_access.allowed_origins(ORIGIN, [value.strip() for value in
+    os.environ.get('HR_ADDITIONAL_ORIGINS', '').split(',') if value.strip()])
 DAILY = os.environ.get('DAILY_API_KEY', '')
 VIDEO_ENABLED = os.environ.get('HR_VIDEO_ENABLED') == '1'
 TRUST_CLIENT_IP = os.environ.get('HR_TRUST_CLIENT_IP') == '1'
@@ -77,7 +79,8 @@ with connect() as db:
     db.execute('CREATE TABLE IF NOT EXISTS intake_files (id TEXT PRIMARY KEY, candidate TEXT NOT NULL, name TEXT NOT NULL, content BLOB NOT NULL)')
     db.execute('CREATE TABLE IF NOT EXISTS intake_batches (id TEXT PRIMARY KEY, digest TEXT NOT NULL)')
 os.chmod(DB, 0o600)
-CANDIDATE_PORTAL = CandidatePortal(connect, LOCK, MEDIA, ORIGIN, candidate_notifications)
+CANDIDATE_PORTAL = CandidatePortal(connect, LOCK, MEDIA, ORIGIN, candidate_notifications,
+                                  origins=ORIGINS, recruiter_origin=os.environ.get('HR_RECRUITER_ORIGIN', ORIGIN))
 CANDIDATE_BOT = CandidateBot(CANDIDATE_PORTAL, candidate_notifications)
 HH_ROUTES = HHRecruiterRoutes(connect, CANDIDATE_PORTAL)
 CANDIDATE_PORTAL.invitation_lookup = HH_ROUTES.existing_invitation
@@ -450,12 +453,13 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
             # Session bearer auth is tab-scoped; explicit JSON + origin blocks browser CSRF.
-            require(self.headers.get('Origin') in (None, ORIGIN), 'Другой источник запроса.', 403)
+            require(self.headers.get('Origin') is None or self.headers.get('Origin') in ORIGINS,
+                    'Другой источник запроса.', 403)
             require(self.headers.get('Content-Type', '').startswith('application/json'), 'Нужен JSON.', 415)
             path = urllib.parse.urlsplit(self.path).path
             if EMPLOYER_ROUTES.handles(path):
                 require(self.headers.get('Sec-Fetch-Site') not in ('cross-site', 'none') or
-                        self.headers.get('Sec-Fetch-Site') == 'none' and self.headers.get('Origin') == ORIGIN,
+                        self.headers.get('Sec-Fetch-Site') == 'none' and self.headers.get('Origin') in ORIGINS,
                         'Другой источник запроса.', 403)
             size = int(self.headers.get('Content-Length', '0'))
             if path in ('/api/hr/employer/intake', '/api/hr/employer/vacancies/import'):

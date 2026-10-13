@@ -286,7 +286,7 @@ class HHRecruiterRoutes:
             parsed = urlsplit(url)
             fragment = parse_qs(parsed.fragment)
             token = fragment.get('invite' if scope == 'call' else 'claim', [''])[0]
-            if (parsed.scheme != 'https' or parsed.netloc != urlsplit(self.portal.origin).netloc or
+            if (parsed.scheme != 'https' or (parsed.scheme + '://' + parsed.netloc) not in self.portal.origins or
                     parsed.username or parsed.password or not token or
                     not hmac.compare_digest(hashlib.sha256(token.encode()).hexdigest(), digest)):
                 continue
