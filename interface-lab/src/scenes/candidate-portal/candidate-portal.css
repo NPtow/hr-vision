@@ -192,7 +192,9 @@
 .cp-call-bar strong { font-size:15px; font-weight:550; }
 .cp-call-bar span { font-size:13px; color:#757575; }
 .cp-call-error { padding:12px 24px; color:#a93442; background:#fff5f4; font-size:14px; }
-.cp-daily-mount { width:100%; flex:1; min-height:0; }
+.cp-call-stage { position:relative; width:100%; flex:1; min-height:0; }
+.cp-daily-mount { position:absolute; inset:0; width:100%; height:100%; }
+.cp-call-loading { position:absolute; inset:0; display:grid; place-items:center; color:#757575; background:#fff; pointer-events:none; }
 @keyframes cp-spin { to { transform:rotate(360deg); } }
 @media (min-width:1600px) { .cp-content-page { padding-top:52px; } .cp-welcome { padding-top:125px; } }
 @media (max-width:1100px) { .cp-sidebar { width:184px; padding:26px 12px; } .cp-home-grid { grid-template-columns:minmax(0,1fr) 255px; gap:20px; } .cp-content-page,.cp-interview-page,.cp-calendar-page { padding-left:28px; padding-right:28px; } .cp-feature-card { padding:27px; } .cp-summary-card { padding:24px 20px; } .cp-welcome { padding:66px 40px; gap:36px; } .cp-welcome h1 { font-size:38px; } .cp-journey-card { padding:30px 24px; } .cp-journey-item { gap:15px; } .cp-precall { grid-template-columns:1fr; max-width:760px; } .cp-preview { aspect-ratio:16/9; } .cp-calendar-grid { padding:25px; gap:25px; grid-template-columns:1fr 1.2fr; } .cp-days { grid-template-columns:repeat(2,minmax(0,1fr)); } }
