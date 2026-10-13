@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
-import { ArrowLeft, Check, FileText, Link2, Loader2, Upload, X } from 'lucide-react';
+import { ArrowLeft, ArrowUp, Check, FileText, Loader2, Upload, X } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Textarea } from '../../components/ui/textarea';
@@ -128,8 +128,10 @@ export function VacancyCreate({ active, token, draftKey, onBack, busy, error, on
     setLocalError('');
   }
   function pickFile(next: File | undefined) {
-    if (!next || disabled) return;
-    if (!filePattern.test(next.name) || !next.size || next.size > maxFileSize) { setImportError('Выберите документ или изображение из списка форматов, не больше 5 МБ.'); return; }
+    if (!next || disabled || pendingImport) return;
+    if (!filePattern.test(next.name)) { setImportError('Поддерживаем PDF, DOCX, TXT, MD, CSV, RTF, DOC, ODT, PNG, JPG и WEBP.'); return; }
+    if (!next.size || next.size > maxFileSize) { setImportError(next.size ? 'Файл должен быть не больше 5 МБ.' : 'Файл пуст. Выберите другой.'); return; }
+    setDraft(previous => ({ ...previous, sourceKind: 'file' }));
     setFile(next); setImportError(''); setPendingImport(null);
   }
   function applyImport(result: EmployerVacancyImport) {
@@ -194,22 +196,29 @@ export function VacancyCreate({ active, token, draftKey, onBack, busy, error, on
 
   if (!active) return null;
   const sourceLabel = sourceKinds.find(item => item.id === draft.sourceKind)!.label;
+  const importLabel = importBusy ? 'Разбираем вакансию…' : draft.sourceKind === 'text' ? 'Разобрать текст' : draft.sourceKind === 'file' ? 'Заполнить из файла' : 'Заполнить по ссылке';
   const hasStructuredSalary = details.salaryMin !== null || details.salaryMax !== null;
   return <main className="ew-vacancy-create">
     <button type="button" className="ew-text-back" disabled={disabled} onClick={onBack}><ArrowLeft size={16}/>К вакансиям</button>
     <header className="ew-vacancy-create-heading"><h1 ref={heading} tabIndex={-1}>Новая вакансия</h1></header>
-    <section className="ew-vacancy-source" aria-labelledby={`${id}-source-title`} aria-busy={importBusy}>
-      <h2 id={`${id}-source-title`}>Заполнить из источника</h2>
-      <div className="ew-vacancy-source-tabs" aria-label="Источник вакансии">{sourceKinds.map(kind => <button key={kind.id} type="button" aria-pressed={draft.sourceKind === kind.id} disabled={disabled || !!pendingImport} onClick={() => { setDraft(previous => ({ ...previous, sourceKind: kind.id })); setImportError(''); }}>{kind.label}</button>)}</div>
-      {draft.sourceKind === 'file' ? <>
-        <input ref={fileInput} type="file" accept={fileTypes} className="ew-vacancy-file-input" aria-label="Файл вакансии" disabled={disabled || !!pendingImport} onChange={event => { pickFile(event.target.files?.[0]); event.target.value = ''; }}/>
-        <div className={`ew-vacancy-dropzone ${dragging ? 'is-dragging' : ''}`} onDragOver={event => { event.preventDefault(); if (!disabled) setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={event => { event.preventDefault(); setDragging(false); if (!pendingImport) pickFile(event.dataTransfer.files[0]); }}>
-          {file ? <><FileText size={24}/><div><strong>{file.name}</strong><span>{Math.ceil(file.size / 1024)} КБ</span></div><Button type="button" variant="ghost" size="icon" aria-label="Убрать файл" disabled={disabled || !!pendingImport} onClick={() => setFile(null)}><X size={17}/></Button></> : <><Upload size={24}/><div><strong>Перетащите файл вакансии</strong><span>Документ или изображение · до 5 МБ</span></div><Button type="button" variant="outline" disabled={disabled || !!pendingImport} onClick={() => fileInput.current?.click()}>Выбрать файл</Button></>}
-        </div>
-        <p className="ew-vacancy-source-note">PDF, DOCX, TXT, MD, CSV, RTF, DOC, ODT, PNG, JPG, WEBP</p>
-      </> : draft.sourceKind === 'text' ? <div className="ew-vacancy-source-label"><label htmlFor={`${id}-source-text`}>Текст вакансии</label><Textarea id={`${id}-source-text`} aria-describedby={`${id}-source-limit`} value={draft.text} rows={5} maxLength={24000} disabled={disabled || !!pendingImport} onChange={event => setDraft(previous => ({ ...previous, text: event.target.value }))} placeholder="Вставьте описание вакансии целиком"/><span id={`${id}-source-limit`} className="ew-vacancy-source-note">До 24 000 символов · {draft.text.length.toLocaleString('ru-RU')} / 24 000</span></div> : <label className="ew-vacancy-source-label" htmlFor={`${id}-source-url`}>Ссылка{draft.sourceKind !== 'other' ? ` на ${sourceLabel}` : ' на вакансию'}<div className="ew-vacancy-url"><Link2 size={18}/><Input id={`${id}-source-url`} type="url" maxLength={2048} value={draft.url} disabled={disabled || !!pendingImport} onChange={event => setDraft(previous => ({ ...previous, url: event.target.value }))} placeholder={draft.sourceKind === 'hh' ? 'https://hh.ru/vacancy/…' : draft.sourceKind === 'superjob' ? 'https://www.superjob.ru/vakansii/…' : 'https://…'}/></div></label>}
-      <div className="ew-vacancy-import-action"><Button type="button" variant="secondary" disabled={disabled || !!pendingImport || (draft.sourceKind === 'file' ? !file : draft.sourceKind === 'text' ? !draft.text.trim() : !draft.url.trim())} onClick={() => { void runImport(); }}>{importBusy ? <><Loader2 size={16} className="ew-vacancy-spinner"/>Разбираем вакансию…</> : draft.sourceKind === 'text' ? 'Разобрать текст' : draft.sourceKind === 'file' ? 'Заполнить из файла' : 'Заполнить по ссылке'}</Button><span>Или заполните поля ниже вручную</span></div>
-      {importBusy && <p className="ew-vacancy-source-note" role="status">Разбираем источник. Это может занять до двух минут.</p>}
+    <section className="ew-vacancy-source" aria-label="Источник вакансии" aria-busy={importBusy}>
+      <input ref={fileInput} type="file" accept={fileTypes} className="ew-vacancy-file-input" aria-label="Файл вакансии" tabIndex={-1} disabled={disabled || !!pendingImport} onChange={event => { pickFile(event.target.files?.[0]); event.target.value = ''; }}/>
+      <div className={`ew-vacancy-source-surface ${dragging ? 'is-dragging' : ''}`}
+        onDragOver={event => { if (!event.dataTransfer.types.includes('Files')) return; event.preventDefault(); if (!disabled && !pendingImport) setDragging(true); }}
+        onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false); }}
+        onDrop={event => { if (!event.dataTransfer.files.length) return; event.preventDefault(); setDragging(false); pickFile(event.dataTransfer.files[0]); }}>
+        {draft.sourceKind === 'file' ? <div className="ew-vacancy-file-row">
+          <button type="button" className="ew-vacancy-file-picker" aria-label={file ? `Заменить файл ${file.name}` : 'Выбрать файл'} disabled={disabled || !!pendingImport} onClick={() => fileInput.current?.click()}>
+            {file ? <><FileText size={20} aria-hidden="true"/><span>{file.name}</span></> : <Upload size={22} aria-hidden="true"/>}
+          </button>
+          {file && <Button type="button" variant="ghost" size="icon" aria-label="Убрать файл" disabled={disabled || !!pendingImport} onClick={() => setFile(null)}><X size={17}/></Button>}
+        </div> : draft.sourceKind === 'text' ? <Textarea id={`${id}-source-text`} aria-label="Текст вакансии" value={draft.text} rows={3} maxLength={24000} disabled={disabled || !!pendingImport} onChange={event => setDraft(previous => ({ ...previous, text: event.target.value }))}/> : <Input id={`${id}-source-url`} aria-label={`Ссылка на ${draft.sourceKind === 'other' ? 'вакансию' : sourceLabel}`} type="url" maxLength={2048} value={draft.url} disabled={disabled || !!pendingImport} onChange={event => setDraft(previous => ({ ...previous, url: event.target.value }))} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void runImport(); } }}/>}
+      </div>
+      <div className="ew-vacancy-source-tools">
+        <div className="ew-vacancy-source-tabs" aria-label="Источник вакансии">{sourceKinds.map(kind => <button key={kind.id} type="button" aria-pressed={draft.sourceKind === kind.id} disabled={disabled || !!pendingImport} onClick={() => { setDraft(previous => ({ ...previous, sourceKind: kind.id })); setImportError(''); }}>{kind.label}</button>)}</div>
+        <Button type="button" className="ew-vacancy-import-trigger" size="icon" aria-label={importLabel} title={importLabel} disabled={disabled || !!pendingImport || (draft.sourceKind === 'file' ? !file : draft.sourceKind === 'text' ? !draft.text.trim() : !draft.url.trim())} onClick={() => { void runImport(); }}>{importBusy ? <Loader2 size={18} className="ew-vacancy-spinner"/> : <ArrowUp size={18}/>}</Button>
+      </div>
+      <span className="ew-vacancy-a11y" role="status">{importBusy ? 'Разбираем вакансию. Это может занять до двух минут.' : ''}</span>
       {importError && <p className="ew-vacancy-create-error" role="alert">{importError}</p>}
       {pendingImport && <div className="ew-vacancy-import-confirm" role="group" aria-label="Замена заполненных полей"><p>В форме уже есть данные. Заменить их данными из нового источника?</p><div><Button type="button" variant="outline" onClick={() => setPendingImport(null)}>Оставить текущие</Button><Button type="button" onClick={() => applyImport(pendingImport)}>Заменить поля</Button></div></div>}
       {draft.source && !pendingImport && <div className="ew-vacancy-imported"><Check size={16}/><p>Данные из «{draft.source.label}» добавлены. Проверьте их перед созданием вакансии.</p></div>}
