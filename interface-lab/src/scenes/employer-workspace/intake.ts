@@ -3,7 +3,14 @@ import { journeyRequestTarget, request } from '../connected-journey/api';
 import type { Scope } from './EmployerShell';
 
 export type IntakeFile = { id: string; name: string; size: number };
-export type IntakePerson = { id: string; name: string; role: string; contact: string; link: string; note: string; scope: Scope; files: IntakeFile[]; createdAt: string; archived: boolean };
+export type PreparedProfile = {
+  cvText: string;
+  evaluationText: string;
+  evaluationUrl?: string;
+  recordings: { name: string; publicUrl: string; mime: string; size: number }[];
+  sourceLabel: string;
+};
+export type IntakePerson = { id: string; name: string; role: string; contact: string; link: string; note: string; scope: Scope; files: IntakeFile[]; createdAt: string; archived: boolean; preparedProfile?: PreparedProfile };
 export function useIntake(token: string, scope: Scope, vacancyId?: string) {
   const [people, setPeople] = useState<IntakePerson[]>([]);
   const [error, setError] = useState('');

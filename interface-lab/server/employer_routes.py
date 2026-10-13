@@ -190,6 +190,8 @@ class EmployerRoutes:
             return self._finish(headers, body), {}
         if route == '/intake' and method == 'POST':
             return self._intake(headers, body), {}
+        if route == '/intake/recording' and method == 'POST':
+            return self._intake_recording(headers, body), {}
         if route == '/vacancies/import' and method == 'POST':
             return self._vacancy_import(headers, body), {}
         with self.lock, self.connect() as db:
@@ -233,6 +235,21 @@ class EmployerRoutes:
             if route == '/action' and method == 'POST':
                 return self._action(db, headers, body), {}
             raise Problem('Действие не найдено.', 404)
+
+    def _intake_recording(self, headers, body):
+        import employer_recordings
+        with self.lock, self.connect() as db:
+            principal = access.authenticate(db, headers)
+            source = employer_recordings.source(db, principal['workspaceId'], body)
+        # Remote calls must not hold the shared lock or an open DB transaction.
+        result = employer_recordings.resolve(source)
+        with self.lock, self.connect() as db:
+            latest = access.authenticate(db, headers)
+            require(latest['accountId'] == principal['accountId'] and
+                    latest['workspaceId'] == principal['workspaceId'], 'Нет доступа.', 403)
+            require(employer_recordings.source(db, latest['workspaceId'], body) == source,
+                    'Запись изменилась. Откройте её ещё раз.', 409)
+        return result
 
     def _intake(self, headers, body):
         with self.lock, self.connect() as db:
