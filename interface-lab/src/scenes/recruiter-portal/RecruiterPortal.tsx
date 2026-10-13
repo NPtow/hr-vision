@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, UserRound } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import logo from '../employer-workspace/assets/hr-vision-logo.svg';
@@ -7,16 +7,21 @@ import './recruiter.css';
 import { formatDate, recruiterRequest, RecruiterRequestError, type RecruiterCandidate, type RecruiterState } from './api';
 import { RecruiterCall, type ActiveCall } from './RecruiterCall';
 import { RecruiterAuth } from './RecruiterAuth';
-import { RecruiterProfile, type RecruiterChannels, type RecruiterChannelActionResult } from './RecruiterProfile';
+import { RecruiterProfile } from './RecruiterProfile';
 import { InterviewList } from './InterviewList';
 import { useRecruiterSession } from './session';
-import { RecruiterMediaActions } from './RecruiterMediaActions';
-import { InvitationControls } from './InvitationControls';
+import { RecruiterCandidateDetails } from './RecruiterCandidateDetails';
+import { RecruiterAgendaPreview } from './RecruiterAgendaPreview';
 
 type SessionIdentity = { token: string; generation: number };
 
 /** Personal interview queue. Ownership and calendar assignment are enforced by the API. */
 export function RecruiterPortal() {
+  return new URLSearchParams(location.search).get('recruiterPreview') === '30'
+    ? <RecruiterAgendaPreview/> : <RecruiterWorkspace/>;
+}
+
+function RecruiterWorkspace() {
   const auth = useRecruiterSession();
   const token = auth.token;
   const identityRef = useRef<SessionIdentity>({ token, generation: 0 });
@@ -28,7 +33,6 @@ export function RecruiterPortal() {
   // A new account must never render the preceding account's cached data, even
   // for the render before the token-change effect clears local controls.
   const state = stateResult?.identity === identity ? stateResult.value : null;
-  const [channels, setChannels] = useState<RecruiterChannels>();
   const [page, setPage] = useState<'interviews' | 'profile'>('interviews');
   const [selectedId, setSelectedId] = useState('');
   const [error, setError] = useState('');
@@ -73,30 +77,12 @@ export function RecruiterPortal() {
   }, [refresh]);
   useEffect(() => {
     const captured = identityRef.current;
-    let active = true;
-    setChannels(undefined);
-    if (!token) return;
-    const load = async () => {
-      try {
-        const next = await recruiterRequest<RecruiterChannels>('notifications', token);
-        if (active && isCurrent(captured)) setChannels(next);
-      } catch (cause) { if (active && isCurrent(captured)) setError((cause as Error).message); }
-    };
-    void load();
-    const timer = setInterval(() => { if (document.visibilityState === 'visible') void load(); }, 10000);
-    return () => { active = false; clearInterval(timer); };
-  }, [token]);
-  useEffect(() => {
-    const captured = identityRef.current;
     const verification = new URLSearchParams(location.search).get('recruiterVerify');
     if (!token || !verification || verifyingEmail.current) return;
     verifyingEmail.current = true;
     void recruiterRequest('notifications/email/verify', token, { token: verification }).then(async () => {
       if (!isCurrent(captured)) return;
-      const next = await recruiterRequest<RecruiterChannels>('notifications', token);
-      if (!isCurrent(captured)) return;
       const url = new URL(location.href); url.searchParams.delete('recruiterVerify'); history.replaceState(history.state, '', url);
-      setChannels(next);
       setPage('profile'); setNotice('Почта подтверждена.');
     }).catch(cause => { if (isCurrent(captured)) setError((cause as Error).message); }).finally(() => { if (isCurrent(captured)) verifyingEmail.current = false; });
   }, [token]);
@@ -123,17 +109,6 @@ export function RecruiterPortal() {
       return false;
     } finally { if (isCurrent(captured)) { mutation.current = false; setBusy(false); } }
   }
-  async function channelAction(action: 'email' | 'telegram') {
-    const captured = identity;
-    if (!isCurrent(captured) || !token) return null;
-    const next = await recruiterRequest<RecruiterChannelActionResult>(action === 'email' ? 'notifications/email/request' : 'notifications/telegram/link', token, {});
-    if (!isCurrent(captured)) return null;
-    const updated = await recruiterRequest<RecruiterChannels>('notifications', token);
-    if (!isCurrent(captured)) return null;
-    setChannels(updated);
-    return next;
-  }
-
   if (auth.loading) return <div className="ew-root rp-root"><main className="rp-access"><img src={logo} alt="HR Vision"/><p role="status">Открываем кабинет…</p></main></div>;
   if (activationToken || !auth.recruiter) return <RecruiterAuth busy={auth.busy} error={auth.error} activationToken={activationToken || undefined}
     onSubmit={async (_mode, values) => auth.authenticate('login', values)}
@@ -147,7 +122,7 @@ export function RecruiterPortal() {
   const navigate = (next: 'interviews' | 'profile') => { setPage(next); setNotice(''); };
   const completed = (state?.candidates || []).filter(candidate => candidate.interview?.status === 'completed')
     .sort((a, b) => Date.parse(b.interview!.start) - Date.parse(a.interview!.start));
-  const renderCandidateDetails = (candidate: RecruiterCandidate) => <CandidateDetails key={`${identity.generation}-${candidate.id}`} candidate={candidate} busy={busy} run={run} onNotice={message => { if (isCurrent(identity)) setNotice(message); }} token={token} onUpdated={refresh}/>;
+  const renderCandidateDetails = (candidate: RecruiterCandidate) => <RecruiterCandidateDetails key={`${identity.generation}-${candidate.id}`} candidate={candidate} busy={busy} run={run} onNotice={message => { if (isCurrent(identity)) setNotice(message); }} token={token} onUpdated={refresh}/>;
   return <div className="ew-root rp-root">
     <div className="rp-shell" inert={activeCall ? true : undefined} aria-hidden={activeCall ? true : undefined}>
       <header className="ew-topbar rp-topbar">
@@ -176,7 +151,7 @@ export function RecruiterPortal() {
               })}</ul>}
             </section>}
           </>}
-          {page === 'profile' && <RecruiterProfile key={identity.generation} recruiter={auth.recruiter} blocks={state.availabilityBlocks || []} busy={busy || auth.busy} run={run} onLogout={() => { void auth.logout(); }} channels={channels} onChannelAction={channelAction}/ >}
+          {page === 'profile' && <RecruiterProfile key={identity.generation} recruiter={auth.recruiter} blocks={state.availabilityBlocks || []} busy={busy || auth.busy} run={run} onLogout={() => { void auth.logout(); }}/ >}
         </>}
       </main>
     </div>
@@ -185,32 +160,5 @@ export function RecruiterPortal() {
       setActiveCall(null); setPage('interviews'); setSelectedId(activeCall.candidateId); setCompletedOpen(true); setCompletedFocusId(activeCall.candidateId);
       setNotice('Интервью завершено.'); void refresh();
     }}/ >}
-  </div>;
-}
-
-function CandidateDetails({ candidate, busy, run, onNotice, token, onUpdated }: {
-  candidate: RecruiterCandidate; busy: boolean; run: (path: string, body: unknown) => Promise<boolean>; onNotice: (value: string) => void;
-  token: string; onUpdated: () => void | Promise<void>;
-}) {
-  const [summary, setSummary] = useState(candidate.internalProfile?.summary || '');
-  const [evaluation, setEvaluation] = useState(candidate.internalProfile?.evaluation || '');
-  async function saveInternal(event: FormEvent) {
-    event.preventDefault();
-    if (await run('profile', { candidateId: candidate.id, summary, evaluation })) onNotice('Заметки сохранены.');
-  }
-  return <div className="rp-interview-profile">
-    {candidate.interview?.status === 'completed' && <section className="rp-interview-results" aria-label="Результаты интервью">
-      <RecruiterMediaActions kind="interview" candidateId={candidate.id} status={candidate.interview.status} token={token} onUpdated={onUpdated}/>
-      {candidate.accountActive === false && <InvitationControls candidateId={candidate.id} scope="claim" token={token} onChanged={() => { void onUpdated(); }}/ >}
-    </section>}
-    <section className="rp-info-grid">
-      <div><h3>О кандидате</h3><p>{[candidate.desiredRole, candidate.city].filter(Boolean).join(' · ')}</p>{candidate.about && <p className="rp-prewrap">{candidate.about}</p>}{candidate.resume && <p className="rp-muted">{candidate.resume.filename}</p>}</div>
-      <div><h3>Контакты и предпочтения</h3><p>{candidate.email || candidate.intake?.contactEmail}</p>{candidate.telegram && <p>{candidate.telegram}</p>}<p>{candidate.geographies.join(', ') || candidate.city}</p>{candidate.workMode && <p className="rp-muted">{{ office: 'В офисе', hybrid: 'Гибрид', remote: 'Удалённо', any: 'Любой формат работы' }[candidate.workMode]}{candidate.desiredSalary ? ` · ${candidate.desiredSalary}` : ''}</p>}</div>
-    </section>
-    <details className="rp-interview-notes"><summary>Заметки рекрутера</summary><form className="rp-internal" onSubmit={saveInternal}>
-      <label>Краткое резюме<textarea value={summary} onChange={e => setSummary(e.target.value)} maxLength={12000} rows={3}/></label>
-      <label>Оценка и заметки<textarea value={evaluation} onChange={e => setEvaluation(e.target.value)} maxLength={12000} rows={3}/></label>
-      <Button variant="secondary" disabled={busy}>Сохранить</Button>
-    </form></details>
   </div>;
 }

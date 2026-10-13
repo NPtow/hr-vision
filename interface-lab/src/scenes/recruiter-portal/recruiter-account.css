@@ -48,14 +48,6 @@
 .rp-invite-result label { display:grid; gap:8px; font-size:14px; }
 .rp-invite-result [data-slot=input] { font-size:12px; }
 .rp-profile-actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap; justify-content:flex-end; }
-.rp-profile-channels { padding:28px; background:var(--rp-surface); border-radius:var(--rp-radius); box-shadow:var(--rp-shadow); }
-.rp-profile-channels>h2 { margin-bottom:12px; font-size:20px; }
-.rp-profile-channel { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:18px 0; }
-.rp-profile-channel h3 { font-size:15px; }
-.rp-profile-channel p,.rp-profile-telegram p { color:#757575; font-size:13px; margin-top:5px; }
-.rp-profile-telegram { margin-top:18px; }
-.rp-profile-telegram a { color:#315ebe; font-size:14px; text-decoration:underline; text-underline-offset:3px; }
-.rp-profile-channel-message { margin-top:18px; font-size:14px; color:#3d6c4e; }
 .rp-schedule-blocks { display:grid; gap:28px; margin-top:24px; }
 .rp-schedule-summary { display:flex; justify-content:space-between; align-items:center; gap:24px; }
 .rp-schedule-rule { display:grid; min-width:0; }
@@ -80,12 +72,11 @@
   .rp-auth h1 { font-size:28px; }
   .rp-auth [data-slot=input] { font-size:16px; }
   .rp-profile-identity { gap:14px; }
-  .rp-profile-identity,.rp-profile-channels { padding:22px; border-radius:24px; }
+  .rp-profile-identity { padding:22px; border-radius:24px; }
   .rp-schedule-summary { align-items:flex-start; flex-wrap:wrap; gap:18px; }
   .rp-schedule-time { font-size:32px; }
   .rp-profile .rp-schedule-date { max-width:none; }
   .rp-profile-identity { flex-wrap:wrap; }
   .rp-profile-actions { justify-content:flex-start; }
-  .rp-profile-channel { align-items:flex-start; flex-wrap:wrap; gap:12px; }
   .rp-auth.rp-invite { padding:24px; }
 }
