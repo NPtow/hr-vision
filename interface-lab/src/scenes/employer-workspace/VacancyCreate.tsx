@@ -7,7 +7,7 @@ import { importEmployerVacancy, type EmployerVacancyDetails, type EmployerVacanc
 import './vacancy-create.css';
 
 export type VacancyCreateValues = EmployerVacancyValues;
-type SourceKind = 'file' | 'hh' | 'superjob' | 'other' | 'text';
+type SourceKind = 'file' | 'url' | 'text';
 type SourceInfo = EmployerVacancyImport['source'];
 type Draft = { values: VacancyCreateValues; source: SourceInfo | null; warnings: string[]; sourceKind: SourceKind; text: string; url: string; importId: string; dirty: boolean };
 type VacancyCreateProps = {
@@ -22,7 +22,7 @@ type VacancyCreateProps = {
   initialDescription?: string;
 };
 
-const sourceKinds: { id: SourceKind; label: string }[] = [{ id: 'file', label: 'Файл' }, { id: 'hh', label: 'HH' }, { id: 'superjob', label: 'SuperJob' }, { id: 'other', label: 'Другая ссылка' }, { id: 'text', label: 'Текст' }];
+const sourceKinds: { id: SourceKind; label: string }[] = [{ id: 'file', label: 'Файл' }, { id: 'url', label: 'Ссылка на вакансию' }, { id: 'text', label: 'Текст' }];
 const fileTypes = '.pdf,.docx,.txt,.md,.csv,.rtf,.doc,.odt,.png,.jpg,.jpeg,.webp';
 const filePattern = /\.(pdf|docx|txt|md|csv|rtf|doc|odt|png|jpe?g|webp)$/i;
 const maxFileSize = 5 * 1024 * 1024;
@@ -57,10 +57,11 @@ function loadDraft(key: string, company: string, initialDescription: string): Dr
   try {
     const saved = JSON.parse(sessionStorage.getItem(key) || 'null');
     if (!saved || saved.version !== 1 || typeof saved.expiresAt !== 'number' || saved.expiresAt < Date.now()) return fresh;
+    const sourceKind = ['hh', 'superjob', 'other'].includes(saved.sourceKind) ? 'url' : saved.sourceKind;
     return {
       values: normalizeValues(saved.values, company), source: saved.source && typeof saved.source.label === 'string' ? saved.source : null,
       warnings: Array.isArray(saved.warnings) ? saved.warnings.filter((item: unknown) => typeof item === 'string') : [],
-      sourceKind: sourceKinds.some(item => item.id === saved.sourceKind) ? saved.sourceKind : 'file',
+      sourceKind: sourceKinds.some(item => item.id === sourceKind) ? sourceKind : 'file',
       text: asText(saved.text, 24000), url: asText(saved.url, 2048), importId: asText(saved.importId, 100), dirty: saved.dirty === true,
     };
   } catch { return fresh; }
@@ -149,9 +150,7 @@ export function VacancyCreate({ active, token, draftKey, onBack, busy, error, on
       try {
         const url = new URL(draft.url.trim());
         if (!['https:', 'http:'].includes(url.protocol)) throw new Error();
-        if (draft.sourceKind === 'hh' && !/(^|\.)hh\.ru$/i.test(url.hostname)) { setImportError('Добавьте ссылку на вакансию HH или выберите «Другая ссылка».'); return; }
-        if (draft.sourceKind === 'superjob' && !/(^|\.)superjob\.ru$/i.test(url.hostname)) { setImportError('Добавьте ссылку на вакансию SuperJob или выберите «Другая ссылка».'); return; }
-        input = { kind: 'url', url: url.href, source: draft.sourceKind };
+        input = { kind: 'url', url: url.href, source: 'other' };
       } catch { setImportError('Проверьте ссылку: она должна начинаться с https:// или http://.'); return; }
     }
     locked.current = true; setImportBusy(true);
@@ -190,7 +189,6 @@ export function VacancyCreate({ active, token, draftKey, onBack, busy, error, on
   }
 
   if (!active) return null;
-  const sourceLabel = sourceKinds.find(item => item.id === draft.sourceKind)!.label;
   const importLabel = importBusy ? 'Разбираем вакансию…' : draft.sourceKind === 'text' ? 'Разобрать текст' : draft.sourceKind === 'file' ? 'Заполнить из файла' : 'Заполнить по ссылке';
   const hasStructuredSalary = details.salaryMin !== null || details.salaryMax !== null;
   return <main className="ew-vacancy-create">
@@ -207,7 +205,7 @@ export function VacancyCreate({ active, token, draftKey, onBack, busy, error, on
             {file ? <><FileText size={20} aria-hidden="true"/><span>{file.name}</span></> : <Upload size={22} aria-hidden="true"/>}
           </button>
           {file && <Button type="button" variant="ghost" size="icon" aria-label="Убрать файл" disabled={disabled || !!pendingImport} onClick={() => setFile(null)}><X size={17}/></Button>}
-        </div> : draft.sourceKind === 'text' ? <Textarea id={`${id}-source-text`} aria-label="Текст вакансии" value={draft.text} rows={3} maxLength={24000} disabled={disabled || !!pendingImport} onChange={event => setDraft(previous => ({ ...previous, text: event.target.value }))}/> : <Input id={`${id}-source-url`} aria-label={`Ссылка на ${draft.sourceKind === 'other' ? 'вакансию' : sourceLabel}`} type="url" maxLength={2048} value={draft.url} disabled={disabled || !!pendingImport} onChange={event => setDraft(previous => ({ ...previous, url: event.target.value }))} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void runImport(); } }}/>}
+        </div> : draft.sourceKind === 'text' ? <Textarea id={`${id}-source-text`} aria-label="Текст вакансии" value={draft.text} rows={3} maxLength={24000} disabled={disabled || !!pendingImport} onChange={event => setDraft(previous => ({ ...previous, text: event.target.value }))}/> : <Input id={`${id}-source-url`} aria-label="Ссылка на вакансию" type="url" maxLength={2048} value={draft.url} disabled={disabled || !!pendingImport} onChange={event => setDraft(previous => ({ ...previous, url: event.target.value }))} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void runImport(); } }}/>}
       </div>
       <div className="ew-vacancy-source-tools">
         <div className="ew-vacancy-source-tabs" aria-label="Источник вакансии">{sourceKinds.map(kind => <button key={kind.id} type="button" aria-pressed={draft.sourceKind === kind.id} disabled={disabled || !!pendingImport} onClick={() => { setDraft(previous => ({ ...previous, sourceKind: kind.id })); setImportError(''); }}>{kind.label}</button>)}</div>
