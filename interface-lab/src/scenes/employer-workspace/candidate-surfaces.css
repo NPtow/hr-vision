@@ -30,13 +30,6 @@
   border-radius:50%; background:transparent; color:var(--ew-candidate-muted);
 }
 .ew-root .ew-candidates-view .ew-search button:hover { background:#eae8f0; }
-.ew-root .ew-candidates-view .ew-list-filter { height:auto; gap:10px; padding:12px 0 0; }
-.ew-root .ew-candidates-view .ew-list-filter select {
-  height:40px; padding:0 32px 0 12px; border:0; border-radius:14px;
-  background:var(--ew-candidate-inset) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14' fill='none'%3E%3Cpath d='m4 5.5 3 3 3-3' stroke='%23686473' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 12px center;
-  color:var(--ew-candidate-muted); font-size:13px;
-}
-.ew-root .ew-candidates-view .ew-list-filter>span { min-width:18px; text-align:center; color:var(--ew-candidate-muted); font-variant-numeric:tabular-nums; }
 .ew-root .ew-candidates-view .ew-rows { min-height:0; grid-auto-rows:max-content; overflow:auto; overscroll-behavior:contain; scrollbar-width:thin; padding:4px; gap:6px; }
 .ew-root .ew-candidates-view .ew-person-row { border-radius:20px; padding:14px; overflow-wrap:anywhere; }
 .ew-root .ew-candidates-view .ew-person-row:hover { background:var(--ew-candidate-inset); }
@@ -70,13 +63,12 @@
 }
 @media(prefers-contrast:more) {
   .ew-root .ew-candidates-view { --ew-candidate-muted:#39333f; }
-  .ew-root .ew-candidates-view :is(.ew-candidate-list,.ew-candidate-detail,.ew-search input,.ew-list-filter select) { outline:1px solid #83798e; outline-offset:-1px; }
+  .ew-root .ew-candidates-view :is(.ew-candidate-list,.ew-candidate-detail,.ew-search input) { outline:1px solid #83798e; outline-offset:-1px; }
   .ew-root .ew-candidates-view .ew-person-row[aria-pressed=true] { background:#e4dff4; }
   .ew-root .ew-candidates-view .ew-candidate-list :where(button,input,select):focus-visible { outline:2px solid var(--ew-candidate-focus); outline-offset:3px; }
 }
 @media(forced-colors:active) {
-  .ew-root .ew-candidates-view :is(.ew-candidate-list,.ew-candidate-detail,.ew-search input,.ew-list-filter select) { border:1px solid CanvasText; box-shadow:none; }
-  .ew-root .ew-candidates-view .ew-list-filter select { appearance:auto; background-image:none; }
+  .ew-root .ew-candidates-view :is(.ew-candidate-list,.ew-candidate-detail,.ew-search input) { border:1px solid CanvasText; box-shadow:none; }
   .ew-root .ew-candidates-view .ew-person-row[aria-pressed=true] { outline:1px solid Highlight; outline-offset:-1px; }
   .ew-root .ew-candidates-view .ew-candidate-list :where(button,input,select):focus-visible,
   .ew-root .ew-candidates-view .ew-back-list:focus-visible { outline:2px solid Highlight; outline-offset:3px; }

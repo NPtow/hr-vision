@@ -171,6 +171,32 @@ class EmployerProjectionTest(unittest.TestCase):
             self.assertTrue(all(m['status'] == 'completed' for m in history))
             self.assertEqual(self.portal.interview(db, one)['id'], 'interview-' + one)
 
+    def test_calendar_aggregates_own_vacancies_without_leaking_another_workspace(self):
+        one, two, foreign = self.person(), self.person(), self.person()
+        first = self.accepted([one])[0]
+        start = now() + dt.timedelta(days=2)
+        with self.connect() as db:
+            second, second_vacancy = self.other_application(db, two, label='Другая своя вакансия')
+            other, _ = self.other_application(db, foreign, workspace='b', label='Чужая вакансия')
+            self.meeting(db, first, 'own-confirmed', start, 'confirmed')
+            self.meeting(db, second, 'own-pending', start + dt.timedelta(hours=1), 'pending')
+            self.meeting(db, other, 'foreign-meeting', start, 'confirmed', workspace='b')
+        for selected in (self.vacancy['id'], second_vacancy):
+            state = self.state(vacancy_id=selected)
+            self.assertEqual([p['meeting']['id'] for p in state['meetings']], ['own-confirmed', 'own-pending'])
+            self.assertEqual([p['vacancyId'] for p in state['meetings']], [self.vacancy['id'], second_vacancy])
+            self.assertTrue(all(p['vacancyRole'] for p in state['meetings']))
+            self.assertNotIn(other, json.dumps(state))
+            self.assertNotIn('foreign-meeting', json.dumps(state))
+        foreign_state = self.state(workspace='b')
+        self.assertEqual([p['meeting']['id'] for p in foreign_state['meetings']], ['foreign-meeting'])
+
+    def test_active_call_stays_in_global_calendar_after_its_reserved_time(self):
+        aid = self.accepted([self.person()])[0]
+        with self.connect() as db:
+            self.meeting(db, aid, 'active-call', now() - dt.timedelta(hours=2), 'live')
+        self.assertEqual([p['meeting']['id'] for p in self.state()['meetings']], ['active-call'])
+
 
 if __name__ == '__main__':
     unittest.main()
