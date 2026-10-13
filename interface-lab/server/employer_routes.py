@@ -237,17 +237,16 @@ class EmployerRoutes:
             raise Problem('Действие не найдено.', 404)
 
     def _intake_recording(self, headers, body):
-        import employer_recordings
         with self.lock, self.connect() as db:
             principal = access.authenticate(db, headers)
-            source = employer_recordings.source(db, principal['workspaceId'], body)
+            source = self.intake.recording_source(db, principal['workspaceId'], body)
         # Remote calls must not hold the shared lock or an open DB transaction.
-        result = employer_recordings.resolve(source)
+        result = self.intake.resolve_recording(source)
         with self.lock, self.connect() as db:
             latest = access.authenticate(db, headers)
             require(latest['accountId'] == principal['accountId'] and
                     latest['workspaceId'] == principal['workspaceId'], 'Нет доступа.', 403)
-            require(employer_recordings.source(db, latest['workspaceId'], body) == source,
+            require(self.intake.recording_source(db, latest['workspaceId'], body) == source,
                     'Запись изменилась. Откройте её ещё раз.', 409)
         return result
 

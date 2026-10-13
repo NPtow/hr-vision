@@ -1,3 +1,4 @@
+import ast
 import io
 import json
 import os
@@ -42,6 +43,20 @@ class ReceiverTest(unittest.TestCase):
         for target in r.BRANCHES:
             a, s, m = self.bundle(target)
             self.assertEqual(r.unpack(a, s, target), m)
+
+    def test_runtime_includes_local_imports_even_inside_route_handlers(self):
+        server = Path(__file__).resolve().parents[2] / 'server'
+        local_modules = {path.stem for path in server.glob('*.py')}
+        for filename in r.RUNTIME:
+            tree = ast.parse((server / filename).read_text())
+            for node in ast.walk(tree):
+                names = ([alias.name for alias in node.names] if isinstance(node, ast.Import)
+                         else [node.module] if isinstance(node, ast.ImportFrom) and node.module else [])
+                for name in names:
+                    module = name.split('.')[0]
+                    if module in local_modules:
+                        self.assertIn(module + '.py', r.RUNTIME,
+                                      f'{filename}:{node.lineno} imports an unpackaged module')
 
     def test_known_complete_service_layouts_are_accepted(self):
         self.assertEqual(len(r.LEGACY_RUNTIME), 19)

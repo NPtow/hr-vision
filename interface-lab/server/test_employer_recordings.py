@@ -6,7 +6,6 @@ from unittest.mock import patch
 
 from domain import Problem
 import employer_intake
-import employer_recordings
 import test_employer_acceptance as fixture
 
 
@@ -39,7 +38,7 @@ class ImportedRecordingTest(unittest.TestCase):
             before = {t: db.execute('SELECT COUNT(*) FROM ' + t).fetchone()[0] for t in tables}
         person, vacancy = self.imported(owner)
         command = {'id': person['id'], 'index': 0}
-        with patch.object(employer_recordings, 'resolve', return_value={'url': 'https://downloader.disk.yandex.ru/file', 'mime': 'video/mp4'}) as resolve:
+        with patch.object(employer_intake, 'resolve_recording', return_value={'url': 'https://downloader.disk.yandex.ru/file', 'mime': 'video/mp4'}) as resolve:
             self.assertEqual(self.request('employer/intake/recording', command)[0], 401)
             self.assertEqual(self.request('employer/intake/recording', command, token=other['token'])[0], 404)
             resolve.assert_not_called()
@@ -53,7 +52,7 @@ class ImportedRecordingTest(unittest.TestCase):
     def test_bad_index_and_untrusted_source_never_reach_remote_resolver(self):
         owner = self.employer()
         person, _ = self.imported(owner, 'https://127.0.0.1/private')
-        with patch.object(employer_recordings, 'resolve') as resolve:
+        with patch.object(employer_intake, 'resolve_recording') as resolve:
             for index, status in ((-1, 400), (True, 400), (100, 400), (1, 404), (0, 422)):
                 self.assertEqual(self.request('employer/intake/recording', {'id': person['id'], 'index': index},
                                              token=owner['token'])[0], status)
@@ -66,7 +65,7 @@ class ImportedRecordingTest(unittest.TestCase):
             with self.app.connect() as db:
                 db.execute('UPDATE em_accounts SET active=0 WHERE workspace_id=?', (owner['workspace']['id'],))
             return {'url': 'https://downloader.disk.yandex.ru/file', 'mime': 'video/mp4'}
-        with patch.object(employer_recordings, 'resolve', side_effect=revoke):
+        with patch.object(employer_intake, 'resolve_recording', side_effect=revoke):
             self.assertEqual(self.request('employer/intake/recording', {'id': person['id'], 'index': 0},
                                          token=owner['token'])[0], 401)
 
@@ -76,13 +75,13 @@ class ImportedRecordingTest(unittest.TestCase):
                             ('https://evil.test/video', False), ('http://downloader.disk.yandex.ru/file', False),
                             ('https://downloader.disk.yandex.ru.evil.test/file', False),
                             ('https://user@downloader.disk.yandex.ru/file', False)]:
-            with patch('employer_recordings.urllib.request.build_opener') as opener:
+            with patch('employer_intake.urllib.request.build_opener') as opener:
                 opener.return_value.open.return_value = io.BytesIO(json.dumps({'href': href}).encode())
                 if valid:
-                    self.assertEqual(employer_recordings.resolve(source)['url'], href)
+                    self.assertEqual(employer_intake.resolve_recording(source)['url'], href)
                 else:
                     with self.assertRaises(Problem):
-                        employer_recordings.resolve(source)
+                        employer_intake.resolve_recording(source)
                 url = opener.return_value.open.call_args.args[0].full_url
                 self.assertTrue(url.startswith('https://cloud-api.yandex.net/v1/disk/public/resources/download?'))
 
