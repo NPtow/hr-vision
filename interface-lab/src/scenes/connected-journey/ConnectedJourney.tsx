@@ -11,6 +11,7 @@ import { InterviewMediaProvider, LabMediaControl } from '../interview-review/Int
 import { EmployerShell, type Scope, type EmployerPage } from '../employer-workspace/EmployerShell';
 import { EmployerAuth } from '../employer-workspace/EmployerAuth';
 import { VacancyCreate } from '../employer-workspace/VacancyCreate';
+import { captureEmployerEntry, clearEmployerEntry } from '../../lib/employer-entry';
 import { Avatar, PeoplePanel } from '../employer-workspace/PeoplePanel';
 import { CandidateIntake, IntakeDetail } from '../employer-workspace/CandidateIntake';
 import { useIntake } from '../employer-workspace/intake';
@@ -39,6 +40,13 @@ const personList = (j: Journey) => Object.values(j.state!.candidates) as Person[
 
 export function ConnectedJourney({ initialRole = 'start' }: { initialRole?: 'start' | 'manager' | 'candidate' }) {
   const realEmployer = initialRole !== 'candidate' && new URLSearchParams(location.search).get('legacy') !== '1';
+  const [siteEntry, setSiteEntry] = useState(() => {
+    if (!realEmployer) return null;
+    const url = new URL(location.href);
+    const entry = captureEmployerEntry(url, sessionStorage);
+    if (url.href !== location.href) history.replaceState(history.state, '', url);
+    return entry;
+  });
   const [scope, setScope] = useState<Scope>(!realEmployer && new URLSearchParams(location.search).get('task') === 'dsa' ? 'dsa' : 'sfera');
   const journey = useJourney(scope, { employer: realEmployer });
   const { state, error, busy, login, act, setError } = journey;
@@ -59,6 +67,16 @@ export function ConnectedJourney({ initialRole = 'start' }: { initialRole?: 'sta
   const choseAccount = useRef(false);
   const generation = useRef({ scope, vacancyId: '', id: '' });
   const autoEnter = useRef(false);
+  const siteEntryOpened = useRef(false);
+  useEffect(() => {
+    if (!realEmployer || !state || !siteEntry?.createVacancy || siteEntryOpened.current) return;
+    siteEntryOpened.current = true;
+    setPage('tasks'); setVacancyOpen(true);
+  }, [realEmployer, state, siteEntry]);
+  function finishSiteEntry() {
+    clearEmployerEntry(sessionStorage);
+    setSiteEntry(current => current ? { ...current, createVacancy: false, description: '' } : null);
+  }
   useEffect(() => {
     if (!state) return;
     if (generation.current.scope === state.scope && (!realEmployer || generation.current.vacancyId === state.vacancy.id) && generation.current.id && generation.current.id !== state.generation) {
@@ -149,11 +167,11 @@ export function ConnectedJourney({ initialRole = 'start' }: { initialRole?: 'sta
     setIntakeSelected(''); setPage(next);
   };
   if (realEmployer && journey.initializing) return <div className="ew-auth"><main className="ew-auth-main"><p className="ew-auth-card" role="status">Открываем кабинет…</p></main></div>;
-  if (realEmployer && !state) return <EmployerAuth busy={busy} error={error} onModeChange={() => setError('')} onSubmit={async (mode, values) => {
+  if (realEmployer && !state) return <EmployerAuth initialMode={siteEntry?.mode} busy={busy} error={error} onModeChange={() => setError('')} onSubmit={async (mode, values) => {
     if (!await journey.authenticate(mode, values)) return false;
     setPicker(false); setPage('tasks'); setSelected(''); setIntakeSelected(''); setVacancyOpen(false); setToast(''); return true;
   }}/>;
-  return <InterviewMediaProvider><div className={`agency-product agency-product-theme cj-app ${inEmployer ? 'ew-root' : ''}`}><EmployerShell enabled={inEmployer} page={page} scope={scope} vacancy={state?.vacancy.role || (realEmployer ? '' : 'Менеджер по работе с клиентами')} name={state?.actorName || ''} hasOffers={pool.length > 0} candidateContext={realEmployer ? panelMode === 'selected' ? 'vacancy' : 'queue' : undefined} onNavigate={navigate} onAccount={() => setPicker(true)} accountBusy={busy || callActive} onLogout={realEmployer ? async () => { if (await journey.logout()) { setPage('tasks'); setSelected(''); setIntakeSelected(''); setVacancyOpen(false); setToast(''); } } : undefined}>
+  return <InterviewMediaProvider><div className={`agency-product agency-product-theme cj-app ${inEmployer ? 'ew-root' : ''}`}><EmployerShell enabled={inEmployer} page={page} scope={scope} vacancy={state?.vacancy.role || (realEmployer ? '' : 'Менеджер по работе с клиентами')} name={state?.actorName || ''} hasOffers={pool.length > 0} candidateContext={realEmployer ? panelMode === 'selected' ? 'vacancy' : 'queue' : undefined} onNavigate={navigate} onAccount={() => setPicker(true)} accountBusy={busy || callActive} onLogout={realEmployer ? async () => { if (await journey.logout()) { finishSiteEntry(); setSiteEntry({ mode: 'login', createVacancy: false, description: '' }); setPage('tasks'); setSelected(''); setIntakeSelected(''); setVacancyOpen(false); setToast(''); } } : undefined}>
     <header className="cj-header"><button className="cj-brand" onClick={() => setPicker(true)}>HR Vision<span>.</span></button>{state && !picker && <button className="cj-account" onClick={() => setPicker(true)}><span className="cj-avatar">{initials(state.actorName)}</span>{state.actorName}<ChevronRight size={14}/></button>}</header>
     {error && <div className="cj-error" role="alert"><span>{error}</span><Button variant="ghost" size="icon-sm" aria-label="Закрыть ошибку" onClick={() => setError('')}><X size={16}/></Button></div>}
     {(picker || !state) ? <main className="cj-start">
@@ -190,7 +208,7 @@ export function ConnectedJourney({ initialRole = 'start' }: { initialRole?: 'sta
       {manager && !realEmployer && <footer className="cj-test-footer"><details><summary>Инструменты команды</summary><div className="cj-actions"><Button variant="outline" onClick={copyEntry}>Скопировать общий вход</Button><Button variant="ghost" onClick={() => setResetOpen(true)}><RotateCcw size={14}/>Начать заново</Button></div><LabMediaControl/></details></footer>}
     </>}
     <Dialog open={resetOpen} onOpenChange={setResetOpen}><DialogContent><DialogHeader><DialogTitle>Начать прохождение заново?</DialogTitle><DialogDescription>Вакансия и аккаунты {state?.vacancy.company} останутся. Ответы, встречи, чат и офферы этого подбора будут сброшены.</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" onClick={() => setResetOpen(false)}>Отмена</Button><Button disabled={busy} onClick={async () => { if (await act('reset')) { setPage('tasks'); setResetOpen(false); setToast('Можно пройти путь заново'); } }}>Сбросить тест</Button></DialogFooter></DialogContent></Dialog>
-    {realEmployer && state && <VacancyCreate open={vacancyOpen} onOpenChange={open => { setVacancyOpen(open); setError(''); }} busy={busy} error={error} company={state.workspaceName || state.vacancy.company} onCreate={async values => {
+    {realEmployer && state && <VacancyCreate open={vacancyOpen} onOpenChange={open => { setVacancyOpen(open); setError(''); if (!open) finishSiteEntry(); }} busy={busy} error={error} initialDescription={siteEntry?.description} company={state.workspaceName || state.vacancy.company} onCreate={async values => {
       if (!await journey.createVacancy(values)) return false;
       setPage('tasks'); setSelected(''); setIntakeSelected(''); setPanelMode('proposed'); setToast('Вакансия создана'); return true;
     }}/>}

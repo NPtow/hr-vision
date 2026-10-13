@@ -323,7 +323,7 @@
 @media(prefers-reduced-motion:reduce) { .ew-root * { transition:none!important; scroll-behavior:auto!important; } }
 
 .ew-account-menu { min-width:190px; padding:6px; border:1px solid #e9e7f0; border-radius:12px; background:#fff; box-shadow:0 8px 28px #12121212; z-index:70; }
-.ew-account-menu [role=menuitem] { padding:10px 12px; border-radius:8px; cursor:pointer; outline:none; }
+.ew-account-menu [role=menuitem] { display:block; padding:10px 12px; border-radius:8px; cursor:pointer; outline:none; color:inherit; text-decoration:none; }
 .ew-account-menu [role=menuitem][data-highlighted] { background:#f6f6f7; }
 .ew-account-menu [role=menuitem][data-disabled] { opacity:.5; pointer-events:none; }
 .ew-root .ew-tasks-heading { flex-wrap:wrap; }

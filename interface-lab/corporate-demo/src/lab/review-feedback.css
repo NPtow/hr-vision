@@ -1,0 +1,34 @@
+.scene-canvas:has(.interview-review-flow) .chapter-sticky,.scene-canvas[data-scene="review-feedback"] .chapter-sticky{padding:24px 36px 25px;display:flex;align-items:center;justify-content:center;background:#f6f5f1}
+.interview-review-flow,.review-reshuffle{position:relative;width:100%;height:100%;isolation:isolate}
+.rr-detail{position:relative;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#202124}
+.rr-stage{position:relative;height:100%;min-height:395px;isolation:isolate;text-align:left}
+.rr-stage .fb-reshuffle-stage{height:100%;min-height:395px;max-width:none;margin:auto}
+.rr-stage .fb-person-card{width:263px;height:296px;margin-left:-131.5px;padding:20px 19px 0;border-color:#eef0e9;border-radius:21px}
+.rr-stage .fb-person-top{gap:9px}.rr-stage .fb-person-top strong{font-size:17px}.rr-stage .fb-person-top>div>span{font-size:10px}.rr-stage .fb-person-avatar{height:34px;width:34px;font-size:12px}
+.rr-stage .fb-person-card h3{font-size:31px;margin:29px 0 17px}.rr-stage .fb-person-skills{white-space:normal}.rr-stage .fb-person-skills>span{font-size:11px;line-height:1.25}
+.rr-stage .fb-card-footer{height:45px;padding:0 19px;font-size:12px}
+.fb-open-interview{width:100%;border:0;border-top:1px solid #31352d0a;cursor:pointer;font-family:inherit;text-align:left}.fb-open-interview:not(:disabled){background:#e7f1eb;color:#37674c}.fb-open-interview:disabled{cursor:default}.fb-open-interview:focus-visible{outline:2px solid #3174c5;outline-offset:-4px}
+.rr-note{position:absolute;left:16px;top:16px;width:300px;border:1px solid #d8e0e9;background:#fff;border-radius:18px;padding:18px;box-shadow:0 12px 50px #3f536812;z-index:65;text-align:left}
+.rr-observation{padding:12px 13px;margin-bottom:18px;border-radius:10px;background:#fbf3e4;border:1px solid #eadcbd;display:flex;flex-direction:column;gap:5px}.rr-observation>span{color:#6e5d3b;font-size:11px;font-weight:550}.rr-observation>strong{font-size:15px;line-height:1.3;font-weight:550;color:#56482f}
+.rr-note fieldset{border:0;padding:0;margin:0}.rr-note legend{font-size:20px;font-weight:570;letter-spacing:-.5px;padding:0;margin-bottom:12px}
+.rr-note fieldset>button{width:100%;display:flex;align-items:center;gap:9px;padding:10px 11px;min-height:48px;font-family:inherit;font-size:13px;line-height:1.3;text-align:left;color:#4d5d56;border:1px solid #dce2da;border-radius:11px;background:#fafbf9;margin-bottom:8px;cursor:pointer}
+.rr-note fieldset>button[aria-pressed=true]{border-color:#9db6dd;color:#305889;background:#eff4fc}.rr-note fieldset>button>span{width:16px;height:16px;border:1px solid #a8bcc0;display:grid;place-items:center;border-radius:50%;flex-shrink:0}
+.rr-note .rr-apply{border:0;background:#3977bd;border-radius:11px;width:100%;min-height:44px;padding:12px 13px;display:flex;align-items:center;justify-content:center;color:white;font:inherit;font-size:14px;font-weight:550;margin-top:6px;cursor:pointer}
+.rr-note button:focus-visible,.rr-proof-open:focus-visible,.rr-retry:focus-visible,.rr-back:focus-visible{outline:2px solid #327aca;outline-offset:3px}
+.rr-note button:active,.rr-proof-open:active,.rr-retry:active,.rr-back:active{filter:brightness(.95);transform:scale(.99)}
+.rr-criterion{position:absolute;left:50%;top:12px;translate:-50% 0;z-index:70;max-width:80%;display:flex;align-items:center;gap:10px;border:1px solid #b7cfbf;background:#e9f3ed;padding:12px 17px;border-radius:13px;color:#436f55;font-size:13px;pointer-events:none;text-align:center;line-height:1.25}.rr-criterion>span{color:#4a6657;font-size:12px}.rr-criterion>strong{font-size:14px;font-weight:550}
+.rr-evidence{position:absolute;left:16px;top:114px;width:262px;z-index:55;border-radius:18px;padding:19px;background:#fff;border:1px solid #cddfd3;box-shadow:0 12px 32px #263f3010}.rr-evidence>span{font-size:11px;color:#466252;font-weight:550}.rr-evidence blockquote{margin:13px 0 15px;font-size:16px;line-height:1.45;letter-spacing:-.2px;color:#263a2d}.rr-proof-open{padding:10px 0;min-height:44px;background:none;border:0;font:inherit;font-size:13px;font-weight:550;color:#315f93;cursor:pointer}
+.rr-retry{position:absolute;bottom:0;right:0;z-index:80;display:flex;align-items:center;gap:6px;padding:10px 9px;min-height:44px;border:0;border-radius:9px;background:#fffefbf2;color:#466453;font:inherit;font-size:12px;cursor:pointer}.rr-retry:disabled{visibility:hidden}
+.rr-back{position:absolute;left:0;top:0;display:flex;align-items:center;gap:5px;border:1px solid #dfe5dc;background:#fff;border-radius:10px;padding:10px 12px;min-height:44px;font:inherit;font-size:12px;color:#385441;cursor:pointer;z-index:35}
+@media(max-width:600px){
+ .scene-canvas:has(.interview-review-flow) .chapter-sticky,.scene-canvas[data-scene="review-feedback"] .chapter-sticky{padding:27px 15px 22px}
+ .rr-detail{justify-content:flex-start;padding-top:52px}.rr-stage{height:auto;min-height:640px}.rr-stage .fb-reshuffle-stage{height:640px;min-height:640px}
+ .rr-stage .fb-person-card{width:260px;margin-left:-130px;height:285px;padding:18px 18px 0}.rr-stage .fb-person-card h3{font-size:29px}.rr-stage .fb-person-top strong{font-size:17px}.rr-stage .fb-person-skills>span{font-size:11px}.rr-stage .fb-person-top>div>span{font-size:10px}
+ .rr-note{left:0;right:0;top:0;width:auto;padding:15px;border-radius:16px}.rr-note legend{font-size:20px;margin-bottom:12px}.rr-note fieldset>button{min-height:48px;padding:10px;font-size:13px;margin-bottom:8px}.rr-note .rr-apply{font-size:14px;min-height:46px;margin-top:8px}.rr-observation{margin-bottom:16px;padding:12px}.rr-observation>strong{font-size:14px}
+ .rr-criterion{top:12px;font-size:12px;max-width:calc(100% - 12px);width:max-content;flex-direction:column;gap:4px;padding:10px 14px}.rr-criterion>strong{font-size:13px}
+ .rr-evidence{top:477px;left:0;width:100%;padding:16px}.rr-evidence blockquote{font-size:14px;margin:9px 0 3px}.rr-evidence>span{font-size:11px}.rr-retry{top:68px;bottom:auto;left:50%;right:auto;translate:-50% 0;white-space:nowrap;font-size:12px}.rr-back{top:0;left:0;padding:8px 10px;font-size:11px}
+}
+@media(prefers-reduced-motion:reduce){
+ .rr-note button:active,.rr-proof-open:active,.rr-retry:active,.rr-back:active{transform:none}
+ .rr-stage[data-stage="answer"] .fb-reshuffle-stage{visibility:hidden}
+}

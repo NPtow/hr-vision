@@ -61,13 +61,13 @@ class RecruiterNotificationsTest(unittest.TestCase):
         with self.connect() as db:
             db.executescript('''
                 CREATE TABLE rc_accounts(id TEXT PRIMARY KEY,email TEXT NOT NULL,name TEXT,active INTEGER);
-                CREATE TABLE cp_candidates(id TEXT PRIMARY KEY,profile TEXT);
+                CREATE TABLE cp_candidates(id TEXT PRIMARY KEY,profile TEXT,email TEXT);
                 CREATE TABLE cp_intake(candidate_id TEXT PRIMARY KEY,source TEXT);
                 CREATE TABLE cp_recruiter_slots(id TEXT PRIMARY KEY,start TEXT,end TEXT,recruiter_name TEXT,candidate_id TEXT);
                 CREATE TABLE cp_recruiter_slot_owners(slot_id TEXT PRIMARY KEY,recruiter_id TEXT REFERENCES rc_accounts(id));
                 CREATE TABLE cp_interviews(id TEXT PRIMARY KEY,candidate_id TEXT,slot_id TEXT,status TEXT);
                 INSERT INTO rc_accounts VALUES ('r-a','a@example.test','Same Name',1),('r-b','b@example.test','Same Name',1);
-                INSERT INTO cp_candidates VALUES ('c-a','{"name":"Анна Миронова","about":"private CV details","salaryMin":"100000"}');
+                INSERT INTO cp_candidates VALUES ('c-a','{"name":"Анна Миронова","about":"private CV details","salaryMin":"100000"}','candidate@example.test');
                 INSERT INTO cp_intake VALUES ('c-a','hh');
                 INSERT INTO cp_recruiter_slots VALUES ('s-a','2099-10-14T13:00:00Z','2099-10-14T13:30:00Z','Same Name','c-a');
                 INSERT INTO cp_recruiter_slot_owners VALUES ('s-a','r-a');
@@ -121,6 +121,8 @@ class RecruiterNotificationsTest(unittest.TestCase):
 
     def test_public_status_no_secrets(self):
         self.assertIn('workspace=recruiter', self.config.public_url)
+        self.assertEqual(notifications.settings({'HR_TELEGRAM_PROXY_URL': 'socks5h://127.0.0.1:10808'}).telegram_proxy_url,
+                         'socks5h://127.0.0.1:10808')
         with self.connect() as db:
             status = notifications.public_status(db, 'r-a', self.config)
         self.assertEqual(status['email']['address'], 'a***@example.test')
@@ -234,7 +236,12 @@ class RecruiterNotificationsTest(unittest.TestCase):
             with self.assertRaises(Problem) as failure:
                 delivery.handle_telegram_update(db, self.update(token), 'wrong-secret', self.config, 20)
             self.assertEqual(failure.exception.status, 403)
-        self.assertEqual(self.consume(self.update(token))['status'], 'linked')
+        def candidate_handler(*args):
+            self.fail('Recruiter binding was incorrectly sent to the candidate bot')
+        with self.connect() as db:
+            result = delivery.handle_telegram_update(db, self.update(token), self.config.telegram_webhook_secret,
+                                                    self.config, 20, update_handler=candidate_handler)
+            self.assertEqual(result['status'], 'linked')
         with self.connect() as db:
             self.assertEqual(db.execute('SELECT count(*) FROM cn_recipients').fetchone()[0], 0)
             self.assertTrue(notifications.public_status(db, 'r-a', self.config)['telegram']['linked'])

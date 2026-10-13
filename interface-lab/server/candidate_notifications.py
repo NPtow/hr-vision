@@ -4,12 +4,16 @@ No network calls occur in init, enqueue or HTTP hooks. app.py starts a daemon on
 in its __main__ server entrypoint and only when HR_NOTIFICATIONS_ENABLED=1.
 Alternatively run one dedicated worker (do not run both intentionally):
     python candidate_notifications.py --db /var/lib/hr-vision-api/journey.sqlite3 --loop
+The standalone CLI handles account binding and delivery only. Interactive bot
+updates and lifecycle keyboards use the handler/renderer injected by app.py.
 
 Environment (all off until HR_NOTIFICATIONS_ENABLED=1):
   HR_CANDIDATE_PUBLIC_URL: candidate portal URL, otherwise HR_ORIGIN + candidate story.
   HR_SMTP_HOST, HR_SMTP_PORT (587), HR_SMTP_FROM, HR_SMTP_USER, HR_SMTP_PASSWORD,
   HR_SMTP_SECURITY=starttls|ssl. TLS and certificate validation cannot be disabled.
   HR_TELEGRAM_BOT_TOKEN, HR_TELEGRAM_BOT_USERNAME.
+  HR_TELEGRAM_PROXY_URL: optional loopback socks5h URL, for example
+  socks5h://127.0.0.1:10808. Uses /usr/bin/curl only for Telegram requests.
   HR_TELEGRAM_WEBHOOK_SECRET: 32+ URL-safe characters. The HTTP adapter must pass the
   X-Telegram-Bot-Api-Secret-Token header to handle_telegram_update, never form input.
   Or HR_TELEGRAM_POLLING=1 for this worker to read updates directly from Telegram.
@@ -35,8 +39,10 @@ recorded as delivered; it does not prove that a human read the email/message. Fa
 or abandoned in-flight deliveries with an unknown outcome require manual retry,
 because SMTP/Telegram cannot provide exactly-once delivery after a process crash.
 
-Only generic notices and an authenticated portal link are sent. Verification emails
-are the sole exception allowed to an unverified address: a generic ownership check,
+Default lifecycle delivery sends generic notices and an authenticated portal link.
+Injected bot handlers/renderers may send candidate details only to the candidate's
+currently verified Telegram chat and, when available, an active canonical account.
+Verification emails are the sole exception allowed to an unverified address: a generic ownership check,
 with no person/profile/vacancy data. Tokens are generated at dispatch, SHA256-only
 at rest, single-use, and redeemable only by the same authenticated candidate.
 """
@@ -52,6 +58,8 @@ import secrets
 import smtplib
 import sqlite3
 import ssl
+import subprocess
+import tempfile
 import threading
 import time
 import urllib.error
@@ -85,6 +93,7 @@ VERIFY_SECONDS = 1800
 LINK_SECONDS = 600
 RESEND_COOLDOWN = 60
 TOKEN_RE = re.compile(r'^[A-Za-z0-9_-]{40,64}$')
+BOT_EVENTS = frozenset(('telegram.reply', 'telegram.callback'))
 
 
 def _number(value, fallback, low, high):
@@ -122,6 +131,7 @@ class Settings:
     smtp_password: str = field(default='', repr=False)
     smtp_security: str = 'starttls'
     telegram_token: str = field(default='', repr=False)
+    telegram_proxy_url: str = field(default='', repr=False)
     telegram_username: str = ''
     telegram_webhook_secret: str = field(default='', repr=False)
     telegram_polling: bool = False
@@ -160,6 +170,7 @@ def settings(env=None):
         smtp_from=env.get('HR_SMTP_FROM', ''), smtp_user=env.get('HR_SMTP_USER', ''),
         smtp_password=env.get('HR_SMTP_PASSWORD', ''), smtp_security=security,
         telegram_token=env.get('HR_TELEGRAM_BOT_TOKEN', ''),
+        telegram_proxy_url=env.get('HR_TELEGRAM_PROXY_URL', ''),
         telegram_username=env.get('HR_TELEGRAM_BOT_USERNAME', '').lstrip('@'),
         telegram_webhook_secret=env.get('HR_TELEGRAM_WEBHOOK_SECRET', ''),
         telegram_polling=env.get('HR_TELEGRAM_POLLING') == '1',
@@ -205,6 +216,8 @@ def init(db):
     ]
     for statement in statements:
         db.execute(statement)
+    if 'payload_json' not in {row[1] for row in db.execute('PRAGMA table_info(cn_outbox)')}:
+        db.execute('ALTER TABLE cn_outbox ADD COLUMN payload_json TEXT')
 
 
 def _recipient(db, candidate_id):
@@ -237,14 +250,26 @@ def configuration_public(settings=None):
             'telegramBindingAvailable': config.telegram_binding_available}
 
 
-def _readiness(recipient, channel, config, verification=False):
+def _telegram_identity_active(db, recipient):
+    if not recipient or not recipient['telegram_chat_id'] or recipient['telegram_verified_at'] is None:
+        return False
+    # The standalone notification store has no canonical account table. When
+    # embedded in the portal, an intake-only or deleted identity cannot receive
+    # candidate data even if an old notification recipient still exists.
+    if db is not None and db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='cp_candidates'").fetchone():
+        active = db.execute('SELECT email FROM cp_candidates WHERE id=?', (recipient['candidate_id'],)).fetchone()
+        return bool(active and active[0])
+    return True
+
+
+def _readiness(recipient, channel, config, verification=False, db=None):
     if channel == 'email':
         if not config.email_configured:
             return 'disabled'
         return 'pending' if verification or recipient['email_verified'] else 'unverified'
     if not config.telegram_configured:
         return 'disabled'
-    return 'pending' if recipient['telegram_chat_id'] else 'unbound'
+    return 'pending' if _telegram_identity_active(db, recipient) else 'unbound'
 
 
 def _safe(row):
@@ -258,10 +283,10 @@ def public_status(db, candidate_id, settings=None):
     result = {
         'email': {'configured': config.email_configured, 'verified': bool(recipient['email_verified']),
                   'address': address[0][:1] + '***@' + address[1],
-                  'status': _readiness(recipient, 'email', config), 'lastDelivery': None},
-        'telegram': {'configured': config.telegram_configured, 'linked': bool(recipient['telegram_chat_id']),
+                  'status': _readiness(recipient, 'email', config, db=db), 'lastDelivery': None},
+        'telegram': {'configured': config.telegram_configured, 'linked': _telegram_identity_active(db, recipient),
                      'canLink': config.telegram_binding_available,
-                     'status': _readiness(recipient, 'telegram', config), 'lastDelivery': None},
+                     'status': _readiness(recipient, 'telegram', config, db=db), 'lastDelivery': None},
     }
     for channel in ('email', 'telegram'):
         last = _dict(db.execute('SELECT * FROM cn_outbox WHERE candidate_id=? AND channel=? ORDER BY created_at DESC,rowid DESC LIMIT 1',
@@ -282,7 +307,7 @@ def _enqueue_one(db, candidate_id, event_key, event_type, channel, config, times
         return _safe(existing)
     rid = secrets.token_hex(16)
     target = recipient['email'] if channel == 'email' else recipient['telegram_chat_id']
-    state = _readiness(recipient, channel, config, verification)
+    state = _readiness(recipient, channel, config, verification, db)
     db.execute('''INSERT INTO cn_outbox
         (id,candidate_id,event_key,event_type,channel,recipient,created_at,status,next_attempt_at)
         VALUES (?,?,?,?,?,?,?,?,?)''',
@@ -297,6 +322,114 @@ def enqueue(db, candidate_id, event_key, event_type, channel='all', settings=Non
     config, timestamp = _config(settings), _now(now)
     return [_enqueue_one(db, candidate_id, event_key, event_type, item, config, timestamp)
             for item in (('email', 'telegram') if channel == 'all' else (channel,))]
+
+
+def _private_chat_id(value):
+    # Telegram user identifiers have at most 52 significant bits. No groups,
+    # usernames, booleans or caller-controlled URLs are delivery targets here.
+    if type(value) is int:
+        value = str(value)
+    require(isinstance(value, str) and re.fullmatch(r'[1-9][0-9]{0,15}', value)
+            and int(value) < 2 ** 52, 'Некорректный Telegram-чат.', 400)
+    return value
+
+
+def _callback_data_valid(value):
+    if not isinstance(value, str):
+        return False
+    try:
+        return 1 <= len(value.encode('utf-8')) <= 64
+    except UnicodeEncodeError:
+        return False
+
+
+def _reply_markup(value):
+    if value is None:
+        return None
+    require(isinstance(value, dict) and set(value) == {'inline_keyboard'},
+            'Некорректная клавиатура.', 400)
+    rows = value['inline_keyboard']
+    require(isinstance(rows, list) and 1 <= len(rows) <= 20, 'Некорректная клавиатура.', 400)
+    count = 0
+    for row in rows:
+        require(isinstance(row, list) and 1 <= len(row) <= 8, 'Некорректная клавиатура.', 400)
+        for button in row:
+            require(isinstance(button, dict) and set(button) in ({'text', 'callback_data'}, {'text', 'url'})
+                    and isinstance(button.get('text'), str) and 1 <= len(button['text']) <= 128,
+                    'Некорректная кнопка.', 400)
+            require(_callback_data_valid(button['callback_data']) if 'callback_data' in button
+                    else _url(button['url']), 'Некорректная кнопка.', 400)
+            count += 1
+    require(count <= 100, 'Слишком много кнопок.', 400)
+    return value
+
+
+def _telegram_message(text, reply_markup=None):
+    require(isinstance(text, str) and 1 <= len(text) <= 4096, 'Некорректный текст сообщения.', 400)
+    result = {'text': text}
+    markup = _reply_markup(reply_markup)
+    if markup is not None:
+        result['reply_markup'] = markup
+    return result
+
+
+def _telegram_callback(callback_query_id, text='', show_alert=False):
+    require(isinstance(callback_query_id, str) and 1 <= len(callback_query_id) <= 256
+            and callback_query_id.isascii() and all(32 < ord(c) < 127 for c in callback_query_id),
+            'Некорректный ответ на кнопку.', 400)
+    require(isinstance(text, str) and len(text) <= 200 and type(show_alert) is bool,
+            'Некорректный ответ на кнопку.', 400)
+    return {'callback_query_id': callback_query_id, 'text': text, 'show_alert': show_alert}
+
+
+def _bot_readiness(db, candidate_id, chat_id, config):
+    if candidate_id:
+        recipient = _dict(db.execute('SELECT * FROM cn_recipients WHERE candidate_id=?', (candidate_id,)))
+        if not _telegram_identity_active(db, recipient) or recipient['telegram_chat_id'] != chat_id:
+            return 'error'
+    return 'pending' if config.telegram_configured else 'disabled'
+
+
+def _enqueue_telegram(db, chat_id, event_key, event_type, payload, candidate_id, config, timestamp):
+    target = _private_chat_id(chat_id)
+    require(candidate_id is None or isinstance(candidate_id, str) and 1 <= len(candidate_id) <= 160,
+            'Кандидат не найден.', 400)
+    require(isinstance(event_key, str) and 1 <= len(event_key) <= 240, 'Не указан ключ события.', 400)
+    owner = candidate_id or ''
+    encoded = json.dumps(payload, ensure_ascii=True, sort_keys=True, separators=(',', ':'))
+    existing = _dict(db.execute("SELECT * FROM cn_outbox WHERE candidate_id=? AND event_key=? AND channel='telegram'",
+                                (owner, event_key)))
+    if existing:
+        require(existing['event_type'] == event_type and existing['recipient'] == target
+                and existing['payload_json'] == encoded, 'Событие уже существует с другим содержимым.', 409)
+        return _safe(existing)
+    state = _bot_readiness(db, owner, target, config)
+    require(state != 'error', 'Telegram-чат не привязан к кандидату.', 403)
+    rid = secrets.token_hex(16)
+    db.execute('''INSERT INTO cn_outbox
+        (id,candidate_id,event_key,event_type,channel,recipient,created_at,status,next_attempt_at,payload_json)
+        VALUES (?,?,?,?,?,?,?,?,?,?)''',
+        (rid, owner, event_key, event_type, 'telegram', target, timestamp, state, timestamp, encoded))
+    return _safe(_dict(db.execute('SELECT * FROM cn_outbox WHERE id=?', (rid,))))
+
+
+def enqueue_telegram_reply(db, chat_id, event_key, text, reply_markup=None, candidate_id=None, settings=None, now=None):
+    """Internal bot hook; callers must validate the originating private update.
+
+    Without a candidate_id only generic onboarding/error prompts are permitted.
+    Candidate-specific content must pass the linked owner for dispatch revalidation.
+    No provider I/O occurs until the caller transaction commits and a worker claims it.
+    """
+    return _enqueue_telegram(db, chat_id, event_key, 'telegram.reply', _telegram_message(text, reply_markup),
+                             candidate_id, _config(settings), _now(now))
+
+
+def enqueue_telegram_callback(db, chat_id, event_key, callback_query_id, text='', show_alert=False,
+                              candidate_id=None, settings=None, now=None):
+    """Queue a callback acknowledgement in the same durable delivery outbox."""
+    return _enqueue_telegram(db, chat_id, event_key, 'telegram.callback',
+                             _telegram_callback(callback_query_id, text, show_alert),
+                             candidate_id, _config(settings), _now(now))
 
 
 def request_email_verification(db, candidate_id, settings=None, now=None):
@@ -351,34 +484,52 @@ def create_telegram_link(db, candidate_id, settings=None, now=None):
             'expiresAt': timestamp + LINK_SECONDS}
 
 
-def _consume_telegram_update(db, update, timestamp):
-    require(isinstance(update, dict) and type(update.get('update_id')) is int, 'Некорректное обновление.', 400)
-    message = update.get('message')
-    content = message.get('text', '') if isinstance(message, dict) else ''
-    if isinstance(content, str) and re.fullmatch(r'/start(?:@[A-Za-z0-9_]+)? rc_[A-Za-z0-9_-]{43}', content):
-        # One bot/polling offset, separate identity namespaces and link tokens.
-        import recruiter_notifications
-        return recruiter_notifications.consume_telegram_update(db, update, timestamp)
+def _consume_telegram_update(db, update, timestamp, settings=None, update_handler=None):
+    require(isinstance(update, dict) and type(update.get('update_id')) is int
+            and 0 <= update['update_id'] < 2 ** 63, 'Некорректное обновление.', 400)
     inserted = db.execute('INSERT OR IGNORE INTO cn_telegram_updates VALUES (?,?)', (update['update_id'], timestamp))
     if not inserted.rowcount:
         return {'status': 'duplicate'}
-    message = update.get('message')
+    callback = update.get('callback_query')
+    if callback is not None:
+        if not isinstance(callback, dict) or 'message' in update or not _callback_data_valid(callback.get('data')):
+            return {'status': 'ignored'}
+        try:
+            _telegram_callback(callback.get('id'))
+        except Problem:
+            return {'status': 'ignored'}
+        message, sender = callback.get('message'), callback.get('from')
+    else:
+        message = update.get('message')
+        sender = message.get('from') if isinstance(message, dict) else None
     if not isinstance(message, dict):
         return {'status': 'ignored'}
-    chat, sender = message.get('chat'), message.get('from')
+    chat = message.get('chat')
     if not (isinstance(chat, dict) and isinstance(sender, dict) and chat.get('type') == 'private'
-            and type(chat.get('id')) is int and chat['id'] > 0
+            and type(chat.get('id')) is int and 0 < chat['id'] < 2 ** 52 and type(sender.get('id')) is int
             and chat['id'] == sender.get('id') and not sender.get('is_bot')):
         return {'status': 'ignored'}
-    content = message.get('text', '')
+    content = message.get('text', '') if callback is None else ''
+    if isinstance(content, str) and re.fullmatch(r'/start(?:@[A-Za-z0-9_]+)? rc_[A-Za-z0-9_-]{43}', content):
+        # One bot/polling offset, separate identity namespaces and link tokens.
+        # Recruiter capabilities must not reach candidate binding or bot commands.
+        import recruiter_notifications
+        return recruiter_notifications.consume_telegram_update(db, update, timestamp)
     match = re.fullmatch(r'/start(?:@[A-Za-z0-9_]+)? ([A-Za-z0-9_-]{40,64})', content) if isinstance(content, str) else None
-    if not match:
-        return {'status': 'ignored'}
+    binding_result = _consume_telegram_link(db, match[1], chat['id'], timestamp) if match else None
+    if update_handler is not None:
+        result = update_handler(db, update, timestamp, _config(settings), binding_result)
+        if result is not None:
+            return result
+    return binding_result or {'status': 'ignored'}
+
+
+def _consume_telegram_link(db, token, chat_id, timestamp):
     row = _dict(db.execute("SELECT * FROM cn_tokens WHERE digest=? AND purpose='telegram' AND used_at IS NULL AND expires_at>?",
-                           (_hash(match[1]), timestamp)))
+                           (_hash(token), timestamp)))
     if not row:
         return {'status': 'invalid_link'}
-    chat_id = str(chat['id'])
+    chat_id = str(chat_id)
     taken = db.execute('SELECT candidate_id FROM cn_recipients WHERE telegram_chat_id=? AND candidate_id<>?',
                        (chat_id, row['candidate_id'])).fetchone()
     if taken:
@@ -391,13 +542,13 @@ def _consume_telegram_update(db, update, timestamp):
     return {'status': 'linked'}
 
 
-def handle_telegram_update(db, update, supplied_secret='', settings=None, now=None):
+def handle_telegram_update(db, update, supplied_secret='', settings=None, now=None, update_handler=None):
     config = _config(settings)
     expected = config.telegram_webhook_secret
     require(config.telegram_configured and re.fullmatch(r'[A-Za-z0-9_-]{32,256}', expected)
             and isinstance(supplied_secret, str) and supplied_secret.isascii() and len(supplied_secret) <= 256
             and hmac.compare_digest(expected, supplied_secret), 'Нет доступа.', 403)
-    return _consume_telegram_update(db, update, _now(now))
+    return _consume_telegram_update(db, update, _now(now), config, update_handler)
 
 
 def retry(db, notification_id, settings=None, now=None, candidate_id=None):
@@ -408,9 +559,15 @@ def retry(db, notification_id, settings=None, now=None, candidate_id=None):
     require(row['status'] != 'sending', 'Отправка уже выполняется.', 409)
     if row['status'] == 'delivered':
         return _safe(row)
-    recipient = _recipient(db, row['candidate_id'])
-    state = _readiness(recipient, row['channel'], config, row['event_type'] == 'email.verification')
-    target = recipient['email'] if row['channel'] == 'email' else recipient['telegram_chat_id']
+    if row['event_type'] in BOT_EVENTS:
+        # Replaying a private reply must never retarget its stored content.
+        target = row['recipient']
+        state = _bot_readiness(db, row['candidate_id'], target, config)
+        require(state != 'error', 'Telegram-чат больше не привязан к кандидату.', 409)
+    else:
+        recipient = _recipient(db, row['candidate_id'])
+        state = _readiness(recipient, row['channel'], config, row['event_type'] == 'email.verification', db)
+        target = recipient['email'] if row['channel'] == 'email' else recipient['telegram_chat_id']
     db.execute('''UPDATE cn_outbox SET status=?,recipient=?,attempts=0,next_attempt_at=?,last_error=NULL,
                lease_id=NULL,lease_until=NULL WHERE id=?''', (state, target, timestamp, notification_id))
     return _safe(_dict(db.execute('SELECT * FROM cn_outbox WHERE id=?', (notification_id,))))
@@ -466,11 +623,17 @@ class Transport:
             raise DeliveryFailure('smtp_delivery_uncertain') from None
 
     def telegram_request(self, method, payload):
-        request = urllib.request.Request('https://api.telegram.org/bot' + self.config.telegram_token + '/' + method,
-            data=json.dumps(payload).encode(), headers={'Content-Type': 'application/json'}, method='POST')
+        if not isinstance(method, str) or not re.fullmatch(r'[A-Za-z][A-Za-z0-9]{0,63}', method):
+            raise DeliveryFailure('telegram_request_invalid')
+        url = 'https://api.telegram.org/bot' + self.config.telegram_token + '/' + method
         try:
-            with urllib.request.urlopen(request, timeout=15) as response:
-                raw = response.read(1024 * 1024 + 1)
+            if self.config.telegram_proxy_url:
+                raw = self._telegram_proxy_response(url, payload)
+            else:
+                request = urllib.request.Request(url, data=json.dumps(payload).encode(),
+                    headers={'Content-Type': 'application/json'}, method='POST')
+                with urllib.request.urlopen(request, timeout=15) as response:
+                    raw = response.read(1024 * 1024 + 1)
             if len(raw) > 1024 * 1024:
                 raise DeliveryFailure('telegram_response_invalid')
             body = json.loads(raw)
@@ -488,12 +651,69 @@ class Transport:
             raise DeliveryFailure('telegram_rejected', code == 429 or (isinstance(code, int) and code >= 500))
         return body.get('result')
 
-    def send_telegram(self, recipient, content):
-        result = self.telegram_request('sendMessage', {'chat_id': recipient, 'text': content,
-            'link_preview_options': {'is_disabled': True}})
-        if not isinstance(result, dict) or not result.get('message_id'):
+    def _telegram_proxy_response(self, url, payload):
+        proxy = self.config.telegram_proxy_url
+        match = re.fullmatch(r'socks5h://(?:127\.0\.0\.1|\[::1\]):([0-9]{1,5})', proxy) if isinstance(proxy, str) else None
+        if not match or not 1 <= int(match[1]) <= 65535:
+            raise DeliveryFailure('telegram_proxy_invalid')
+        if not isinstance(payload, dict) or '\0' in url:
+            raise DeliveryFailure('telegram_request_invalid')
+
+        def quoted(value):
+            # curl --config has its own quoting rules, independent of shell/JSON.
+            escaped = (value.replace('\\', '\\\\').replace('"', '\\"').replace('\t', '\\t')
+                       .replace('\n', '\\n').replace('\r', '\\r').replace('\v', '\\v'))
+            return '"' + escaped + '"'
+
+        config = '\n'.join(key + ' = ' + quoted(value) for key, value in (
+            ('url', url), ('proxy', proxy), ('request', 'POST'),
+            ('header', 'Content-Type: application/json'), ('data', json.dumps(payload, ensure_ascii=True)))) + '\n'
+        # -q must be the first option: user curlrc could otherwise enable tracing,
+        # redirects or additional requests. Secrets and request data use stdin;
+        # the subprocess also gets no inherited credentials/proxy/TLS-debug env.
+        command = ['/usr/bin/curl', '--disable', '--config', '-', '--silent', '--show-error',
+                   '--max-time', '15', '--connect-timeout', '5', '--fail-with-body',
+                   '--max-filesize', str(1024 * 1024), '--noproxy', '', '--globoff',
+                   '--proto', '=https', '--write-out', '\n%{http_code}']
+        try:
+            with tempfile.TemporaryFile() as response:
+                result = subprocess.run(command, input=config.encode('utf-8'), stdout=response,
+                    stderr=subprocess.DEVNULL, timeout=20, check=False,
+                    env={'PATH': '/usr/bin:/bin', 'LANG': 'C', 'LC_ALL': 'C'})
+                if result.returncode == 63:
+                    raise DeliveryFailure('telegram_response_invalid')
+                if result.returncode not in (0, 22):
+                    raise DeliveryFailure('telegram_delivery_uncertain')
+                size = response.seek(0, os.SEEK_END)
+                if size < 4 or size > 1024 * 1024 + 4:
+                    raise DeliveryFailure('telegram_response_invalid')
+                response.seek(0)
+                raw = response.read(1024 * 1024 + 4)
+        except (OSError, subprocess.SubprocessError):
+            raise DeliveryFailure('telegram_delivery_uncertain') from None
+        if not re.fullmatch(rb'\n[0-9]{3}', raw[-4:]):
+            raise DeliveryFailure('telegram_response_invalid')
+        code = int(raw[-3:])
+        if not 200 <= code < 300:
+            raise DeliveryFailure('telegram_http_' + str(code), code == 429 or code >= 500,
+                                  60 if code == 429 else 0)
+        if result.returncode != 0:
+            raise DeliveryFailure('telegram_response_invalid')
+        return raw[:-4]
+
+    def send_telegram(self, recipient, content, reply_markup=None):
+        payload = _telegram_message(content, reply_markup)
+        payload.update({'chat_id': _private_chat_id(recipient), 'link_preview_options': {'is_disabled': True}})
+        result = self.telegram_request('sendMessage', payload)
+        if not isinstance(result, dict) or type(result.get('message_id')) is not int or result['message_id'] <= 0:
             raise DeliveryFailure('telegram_response_invalid')
         return str(result['message_id'])
+
+    def answer_callback_query(self, callback_query_id, text='', show_alert=False):
+        result = self.telegram_request('answerCallbackQuery', _telegram_callback(callback_query_id, text, show_alert))
+        if result is not True:
+            raise DeliveryFailure('telegram_response_invalid')
+        return 'telegram_callback_accepted'
 
 
 def _verification_message(db, row, config, timestamp):
@@ -507,7 +727,7 @@ def _verification_message(db, row, config, timestamp):
             + link + '\n\nСсылка действует 30 минут. Она не выполняет вход в аккаунт. Если вы не запрашивали письмо, ничего делать не нужно.')
 
 
-def process_pending(connect, settings=None, limit=10, now=None, transport=None):
+def process_pending(connect, settings=None, limit=10, now=None, transport=None, telegram_renderer=None):
     config, timestamp = _config(settings), _now(now)
     sender = transport if transport is not None else Transport(config)
     counts = {'delivered': 0, 'pending': 0, 'error': 0, 'disabled': 0, 'unverified': 0, 'unbound': 0}
@@ -518,15 +738,19 @@ def process_pending(connect, settings=None, limit=10, now=None, transport=None):
             db.execute('BEGIN IMMEDIATE')
             db.execute("""UPDATE cn_outbox SET status='error',last_error='delivery_uncertain',lease_id=NULL,lease_until=NULL
                 WHERE status='sending' AND lease_until<?""", (timestamp,))
-            row = _dict(db.execute("SELECT * FROM cn_outbox WHERE status='pending' AND next_attempt_at<=? ORDER BY created_at,rowid LIMIT 1", (timestamp,)))
+            row = _dict(db.execute("""SELECT * FROM cn_outbox WHERE status='pending' AND next_attempt_at<=?
+                ORDER BY CASE WHEN event_type='telegram.callback' THEN 0 ELSE 1 END,created_at,rowid LIMIT 1""", (timestamp,)))
             if not row:
                 db.commit()
                 break
-            recipient = _recipient(db, row['candidate_id'])
-            current = recipient['email'] if row['channel'] == 'email' else recipient['telegram_chat_id']
-            state = _readiness(recipient, row['channel'], config, row['event_type'] == 'email.verification')
-            if current != row['recipient']:
-                state = 'error'
+            if row['event_type'] in BOT_EVENTS:
+                state = _bot_readiness(db, row['candidate_id'], row['recipient'], config)
+            else:
+                recipient = _recipient(db, row['candidate_id'])
+                current = recipient['email'] if row['channel'] == 'email' else recipient['telegram_chat_id']
+                state = _readiness(recipient, row['channel'], config, row['event_type'] == 'email.verification', db)
+                if current != row['recipient']:
+                    state = 'error'
             if state != 'pending':
                 db.execute('UPDATE cn_outbox SET status=?,last_error=? WHERE id=?',
                            (state, 'recipient_changed' if state == 'error' else None, row['id']))
@@ -536,11 +760,22 @@ def process_pending(connect, settings=None, limit=10, now=None, transport=None):
             lease = secrets.token_hex(16)
             db.execute("UPDATE cn_outbox SET status='sending',attempts=attempts+1,lease_id=?,lease_until=? WHERE id=?",
                        (lease, timestamp + LEASE_SECONDS, row['id']))
-            if row['event_type'] == 'email.verification':
+            reply_markup, bot_payload = None, None
+            if row['event_type'] in BOT_EVENTS:
+                bot_payload = json.loads(row['payload_json'])
+                subject, content = '', bot_payload.get('text', '')
+                reply_markup = bot_payload.get('reply_markup')
+            elif row['event_type'] == 'email.verification':
                 subject, content = _verification_message(db, row, config, timestamp)
             else:
                 subject, body = EVENTS[row['event_type']]
                 content = body + '\n\n' + config.public_url
+                if row['channel'] == 'telegram' and telegram_renderer is not None:
+                    rendered = telegram_renderer(db, row, config, timestamp)
+                    if rendered is not None:
+                        require(isinstance(rendered, dict), 'Некорректное сообщение бота.', 400)
+                        rendered = _telegram_message(rendered.get('text'), rendered.get('reply_markup'))
+                        content, reply_markup = rendered['text'], rendered.get('reply_markup')
             db.commit()
         except Exception:
             db.rollback()
@@ -548,8 +783,15 @@ def process_pending(connect, settings=None, limit=10, now=None, transport=None):
         finally:
             db.close()
         try:
-            provider_ref = (sender.send_email(row['recipient'], subject, content, row['id']) if row['channel'] == 'email'
-                            else sender.send_telegram(row['recipient'], content))
+            if row['event_type'] == 'telegram.callback':
+                provider_ref = sender.answer_callback_query(bot_payload['callback_query_id'], content,
+                                                             bot_payload.get('show_alert', False))
+            elif row['channel'] == 'email':
+                provider_ref = sender.send_email(row['recipient'], subject, content, row['id'])
+            elif reply_markup is not None:
+                provider_ref = sender.send_telegram(row['recipient'], content, reply_markup=reply_markup)
+            else:
+                provider_ref = sender.send_telegram(row['recipient'], content)
             state, error, delay = 'delivered', None, 0
         except DeliveryFailure as failure:
             state = 'pending' if failure.retryable and row['attempts'] + 1 < MAX_ATTEMPTS else 'error'
@@ -569,7 +811,7 @@ def process_pending(connect, settings=None, limit=10, now=None, transport=None):
     return counts
 
 
-def poll_telegram_updates(connect, settings=None, now=None, transport=None):
+def poll_telegram_updates(connect, settings=None, now=None, transport=None, update_handler=None):
     config, timestamp = _config(settings), _now(now)
     if not (config.telegram_configured and config.telegram_polling):
         return {'status': 'disabled', 'processed': 0}
@@ -580,7 +822,8 @@ def poll_telegram_updates(connect, settings=None, now=None, transport=None):
     finally:
         db.close()
     offset = int(row[0]) if row else 0
-    updates = sender.telegram_request('getUpdates', {'offset': offset, 'limit': 50, 'timeout': 0, 'allowed_updates': ['message']})
+    updates = sender.telegram_request('getUpdates', {'offset': offset, 'limit': 50, 'timeout': 0,
+                                                    'allowed_updates': ['message', 'callback_query']})
     if not isinstance(updates, list):
         raise DeliveryFailure('telegram_response_invalid')
     processed = 0
@@ -588,7 +831,7 @@ def poll_telegram_updates(connect, settings=None, now=None, transport=None):
         db = connect()
         try:
             with db:
-                _consume_telegram_update(db, update, timestamp)
+                _consume_telegram_update(db, update, timestamp, config, update_handler)
                 next_offset = update['update_id'] + 1
                 db.execute("INSERT INTO cn_worker_state VALUES ('telegram_offset',?) ON CONFLICT(name) DO UPDATE SET value=excluded.value",
                            (str(max(offset, next_offset)),))
@@ -603,7 +846,7 @@ _worker_lock = threading.Lock()
 _worker_thread = None
 
 
-def start_worker(connect, interval=5, stop_event=None):
+def start_worker(connect, interval=5, stop_event=None, update_handler=None, telegram_renderer=None):
     """Start once from server __main__, not imports. Off means no thread/network.
 
     A daemon exits with the API process. Passing an Event permits orderly local
@@ -625,10 +868,17 @@ def start_worker(connect, interval=5, stop_event=None):
                     config = settings()
                     if not config.enabled:
                         return
-                    counts = process_pending(connect, settings=config, limit=5)
+                    counts = process_pending(connect, settings=config, limit=5, telegram_renderer=telegram_renderer)
                     import recruiter_notifications
                     recruiter_counts = recruiter_notifications.process_pending(connect, limit=5)
-                    polled = poll_telegram_updates(connect, settings=config)
+                    polled = poll_telegram_updates(connect, settings=config, update_handler=update_handler)
+                    if polled.get('processed', 0) > 0:
+                        # Commands enqueue replies in the polling transaction.
+                        # Drain them in this same cycle so callbacks do not wait
+                        # for the worker's next interval behind a loading spinner.
+                        replies = process_pending(connect, settings=config, limit=5, telegram_renderer=telegram_renderer)
+                        for state, count in replies.items():
+                            counts[state] = counts.get(state, 0) + count
                     if any(counts.values()) or any(recruiter_counts.values()) or polled.get('processed'):
                         print(json.dumps({'worker': 'candidate_notifications', 'outbox': counts,
                                           'recruiterOutbox': recruiter_counts, 'telegram': polled}), flush=True)
