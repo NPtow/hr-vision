@@ -6,10 +6,12 @@ import json
 import sqlite3
 import threading
 import unittest
+from unittest.mock import Mock, patch
 from urllib.parse import parse_qs, urlsplit
 
 import candidate_booking as booking
 import candidate_invites as invites
+import recruiter_notifications
 from candidate_portal import profile_value
 from domain import Problem, iso, now
 import test_candidate_portal as fixture
@@ -230,6 +232,31 @@ class CandidateBookingTest(unittest.TestCase):
         self.assertEqual(1, len(self.rows('SELECT * FROM booking_test_events')))
         self.assertEqual(2, len(self.rows('SELECT id FROM rn_outbox')))
         self.assertEqual(2, len(self.rows('SELECT request_id FROM cp_booking_requests')))
+
+    def test_hh_booking_emails_assigned_recruiter_without_account_verification(self):
+        _, _, token = self.issue()
+        selected = self.slot(recruiter='Первый')
+        self.slot(recruiter='Второй')
+        config = recruiter_notifications.settings({'HR_NOTIFICATIONS_ENABLED': '1',
+            'HR_SMTP_HOST': 'smtp.example.test', 'HR_SMTP_FROM': 'hr@example.test'})
+        transport = Mock()
+        transport.send_email.return_value = 'smtp_accepted'
+        with patch.object(recruiter_notifications, 'settings', return_value=config):
+            self.book(token, selected)
+            self.book(token, selected)
+            self.book(token, selected, 'request-2')
+        owner_email = self.rows('''SELECT a.email FROM rc_accounts a
+            JOIN cp_recruiter_slot_owners o ON o.recruiter_id=a.id WHERE o.slot_id=?''', (selected['id'],))[0][0]
+        self.assertEqual([(0,)], self.rows('SELECT email_verified FROM rn_channels'))
+        self.assertEqual([(1,)], self.rows("SELECT count(*) FROM rn_outbox WHERE channel='email'"))
+        result = recruiter_notifications.process_pending(self.connect, config, transport=transport)
+        self.assertEqual(result['delivered'], 1)
+        transport.send_email.assert_called_once()
+        self.assertEqual(transport.send_email.call_args.args[0], owner_email)
+        self.assertIn('Источник: HH', transport.send_email.call_args.args[2])
+        self.assertIn('workspace=recruiter', transport.send_email.call_args.args[2])
+        transport.send_telegram.assert_not_called()
+        self.assertEqual(recruiter_notifications.process_pending(self.connect, config, transport=transport)['delivered'], 0)
 
     def test_same_request_cannot_change_slot_and_person_cannot_book_twice(self):
         _, _, token = self.issue()

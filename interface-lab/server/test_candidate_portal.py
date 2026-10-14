@@ -8,13 +8,14 @@ import sqlite3
 import tempfile
 import threading
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from pathlib import Path
 
 from candidate_portal import CandidatePortal, COOKIE, ClosingConnection, dump
 from domain import Problem, iso, now
 from daily_media import DailyMedia
 import recruiter_access
+import recruiter_notifications
 
 
 def assign_fixture_slot(db, slot):
@@ -250,6 +251,32 @@ class CandidatePortalTest(unittest.TestCase):
         self.assert_problem(409, 'candidate/book', {'slotId': second['id']}, cookie)
         with self.connect() as db:
             self.assertEqual(db.execute("SELECT COUNT(*) FROM fake_events WHERE type='interview.booked'").fetchone()[0], 1)
+
+    def test_self_registration_booking_emails_assigned_recruiter_without_setup(self):
+        person, cookie = self.register()
+        selected = self.slot(recruiter='Выбранный рекрутер')
+        self.slot(recruiter='Другой рекрутер')
+        config = recruiter_notifications.settings({'HR_NOTIFICATIONS_ENABLED': '1',
+            'HR_SMTP_HOST': 'smtp.example.test', 'HR_SMTP_FROM': 'hr@example.test'})
+        transport = Mock()
+        transport.send_email.return_value = 'smtp_accepted'
+        with patch.object(recruiter_notifications, 'settings', return_value=config):
+            for _ in range(2):
+                self.call('candidate/book', {'slotId': selected['id']}, cookie)
+        with self.connect() as db:
+            owner_email = db.execute('''SELECT a.email FROM rc_accounts a
+                JOIN cp_recruiter_slot_owners o ON o.recruiter_id=a.id WHERE o.slot_id=?''',
+                (selected['id'],)).fetchone()[0]
+            self.assertEqual(db.execute('SELECT email_verified FROM rn_channels').fetchone()[0], 0)
+            self.assertEqual(db.execute("SELECT count(*) FROM rn_outbox WHERE channel='email'").fetchone()[0], 1)
+        result = recruiter_notifications.process_pending(self.connect, config, transport=transport)
+        self.assertEqual(result['delivered'], 1)
+        transport.send_email.assert_called_once()
+        self.assertEqual(transport.send_email.call_args.args[0], owner_email)
+        self.assertIn('Длительность: 30 минут', transport.send_email.call_args.args[2])
+        self.assertIn('workspace=recruiter', transport.send_email.call_args.args[2])
+        transport.send_telegram.assert_not_called()
+        self.assertEqual(recruiter_notifications.process_pending(self.connect, config, transport=transport)['delivered'], 0)
 
     def test_overlapping_recruiter_slots_rejected(self):
         self.slot()
