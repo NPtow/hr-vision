@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link2, Loader2 } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { request } from '../connected-journey/api';
 import { parseMeetingTranscript } from '../connected-journey/transcript';
@@ -40,8 +39,6 @@ function PreparedInterview({ person, profile, index, token, vacancyId, busy, onC
       .finally(() => { if (current) setLoading(false); });
     return () => { current = false; };
   }, [person.id, index, token, vacancyId, source?.publicUrl, attempt]);
-  const originalUrl = webUrl(source?.publicUrl || '');
-  const evaluationUrl = webUrl(profile.evaluationUrl || '');
   const transcript = profile.recordings.length <= 1 ? profile.transcriptText || '' : '';
   const chapters = profile.recordings.length <= 1 ? profile.chapters || parseMeetingTranscript(transcript) : [];
   const canComment = !!vacancyId && !!source && !person.archived;
@@ -56,18 +53,14 @@ function PreparedInterview({ person, profile, index, token, vacancyId, busy, onC
       onSave={canComment ? (text, expectedRevision, requestId) => onComment({ recordingIndex: index, seconds, chapterTitle, text, expectedRevision, requestId }) : undefined}/>;
   }
   return <>
-    {loading && <p className="ir-muted" role="status"><Loader2 className="cj-spin" size={16} aria-hidden="true"/> Загружаем запись…</p>}
     {error && <div className="ew-inline-error" role="alert"><p>{error}</p><Button type="button" variant="ghost" onClick={() => setAttempt(value => value + 1)}>Повторить загрузку</Button></div>}
     <SourceScreeningReview appearance="candidate" sourceId={`${person.id}:prepared:${index}:${source?.publicUrl || 'none'}`}
       name={person.name} chapters={chapters} fullChapters={chapters} transcriptText={transcript}
       media={media ? { src: media.url, label: source?.name } : undefined}
       renderChapterComment={chapter => chapter.seconds === null ? null : comment(chapter.seconds, chapter.title)}
       renderTimeComment={(seconds, onClose) => comment(seconds, '', onClose)}
-      allowNewTimeComment={canComment}
       commentTimestamps={[...commentCounts].sort(([a], [b]) => a - b).map(([seconds, count]) => ({ seconds, count }))}
-      emptyMessage={loading ? 'Загружаем запись…' : error || 'Запись интервью не добавлена.'}
-      recruiterContent={profile.evaluationText || evaluationUrl ? <>{profile.evaluationText ? <p className="ew-prewrap">{profile.evaluationText}</p> : <p><a href={evaluationUrl} target="_blank" rel="noreferrer">Открыть оценку рекрутера ↗</a></p>}</> : undefined}/>
-    {originalUrl && <a className="ew-file-row" href={originalUrl} target="_blank" rel="noreferrer"><Link2 size={18} aria-hidden="true"/><span>Исходная запись ↗</span></a>}
+      emptyMessage={loading ? 'Загружаем запись…' : error || 'Запись интервью не добавлена.'}/>
   </>;
 }
 
@@ -75,7 +68,6 @@ export function PreparedIntakeProfile({ person, token, vacancyId, onUpdated }: {
   person: IntakePerson; token: string; vacancyId?: string; onUpdated?: () => void;
 }) {
   const [current, setCurrent] = useState(person);
-  const [index, setIndex] = useState(0);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const saving = useRef(false);
@@ -104,17 +96,14 @@ export function PreparedIntakeProfile({ person, token, vacancyId, onUpdated }: {
   const download = (file: typeof firstFile, mode: 'download' | 'open' = 'download') => {
     setError(''); void downloadResume(token, file, mode).catch(cause => setError(cause instanceof Error ? cause.message : 'Не удалось загрузить резюме.'));
   };
-  return <EmployerCandidateProfile person={current}
-    source={{ interviewRole: current.role, contact: current.contact, cv: profile.cvText, profile: current.note ? [{ label: 'Заметка', value: current.note }] : [] }}
+  return <EmployerCandidateProfile person={{ ...current, photo: profile.photo }}
+    source={{ interviewRole: current.role, role: profile.summary, contact: current.contact, cv: profile.cvText, score: profile.score,
+      profile: profile.profile || (current.note ? [{ label: 'Заметка', value: current.note }] : []) }}
     resume={firstFile ? { name: firstFile.name, sizeLabel: `${Math.max(1, Math.ceil(firstFile.size / 1024))} КБ`, onOpen: () => download(firstFile, 'open'), onDownload: () => download(firstFile) }
       : resumeUrl ? { name: 'Резюме', onOpen: () => { window.open(resumeUrl, '_blank', 'noopener,noreferrer'); } } : undefined}
     interview={<>
       {current.files.slice(1).map(file => <button key={file.id} type="button" className="ew-file-row" onClick={() => download(file)}>{file.name}</button>)}
-      {profile.recordings.length > 1 && <div className="ew-methods" role="group" aria-label="Части интервью">{profile.recordings.map((recording, recordingIndex) => <button type="button" key={`${recordingIndex}:${recording.name}`} aria-pressed={index === recordingIndex} onClick={() => setIndex(recordingIndex)}>Часть {recordingIndex + 1}</button>)}</div>}
-      <PreparedInterview key={`${current.id}:${index}:${token}`} person={current} profile={profile} index={index} token={token} vacancyId={vacancyId} busy={busy} onComment={values => mutate('comment', values)}/>
+      <PreparedInterview key={`${current.id}:${token}`} person={current} profile={profile} index={0} token={token} vacancyId={vacancyId} busy={busy} onComment={values => mutate('comment', values)}/>
     </>}
-    workflowRevision={current.reviewRevision || 0} busy={busy} error={error}
-    meetingUnavailableReason={current.archived ? 'Кандидат в архиве.' : 'Для встречи нужно согласие кандидата и его свободное время.'}
-    onReject={vacancyId && !current.archived ? ({ expectedRevision, requestId, ...rejectionAnswers }) => mutate('review', { expectedRevision, requestId, rejectionAnswers }) : undefined}
-    decisionFeedback={current.reviewRejection || undefined}/>;
+    workflowRevision={current.reviewRevision || 0} busy={busy} error={error}/>;
 }

@@ -64,7 +64,6 @@ function Screening({ journey, person, source, appearance = 'panel', enableCommen
     transcriptText={index === 0 ? transcript : undefined} summary={index === 0 ? source.shortSummary : undefined}
     renderChapterComment={showComments ? chapter => chapter.seconds === null ? null : comment(chapter.seconds, recording?.id || null, chapter.title) : undefined}
     renderTimeComment={showComments ? (seconds, onClose) => comment(seconds, recording?.id || null, '', onClose) : undefined}
-    allowNewTimeComment={canComment}
     commentTimestamps={enableComments ? commentTimestamps(recording?.id || null) : undefined}
     emptyMessage={emptyMessage} recruiterContent={index === 0 && (source.conclusion.length || source.questions.length) ? <>
       <span className="ir-eyebrow">Мнение рекрутера{source.score !== null ? ` · ${source.score} / 5` : ''}</span>

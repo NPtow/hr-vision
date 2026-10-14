@@ -1,266 +1,231 @@
-// Materialize __LOCAL_REVIEW_FIXTURE__ from test_employer_candidate_review_acceptance
-// --serve-fixture into an ignored local output copy. Run via playwright-cli run-code.
-// Real local HTTP/temporary SQLite; only the external video/file resolver is fake.
-// Never inject a production session, use a production origin, or send real messages.
+// Materialize __LOCAL_REVIEW_FIXTURE__ only in a private local output copy.
+// Real temporary employer HTTP/SQLite, four verified source profiles, read-only
+// original DSA media. No production session, mutation, message or generated speech.
 async page => {
   const config = __LOCAL_REVIEW_FIXTURE__;
   const local = url => ['127.0.0.1', 'localhost', '[::1]'].includes(new URL(url).hostname);
   const uiOrigin = config.uiOrigin || 'http://127.0.0.1:6023';
-  if (!config.localOnly || !local(config.apiBase) || !local(uiOrigin) || !config.videoPath) throw Error('Complete local review fixture required');
-  const checks = [], errors = [], commands = [], materials = [], screenshots = [];
-  const assert = (value, label) => { if (!value) throw Error(label); checks.push(label); };
+  if (!config.localOnly || !local(config.apiBase) || !local(uiOrigin) || config.profiles?.length !== 4 || !config.artifactDir) throw Error('Private local source fixture required');
+  const checks = [], errors = [], commands = [], mediaResponses = [], screenshots = [], decodedFrames = [];
+  const assert = (ok, label) => { if (!ok) throw Error(label); checks.push(label); };
   const onError = error => errors.push(error.message);
-  page.on('pageerror', onError);
-  const api = async (path, data) => {
-    const response = await page.request.fetch(new URL(path, config.apiBase).href, {
-      method: data ? 'POST' : 'GET', data,
-      headers: { authorization: `Bearer ${config.token}`, 'content-type': 'application/json' },
-    });
-    const body = await response.json();
-    if (!response.ok()) throw Error(`Local API ${path}: ${response.status()}`);
-    return body;
+  const onResponse = response => {
+    if (response.url().startsWith('https://kabinet.158-160-179-53.sslip.io/api/video/')) mediaResponses.push({ status: response.status(), range: response.headers()['content-range'] || '' });
   };
-  const state = (vid = config.vacancy.id) => api('employer/state?vacancyId=' + encodeURIComponent(vid));
-  const person = async (aid = config.alpha.applicationId, vid = config.vacancy.id) => (await state(vid)).candidates[aid];
-  const intake = async () => (await api('employer/intake?vacancyId=' + config.vacancy.id)).candidates;
+  page.on('pageerror', onError); page.on('response', onResponse);
+  const api = async path => {
+    const response = await page.request.get(new URL(path, config.apiBase).href, { headers: { authorization: `Bearer ${config.token}` } });
+    if (!response.ok()) throw Error(`Local API read failed: ${response.status()}`);
+    return response.json();
+  };
+  const state = () => api('employer/state?vacancyId=' + config.vacancy.id);
+  const intake = async (vid = config.vacancy.id) => (await api('employer/intake?vacancyId=' + vid)).candidates;
+  const sources = await intake();
+  const expected = id => sources.find(person => person.id === id).preparedProfile;
+  const originalStages = (await state()).candidates[config.selectedApplicationId].stages;
   const card = () => page.locator('.ecp-profile');
-  const button = name => page.getByRole('button', { name, exact: true });
-  const chapter = index => page.locator('.ir-candidate-chapters > ol > li').nth(index);
+  const row = index => card().locator('.ir-candidate-chapters > ol > li').nth(index);
   const exact = async id => {
     await page.locator(`.ecp-profile[data-candidate-id="${id}"]`).waitFor({ state: 'visible' });
-    assert(await card().count() === 1, 'Only one proposed-candidate profile is rendered');
+    assert(await card().count() === 1, 'Exactly one requested source profile is rendered');
   };
-  const goto = async (aid = config.alpha.applicationId, vid = config.vacancy.id, pool = 'proposed') => {
+  const goto = async (id, vid = config.vacancy.id) => {
     const url = new URL('/iframe.html', uiOrigin);
-    Object.entries({ id: 'hr-vision-product--manager', viewMode: 'story', screen: 'shortlist', vacancyId: vid, applicationId: aid, pool }).forEach(([key, value]) => url.searchParams.set(key, value));
-    await page.goto(url.href);
+    Object.entries({ id: 'hr-vision-product--manager', viewMode: 'story', screen: 'shortlist', pool: 'proposed', vacancyId: vid, intakeId: id }).forEach(([k, v]) => url.searchParams.set(k, v));
+    await page.goto(url.href); await exact(id);
   };
-  const select = async (name, id) => {
-    const row = page.locator('.ew-person-row').filter({ hasText: name });
-    await row.waitFor({ state: 'attached' });
-    if (!await row.isVisible()) await page.getByRole('button', { name: 'К списку', exact: true }).click();
-    await row.click(); await exact(id);
+  const select = async person => {
+    const target = page.locator('.ew-person-row').filter({ hasText: person.name });
+    await target.waitFor({ state: 'attached' });
+    if (!await target.isVisible()) await page.getByRole('button', { name: 'К списку', exact: true }).click();
+    await target.click(); await exact(person.id);
   };
-  const readyVideo = async () => {
-    await page.waitForFunction(() => {
+  const ready = async () => page.waitForFunction(() => {
+    const video = document.querySelector('.ecp-profile video');
+    return video && video.readyState >= 1 && video.duration > 60 && video.videoWidth > 0;
+  }, null, { timeout: 45000 });
+  const pause = async () => {
+    await page.waitForFunction(() => { const video = document.querySelector('.ecp-profile video'); return !video || (!video.seeking && video.readyState >= 2); }, null, { timeout: 45000 });
+    const frame = await page.evaluate(() => {
       const video = document.querySelector('.ecp-profile video');
-      return video && video.readyState >= 1 && Number.isFinite(video.duration) && video.duration > 80;
+      if (!video || video.paused || !video.requestVideoFrameCallback) return null;
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(Error('No decoded video frame arrived before pause')), 10000);
+        video.requestVideoFrameCallback((_now, metadata) => { clearTimeout(timer); resolve({ time: metadata.mediaTime, frames: metadata.presentedFrames }); });
+      });
     });
-  };
-  const fit = async label => {
-    const size = await page.evaluate(() => ({ width: innerWidth, scroll: document.documentElement.scrollWidth }));
-    assert(size.scroll <= size.width + 1, `${label}: no page-level horizontal overflow`);
+    if (frame) decodedFrames.push(frame);
+    const control = card().getByRole('button', { name: 'Пауза', exact: true });
+    if (await control.isVisible()) await control.click();
   };
   const shot = async name => {
-    const path = `output/playwright/employer-candidate-review-20261014/${name}.png`;
+    const path = `${config.artifactDir}/${name}.png`;
     await page.screenshot({ path, fullPage: true }); screenshots.push(path);
   };
-  let loseComment = false, rejectBeforeCommit = false, delayedMaterial, delayedRejection;
+  const clock = value => value.split(':').reduce((n, part) => n * 60 + Number(part), 0);
+  const normalize = value => value.replace(/\s+/g, ' ').trim();
+  // Independent reference: literal saved-source lines; no generated transcript.
+  const cues = profile => profile.transcriptText.split(/\r?\n/).flatMap(line => {
+    const match = line.match(/^\[(\d+(?::\d{2}){1,2})-(\d+(?::\d{2}){1,2})\]\s+([РК]):\s*(.+)$/u);
+    return match ? [{ start: clock(match[1]), end: clock(match[2]), text: match[4] }] : [];
+  });
+  const excerpt = async (profile, index) => {
+    const chapter = profile.chapters[index];
+    const sourceText = cues(profile).filter(cue => cue.start === cue.end ? cue.start >= chapter.seconds && cue.start < chapter.endSeconds : cue.end > chapter.seconds && cue.start < chapter.endSeconds).map(cue => cue.text);
+    const actual = await card().locator('[aria-label="Текст выбранного фрагмента"] p').allTextContents();
+    assert(sourceText.length > 0 && normalize(actual.join(' ')) === normalize(sourceText.join(' ')), `Chapter ${index + 1}: selected transcript equals all source cues in its exact interval`);
+  };
+  let loseComment = false, failComment = false, recordingHeld = false, recordingStarted, releaseRecording;
+  const recordingWaiting = new Promise(resolve => { recordingStarted = resolve; });
+  const recordingReleased = new Promise(resolve => { releaseRecording = resolve; });
   const routeHandler = async route => {
-    const request = route.request();
-    const url = new URL(request.url());
+    const request = route.request(), url = new URL(request.url());
     const relative = url.pathname.replace(/^\/api\/hr\//, '') + url.search;
     if (relative.startsWith('employer/session')) return route.fulfill({ json: { token: config.token, state: await state() } });
+    if (request.method() === 'POST' && !['employer/intake/comment', 'employer/intake/recording'].includes(relative)) throw Error('Unexpected write in candidate view QA');
     const body = request.postData() ? request.postDataJSON() : null;
-    if (relative === 'employer/action' || relative === 'employer/intake/comment' || relative === 'employer/intake/review') commands.push({ path: relative, body });
-    if (relative === 'employer/screening/materials') materials.push(body);
-    if (rejectBeforeCommit && relative === 'employer/action' && body?.action === 'review.reject') {
-      rejectBeforeCommit = false;
-      return route.fulfill({ status: 503, json: { error: 'Локальная проверка: временно не удалось сохранить отказ.' } });
+    if (relative === 'employer/intake/comment') {
+      commands.push(body);
+      if (failComment) { failComment = false; return route.fulfill({ status: 503, json: { error: 'Локальная проверка сохранения.' } }); }
     }
     const response = await route.fetch({ url: new URL(relative, config.apiBase).href,
       headers: { authorization: `Bearer ${config.token}`, 'content-type': 'application/json' } });
-    if (delayedMaterial && !delayedMaterial.used && relative === 'employer/screening/materials' && body?.applicationId === delayedMaterial.applicationId) {
-      const held = delayedMaterial; held.used = true; held.started(); await held.resumed;
+    if (relative === 'employer/intake/recording' && body?.id === config.profiles[0].id && !recordingHeld) {
+      recordingHeld = true; recordingStarted(); await recordingReleased;
     }
-    if (delayedRejection && !delayedRejection.used && relative === 'employer/action' && body?.action === 'review.reject') {
-      const held = delayedRejection; held.used = true; held.started(); await held.resumed;
-    }
-    if (loseComment && relative === 'employer/action' && body?.action === 'screening.comment.add') {
-      if (!response.ok()) throw Error('Lost-response fixture requires a committed comment');
+    if (relative === 'employer/intake/comment' && loseComment) {
+      if (!response.ok()) throw Error('Lost-response fixture requires a committed note');
       loseComment = false; await response.dispose(); return route.abort('connectionreset');
     }
     return route.fulfill({ response });
   };
-  const videoHandler = async route => {
-    const response = await route.fetch({ url: new URL('_qa/video', config.apiBase).href,
-      headers: { range: route.request().headers().range || 'bytes=0-' } });
-    return route.fulfill({ response });
-  };
   await page.route('**/api/hr/**', routeHandler);
-  await page.route('https://media.example/**', videoHandler);
   try {
     await page.setViewportSize({ width: 1440, height: 1080 });
-    await goto(); await exact(config.alpha.applicationId); await readyVideo();
-    const originalSelected = await person(config.selected.applicationId);
-    assert(await page.locator('.ir-candidate-chapters > ol > li').count() === 3, 'Canonical VTT produces three actual timestamp chapters');
-    assert((await card().innerText()).includes('ONLY_ALPHA_PROFILE') && !(await card().innerText()).includes('ONLY_BETA_'), 'Profile and transcript match the selected candidate');
-    assert(await card().getByRole('button', { name: 'Назначить встречу', exact: true }).isVisible() && await card().getByRole('button', { name: 'Отказать', exact: true }).isVisible(), 'Decision exposes meeting and reject in the review card');
-    const downloadEvent = page.waitForEvent('download');
-    await button('Скачать резюме').click();
-    assert((await downloadEvent).suggestedFilename() === 'acceptance.txt', 'Original CV download is wired to the real scoped endpoint');
+    const first = config.profiles[0], profile = expected(first.id);
+    await goto(first.id); await recordingWaiting;
+    await row(1).locator('.ir-candidate-chapter').click();
+    releaseRecording(); await ready();
+    await page.waitForFunction(start => { const video = document.querySelector('.ecp-profile video'); return video && !video.paused && video.currentTime >= start && video.currentTime < start + 4; }, profile.chapters[1].seconds, { timeout: 45000 });
+    assert(true, 'Selecting a chapter before its URL arrives retains the range and starts at its timestamp');
+    await pause(); await excerpt(profile, 1);
+    await row(0).locator('.ir-candidate-chapter').click(); await pause();
+    assert(await card().locator('video').count() === 1 && await card().locator('.ir-candidate-chapters > ol > li').count() === profile.chapters.length, 'One source recording and its actual chapters are shown');
+    assert(!await card().locator('.ir-candidate-full-transcript').evaluate(el => el.open), 'Full actual transcript starts collapsed');
+    await excerpt(profile, 0);
+    // Real source video: user action seeks, plays, then naturally stops its range.
+    const rangeIndex = profile.chapters.reduce((best, item, index, all) => item.endSeconds - item.seconds < all[best].endSeconds - all[best].seconds ? index : best, 0);
+    const range = profile.chapters[rangeIndex];
+    await card().getByRole('button', { name: 'Выключить звук', exact: true }).click();
+    await row(rangeIndex).locator('.ir-candidate-chapter').focus(); await page.keyboard.press('Enter');
+    await page.waitForFunction(start => { const v = document.querySelector('.ecp-profile video'); return v && !v.paused && v.currentTime >= start && v.currentTime < start + 3; }, range.seconds, { timeout: 45000 });
+    assert(true, 'Keyboard chapter action seeks and plays the real source recording');
+    await excerpt(profile, rangeIndex);
+    await page.waitForFunction(end => { const v = document.querySelector('.ecp-profile video'); return v && v.paused && Math.abs(v.currentTime - end) < 0.15; }, range.endSeconds, { timeout: (range.endSeconds - range.seconds) * 1000 + 20000 });
+    await page.waitForTimeout(400);
+    assert(await row(rangeIndex).locator('.ir-candidate-chapter').getAttribute('aria-pressed') === 'true', 'Playback stops at the selected end without auto-next');
+    assert(mediaResponses.some(response => response.status === 206 && response.range.startsWith('bytes ')), 'Actual DSA media supports byte-range playback');
+    assert(decodedFrames.some(frame => frame.frames > 0), 'Source video delivered an actual decoded frame before pause');
+    const full = card().locator('.ir-candidate-full-transcript');
+    await full.locator('summary').focus(); await page.keyboard.press('Enter');
+    assert(await full.evaluate(el => el.open), 'Full transcript opens separately by keyboard');
+    assert(normalize((await full.locator('p').allTextContents()).join(' ')) === normalize(cues(profile).map(cue => cue.text).join(' ')), 'Full transcript preserves the complete actual source words');
+    await full.locator('summary').click();
 
-    // Every existing chapter can hold its own saved comment.
-    for (const [index, seconds] of [0, 12, 40].entries()) {
-      const row = chapter(index);
-      await row.locator('.ir-candidate-chapter').focus(); await page.keyboard.press('Enter');
-      await page.waitForFunction(expected => Math.abs(document.querySelector('.ecp-profile video').currentTime - expected) < 0.2, seconds);
-      assert(true, `Keyboard chapter ${seconds}s seeks the actual synthetic video`);
-      const trigger = row.getByRole('button', { name: /^Комментарий к/ });
-      await trigger.focus(); await page.keyboard.press('Enter');
-      await row.getByRole('textbox').fill(`SAVED_ALPHA_COMMENT_${seconds}`);
-      if (seconds === 12) loseComment = true;
-      await row.getByRole('button', { name: 'Сохранить комментарий', exact: true }).click();
-      if (seconds === 12) {
-        await row.getByRole('alert').waitFor();
-        assert(await row.getByRole('textbox').inputValue() === 'SAVED_ALPHA_COMMENT_12', 'Lost response keeps timestamp comment draft');
-        await row.getByRole('button', { name: 'Сохранить комментарий', exact: true }).click();
+    await row(0).locator('.ir-candidate-chapter').click(); await pause();
+    await row(0).getByRole('button', { name: /^Комментарий к/ }).click();
+    await row(0).getByRole('textbox').fill('LOCAL_DRAFT_RETAINED');
+    await row(1).locator('.ir-candidate-chapter').click(); await pause();
+    assert(!await row(0).getByRole('textbox').isVisible() && await row(0).locator('textarea').inputValue() === 'LOCAL_DRAFT_RETAINED', 'Unselected chapter hides its comment but preserves its draft');
+    assert(await card().locator('.ir-candidate-chapter-comment:visible').count() === 1, 'Only the selected chapter exposes its comment control');
+    await row(0).locator('.ir-candidate-chapter').click(); await pause();
+    assert(await row(0).getByRole('textbox').inputValue() === 'LOCAL_DRAFT_RETAINED', 'Returning to the chapter restores its draft');
+    await row(0).getByRole('button', { name: 'Отмена', exact: true }).click();
+    for (let index = 0; index < 3; index++) {
+      await row(index).locator('.ir-candidate-chapter').click(); await pause(); await excerpt(profile, index);
+      await row(index).getByRole('button', { name: /^Комментарий к/ }).click();
+      await row(index).getByRole('textbox').fill(`LOCAL_SOURCE_COMMENT_${index}`);
+      if (index === 1) loseComment = true;
+      if (index === 2) failComment = true;
+      await row(index).getByRole('button', { name: 'Сохранить комментарий', exact: true }).click();
+      if (index > 0) {
+        await row(index).getByRole('alert').waitFor();
+        assert(await row(index).getByRole('textbox').inputValue() === `LOCAL_SOURCE_COMMENT_${index}`, `Chapter ${index + 1}: failure preserves annotation draft`);
+        await row(index).getByRole('button', { name: 'Сохранить комментарий', exact: true }).click();
       }
-      await row.getByRole('button', { name: /Комментарий к.*комментариев: 1/ }).waitFor();
+      await row(index).getByRole('button', { name: /Комментарий к.*комментариев: 1/ }).waitFor();
     }
-    const savedComments = (await person()).screeningComments;
-    assert(savedComments.length === 3, 'Three timestamps persist as three comments, including retry');
-    assert(savedComments.every(comment => comment.interviewId === config.alpha.interviewId && comment.recordingId === config.alpha.recordingId), 'Every comment retains exact screening and recording identity');
-    const retries = commands.filter(item => item.body?.action === 'screening.comment.add' && item.body.seconds === 12);
-    assert(retries.length === 2 && retries[0].body.requestId === retries[1].body.requestId, 'Comment retry reuses the original requestId');
-    await page.reload(); await exact(config.alpha.applicationId); await readyVideo();
-    for (const [index, seconds] of [0, 12, 40].entries()) {
-      const row = chapter(index);
-      await row.getByRole('button', { name: /Комментарий к.*комментариев: 1/ }).click();
-      assert(await row.getByText(`SAVED_ALPHA_COMMENT_${seconds}`, { exact: true }).isVisible(), `Reload restores comment at ${seconds}s`);
-      await row.getByRole('button', { name: 'Отмена', exact: true }).click();
+    const saved = (await intake()).find(person => person.id === first.id).screeningComments;
+    assert(saved.length === 4 && new Set(saved.map(comment => comment.recordingId)).size === 1, 'Three chapter notes and one legacy note persist against the exact recording');
+    const retries = commands.filter(command => command.seconds === profile.chapters[1].seconds);
+    assert(retries.length === 2 && retries[0].requestId === retries[1].requestId, 'Lost-response retry saves one comment with one request identity');
+    assert(commands.every(command => command.vacancyId === config.vacancy.id && command.id === first.id && command.recordingIndex === 0), 'Annotation commands retain exact local vacancy, profile and recording index');
+    await page.reload(); await exact(first.id); await ready();
+    for (let index = 0; index < 3; index++) {
+      await row(index).locator('.ir-candidate-chapter').click(); await pause();
+      await row(index).getByRole('button', { name: /Комментарий к.*комментариев: 1/ }).click();
+      assert(await row(index).getByText(`LOCAL_SOURCE_COMMENT_${index}`, { exact: true }).isVisible(), `Reload restores chapter ${index + 1} note`);
+      await row(index).getByRole('button', { name: 'Отмена', exact: true }).click();
     }
-    assert((await person()).feedback === null, 'Review comments do not create meeting feedback');
-    await shot('canonical-desktop');
+    const legacy = card().locator('.ir-candidate-saved-comments');
+    assert(!await legacy.evaluate(el => el.open), 'Legacy arbitrary-time notes start collapsed');
+    await legacy.locator('summary').click();
+    await legacy.getByRole('button', { name: 'Комментарии к 00:00, 1', exact: true }).click();
+    assert(await legacy.getByText('LOCAL_EXISTING_ARBITRARY_NOTE', { exact: true }).isVisible(), 'Existing arbitrary-time notes remain readable');
+    await legacy.getByRole('button', { name: 'Отмена', exact: true }).click();
+    await legacy.locator('summary').click();
+    await row(2).locator('.ir-candidate-chapter').click(); await pause();
+    await shot('source-desktop');
 
-    // The same person's other application has independent private comments.
-    await goto(config.otherApplicationId, config.otherVacancy.id); await exact(config.otherApplicationId); await readyVideo();
-    assert(await page.getByRole('button', { name: /Комментарий к.*комментариев:/ }).count() === 0, 'Same screening in another vacancy does not expose application comments');
-    assert((await person(config.otherApplicationId, config.otherVacancy.id)).screeningComments.length === 0, 'Other vacancy persists an independent empty review');
-    await goto(config.beforeVideo.applicationId, config.otherVacancy.id);
-    await exact(config.beforeVideo.applicationId); await readyVideo();
-    await button('Комментарии к 00:20, 1').click();
-    assert(await page.getByText('BEFORE_VIDEO_COMMENT', { exact: true }).isVisible(), 'Comment without a recording ID remains visible when its single video becomes available');
-    await button('Отмена').click();
-
-    // Late media from a previously selected profile cannot replace the new one.
-    let started, resume;
-    const waiting = new Promise(resolve => { started = resolve; });
-    const resumed = new Promise(resolve => { resume = resolve; });
-    delayedMaterial = { applicationId: config.alpha.applicationId, started, resumed };
-    await goto(); await exact(config.alpha.applicationId); await waiting;
-    await select(config.beta.name, config.beta.applicationId); await readyVideo();
-    resume(); delayedMaterial = undefined;
-    await page.getByText('ONLY_BETA_PROFILE', { exact: false }).first().waitFor();
-    assert(!(await card().innerText()).includes('ONLY_ALPHA_'), 'Late previous-candidate material response cannot leak into current profile');
-    assert(!(await card().innerText()).includes('SAVED_ALPHA_COMMENT'), 'Switching candidate isolates saved timestamp comments');
-
-    // A backend failure preserves all three refusal answers and keeps the person.
-    await button('Отказать').focus(); await page.keyboard.press('Enter');
-    const refusal = page.getByRole('form', { name: 'Обратная связь при отказе', exact: true });
-    assert(await refusal.getByRole('textbox').count() === 3, 'Refusal asks exactly three questions');
-    for (const [index, text] of ['BETA_REASON', 'BETA_MISSING', 'BETA_IMPROVE'].entries()) await refusal.getByRole('textbox').nth(index).fill(text);
-    rejectBeforeCommit = true;
-    await refusal.getByRole('button', { name: 'Сохранить отказ', exact: true }).click();
-    await page.getByRole('alert').filter({ hasText: /не удалось|остались/ }).first().waitFor();
-    assert(await refusal.getByRole('textbox').nth(2).inputValue() === 'BETA_IMPROVE', 'Failed refusal retains all three answers');
-    assert(!!(await person(config.beta.applicationId)), 'Failed refusal keeps candidate in review');
-    let rejectionStarted, resumeRejection;
-    const rejectionWaiting = new Promise(resolve => { rejectionStarted = resolve; });
-    const rejectionResumed = new Promise(resolve => { resumeRejection = resolve; });
-    delayedRejection = { started: rejectionStarted, resumed: rejectionResumed };
-    await refusal.getByRole('button', { name: 'Сохранить отказ', exact: true }).click();
-    await rejectionWaiting;
-    await select(config.alpha.name, config.alpha.applicationId);
-    resumeRejection(); delayedRejection = undefined;
-    await page.locator('.ew-person-row').filter({ hasText: config.beta.name }).waitFor({ state: 'hidden' });
-    await exact(config.alpha.applicationId);
-    assert(await page.getByRole('heading', { name: 'Отказ сохранён', exact: true }).count() === 0, 'Late rejection result does not replace a newly selected candidate');
-    assert(await page.locator('.ew-person-row').filter({ hasText: config.beta.name }).count() === 0, 'Successful refusal removes only the rejected candidate from the visible queue');
-    assert(!(await state()).candidates[config.beta.applicationId], 'Refusal persists after real API read');
-    assert((await person()).screeningComments.length === 3, 'Rejecting another candidate preserves prior comments');
-
-    // Imported cards have real source material and no invented transcript chapters.
-    await select(config.prepared.name, config.prepared.id); await readyVideo();
-    assert(await page.locator('.ir-candidate-chapters > ol > li').count() === 0, 'Prepared import without transcript does not invent chapters');
-    assert(!(await card().innerText()).includes('ONLY_ALPHA_'), 'Prepared recording does not inherit another candidate transcript');
-    await button('Открыть').click();
-    assert(await page.getByText(/ONLY_PREPARED_CV/).isVisible(), 'Prepared CV remains available inside its own profile');
-    await button('Свернуть').click();
-    const position = page.getByRole('slider', { name: 'Позиция видеозаписи', exact: true });
-    await position.focus(); await page.keyboard.press('End');
-    const currentComment = page.getByRole('button', { name: 'Комментарий к 01:29', exact: true });
-    await currentComment.click();
-    await page.getByRole('textbox', { name: 'Комментарий к 01:29', exact: true }).fill('PREPARED_CURRENT_TIME_COMMENT');
-    await button('Сохранить комментарий').click();
-    await page.getByRole('textbox', { name: 'Комментарий к 01:29', exact: true }).waitFor({ state: 'hidden' });
-    let prepared = (await intake()).find(candidate => candidate.id === config.prepared.id);
-    assert(prepared.screeningComments.length === 1 && prepared.screeningComments[0].seconds === 89, 'Prepared current-time comment persists against stored recording identity');
-    assert(!(await state()).candidates[config.prepared.id], 'Prepared comment does not fabricate a canonical application');
-    assert(new URL(page.url()).searchParams.get('intakeId') === config.prepared.id, 'Prepared selection has its exact identity in the URL');
-    await page.reload(); await exact(config.prepared.id); await readyVideo();
-    assert(new URL(page.url()).searchParams.get('intakeId') === config.prepared.id, 'Reload preserves the prepared candidate rather than opening another application');
-    await select(config.alpha.name, config.alpha.applicationId);
-    await page.goBack(); await exact(config.prepared.id); await readyVideo();
-    assert(new URL(page.url()).searchParams.get('intakeId') === config.prepared.id, 'Browser Back restores the exact prepared profile');
-    await button('Комментарии к 01:29, 1').click();
-    assert(await page.getByText('PREPARED_CURRENT_TIME_COMMENT', { exact: true }).isVisible(), 'Prepared timestamp comment survives reload');
-    await button('Отмена').click();
-
+    await goto(config.sameSourceOtherVacancy.id, config.otherVacancy.id); await ready();
+    assert((await intake(config.otherVacancy.id)).find(person => person.id === config.sameSourceOtherVacancy.id).screeningComments.length === 0, 'Same source recording under another vacancy keeps private notes separate');
+    await goto(first.id); await ready();
+    for (let index = 1; index < config.profiles.length; index++) {
+      const person = config.profiles[index], source = expected(person.id);
+      await select(person); await ready();
+      assert(await card().locator('.ir-candidate-chapters > ol > li').count() === source.chapters.length, `Source profile ${index + 1}: its own chapters are shown`);
+      await excerpt(source, 0);
+      assert((await intake()).find(candidate => candidate.id === person.id).screeningComments.length === 0, `Source profile ${index + 1}: previous candidate notes do not leak`);
+    }
+    await select(first); await ready();
     await page.setViewportSize({ width: 390, height: 844 });
-    if (!await card().isVisible()) await select(config.prepared.name, config.prepared.id);
-    await fit('Prepared mobile card');
-    await shot('prepared-mobile');
+    if (!await card().isVisible()) await select(first);
+    for (const width of [390, 320]) {
+      await page.setViewportSize({ width, height: 844 });
+      assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `Mobile ${width}: no horizontal page overflow`);
+      await row(1).locator('.ir-candidate-chapter').click(); await pause(); await excerpt(profile, 1);
+      await row(1).getByRole('button', { name: /^Комментарий к/ }).click();
+      await row(1).getByRole('textbox').fill('LOCAL_MOBILE_DRAFT');
+      assert(await row(1).getByRole('textbox').isVisible(), `Mobile ${width}: selected chapter comment is usable`);
+      await shot(`source-mobile-${width}`);
+      await row(1).getByRole('button', { name: 'Отмена', exact: true }).click();
+    }
     await page.emulateMedia({ reducedMotion: 'reduce' });
-    const animated = await card().evaluate(el => [...el.querySelectorAll('*')].some(child => {
-      const style = getComputedStyle(child);
-      return style.animationName !== 'none' && style.animationDuration.split(',').some(time => parseFloat(time) > 0.01);
-    }));
-    assert(!animated, 'Reduced motion has no continuing profile animation');
-    await button('Отказать').click();
-    const importedRefusal = page.getByRole('form', { name: 'Обратная связь при отказе', exact: true });
-    for (const [index, text] of ['PREPARED_REASON', 'PREPARED_MISSING', 'PREPARED_IMPROVE'].entries()) await importedRefusal.getByRole('textbox').nth(index).fill(text);
-    await importedRefusal.getByRole('button', { name: 'Сохранить отказ', exact: true }).click();
-    await page.getByText('Кандидат в архиве.', { exact: true }).waitFor();
-    prepared = (await intake()).find(candidate => candidate.id === config.prepared.id);
-    assert(prepared.archived && prepared.reviewRejection.reason === 'PREPARED_REASON', 'Prepared refusal archives its own source and persists separate answers');
-    assert(await page.locator('.ew-person-row').filter({ hasText: config.prepared.name }).count() === 0, 'Archived prepared candidate is absent from the active queue');
-    await button('Комментарии к 01:29, 1').click();
-    assert(await page.getByText('PREPARED_CURRENT_TIME_COMMENT', { exact: true }).isVisible(), 'Archived prepared profile retains readable saved comments');
-    assert(await card().getByRole('textbox').count() === 0 && await card().getByRole('button', { name: 'Сохранить комментарий', exact: true }).count() === 0, 'Archived timestamp comments are read-only');
-
-    // Cancelling scheduling stays in the proposal pool; success opens the same card.
+    assert(!await card().evaluate(el => [...el.querySelectorAll('*')].some(child => {
+      const style = getComputedStyle(child); return style.animationName !== 'none' && style.animationDuration.split(',').some(value => parseFloat(value) > 0.01);
+    })), 'Reduced motion has no continuing decorative animation');
+    assert(JSON.stringify((await state()).candidates[config.selectedApplicationId].stages) === JSON.stringify(originalStages), 'Existing selected-stage history remains untouched');
+    const archived = config.profiles[3];
+    const archivedResponse = await page.request.post(new URL('employer/intake/archive', config.apiBase).href, {
+      headers: { authorization: `Bearer ${config.token}` }, data: { vacancyId: config.vacancy.id, id: archived.id, archived: true },
+    });
+    assert(archivedResponse.ok(), 'Local archival fixture uses the real scoped API');
+    const archivedUrl = new URL(page.url()); archivedUrl.searchParams.set('intakeId', archived.id);
+    await page.goto(archivedUrl.href);
+    await page.getByRole('heading', { name: 'Кандидат недоступен', exact: true, includeHidden: true }).waitFor({ state: 'attached' });
+    assert(await card().count() === 0, 'Explicit archived profile URL never falls back to another person');
     await page.setViewportSize({ width: 1440, height: 1080 });
-    await goto(); await exact(config.alpha.applicationId);
-    await button('Назначить встречу').click();
-    await page.getByRole('heading', { name: 'Назначить встречу', exact: true }).waitFor();
-    await button('К кандидатам').click();
-    await exact(config.alpha.applicationId);
-    assert((await person()).reviewState === 'proposed', 'Cancelled scheduling keeps the candidate under review');
-    await button('Назначить встречу').click();
-    await page.getByRole('radio').first().click();
-    await button('Предложить время').click();
-    await page.locator(`.esc-card[data-candidate-id="${config.alpha.applicationId}"]`).waitFor();
-    assert(new URL(page.url()).searchParams.get('pool') === 'selected', 'Successful scheduling opens selected context for the same application');
-    assert((await person()).screeningComments.length === 3, 'Promotion to selected keeps review comments');
-    const currentSelected = await person(config.selected.applicationId);
-    assert(JSON.stringify(currentSelected.stages) === JSON.stringify(originalSelected.stages), 'Existing selected-candidate stage history remains unchanged');
-    await goto(config.selected.applicationId, config.vacancy.id, 'selected');
-    await page.locator(`.esc-card[data-candidate-id="${config.selected.applicationId}"]`).waitFor();
-    assert(await page.getByRole('tablist', { name: 'Этапы кандидата', exact: true }).getByRole('tab').count() === 3, 'Existing selected stage workspace remains available');
-    await goto('missing-review-application');
     await page.getByRole('heading', { name: 'Кандидат недоступен', exact: true }).waitFor();
-    assert(await card().count() === 0, 'Stale explicit review URL never falls back to another candidate');
-    assert(materials.every(body => body.applicationId && body.vacancyId && body.candidate === body.applicationId), 'Screening material requests consistently carry exact application scope');
+    assert(await card().count() === 0, 'Archived desktop placeholder is visible without another candidate card');
     assert(errors.length === 0, 'No browser JavaScript exceptions');
-    return { status: 'passed', boundary: config.fixture, checks, errors, screenshots,
-      commands: commands.map(({ path, body }) => ({ path, action: body?.action, applicationId: body?.applicationId, vacancyId: body?.vacancyId, id: body?.id, requestId: body?.requestId })), materials };
+    return { status: 'passed', boundary: config.fixture, checks, errors, screenshots, sourceMediaRequests: mediaResponses.length };
   } catch (error) {
     await shot('failure');
-    return { status: 'failed', boundary: config.fixture, checks, failure: error.message, errors, screenshots };
+    return { status: 'failed', boundary: config.fixture, checks, errors, failure: error.message, screenshots, sourceMediaRequests: mediaResponses.length };
   } finally {
+    releaseRecording();
+    await pause().catch(() => {});
     await page.unroute('**/api/hr/**', routeHandler);
-    await page.unroute('https://media.example/**', videoHandler);
-    page.off('pageerror', onError);
+    page.off('pageerror', onError); page.off('response', onResponse);
   }
 }

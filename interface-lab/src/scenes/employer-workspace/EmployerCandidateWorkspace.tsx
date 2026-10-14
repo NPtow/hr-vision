@@ -4,8 +4,8 @@ import { request, type Journey, type Person, type SourceProfile } from '../conne
 import { EmployerCandidateProfile } from './EmployerCandidateProfile';
 
 /** The proposed-candidate view. Progress through stages remains in the task card. */
-export function EmployerCandidateWorkspace({ journey, person, source, onMeet, onRejected }: {
-  journey: Journey; person: Person; source: SourceProfile; onMeet: () => void; onRejected: (name: string) => void;
+export function EmployerCandidateWorkspace({ journey, person, source }: {
+  journey: Journey; person: Person; source: SourceProfile;
 }) {
   const [fileBusy, setFileBusy] = useState(false);
   const [fileError, setFileError] = useState('');
@@ -40,11 +40,6 @@ export function EmployerCandidateWorkspace({ journey, person, source, onMeet, on
       onOpen: () => { void resumeFile(false); }, onDownload: () => { void resumeFile(true); },
     } : undefined}
     workflowRevision={person.workflowRevision || 0} busy={journey.busy || fileBusy}
-    error={fileError || journey.error} onMeet={onMeet}
-    onReject={async ({ expectedRevision, requestId, ...rejectionAnswers }) => {
-      const saved = await journey.act('review.reject', person.id, { rejectionAnswers, expectedRevision, requestId });
-      if (saved) onRejected(person.name);
-      return saved;
-    }}/>
+    error={fileError || journey.error}/>
   ;
 }

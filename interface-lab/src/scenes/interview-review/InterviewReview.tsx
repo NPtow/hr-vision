@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode, type SyntheticEvent } from 'react';
-import { AlertCircle, FileText, ListVideo, MessageSquareText, Video, VideoOff, Play, Pause, Maximize, VolumeX, MessageCircle } from 'lucide-react';
+import { AlertCircle, FileText, ListVideo, MessageSquareText, Video, VideoOff, Play, Pause, Maximize, VolumeX } from 'lucide-react';
 import type { Candidate } from '../agency-product/model';
 import { useInterviewMedia, type InterviewMedia } from './InterviewMediaContext';
 import './interview-review.css';
@@ -7,7 +7,7 @@ import playAsset from '../employer-workspace/assets/play.svg';
 import candidatePlayAsset from '../employer-workspace/assets/candidate-profile/play.svg';
 import candidateVolumeAsset from '../employer-workspace/assets/candidate-profile/volume.svg';
 import candidateRepeatAsset from '../employer-workspace/assets/candidate-profile/repeat.svg';
-import { parseMeetingTranscript } from '../connected-journey/transcript';
+import { groupTranscriptTurns, parseMeetingTranscript, transcriptInRange } from '../connected-journey/transcript';
 
 export type { InterviewMedia } from './InterviewMediaContext';
 export type InterviewReviewProps = {
@@ -49,7 +49,6 @@ export type RecordingReviewProps = {
   renderChapterComment?: (chapter: RecordingChapter, context: RecordingChapterContext) => ReactNode;
   renderTimeComment?: (seconds: number, onClose: () => void) => ReactNode;
   commentTimestamps?: { seconds: number; count: number }[];
-  allowNewTimeComment?: boolean;
 };
 
 /** Parse a source's mm:ss or hh:mm:ss. A missing timestamp is never a seekable chapter. */
@@ -67,6 +66,12 @@ function formatTime(seconds: number) {
   const minutes = Math.floor(value / 60) % 60;
   const rest = String(value % 60).padStart(2, '0');
   return hours ? `${hours}:${String(minutes).padStart(2, '0')}:${rest}` : `${String(minutes).padStart(2, '0')}:${rest}`;
+}
+
+function TranscriptSpeech({ cues }: { cues: RecordingChapter[] }) {
+  return <div className="ir-candidate-transcript-speech">{groupTranscriptTurns(cues).map((turn, index) => <div key={index}>
+    {turn.speaker && <strong>{turn.speaker}</strong>}<p>{turn.fragments.join(' ')}</p>
+  </div>)}</div>;
 }
 
 /** Initial HR interview only. Do not reuse its materials as a manager meeting recording. */
@@ -93,7 +98,7 @@ export function SourceScreeningReview(props: Omit<RecordingReviewProps, 'kind'>)
 
 function RecordingReview({ sourceId, name, chapters: evidence, kind, summary, unknown, transcriptText,
   emptyMessage, initialEvidenceIndex, compact = false, media, fullChapters, shortPlaylist = false, appearance, recruiterContent,
-  renderChapterComment, renderTimeComment, commentTimestamps, allowNewTimeComment = true }: RecordingReviewProps) {
+  renderChapterComment, renderTimeComment, commentTimestamps }: RecordingReviewProps) {
   const headingId = useId();
   const player = useRef<HTMLVideoElement>(null);
   const chapterList = useRef<HTMLOListElement>(null);
@@ -109,7 +114,6 @@ function RecordingReview({ sourceId, name, chapters: evidence, kind, summary, un
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(false);
   const [commentTime, setCommentTime] = useState<number | null>(null);
-  const timeCommentTrigger = useRef<HTMLButtonElement>(null);
   const timeCommentReturn = useRef<HTMLButtonElement | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   useEffect(() => {
@@ -120,18 +124,26 @@ function RecordingReview({ sourceId, name, chapters: evidence, kind, summary, un
   const [failed, setFailed] = useState(false);
   const [notice, setNotice] = useState('');
   const pendingSeek = useRef<number | null>(null);
+  const pendingPlay = useRef(false);
+  const candidateClip = useRef<{ start: number; end: number | null } | null>(null);
   const chapters = useMemo(() => (mode === 'full' && fullChapters ? fullChapters : evidence).map((item, index) => ({ ...item, index })), [evidence, fullChapters, mode]);
   const chronological = useMemo(() => chapters.filter(chapter => chapter.seconds !== null).sort((a, b) => a.seconds! - b.seconds!), [chapters]);
   const activeChapter = [...chronological].reverse().find(chapter => currentTime >= chapter.seconds!);
   const excerpt = chapters[selected];
   const playlistIndex = useRef(0);
-  const shortMode = mode === 'short' && shortPlaylist && !!chapters.length;
+  const shortMode = appearance !== 'candidate' && mode === 'short' && shortPlaylist && !!chapters.length;
   const transcriptParagraphs = useMemo(() => appearance === 'candidate' && transcriptText ? parseMeetingTranscript(transcriptText) : [], [appearance, transcriptText]);
+  const excerptEnd = excerpt?.endSeconds != null && excerpt.seconds != null && excerpt.endSeconds > excerpt.seconds
+    ? excerpt.endSeconds : chronological.find(chapter => excerpt?.seconds != null && chapter.seconds! > excerpt.seconds)?.seconds ?? null;
+  const fragmentParagraphs = excerpt?.seconds != null ? transcriptInRange(transcriptParagraphs, excerpt.seconds, excerptEnd) : [];
+  const quotedFragment = !fragmentParagraphs.length && excerpt?.isQuote === true ? excerpt.fragment.trim() : '';
+  const hasFullTranscript = !!transcriptParagraphs.length || (!!transcriptText?.trim() && !/^\s*WEBVTT\b/.test(transcriptText));
+  const additionalCommentTimes = (commentTimestamps || []).filter(item => Number.isFinite(item.seconds) && item.seconds >= 0 && item.count > 0
+    && !chapters.some(chapter => chapter.seconds !== null && Math.abs(chapter.seconds - item.seconds) < 0.001));
 
   useEffect(() => {
     if (appearance !== 'candidate') return;
     setLoaded(false); setFailed(false); setPlaying(false); setCurrentTime(0); setDuration(0);
-    pendingSeek.current = null;
   }, [appearance, media?.src]);
 
   useEffect(() => {
@@ -151,7 +163,7 @@ function RecordingReview({ sourceId, name, chapters: evidence, kind, summary, un
     if (!video || !media || failed) return;
     if (video.readyState < 1) {
       pendingSeek.current = seconds;
-      setNotice('Запись загружается. Текст фрагмента уже доступен.');
+      if (appearance !== 'candidate') setNotice('Запись загружается. Текст фрагмента уже доступен.');
       return;
     }
     if (!Number.isFinite(video.duration) || seconds >= video.duration) {
@@ -163,7 +175,7 @@ function RecordingReview({ sourceId, name, chapters: evidence, kind, summary, un
     try {
       video.currentTime = seconds;
       setCurrentTime(seconds);
-      setNotice(appearance === 'panel' ? '' : `В записи выбран момент ${formatTime(seconds)}. Нажмите воспроизведение в плеере.`);
+      setNotice(appearance ? '' : `В записи выбран момент ${formatTime(seconds)}. Нажмите воспроизведение в плеере.`);
       pendingSeek.current = null;
     } catch {
       setNotice('Перейти к этому моменту пока не удалось. Текст фрагмента доступен ниже.');
@@ -175,6 +187,24 @@ function RecordingReview({ sourceId, name, chapters: evidence, kind, summary, un
     if (!chapter) return;
     setSelected(index);
     playlistIndex.current = index;
+    if (appearance === 'candidate') {
+      setNotice('');
+      if (chapter.seconds === null) return;
+      const nextStart = chronological.find(item => item.seconds! > chapter.seconds!)?.seconds;
+      const end = chapter.endSeconds != null && chapter.endSeconds > chapter.seconds ? chapter.endSeconds : nextStart ?? null;
+      candidateClip.current = { start: chapter.seconds, end };
+      pendingSeek.current = chapter.seconds;
+      pendingPlay.current = true;
+      if (!media || failed) return;
+      seek(chapter.seconds);
+      const video = player.current;
+      if (!video || video.readyState < 1) return;
+      pendingPlay.current = false;
+      if (Number.isFinite(video.duration) && chapter.seconds < video.duration) {
+        void video.play().catch(playbackFailed);
+      }
+      return;
+    }
     if (!media) {
       setNotice('Показан текст фрагмента. Видеозапись не подключена.');
     } else if (failed) {
@@ -186,8 +216,25 @@ function RecordingReview({ sourceId, name, chapters: evidence, kind, summary, un
     }
   }
 
+  function playbackFailed(cause: unknown) {
+    // Pausing or choosing another clip may cancel a pending play while the video buffers.
+    if (appearance === 'candidate' && cause && typeof cause === 'object' && 'name' in cause && cause.name === 'AbortError') return;
+    setNotice('Не удалось начать воспроизведение. Попробуйте ещё раз.');
+  }
+
   function onTimeUpdate(event: SyntheticEvent<HTMLVideoElement>) {
     const seconds = event.currentTarget.currentTime;
+    if (appearance === 'candidate') {
+      const clip = candidateClip.current;
+      if (clip?.end != null && !event.currentTarget.paused && seconds >= clip.end) {
+        event.currentTarget.pause();
+        event.currentTarget.currentTime = Math.min(clip.end, event.currentTarget.duration);
+        setCurrentTime(event.currentTarget.currentTime);
+        return;
+      }
+      setCurrentTime(seconds);
+      return;
+    }
     if (shortMode && !event.currentTarget.paused) {
       const current = chapters[playlistIndex.current];
       if (current?.endSeconds && seconds >= current.endSeconds) {
@@ -220,15 +267,26 @@ function RecordingReview({ sourceId, name, chapters: evidence, kind, summary, un
     const video = player.current;
     if (!video || !media || failed) return;
     if (!video.paused) video.pause();
-    else void video.play().catch(() => setNotice('Не удалось начать воспроизведение. Попробуйте ещё раз.'));
+    else {
+      const clip = appearance === 'candidate' ? candidateClip.current : null;
+      if (clip && (video.currentTime < clip.start || (clip.end != null && video.currentTime >= clip.end))) seek(clip.start);
+      void video.play().catch(playbackFailed);
+    }
   }
   const videoBlock = (<div className={`ir-player${media ? ' ir-player-connected' : ''}`}>
       {media ? <>
         <video ref={player} src={media.src} controls={!appearance || fullscreen} muted={muted} playsInline preload="metadata" aria-label={media.localPreview ? 'Локальная тестовая видеозапись' : `Видеозапись: ${name}`} onLoadedMetadata={event => {
           setLoaded(true); setFailed(false); setDuration(Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : 0);
           if (pendingSeek.current !== null) seek(pendingSeek.current, event.currentTarget);
+          if (appearance === 'candidate' && pendingPlay.current) {
+            pendingPlay.current = false;
+            if (candidateClip.current && candidateClip.current.start < event.currentTarget.duration) {
+              void event.currentTarget.play().catch(playbackFailed);
+            }
+          }
         }} onDurationChange={event => setDuration(Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : 0)} onTimeUpdate={onTimeUpdate} onPlay={() => {
           setPlaying(true);
+          if (appearance === 'candidate') setNotice('');
           if (shortMode && player.current) {
             const seconds = player.current.currentTime;
             const index = chapters.findIndex(c => c.seconds !== null && c.endSeconds && seconds >= c.seconds && seconds < c.endSeconds);
@@ -237,8 +295,9 @@ function RecordingReview({ sourceId, name, chapters: evidence, kind, summary, un
           }
           window.dispatchEvent(new CustomEvent('hr-vision-interview-play', { detail: player.current }));
         }} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} onError={() => {
-          setFailed(true); setLoaded(false); setPlaying(false); pendingSeek.current = null;
-          setNotice('Не удалось открыть видеозапись. Доступные текстовые материалы показаны ниже.');
+          setFailed(true); setLoaded(false); setPlaying(false);
+          pendingSeek.current = appearance === 'candidate' ? candidateClip.current?.start ?? pendingSeek.current : null;
+          setNotice(appearance === 'candidate' ? '' : 'Не удалось открыть видеозапись. Доступные текстовые материалы показаны ниже.');
         }}>Ваш браузер не поддерживает воспроизведение видео.</video>
         {appearance === 'panel' && !playing && !failed && <button className="ir-big-play" onClick={togglePlayback} aria-label="Воспроизвести интервью"><img src={playAsset} alt=""/></button>}
         {failed && <div className="ir-media-error" role="alert"><AlertCircle size={24} aria-hidden="true"/><strong>Не удалось открыть запись</strong><p>Проверьте доступность файла и поддержку его формата.</p><button type="button" onClick={() => { setFailed(false); setNotice(''); player.current?.load(); }}>Попробовать снова</button></div>}
@@ -248,14 +307,15 @@ function RecordingReview({ sourceId, name, chapters: evidence, kind, summary, un
   const excerptBlock = (excerpt && <article className="ir-excerpt" aria-label="Выбранный фрагмент интервью"><span className="ir-eyebrow">{meeting ? 'Автоматическая расшифровка' : excerpt.isQuote === false ? 'Описание главы из панели ДСА' : 'Со слов кандидата'}</span><h4>{excerpt.title}</h4>{excerpt.isQuote === false ? <p>{excerpt.fragment}</p> : <blockquote>«{excerpt.fragment}»</blockquote>}<p className="ir-source"><FileText size={13} aria-hidden="true"/>{excerpt.source}</p>{excerpt.isQuote !== false && <p className="ir-source-boundary">{meeting ? 'Распознавание может ошибаться. Сверяйте важные формулировки с записью.' : 'Слова кандидата. Независимого подтверждения результата пока нет.'}</p>}</article>);
   const recruiterBlock = recruiterContent || ((summary || unknown) && <><span className="ir-eyebrow">Мнение рекрутера</span>{summary && <p>{summary}</p>}{unknown && <><span className="ir-eyebrow">На встрече</span><p className="ir-recruiter-question">{unknown}</p></>}</>);
 
+  if (appearance === 'candidate' && !media && !chapters.length && !hasFullTranscript && !additionalCommentTimes.length) return null;
   if (appearance === 'candidate') return <section className="ir-review ir-candidate-review" aria-labelledby={headingId} data-candidate={sourceId} data-recording-kind={kind}>
-    <div className="ir-candidate-interview">
-      <div className="ir-candidate-main">
-        <header className="ir-candidate-heading"><h3 id={headingId}>Интервью с рекрутером</h3>{shortPlaylist && <div className="ir-mode" role="group" aria-label="Режим просмотра интервью"><button type="button" aria-pressed={mode === 'short'} onClick={() => changeMode('short')}>Коротко</button><button type="button" aria-pressed={mode === 'full'} onClick={() => changeMode('full')}>Целиком</button></div>}</header>
+    {(media || chapters.length || additionalCommentTimes.length) ? <div className={`ir-candidate-interview${media ? ' ir-candidate-has-player' : ''}${chapters.length || additionalCommentTimes.length ? ' ir-candidate-has-chapters' : ''}`}>
+      {media && <div className="ir-candidate-main">
+        <header className="ir-candidate-heading"><h3 id={headingId}>Интервью с рекрутером</h3></header>
         <div className="ir-candidate-player">
           {videoBlock}
           <div className="ir-candidate-controls" aria-label="Управление видеозаписью">
-            <div className="ir-candidate-track"><input type="range" aria-label="Позиция видеозаписи" min={0} max={duration || 1} step={0.1} value={Math.min(currentTime, duration || 1)} disabled={!loaded || failed || !duration} aria-valuetext={formatTime(currentTime)} onChange={event => seek(Math.min(Number(event.target.value), Math.max(0, duration - 0.01)))}/>
+            <div className="ir-candidate-track"><input type="range" aria-label="Позиция видеозаписи" min={0} max={duration || 1} step={0.1} value={Math.min(currentTime, duration || 1)} disabled={!loaded || failed || !duration} aria-valuetext={formatTime(currentTime)} onChange={event => { candidateClip.current = null; seek(Math.min(Number(event.target.value), Math.max(0, duration - 0.01))); }}/>
               {!!duration && !failed && <div className="ir-timeline-markers" aria-label="Моменты на таймлайне">{chronological.filter(chapter => chapter.seconds! < duration).map(chapter => <button type="button" key={chapter.index} style={{ left: `${chapter.seconds! / duration * 100}%` }} onClick={() => chooseChapter(chapter.index)} aria-label={`На таймлайне: ${chapter.title}, ${formatTime(chapter.seconds!)}`} title={`${formatTime(chapter.seconds!)} · ${chapter.title}`}/>)}</div>}
             </div>
             <div className="ir-candidate-control-row">
@@ -266,27 +326,31 @@ function RecordingReview({ sourceId, name, chapters: evidence, kind, summary, un
             </div>
           </div>
         </div>
-        {renderTimeComment && (media || commentTime !== null || !!commentTimestamps?.length) && <div className="ir-candidate-time-comment">
-          {allowNewTimeComment && <button ref={timeCommentTrigger} className="ir-candidate-comment-button" type="button" disabled={commentTime !== null || !media || failed} onClick={event => { timeCommentReturn.current = event.currentTarget; setCommentTime(Math.floor(currentTime)); }}><MessageCircle size={14} aria-hidden="true"/>Комментарий к {formatTime(commentTime ?? currentTime)}</button>}
-          {!!commentTimestamps?.length && <div className="ir-candidate-comment-times" aria-label="Сохранённые комментарии">{commentTimestamps.filter(item => Number.isFinite(item.seconds) && item.seconds >= 0 && item.count > 0).map(item => <button className="ir-candidate-comment-button" key={item.seconds} type="button" aria-label={`Комментарии к ${formatTime(item.seconds)}, ${item.count}`} disabled={commentTime !== null} onClick={event => { timeCommentReturn.current = event.currentTarget; setCommentTime(item.seconds); seek(item.seconds); }}>{formatTime(item.seconds)} · {item.count}</button>)}</div>}
-          {commentTime !== null && <div key={`${sourceId}:${commentTime}`}>{renderTimeComment(commentTime, () => { setCommentTime(null); requestAnimationFrame(() => (timeCommentReturn.current || timeCommentTrigger.current)?.focus()); })}</div>}
-        </div>}
-        <p className="ir-seek-status" role="status" aria-live="polite">{notice}</p>
-      </div>
-      <aside className="ir-candidate-chapters" aria-label="Ключевые моменты">
-        <h3>Ключевые моменты</h3>
-        {chapters.length ? <ol ref={chapterList}>{chapters.map(chapter => <li key={`${sourceId}:${mode}:${chapter.index}`} data-selected={selected === chapter.index ? 'true' : undefined}>
-          <div className="ir-candidate-chapter-row"><button type="button" className="ir-candidate-chapter" aria-pressed={selected === chapter.index} onClick={() => chooseChapter(chapter.index)} aria-label={`${media && !failed && chapter.seconds !== null ? 'Открыть момент' : 'Показать текст'}: ${chapter.title}${chapter.seconds === null ? '' : `, ${formatTime(chapter.seconds)}`}`}><strong>{chapter.title}</strong><span>{chapter.seconds !== null ? `${formatTime(chapter.seconds)}${chapter.endSeconds != null ? ` — ${formatTime(chapter.endSeconds)}` : ''}` : 'Без таймкода'}</span></button>
-            {media && !failed && chapter.seconds !== null && <button type="button" className="ir-candidate-repeat" aria-label={`Повторить: ${chapter.title}`} onClick={() => { chooseChapter(chapter.index); if (player.current) void player.current.play().catch(() => setNotice('Не удалось начать воспроизведение.')); }}><img src={candidateRepeatAsset} alt=""/></button>}
+        {notice && <p className="ir-candidate-error" role="alert">{notice}</p>}
+      </div>}
+      {!!(chapters.length || additionalCommentTimes.length) && <aside className="ir-candidate-chapters" aria-label="Ключевые моменты">
+        {chapters.length ? <><h3 id={!media ? headingId : undefined}>Ключевые моменты</h3><ol ref={chapterList}>{chapters.map(chapter => <li key={`${sourceId}:${mode}:${chapter.index}`} data-selected={selected === chapter.index ? 'true' : undefined}>
+          <div className="ir-candidate-chapter-row"><button type="button" className="ir-candidate-chapter" aria-pressed={selected === chapter.index} onClick={() => chooseChapter(chapter.index)} aria-label={`${media && !failed && chapter.seconds !== null ? 'Открыть момент' : 'Показать текст'}: ${chapter.title}${chapter.seconds === null ? '' : `, ${formatTime(chapter.seconds)}`}`}><strong>{chapter.title}</strong>{chapter.seconds !== null && <span>{formatTime(chapter.seconds)}{chapter.endSeconds != null ? ` — ${formatTime(chapter.endSeconds)}` : ''}</span>}</button>
+            {media && !failed && chapter.seconds !== null && selected === chapter.index && <button type="button" className="ir-candidate-repeat" aria-label={`Повторить: ${chapter.title}`} onClick={() => chooseChapter(chapter.index)}><img src={candidateRepeatAsset} alt=""/></button>}
           </div>
-          {chapter.seconds !== null && renderChapterComment?.(chapter, { sourceId, mode, index: chapter.index })}
-        </li>)}</ol> : <p className="ir-muted">Ключевые моменты ещё не подготовлены.</p>}
-      </aside>
-    </div>
-    <section className="ir-candidate-transcript" aria-label="Расшифровка"><h3>Расшифровка</h3>
-      {transcriptParagraphs.length ? <div className="ir-candidate-transcript-speech">{transcriptParagraphs.map((paragraph, index) => <div key={`${paragraph.seconds}:${index}`}>{paragraph.speaker && <strong>{paragraph.speaker}</strong>}<p>{paragraph.fragment}</p></div>)}</div> : transcriptText ? /^\s*WEBVTT\b/.test(transcriptText) ? <p className="ir-muted">Не удалось прочитать расшифровку.</p> : <pre>{transcriptText}</pre> : excerpt ? <><h4>{excerpt.title}</h4><p>{excerpt.fragment || excerpt.detail}</p><span className="ir-candidate-source">{excerpt.source}</span></> : <p className="ir-muted">Расшифровка появится после обработки интервью.</p>}
-    </section>
-    {recruiterBlock && <section className="ir-candidate-recruiter">{recruiterBlock}</section>}
+          {chapter.seconds !== null && renderChapterComment && <div className="ir-candidate-chapter-comment" hidden={selected !== chapter.index}>{renderChapterComment(chapter, { sourceId, mode, index: chapter.index })}</div>}
+        </li>)}</ol></> : null}
+        {renderTimeComment && !!additionalCommentTimes.length && <details className="ir-candidate-saved-comments">
+          <summary id={!media && !chapters.length ? headingId : undefined}>Комментарии · {additionalCommentTimes.reduce((sum, item) => sum + item.count, 0)}</summary>
+          <div className="ir-candidate-comment-times" aria-label="Сохранённые комментарии">{additionalCommentTimes.map(item => <button className="ir-candidate-comment-button" key={item.seconds} type="button" aria-label={`Комментарии к ${formatTime(item.seconds)}, ${item.count}`} disabled={commentTime !== null} onClick={event => { timeCommentReturn.current = event.currentTarget; setCommentTime(item.seconds); candidateClip.current = null; seek(item.seconds); }}>{formatTime(item.seconds)} · {item.count}</button>)}</div>
+          {commentTime !== null && <div key={`${sourceId}:${commentTime}`}>{renderTimeComment(commentTime, () => { setCommentTime(null); requestAnimationFrame(() => timeCommentReturn.current?.focus()); })}</div>}
+        </details>}
+      </aside>}
+    </div> : null}
+    {!!(fragmentParagraphs.length || quotedFragment || hasFullTranscript) && <section className="ir-candidate-transcript" aria-label="Расшифровка">
+      {!!(fragmentParagraphs.length || quotedFragment) && <>
+        <header className="ir-candidate-fragment-heading"><h3 id={!media && !chapters.length ? headingId : undefined}>Расшифровка</h3>{excerpt?.seconds != null && <span>{formatTime(excerpt.seconds)}{excerptEnd !== null ? ` — ${formatTime(excerptEnd)}` : ''}</span>}</header>
+        <div aria-label="Текст выбранного фрагмента">{fragmentParagraphs.length ? <TranscriptSpeech cues={fragmentParagraphs}/> : <div className="ir-candidate-transcript-speech"><p>{quotedFragment}</p></div>}</div>
+      </>}
+      {hasFullTranscript && <details className="ir-candidate-full-transcript"><summary id={!media && !chapters.length && !additionalCommentTimes.length ? headingId : undefined}>Полная расшифровка</summary>
+        {transcriptParagraphs.length ? <TranscriptSpeech cues={transcriptParagraphs}/> : <pre>{transcriptText}</pre>}
+      </details>}
+    </section>}
   </section>;
 
   if (appearance === 'panel') return <section className="ir-review ir-panel-review" aria-labelledby={headingId} data-candidate={sourceId} data-recording-kind={kind}>

@@ -8,10 +8,15 @@ export type PreparedProfile = {
   cvText: string;
   evaluationText: string;
   evaluationUrl?: string;
-  recordings: { name: string; publicUrl: string; mime: string; size: number }[];
+  recordings: { name: string; publicUrl: string; mime: string; size?: number }[];
   sourceLabel: string;
   transcriptText?: string;
   chapters?: RecordingChapter[];
+  photo?: string | null;
+  score?: number | null;
+  summary?: string;
+  profile?: { label: string; value: string }[];
+  source?: { kind: 'dsa-panel'; candidateId: string; example: boolean };
 };
 export type IntakeComment = { id: string; recordingIndex: number; recordingId: string; seconds: number; chapterTitle?: string; text: string; createdAt: string };
 export type IntakePerson = { id: string; name: string; role: string; contact: string; link: string; note: string; scope: Scope; files: IntakeFile[]; createdAt: string; archived: boolean; preparedProfile?: PreparedProfile; screeningComments?: IntakeComment[]; reviewRevision?: number; reviewRejection?: { reason: string; missing: string; improve: string; createdAt?: string } | null };

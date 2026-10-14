@@ -20,6 +20,7 @@ from urllib.parse import quote, urlsplit
 
 from candidate_resume import MAX_BYTES, MAX_ENCODED, parse_upload
 from domain import Problem, iso, now, require, text
+from dsa_panel import SOURCE as DSA_PANEL_SOURCE
 import employer_store as store
 
 MAX_BATCH_BYTES = 8 * 1024 * 1024
@@ -184,6 +185,8 @@ def _recording_fingerprint(recording):
     # a chapter title can be edited without moving comments to another source.
     source = {key: recording.get(key) for key in
               ('publicUrl', 'mime', 'size', 'id', 'sha256', 'checksum', 'version')}
+    if recording.get('source') == 'dsa-panel':
+        source.update(source='dsa-panel', sourceCandidateId=recording.get('sourceCandidateId'))
     return 'intake-recording:' + hashlib.sha256(_dump(source).encode()).hexdigest()
 
 
@@ -193,8 +196,17 @@ def _stored_recording(person, index):
     require(index < len(recordings) and isinstance(recordings[index], dict), 'Запись не найдена.', 404)
     recording = recordings[index]
     url, mime = recording.get('publicUrl', ''), recording.get('mime', '')
-    require(isinstance(url, str) and re.fullmatch(r'https://disk\.yandex\.ru/[id]/[A-Za-z0-9_-]{8,120}', url),
-            'Не удалось открыть исходную запись.', 422)
+    if recording.get('source') == 'dsa-panel':
+        source_id = recording.get('sourceCandidateId')
+        source = (person.get('preparedProfile') or {}).get('source') or {}
+        require(isinstance(source, dict) and source.get('kind') == 'dsa-panel' and
+                source.get('example') is True and source.get('candidateId') == source_id and
+                isinstance(source_id, str) and re.fullmatch(r'\d{1,12}', source_id) and
+                len(recordings) == 1 and url == DSA_PANEL_SOURCE + '/api/video/' + source_id,
+                'Не удалось открыть исходную запись.', 422)
+    else:
+        require(isinstance(url, str) and re.fullmatch(r'https://disk\.yandex\.ru/[id]/[A-Za-z0-9_-]{8,120}', url),
+                'Не удалось открыть исходную запись.', 422)
     require(isinstance(mime, str) and mime.startswith(('video/', 'audio/')), 'Этот файл не является записью.', 422)
     return recording
 
@@ -420,7 +432,10 @@ def recording_source(db, workspace_id, body):
     require(row is not None, 'Запись не найдена.', 404)
     _check_scope(db, workspace_id, row[0], body)
     recording = _stored_recording(json.loads(row[1]), index)
-    return {'publicUrl': recording['publicUrl'], 'mime': recording['mime']}
+    source = {'publicUrl': recording['publicUrl'], 'mime': recording['mime']}
+    if recording.get('source') == 'dsa-panel':
+        source.update(source='dsa-panel', sourceCandidateId=recording['sourceCandidateId'])
+    return source
 
 
 class _NoRecordingRedirect(urllib.request.HTTPRedirectHandler):
@@ -430,6 +445,15 @@ class _NoRecordingRedirect(urllib.request.HTTPRedirectHandler):
 
 def resolve_recording(recording):
     """Use the fixed public API, never fetch a caller-supplied host or a video file."""
+    if recording.get('source') == 'dsa-panel':
+        source_id = recording.get('sourceCandidateId')
+        require(isinstance(source_id, str) and re.fullmatch(r'\d{1,12}', source_id) and
+                recording.get('publicUrl') == DSA_PANEL_SOURCE + '/api/video/' + source_id and
+                isinstance(recording.get('mime'), str) and recording['mime'].startswith(('video/', 'audio/')),
+                'Не удалось открыть исходную запись.', 422)
+        # DSA's existing Range-capable proxy handles its private storage URL.
+        # Do not resolve it as a Yandex public key or copy/download the media.
+        return {'url': recording['publicUrl'], 'mime': recording['mime']}
     url = 'https://cloud-api.yandex.net/v1/disk/public/resources/download?' + urllib.parse.urlencode({
         'public_key': recording['publicUrl'],
     })
