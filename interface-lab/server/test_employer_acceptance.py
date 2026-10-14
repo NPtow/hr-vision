@@ -33,6 +33,9 @@ PASSWORD = 'acceptance-test-passphrase-123'
 class EmployerAcceptanceTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        cls.generation = patch('candidate_resume_model.ResumeModel.generate', side_effect=lambda resume, *_: resume)
+        cls.generation.start()
+        cls.addClassCleanup(cls.generation.stop)
         cls.data = tempfile.TemporaryDirectory(prefix='hr-employer-acceptance-')
         cls.env = patch.dict(os.environ, {
             'HR_DATA_DIR': cls.data.name, 'HR_TEAM_KEY': 'acceptance-private-team',

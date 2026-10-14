@@ -48,6 +48,7 @@ writeFileSync(`${stage}/ui/deployment.json`, deployment);
 files['ui/deployment.json'] = digest(deployment);
 if (target === 'service') for (const name of [
   'app.py', 'browser_access.py', 'candidate_portal.py', 'candidate_resume.py', 'candidate_notifications.py', 'candidate_bot.py',
+  'structured_model.py', 'candidate_resume_model.py', 'candidate_resume_prompts.py',
   'candidate_invites.py', 'recruiter_availability.py', 'hh_recruiting.py', 'hh_routes.py',
   'candidate_booking.py', 'candidate_access.py', 'hh_outreach.py', 'hh_outreach_routes.py', 'hh_outreach_worker.py',
   'hh_browser/__init__.py', 'hh_browser/adapter.py', 'hh_browser/store.py', 'hh_browser/bridge.py',

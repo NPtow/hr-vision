@@ -36,11 +36,12 @@ OUTREACH_RUNTIME = {
     'hh_browser/__init__.py', 'hh_browser/adapter.py', 'hh_browser/store.py', 'hh_browser/bridge.py',
 }
 PRE_ACCESS_RUNTIME = PRE_OUTREACH_RUNTIME | OUTREACH_RUNTIME
-RUNTIME = PRE_ACCESS_RUNTIME | {'candidate_access.py'}
+PRE_CV_RUNTIME = PRE_ACCESS_RUNTIME | {'candidate_access.py'}
+RUNTIME = PRE_CV_RUNTIME | {'structured_model.py', 'candidate_resume_model.py', 'candidate_resume_prompts.py'}
 BOT_RUNTIME = PRE_IMPORT_RUNTIME - {'recruiter_access.py', 'recruiter_sources.py', 'recruiter_notifications.py'}
 LEGACY_RUNTIME = BOT_RUNTIME - {'candidate_bot.py'}
 RUNTIME_LAYOUTS = {frozenset(LEGACY_RUNTIME), frozenset(BOT_RUNTIME), frozenset(PRE_IMPORT_RUNTIME),
-                   frozenset(PRE_OUTREACH_RUNTIME), frozenset(PRE_ACCESS_RUNTIME), frozenset(RUNTIME)}
+                   frozenset(PRE_OUTREACH_RUNTIME), frozenset(PRE_ACCESS_RUNTIME), frozenset(PRE_CV_RUNTIME), frozenset(RUNTIME)}
 MAX_ARCHIVE = 50 * 1024 * 1024
 MAX_CONTENT = 120 * 1024 * 1024
 

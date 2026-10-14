@@ -9,6 +9,7 @@ import sqlite3
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 import zipfile
 
 from candidate_portal import CandidatePortal, ClosingConnection, dump
@@ -128,6 +129,9 @@ class ResumeExtractionTest(unittest.TestCase):
 
 class CandidateCVOnboardingTest(unittest.TestCase):
     def setUp(self):
+        generation = patch('candidate_resume_model.ResumeModel.generate', side_effect=lambda resume, *_: resume)
+        generation.start()
+        self.addCleanup(generation.stop)
         self.tmp = tempfile.TemporaryDirectory(prefix='hr-cv-onboarding-')
         self.path = Path(self.tmp.name) / 'private.sqlite3'
         self.lock = threading.RLock()

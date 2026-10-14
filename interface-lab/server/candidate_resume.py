@@ -243,7 +243,7 @@ def _pdf_worker(source, target):
     executable = shutil.which('pdftotext')
     if not executable:
         raise SystemExit(127)
-    os.execv(executable, [executable, '-f', '1', '-l', '50', '-enc', 'UTF-8', source, target])
+    os.execv(executable, [executable, '-layout', '-f', '1', '-l', '50', '-enc', 'UTF-8', source, target])
 
 
 if __name__ == '__main__':

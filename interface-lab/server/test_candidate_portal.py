@@ -8,6 +8,7 @@ import sqlite3
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from candidate_portal import CandidatePortal, COOKIE, ClosingConnection, dump
@@ -70,6 +71,10 @@ class FakeNotifications:
 
 class CandidatePortalTest(unittest.TestCase):
     def setUp(self):
+        # These tests cover portal workflows; real model contracts have their own suite.
+        generation = patch('candidate_resume_model.ResumeModel.generate', side_effect=lambda resume, *_: resume)
+        generation.start()
+        self.addCleanup(generation.stop)
         self.tmp = tempfile.TemporaryDirectory(prefix='hr-candidate-unit-')
         self.db_path = Path(self.tmp.name) / 'state.sqlite3'
         self.media = FakeMedia()

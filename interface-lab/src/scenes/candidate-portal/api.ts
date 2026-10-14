@@ -121,7 +121,7 @@ export class CandidateApiError extends Error {
 
 export async function candidateRequest<T>(path: string, body?: unknown): Promise<T> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), path.endsWith('/materials') ? 60000 : 25000);
+  const timeout = setTimeout(() => controller.abort(), path === 'resume' && body !== undefined ? 180000 : path.endsWith('/materials') ? 60000 : 25000);
   try {
     const response = await fetch(`/api/hr/candidate/${path}`, {
       method: body === undefined ? 'GET' : 'POST',

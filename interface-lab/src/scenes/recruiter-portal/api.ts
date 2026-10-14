@@ -33,7 +33,7 @@ export async function recruiterRequest<T>(path: string, token: string, body?: un
     method: body === undefined ? 'GET' : 'POST',
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
     body: body === undefined ? undefined : JSON.stringify(body),
-    cache: 'no-store', signal: AbortSignal.timeout(path === 'hh/responses/import' ? 180000 : path === 'interview/start' ? 60000 : 30000),
+    cache: 'no-store', signal: AbortSignal.timeout(path === 'hh/responses/import' || path === 'candidates' && body !== undefined ? 180000 : path === 'interview/start' ? 60000 : 30000),
   });
   const data = await response.json().catch(() => ({ error: 'Сервис временно недоступен.' }));
   if (!response.ok) throw new RecruiterRequestError(data.error || 'Не удалось выполнить действие.', response.status);

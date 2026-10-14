@@ -21,6 +21,9 @@ from test_candidate_portal import FakeMedia
 class CandidateHTTPTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        cls.generation = patch('candidate_resume_model.ResumeModel.generate', side_effect=lambda resume, *_: resume)
+        cls.generation.start()
+        cls.addClassCleanup(cls.generation.stop)
         cls.data = tempfile.TemporaryDirectory(prefix='hr-candidate-http-')
         cls.env = patch.dict(os.environ, {'HR_DATA_DIR': cls.data.name, 'HR_TEAM_KEY': 'http-test-team-only',
             'HR_VIDEO_ENABLED': '0', 'DAILY_API_KEY': '', 'HR_NOTIFICATIONS_ENABLED': '0',

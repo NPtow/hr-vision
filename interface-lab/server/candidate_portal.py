@@ -20,6 +20,7 @@ import uuid
 
 from domain import Problem, require, text, timestamp, iso, now
 from candidate_resume import parse_upload, salary_value, start_date_value
+import candidate_resume_model
 import candidate_invites as invites
 import recruiter_availability as availability
 import employer_workflow
@@ -253,6 +254,7 @@ class CandidatePortal:
         self.dummy_hash = password_hash(secrets.token_urlsafe(24))
         with self.connect() as db:
             self.init(db)
+        self.resume_model = candidate_resume_model.ResumeModel(self.connect, self.lock)
 
     @contextmanager
     def media_operation(self, meeting_id):
@@ -317,6 +319,7 @@ class CandidatePortal:
         CREATE INDEX IF NOT EXISTS cp_application_candidate ON cp_applications(candidate_id);
         ''')
         invites.migrate_accounts(db)
+        candidate_resume_model.init(db)
         migrate_meetings(db)
         migrate_search(db)
         invites.init(db)
@@ -682,6 +685,10 @@ class CandidatePortal:
     def save_resume(self, db, cid, resume):
         previous = self.person(db, cid)
         fields = dict(resume['fields'])
+        if '_profileBefore' in resume:
+            # Do not overwrite preferences edited in another tab during the model request.
+            fields = {key: value for key, value in fields.items()
+                      if previous.get(key) == resume['_profileBefore'].get(key)}
         if fields.get('salaryMin') and 'salaryMax' not in fields and previous.get('salaryMax') and fields['salaryMin'] > previous['salaryMax']:
             fields['salaryMax'] = None
         if fields.get('salaryMax') and 'salaryMin' not in fields and previous.get('salaryMin') and fields['salaryMax'] < previous['salaryMin']:
@@ -1324,6 +1331,14 @@ class CandidatePortal:
                 require(set(body) <= {'filename', 'contentBase64', 'contactEmail'}, 'Проверьте поля резюме.', 400)
             parsed_resume = parse_upload({key: body[key] for key in ('filename', 'contentBase64') if key in body}
                                          if is_recruiter else body)
+            def authorize_resume(db):
+                actor = self.recruiter_principal(db, headers, manager_actor)['id'] if is_recruiter else self.session_candidate(db, headers)
+                require(actor == rate_identity, 'Войдите снова, чтобы загрузить резюме.', 401)
+            with self.connect() as db:
+                authorize_resume(db)
+                if not is_recruiter:
+                    parsed_resume['_profileBefore'] = self.person(db, rate_identity)
+            parsed_resume = self.resume_model.generate(parsed_resume, rate_identity, authorize_resume)
 
         with self.lock, self.connect() as db:
             if method == 'POST':
@@ -1361,6 +1376,9 @@ class CandidatePortal:
                     require(not principal['legacy'], 'Войдите в свой кабинет рекрутера.', 401)
                     return recruiter_notifications.public_status(db, principal['id']), {}
                 raise Problem('Не найдено.', 404)
+
+            if parsed_resume and parsed_resume.get('runId'):
+                self.resume_model.assert_current(db, rate_identity, parsed_resume['runId'])
 
             if path in ('/api/hr/recruiter/candidate-access/state', '/api/hr/recruiter/candidate-access/send'):
                 require(self.candidate_access is not None, 'Выдача доступа временно недоступна.', 503)

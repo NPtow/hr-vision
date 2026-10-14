@@ -27,6 +27,9 @@ class CandidateBotHTTPTest(unittest.TestCase):
     SECRET = 'test-webhook-secret-01234567890123456789'
 
     def setUp(self):
+        generation = patch('candidate_resume_model.ResumeModel.generate', side_effect=lambda resume, *_: resume)
+        generation.start()
+        self.addCleanup(generation.stop)
         self.data = tempfile.TemporaryDirectory(prefix='hr-candidate-bot-http-')
         self.addCleanup(self.data.cleanup)
         self.environment = patch.dict(os.environ, {

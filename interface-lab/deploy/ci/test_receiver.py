@@ -106,9 +106,10 @@ class ReceiverTest(unittest.TestCase):
         self.assertEqual(r.PRE_IMPORT_RUNTIME - r.BOT_RUNTIME, {'recruiter_access.py', 'recruiter_sources.py', 'recruiter_notifications.py'})
         self.assertEqual(r.PRE_OUTREACH_RUNTIME - r.PRE_IMPORT_RUNTIME, {'vacancy_import.py', 'vacancy_sources.py'})
         self.assertEqual(r.PRE_ACCESS_RUNTIME - r.PRE_OUTREACH_RUNTIME, r.OUTREACH_RUNTIME)
-        self.assertEqual(r.RUNTIME - r.PRE_ACCESS_RUNTIME, {'candidate_access.py'})
+        self.assertEqual(r.PRE_CV_RUNTIME - r.PRE_ACCESS_RUNTIME, {'candidate_access.py'})
+        self.assertEqual(r.RUNTIME - r.PRE_CV_RUNTIME, {'structured_model.py', 'candidate_resume_model.py', 'candidate_resume_prompts.py'})
         for runtime in (r.LEGACY_RUNTIME, r.BOT_RUNTIME, r.PRE_IMPORT_RUNTIME, r.PRE_OUTREACH_RUNTIME,
-                        r.PRE_ACCESS_RUNTIME, r.RUNTIME):
+                        r.PRE_ACCESS_RUNTIME, r.PRE_CV_RUNTIME, r.RUNTIME):
             with self.subTest(count=len(runtime)):
                 a, s, m = self.bundle('service', runtime=runtime)
                 self.assertEqual(r.unpack(a, s, 'service'), m)
@@ -160,10 +161,10 @@ class ReceiverTest(unittest.TestCase):
             nested.write_text('# changed bridge')
             self.assertTrue(r.api_changed(source))
             nested.write_text('# same')
-            for name in r.OUTREACH_RUNTIME | {'candidate_access.py'}:
+            for name in r.RUNTIME - r.PRE_OUTREACH_RUNTIME:
                 (source / name).unlink()
             self.assertTrue(r.api_changed(source))
-            for name in r.OUTREACH_RUNTIME | {'candidate_access.py'}:
+            for name in r.RUNTIME - r.PRE_OUTREACH_RUNTIME:
                 (api / 'current' / name).unlink()
             self.assertFalse(r.api_changed(source))
 
