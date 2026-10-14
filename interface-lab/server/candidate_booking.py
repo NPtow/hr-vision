@@ -4,7 +4,7 @@ Integration: construct CandidateBooking(portal) after CandidatePortal, mount
 handles() before generic routes, and optionally set event_sink to the campaign
 engine's transactional event writer. Public routes accept POST JSON only:
   /api/hr/booking/state {token}
-  /api/hr/booking/book  {token, slotId, requestId}
+  /api/hr/booking/book  {token, slotId, requestId, email, consentProfile:true}
   /api/hr/booking/call  {token} -> a separate existing-domain guest URL
 
 The trusted campaign engine calls issue(db, candidate_id, campaign_id,
@@ -16,8 +16,9 @@ checks; the engine separately checks campaign/audience/browser state.
 Invitation rows contain a digest only. A private per-database HMAC key allows
 the trusted issuer to recover the same URL; keep the database/backups private,
 as with the existing HH outbox. Public DTOs never expose CV, contacts, internal
-profile, campaign identifiers or media tokens. Public booking does not create
-an account or record consent. Existing call consent/time rules remain in force.
+profile, campaign identifiers or media tokens. Public booking records only explicit
+CV-profile preparation consent and contact email; it creates no account and grants
+no recording, reuse or automatic-vacancy consent. Existing call rules remain in force.
 """
 import base64
 import datetime as dt
@@ -26,9 +27,12 @@ import hmac
 import json
 import re
 import secrets
-from urllib.parse import parse_qs, quote, urlsplit
+from urllib.parse import parse_qs, quote, urlencode, urlsplit
 
 import candidate_invites as invites
+from candidate_notifications import _email as delivery_email
+from candidate_portal import email_value, profile_value
+from candidate_resume import extract_preferences, start_date_value
 from domain import Problem, iso, now, require, timestamp
 
 
@@ -36,6 +40,9 @@ PREFIX = '/api/hr/booking/'
 TOKEN_RE = re.compile(r'^[A-Za-z0-9_-]{43}$')
 ID_RE = re.compile(r'^[A-Za-z0-9_.:-]{1,160}$')
 TTL_SECONDS = 7 * 86400
+PROFILE_CONSENT_VERSION = 'hh-cv-profile-v1'
+CV_PROFILE_FIELDS = frozenset(('name', 'city', 'desiredRole', 'about', 'residence',
+                               'employmentType', 'salaryMin', 'salaryMax', 'latestStartDate'))
 
 
 def _id(value):
@@ -65,13 +72,31 @@ def init(db):
           request_id TEXT NOT NULL, slot_id TEXT NOT NULL REFERENCES cp_recruiter_slots(id),
           interview_id TEXT NOT NULL REFERENCES cp_interviews(id), created_at TEXT NOT NULL,
           PRIMARY KEY(invitation_id,request_id))''',
+        '''CREATE TABLE IF NOT EXISTS cp_booking_profile_consents (
+          interview_id TEXT PRIMARY KEY REFERENCES cp_interviews(id),
+          candidate_id TEXT NOT NULL REFERENCES cp_candidates(id),
+          invitation_id TEXT NOT NULL REFERENCES cp_booking_invitations(id),
+          contact_email TEXT NOT NULL, consent_version TEXT NOT NULL,
+          consent_at TEXT NOT NULL, profile_prepared_at TEXT NOT NULL)''',
         '''CREATE TABLE IF NOT EXISTS cp_booking_call_links (
           interview_id TEXT PRIMARY KEY REFERENCES cp_interviews(id),
           call_invitation_id TEXT NOT NULL REFERENCES cp_invitations(id),
           url TEXT NOT NULL, expires_at TEXT NOT NULL)''',
     ):
         db.execute(statement)
+    if 'request_hash' not in {row[1] for row in db.execute('PRAGMA table_info(cp_booking_requests)')}:
+        db.execute('ALTER TABLE cp_booking_requests ADD COLUMN request_hash TEXT')
     db.execute('INSERT OR IGNORE INTO cp_booking_config VALUES (1,?)', (secrets.token_bytes(32),))
+
+
+def profile_consent(db, candidate_id, interview_id):
+    """Trusted exact-person/interview lookup; never exposes contacts publicly."""
+    if not db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='cp_booking_profile_consents'").fetchone():
+        return None
+    row = db.execute('''SELECT contact_email,consent_version,consent_at,profile_prepared_at
+      FROM cp_booking_profile_consents WHERE candidate_id=? AND interview_id=?''',
+                     (candidate_id, interview_id)).fetchone()
+    return dict(zip(('email', 'consentVersion', 'consentAt', 'profilePreparedAt'), row)) if row else None
 
 
 class CandidateBooking:
@@ -126,7 +151,9 @@ class CandidateBooking:
                         campaign_id, recipient_id, expires, iso(now())))
         return {'invitationId': identifier,
                 'url': self.portal.origin.rstrip('/') + '/iframe.html?id=hr-vision-product--candidate'
-                       '&viewMode=story&cp=invite-booking#booking=' + quote(self._token(db, identifier)),
+                       '&viewMode=story&cp=invite-booking&' + urlencode({
+                           'utm_source': 'hh', 'utm_medium': 'outreach', 'utm_campaign': campaign_id})
+                       + '#booking=' + quote(self._token(db, identifier)),
                 'expiresAt': iso(dt.datetime.fromtimestamp(expires, dt.timezone.utc))}
 
     @staticmethod
@@ -227,16 +254,65 @@ class CandidateBooking:
         name = json.loads(row[0]).get('name', '')
         return {'status': 'booked' if booking else 'available', 'candidateName': name,
                 'timezone': 'Europe/Moscow', 'slots': slots,
-                'booking': {key: value for key, value in booking.items() if key != 'slotId'} if booking else None}
+                'profileReady': bool(booking and profile_consent(db, cid, booking['id'])),
+                'booking': booking}
+
+    @staticmethod
+    def _prepare_profile(db, cid):
+        """Fill missing imported CV facts once; preserve the same person and edits."""
+        row = db.execute('''SELECT c.profile,r.text_content,r.extracted FROM cp_candidates c
+          JOIN cp_resumes r ON r.candidate_id=c.id WHERE c.id=?''', (cid,)).fetchone()
+        require(row, 'Сначала подготовьте резюме.', 409)
+        profile = json.loads(row[0])
+        # Reviewed blank fields may be intentional. Never overwrite an edited profile.
+        if profile.get('resumeReviewed'):
+            return
+        raw = re.sub(r'^Резюме из HH · [^\n]+\n\n', '', row[1], count=1)
+        facts = extract_preferences(raw)
+        extracted = json.loads(row[2])
+        if isinstance(extracted, dict):
+            facts = {**{key: value for key, value in extracted.items() if key in CV_PROFILE_FIELDS}, **facts}
+        patch = {key: value for key, value in facts.items() if key in CV_PROFILE_FIELDS
+                 and not profile.get(key) and value not in ('', None)}
+        if 'latestStartDate' in patch:
+            try:
+                start_date_value(patch['latestStartDate'], future=True)
+            except Problem:
+                patch.pop('latestStartDate')  # An older CV date must not block today's booking.
+        # An edited salary boundary outranks the older CV's opposite boundary.
+        minimum, maximum = patch.get('salaryMin', profile.get('salaryMin')), patch.get('salaryMax', profile.get('salaryMax'))
+        if minimum is not None and maximum is not None and minimum > maximum:
+            patch.pop('salaryMin', None)
+            patch.pop('salaryMax', None)
+        if patch:
+            merged = profile_value(patch, profile)
+            db.execute('UPDATE cp_candidates SET profile=?,updated_at=? WHERE id=?',
+                       (json.dumps(merged, ensure_ascii=False, separators=(',', ':')), iso(now()), cid))
 
     def _book(self, db, invitation, body):
         slot_id, request_id = _id(body.get('slotId')), _id(body.get('requestId'))
-        previous = db.execute('''SELECT slot_id FROM cp_booking_requests WHERE invitation_id=? AND request_id=?''',
-                              (invitation['id'], request_id)).fetchone()
+        email = delivery_email(email_value(body.get('email')))
+        consent = body.get('consentProfile')
+        require(type(consent) is bool, 'Подтвердите создание профиля из резюме.', 400)
+        fingerprint = hashlib.sha256(json.dumps({'slotId': slot_id, 'email': email, 'consentProfile': consent},
+                                               sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+        previous = db.execute('''SELECT slot_id,request_hash FROM cp_booking_requests
+          WHERE invitation_id=? AND request_id=?''', (invitation['id'], request_id)).fetchone()
         if previous:
-            require(previous[0] == slot_id, 'Этот запрос уже использован для другого времени.', 409)
+            require(previous[0] == slot_id and (previous[1] is None or previous[1] == fingerprint),
+                    'Этот запрос уже использован с другими данными.', 409)
+        cid = invitation['candidateId']
+        existing = self._interview(db, cid)
+        saved = profile_consent(db, cid, existing['id']) if existing else None
+        if saved:
+            require(consent and saved['email'] == email, 'Данные для этого интервью уже подтверждены.', 409)
+        require(consent is True, 'Согласитесь на создание профиля из резюме, чтобы выбрать время.', 400)
+        if previous and previous[1] is not None:
             return self._state(db, invitation)
-        existing = self._interview(db, invitation['candidateId'])
+        person = db.execute('SELECT email FROM cp_candidates WHERE id=?', (cid,)).fetchone()
+        require(person and (person[0] is None or person[0] == email),
+                'Профиль уже связан с другой почтой. Свяжитесь с командой HR Vision.', 409)
+        require(self._prepared(db, cid), 'Сначала подготовьте резюме.', 409)
         if existing:
             require(existing['slotId'] == slot_id, 'Вы уже записаны. Для переноса свяжитесь с командой.', 409)
             interview_id = existing['id']
@@ -245,18 +321,30 @@ class CandidateBooking:
             available = next((slot for slot in self.portal.slots(db) if slot['id'] == slot_id), None)
             require(available and timestamp(available['end']) - timestamp(available['start']) == dt.timedelta(minutes=30),
                     'Это время уже недоступно. Выберите другое.', 409)
-            require(self._prepared(db, invitation['candidateId']), 'Сначала подготовьте резюме.', 409)
-            self.portal.book(db, invitation['candidateId'], {'slotId': slot_id}, prepared=True)
-            interview_id = self._interview(db, invitation['candidateId'])['id']
+            self.portal.book(db, cid, {'slotId': slot_id}, prepared=True)
+            interview_id = self._interview(db, cid)['id']
             db.execute('INSERT INTO cp_booking_attribution VALUES (?,?,?,?,?)',
                        (interview_id, invitation['id'], invitation['campaignId'], invitation['recipientId'], iso(now())))
             self._event(db, 'booking.created', invitation, interview_id=interview_id, key='booking:' + interview_id)
-        db.execute('INSERT INTO cp_booking_requests VALUES (?,?,?,?,?)',
-                   (invitation['id'], request_id, slot_id, interview_id, iso(now())))
+        if not saved:
+            self._prepare_profile(db, cid)
+            prepared_at = iso(now())
+            db.execute('INSERT INTO cp_booking_profile_consents VALUES (?,?,?,?,?,?,?)',
+                       (interview_id, cid, invitation['id'], email, PROFILE_CONSENT_VERSION, prepared_at, prepared_at))
+            db.execute('UPDATE cp_intake SET contact_email=? WHERE candidate_id=?', (email, cid))
+        if previous:
+            # Legacy booking rows acquire the new payload fingerprint only after
+            # explicitly completing the new consent step, never on a page read.
+            db.execute('UPDATE cp_booking_requests SET request_hash=? WHERE invitation_id=? AND request_id=?',
+                       (fingerprint, invitation['id'], request_id))
+        else:
+            db.execute('''INSERT INTO cp_booking_requests
+              (invitation_id,request_id,slot_id,interview_id,created_at,request_hash) VALUES (?,?,?,?,?,?)''',
+                       (invitation['id'], request_id, slot_id, interview_id, iso(now()), fingerprint))
         # A booking can lie beyond the initial invitation window. Keep this same
         # personal page available through the meeting without rotating its URL.
-        booking = self._interview(db, invitation['candidateId'])
-        retain_until = int(timestamp(booking['end']).timestamp()) + 90 * 60
+        booked = self._interview(db, cid)
+        retain_until = int(timestamp(booked['end']).timestamp()) + 90 * 60
         db.execute('UPDATE cp_booking_invitations SET expires=MAX(expires,?) WHERE id=?',
                    (retain_until, invitation['id']))
         return self._state(db, invitation)
@@ -292,7 +380,7 @@ class CandidateBooking:
         require((headers.get('Origin') is None or headers.get('Origin') in allowed)
                 and headers.get('Sec-Fetch-Site') != 'cross-site', 'Другой источник запроса.', 403)
         require(headers.get('Content-Type', '').split(';', 1)[0].strip() == 'application/json', 'Нужен JSON.', 415)
-        expected = {'token', 'slotId', 'requestId'} if parsed.path.endswith('/book') else {'token'}
+        expected = {'token', 'slotId', 'requestId', 'email', 'consentProfile'} if parsed.path.endswith('/book') else {'token'}
         require(isinstance(body, dict) and set(body) == expected, 'Проверьте поля запроса.', 400)
         self.portal.rate_limit('booking-ip:' + str(ip), 120, 60)
         with self.portal.lock, self.portal.connect() as db:

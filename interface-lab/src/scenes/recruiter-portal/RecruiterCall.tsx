@@ -4,7 +4,7 @@ import { PhoneOff, X } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { recruiterRequest, type Room } from './api';
 import type { InterviewRecording } from '../candidate-portal/api';
-import { InvitationControls } from './InvitationControls';
+import { CandidateAccessControls } from './CandidateAccessControls';
 
 export type ActiveCall = { kind: 'interview' | 'meeting'; candidateId: string; applicationId?: string; meetingId?: string; title: string; accountActive?: boolean; recording?: InterviewRecording };
 type CaptureStatus = 'unknown' | 'active' | 'stopped' | 'error';
@@ -126,7 +126,7 @@ export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }:
         {(recording !== 'active' || transcribing !== 'active') && <><label className="rp-check"><input type="checkbox" checked={oralConsent} disabled={starting} onChange={event => setOralConsent(event.target.checked)}/><span>Согласие получено</span></label><Button disabled={!oralConsent || starting || finishing || (startRequested && !retryRecording && !retryTranscription && !startFailed)} onClick={startInterview}>{starting ? 'Запускаем…' : retryRecording || retryTranscription || startFailed ? 'Повторить запуск записи' : startRequested ? 'Ожидаем подтверждения…' : 'Начать интервью и запись'}</Button></>}
         <span className="rp-muted rp-help" role="status">{recording === 'active' ? transcribing === 'active' ? 'Запись и расшифровка идут' : 'Запись идёт · статус расшифровки уточняется' : recording === 'stopped' ? 'Запись остановлена' : recording === 'error' ? 'Ошибка записи' : 'Статус записи уточняется'}</span>
       </div>
-      {active.kind === 'interview' && active.accountActive === false && startRequested && <div className="rp-call-claim"><Button variant="secondary" onClick={() => setShowClaim(current => !current)} aria-expanded={showClaim}>Профиль кандидата</Button>{showClaim && <InvitationControls candidateId={active.candidateId} scope="claim" token={token}/>}</div>}
+      {active.kind === 'interview' && <div className="rp-call-claim"><Button variant="secondary" onClick={() => setShowClaim(current => !current)} aria-expanded={showClaim}>Доступ кандидату</Button>{showClaim && <CandidateAccessControls candidateId={active.candidateId} token={token} allowClaimFallback={active.accountActive === false && startRequested}/>}</div>}
     </div>}
     {error && <div className="rp-error" role="alert">{error}</div>}
     <div className="rp-call-frame" ref={mount}/>

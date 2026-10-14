@@ -247,6 +247,7 @@ class CandidatePortal:
         # Optional personal-booking adapter; no booking schema is required here.
         self.booking_invitation_lookup = None
         self.booking_invitation_store = None
+        self.candidate_access = None
         self._media_guard = threading.Lock()
         self._media_locks = {}
         self.dummy_hash = password_hash(secrets.token_urlsafe(24))
@@ -1258,6 +1259,8 @@ class CandidatePortal:
         path = urllib.parse.urlsplit(raw_path).path
         require(self.handles(path), 'Не найдено.', 404)
         require(method in ('GET', 'POST'), 'Метод не поддерживается.', 405)
+        if path in ('/api/hr/recruiter/candidate-access/state', '/api/hr/recruiter/candidate-access/send'):
+            require(method == 'POST', 'Нужен POST-запрос.', 405)
         if method == 'POST':
             require((headers.get('Origin') is None or headers.get('Origin') in self.origins) and
                     headers.get('Sec-Fetch-Site') != 'cross-site',
@@ -1281,7 +1284,9 @@ class CandidatePortal:
                     '/api/hr/recruiter/interview/complete', '/api/hr/recruiter/interview/start',
                     '/api/hr/recruiter/interview/materials', '/api/hr/recruiter/notifications',
                     '/api/hr/recruiter/notifications/email/request', '/api/hr/recruiter/notifications/email/verify',
-                    '/api/hr/recruiter/notifications/telegram/link'}, 'Доступно только команде HR Vision.', 403)
+                    '/api/hr/recruiter/notifications/telegram/link',
+                    '/api/hr/recruiter/candidate-access/state', '/api/hr/recruiter/candidate-access/send'},
+                    'Доступно только команде HR Vision.', 403)
         capability_paths = ('/api/hr/candidate/guest/state', '/api/hr/candidate/guest/join',
                             '/api/hr/candidate/claim/state', '/api/hr/candidate/claim/resume', '/api/hr/candidate/claim')
         if path in capability_paths:
@@ -1325,7 +1330,8 @@ class CandidatePortal:
                     '/api/hr/recruiter/interview/book', '/api/hr/recruiter/invitations',
                     '/api/hr/recruiter/invitations/revoke', '/api/hr/recruiter/profile',
                     '/api/hr/recruiter/interview/join', '/api/hr/recruiter/interview/start',
-                    '/api/hr/recruiter/interview/complete', '/api/hr/recruiter/interview/materials'}:
+                    '/api/hr/recruiter/interview/complete', '/api/hr/recruiter/interview/materials',
+                    '/api/hr/recruiter/candidate-access/state', '/api/hr/recruiter/candidate-access/send'}:
                     self.recruiter_candidate(db, principal, cid,
                         allow_prepared=path in ('/api/hr/recruiter/interview/book', '/api/hr/recruiter/invitations',
                                                 '/api/hr/recruiter/invitations/revoke', '/api/hr/recruiter/profile'))
@@ -1351,6 +1357,14 @@ class CandidatePortal:
                     return recruiter_notifications.public_status(db, principal['id']), {}
                 raise Problem('Не найдено.', 404)
 
+            if path in ('/api/hr/recruiter/candidate-access/state', '/api/hr/recruiter/candidate-access/send'):
+                require(self.candidate_access is not None, 'Выдача доступа временно недоступна.', 503)
+                allowed = {'candidateId'} if path.endswith('/state') else {'candidateId', 'requestId'}
+                require(set(body) <= allowed, 'Проверьте поля запроса.', 400)
+                if path.endswith('/state'):
+                    return self.candidate_access.state(db, cid, principal=principal), {'Cache-Control': 'no-store'}
+                return self.candidate_access.request(db, principal, cid,
+                    {key: value for key, value in body.items() if key != 'candidateId'}), {'Cache-Control': 'no-store'}
             if path == '/api/hr/candidate/register':
                 cid = self.register(db, body)
                 response_headers['Set-Cookie'] = self.session_cookie(db, cid)

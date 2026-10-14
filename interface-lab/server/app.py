@@ -26,6 +26,7 @@ import candidate_notifications
 from candidate_bot import CandidateBot
 from hh_routes import HHRecruiterRoutes
 from candidate_booking import CandidateBooking
+from candidate_access import CandidateAccess
 from hh_outreach import HHOutreach
 from hh_outreach_routes import HHOutreachRoutes
 from hh_outreach_worker import OutreachBrowserService
@@ -89,6 +90,8 @@ CANDIDATE_BOT = CandidateBot(CANDIDATE_PORTAL, candidate_notifications)
 HH_ROUTES = HHRecruiterRoutes(connect, CANDIDATE_PORTAL)
 CANDIDATE_PORTAL.invitation_lookup = HH_ROUTES.existing_invitation
 BOOKING = CandidateBooking(CANDIDATE_PORTAL)
+CANDIDATE_ACCESS = CandidateAccess(CANDIDATE_PORTAL)
+CANDIDATE_PORTAL.candidate_access = CANDIDATE_ACCESS
 OUTREACH = HHOutreach(connect, issue_booking=BOOKING.issue, booking_current=BOOKING.current,
     prepare_candidate=HH_ROUTES.prepare_candidate,
     sending_enabled=os.environ.get('HR_HH_BROWSER_SENDING_ENABLED') == '1')
@@ -608,4 +611,5 @@ if __name__ == '__main__':
         telegram_renderer=CANDIDATE_BOT.render_notification)
     HH_ROUTES.start_worker()
     OUTREACH_BROWSER.start_worker()
+    CANDIDATE_ACCESS.start_worker()
     ThreadingHTTPServer(('127.0.0.1', int(os.environ.get('HR_PORT', '8391'))), Handler).serve_forever()

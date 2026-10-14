@@ -105,14 +105,16 @@ class ReceiverTest(unittest.TestCase):
         self.assertEqual(r.BOT_RUNTIME - r.LEGACY_RUNTIME, {'candidate_bot.py'})
         self.assertEqual(r.PRE_IMPORT_RUNTIME - r.BOT_RUNTIME, {'recruiter_access.py', 'recruiter_sources.py', 'recruiter_notifications.py'})
         self.assertEqual(r.PRE_OUTREACH_RUNTIME - r.PRE_IMPORT_RUNTIME, {'vacancy_import.py', 'vacancy_sources.py'})
-        self.assertEqual(r.RUNTIME - r.PRE_OUTREACH_RUNTIME, r.OUTREACH_RUNTIME)
-        for runtime in (r.LEGACY_RUNTIME, r.BOT_RUNTIME, r.PRE_IMPORT_RUNTIME, r.PRE_OUTREACH_RUNTIME, r.RUNTIME):
+        self.assertEqual(r.PRE_ACCESS_RUNTIME - r.PRE_OUTREACH_RUNTIME, r.OUTREACH_RUNTIME)
+        self.assertEqual(r.RUNTIME - r.PRE_ACCESS_RUNTIME, {'candidate_access.py'})
+        for runtime in (r.LEGACY_RUNTIME, r.BOT_RUNTIME, r.PRE_IMPORT_RUNTIME, r.PRE_OUTREACH_RUNTIME,
+                        r.PRE_ACCESS_RUNTIME, r.RUNTIME):
             with self.subTest(count=len(runtime)):
                 a, s, m = self.bundle('service', runtime=runtime)
                 self.assertEqual(r.unpack(a, s, 'service'), m)
 
     def test_partial_recruiter_layout_is_rejected(self):
-        for module in r.RUNTIME - r.BOT_RUNTIME:
+        for module in r.PRE_ACCESS_RUNTIME - r.BOT_RUNTIME:
             a, s, _ = self.bundle('service', runtime=r.RUNTIME - {module})
             with self.assertRaisesRegex(ValueError, 'Incomplete API'):
                 r.unpack(a, s, 'service')
@@ -138,6 +140,13 @@ class ReceiverTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Incomplete API'):
             r.unpack(a, s, 'service')
 
+    def test_candidate_access_cannot_ship_without_its_booking_dependencies(self):
+        for runtime in (r.PRE_OUTREACH_RUNTIME | {'candidate_access.py'},
+                        r.RUNTIME - {'candidate_booking.py'}):
+            a, s, _ = self.bundle('service', runtime=runtime)
+            with self.assertRaisesRegex(ValueError, 'Incomplete API'):
+                r.unpack(a, s, 'service')
+
     def test_nested_runtime_change_detection_and_rollback(self):
         source, api = self.root / 'nested-incoming', self.root / 'nested-installed'
         for folder in (source, api / 'current'):
@@ -151,10 +160,10 @@ class ReceiverTest(unittest.TestCase):
             nested.write_text('# changed bridge')
             self.assertTrue(r.api_changed(source))
             nested.write_text('# same')
-            for name in r.OUTREACH_RUNTIME:
+            for name in r.OUTREACH_RUNTIME | {'candidate_access.py'}:
                 (source / name).unlink()
             self.assertTrue(r.api_changed(source))
-            for name in r.OUTREACH_RUNTIME:
+            for name in r.OUTREACH_RUNTIME | {'candidate_access.py'}:
                 (api / 'current' / name).unlink()
             self.assertFalse(r.api_changed(source))
 

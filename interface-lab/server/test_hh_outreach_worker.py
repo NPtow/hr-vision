@@ -127,7 +127,8 @@ class BrowserServiceTest(unittest.TestCase):
                        (slot['id'], slot['start'], slot['end'], slot['recruiterName']))
             assign_fixture_slot(db, slot)
         token = parse_qs(urlsplit(url).fragment)['booking'][0]
-        body = {'token': token, 'slotId': 'slot-one', 'requestId': 'test-request-booking-123'}
+        body = {'token': token, 'slotId': 'slot-one', 'requestId': 'test-request-booking-123',
+                'email': 'booking@example.test', 'consentProfile': True}
         result, _ = self.booking.handle('POST', '/api/hr/booking/book', {'Content-Type': 'application/json'}, body, '127.0.0.1')
         retry, _ = self.booking.handle('POST', '/api/hr/booking/book', {'Content-Type': 'application/json'}, body, '127.0.0.1')
         self.assertEqual(result['booking']['id'], retry['booking']['id'])

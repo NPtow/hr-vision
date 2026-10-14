@@ -55,3 +55,16 @@
   .bp-surface, .bp-slot, .bp-error, .bp-empty { outline: 1px solid CanvasText; }
   .bp-slot[data-selected='true'] { outline: 3px solid Highlight; }
 }
+.bp-booking-contact { display: grid; gap: 10px; margin-top: 32px; }
+.bp-booking-contact > label { font-size: 14px; font-weight: 550; }
+.bp-booking-contact > input { width: 100%; min-height: 46px; padding: 12px 15px; border: 0; border-radius: 12px; background: #f5f5f7; color: inherit; font: inherit; }
+.bp-booking-contact > input:focus-visible { outline: 3px solid #6756ce; outline-offset: 3px; }
+.bp-booking-contact > input:disabled { opacity: .65; }
+.bp-booking-contact .bp-muted { font-size: 13px; margin: 0; }
+.bp-booking-contact .bp-consent { display: flex; align-items: flex-start; gap: 10px; margin-top: 12px; min-height: 44px; font-weight: 400; line-height: 1.5; cursor: pointer; }
+.bp-consent input { width: 18px; height: 18px; flex-shrink: 0; margin: 2px 0 0; accent-color: #6756ce; }
+.bp-consent input:focus-visible { outline: 3px solid #6756ce; outline-offset: 3px; }
+
+.bp-profile-confirmation { margin-top: 28px; }
+.bp-profile-confirmation .bp-booking-contact { margin-top: 14px; }
+.bp-profile-confirmation .bp-actions { margin-top: 18px; justify-content: flex-start; }

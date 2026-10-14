@@ -3,7 +3,7 @@ import { ChevronRight, FileText } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import type { CandidateProfile } from '../candidate-portal/api';
 import type { RecruiterCandidate } from './api';
-import { InvitationControls } from './InvitationControls';
+import { CandidateAccessControls } from './CandidateAccessControls';
 import { RecruiterMediaActions } from './RecruiterMediaActions';
 import './candidate-details.css';
 
@@ -88,8 +88,9 @@ export function RecruiterCandidateDetails({ candidate, busy, run, onNotice, toke
   return <div className="rp-candidate-details">
     {!readOnly && candidate.interview?.status === 'completed' && <section className="rcd-results" aria-label="Результаты интервью">
       <RecruiterMediaActions kind="interview" candidateId={candidate.id} status={candidate.interview.status} token={token} onUpdated={onUpdated}/>
-      {candidate.accountActive === false && <InvitationControls candidateId={candidate.id} scope="claim" token={token} onChanged={() => { void onUpdated(); }}/ >}
     </section>}
+
+    {!readOnly && candidate.interview && <CandidateAccessControls candidateId={candidate.id} token={token} allowClaimFallback={candidate.accountActive === false && candidate.interview.status === 'completed'} onChanged={() => { void onUpdated(); }}/> }
 
     {(source || applications.length > 0) && <dl className="rcd-origin">
       <Fact label="Источник">{source}</Fact>

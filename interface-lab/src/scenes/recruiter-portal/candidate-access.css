@@ -1,0 +1,8 @@
+.rca-access { display: grid; gap: 12px; min-width: 0; }
+.rca-access > div { min-width: 0; }
+.rp-root .rca-access h3 { margin: 0 0 5px; font-size: 14px; font-weight: 600; }
+.rp-root .rca-access-help { margin: 0; color: #686473; font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; }
+.rca-access > button { justify-self: start; min-height: 44px; }
+.rca-access .rca-access-error { margin: 0; color: #a23247; font-size: 13px; line-height: 1.55; }
+.rp-call-claim .rca-access { margin-top: 12px; padding: 16px; border-radius: 16px; background: #f5f4f8; }
+@media (max-width: 600px) { .rca-access > button { white-space: normal; text-align: left; } }
