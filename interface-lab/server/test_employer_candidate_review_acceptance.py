@@ -14,6 +14,7 @@ from pathlib import Path
 import signal
 import threading
 import unittest
+import urllib.request
 import uuid
 from unittest.mock import patch
 
@@ -160,6 +161,36 @@ class EmployerCandidateReviewAcceptanceTest(unittest.TestCase):
             db.execute('UPDATE em_intake_candidates SET body=? WHERE id=?',
                        (json.dumps(person, ensure_ascii=False), person['id']))
         return person
+
+    def test_intake_original_file_has_one_wire_length_and_preserves_bytes(self):
+        employer = self.employer('Original CV headers')
+        vacancy = self.vacancy(employer)
+        content = b'{\\rtf1\\ansi Original CV bytes for authenticated HTTP.}'
+        imported = self.ok('employer/intake', {
+            'vacancyId': vacancy['id'], 'batch': 'wire-file-' + uuid.uuid4().hex,
+            'scope': 'sfera', 'entries': [{'name': 'Original CV fixture',
+                'file': {'name': 'original.rtf', 'data': base64.b64encode(content).decode()}}],
+        }, token=employer['token'])['candidates'][0]
+        file_id = imported['files'][0]['id']
+        original_file = employer_intake.file
+
+        def mixed_case_headers(*args):
+            data, headers = original_file(*args)
+            return data, {**headers, 'cOnTeNt-LeNgTh': '999999',
+                          'cAcHe-CoNtRoL': 'public', 'x-CoNtEnT-tYpE-oPtIoNs': 'invalid'}
+
+        for label, reader in [('endpoint', original_file), ('mixed-case', mixed_case_headers)]:
+            with self.subTest(headers=label), patch.object(employer_intake, 'file', side_effect=reader):
+                request = urllib.request.Request(self.url + 'employer/intake/files/' + file_id,
+                    headers={'Authorization': 'Bearer ' + employer['token']})
+                with urllib.request.urlopen(request, timeout=10) as response:
+                    self.assertEqual(response.status, 200)
+                    self.assertEqual(response.read(), content)
+                    self.assertEqual(response.headers.get_all('Content-Length'), [str(len(content))])
+                    self.assertEqual(response.headers.get_all('Cache-Control'), ['no-store'])
+                    self.assertEqual(response.headers.get_all('X-Content-Type-Options'), ['nosniff'])
+                    self.assertEqual(response.headers.get_all('Content-Type'), ['application/octet-stream'])
+                    self.assertIn('original.rtf', response.headers['Content-Disposition'])
 
     def test_comments_on_each_timestamp_persist_and_do_not_create_stage_feedback(self):
         employer = self.employer('Review persistence')

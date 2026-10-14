@@ -36,14 +36,17 @@ export function useIntake(token: string, scope: Scope, vacancyId?: string) {
   const current = result?.context === context ? result : null;
   return { people: current?.people || [], error: current?.error || '', loading: !!token && (!current || current.loading), refresh };
 }
+export async function loadResumeFile(token: string, file: IntakeFile, signal?: AbortSignal) {
+  const target = journeyRequestTarget(`intake/files/${encodeURIComponent(file.id)}`, token);
+  const response = await fetch('/api/hr/' + target.path, { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store', signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30000)]) : AbortSignal.timeout(30000) });
+  if (!response.ok) throw new Error('Не удалось загрузить резюме. Попробуйте ещё раз.');
+  return response.blob();
+}
 export async function downloadResume(token: string, file: IntakeFile, mode: 'download' | 'open' = 'download') {
   const targetWindow = mode === 'open' ? window.open('about:blank', '_blank') : null;
   if (targetWindow) targetWindow.opener = null;
-  const target = journeyRequestTarget(`intake/files/${encodeURIComponent(file.id)}`, token);
   try {
-    const response = await fetch('/api/hr/' + target.path, { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store', signal: AbortSignal.timeout(30000) });
-    if (!response.ok) throw new Error('Не удалось загрузить резюме. Попробуйте ещё раз.');
-    const url = URL.createObjectURL(await response.blob());
+    const url = URL.createObjectURL(await loadResumeFile(token, file));
     if (targetWindow) targetWindow.location.replace(url);
     else {
       const a = document.createElement('a'); a.href = url; a.download = file.name; document.body.appendChild(a); a.click(); a.remove();

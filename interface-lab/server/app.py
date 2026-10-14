@@ -227,13 +227,15 @@ class Handler(BaseHTTPRequestHandler):
 
     def answer(self, code, data, headers=None):
         content = data if isinstance(data, bytes) else json.dumps(data, ensure_ascii=False).encode()
+        forwarded = {name: value for name, value in (headers or {}).items()
+                     if name.lower() not in {'content-length', 'cache-control', 'x-content-type-options'}}
         self.send_response(code)
-        if not (headers and 'Content-Type' in headers):
+        if not any(name.lower() == 'content-type' for name in forwarded):
             self.send_header('Content-Type', 'application/octet-stream' if isinstance(data, bytes) else 'application/json; charset=utf-8')
         self.send_header('Cache-Control', 'no-store')
         self.send_header('X-Content-Type-Options', 'nosniff')
         self.send_header('Content-Length', str(len(content)))
-        for name, value in (headers or {}).items():
+        for name, value in forwarded.items():
             self.send_header(name, value)
         self.end_headers()
         self.wfile.write(content)

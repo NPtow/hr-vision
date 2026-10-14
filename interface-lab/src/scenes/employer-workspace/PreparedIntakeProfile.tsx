@@ -3,7 +3,7 @@ import { Button } from '../../components/ui/button';
 import { request } from '../connected-journey/api';
 import { parseMeetingTranscript } from '../connected-journey/transcript';
 import { SourceScreeningReview } from '../interview-review/InterviewReview';
-import { downloadResume, type IntakePerson, type PreparedProfile } from './intake';
+import { downloadResume, loadResumeFile, type IntakePerson, type PreparedProfile } from './intake';
 import { EmployerCandidateProfile, EmployerTimecodeComment } from './EmployerCandidateProfile';
 
 function webUrl(value: string) {
@@ -93,14 +93,18 @@ export function PreparedIntakeProfile({ person, token, vacancyId, onUpdated }: {
       setError(cause instanceof Error ? cause.message : 'Не удалось сохранить.'); return false;
     } finally { saving.current = false; setBusy(false); }
   }
-  const download = (file: typeof firstFile, mode: 'download' | 'open' = 'download') => {
-    setError(''); void downloadResume(token, file, mode).catch(cause => setError(cause instanceof Error ? cause.message : 'Не удалось загрузить резюме.'));
+  const download = (file: typeof firstFile) => {
+    setError(''); void downloadResume(token, file).catch(cause => setError(cause instanceof Error ? cause.message : 'Не удалось загрузить резюме.'));
   };
   return <EmployerCandidateProfile person={{ ...current, photo: profile.photo }}
     source={{ interviewRole: current.role, role: profile.summary, contact: current.contact, cv: profile.cvText, score: profile.score,
       profile: profile.profile || (current.note ? [{ label: 'Заметка', value: current.note }] : []) }}
-    resume={firstFile ? { name: firstFile.name, sizeLabel: `${Math.max(1, Math.ceil(firstFile.size / 1024))} КБ`, onOpen: () => download(firstFile, 'open'), onDownload: () => download(firstFile) }
-      : resumeUrl ? { name: 'Резюме', onOpen: () => { window.open(resumeUrl, '_blank', 'noopener,noreferrer'); } } : undefined}
+    resume={firstFile ? { id: firstFile.id, name: firstFile.name, sizeLabel: `${Math.max(1, Math.ceil(firstFile.size / 1024))} КБ`, load: signal => loadResumeFile(token, firstFile, signal), onDownload: () => download(firstFile) }
+      : resumeUrl ? { id: resumeUrl, name: 'Резюме', load: async signal => {
+        const response = await fetch(resumeUrl, { credentials: 'omit', signal });
+        if (!response.ok) throw new Error('Не удалось загрузить резюме.');
+        return response.blob();
+      }, onDownload: () => { window.open(resumeUrl, '_blank', 'noopener,noreferrer'); } } : undefined}
     interview={<>
       {current.files.slice(1).map(file => <button key={file.id} type="button" className="ew-file-row" onClick={() => download(file)}>{file.name}</button>)}
       <PreparedInterview key={`${current.id}:${token}`} person={current} profile={profile} index={0} token={token} vacancyId={vacancyId} busy={busy} onComment={values => mutate('comment', values)}/>

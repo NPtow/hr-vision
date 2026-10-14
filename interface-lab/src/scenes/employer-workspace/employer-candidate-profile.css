@@ -5,10 +5,8 @@
 .ecp-score { white-space:nowrap; }
 .ecp-decision { display:flex; align-items:center; gap:8px; flex-wrap:wrap; flex:none; }
 .ecp-profile .ecp-decision button { min-height:44px; height:auto; }
-.ecp-overview { display:flex; flex-direction:column; gap:12px; min-width:0; }
 .ecp-meta { display:grid; gap:4px; min-width:0; }
 .ecp-profile .ecp-meta p,.ecp-profile .ecp-caption { color:var(--ecp-muted); font-size:13px; line-height:20px; overflow-wrap:anywhere; }
-.ecp-profile .ecp-profile-toggle { align-self:flex-start; min-height:36px; padding:6px 0; color:var(--ecp-muted); font-size:12px; }
 .ecp-resume { display:flex; align-items:center; gap:12px; min-width:0; padding:8px 12px; }
 .ecp-file-icon { display:grid; place-items:center; flex:none; width:40px; height:40px; background:var(--ecp-soft); border-radius:50%; }
 .ecp-file-icon img,.ecp-file-actions img { display:block; max-width:none; flex:none; }
@@ -17,11 +15,12 @@
 .ecp-file-copy>span { font-size:12px; line-height:16px; color:var(--ecp-muted); }
 .ecp-file-actions { display:flex; align-items:center; gap:4px; }
 .ecp-profile .ecp-file-actions button { min-height:44px; }
-.ecp-resume-text,.ecp-saved-rejection { background:var(--ecp-soft); border-radius:20px; padding:20px; font-size:14px; line-height:22px; }
-.ecp-resume-text dl { display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr)); }
-.ecp-resume-text dt { color:var(--ecp-muted); font-size:12px; }
-.ecp-resume-text dd,.ecp-resume-text>p { white-space:pre-wrap; overflow-wrap:anywhere; }
-.ecp-profile .ecp-resume-text>p { margin-top:20px; color:var(--ecp-ink); }
+.ecp-saved-rejection { background:var(--ecp-soft); border-radius:20px; padding:20px; font-size:14px; line-height:22px; }
+.ecp-resume-preview { min-width:0; overflow:hidden; border-radius:16px; background:#fff; }
+.ecp-resume-document { display:block; width:100%; height:clamp(480px,75vh,900px); border:0; background:#fff; }
+.ecp-resume-image { display:block; max-width:100%; height:auto; margin:auto; }
+.ecp-resume-source-text { margin:0; padding:20px; white-space:pre-wrap; overflow-wrap:anywhere; font:inherit; font-size:14px; line-height:22px; }
+.ecp-resume-status { display:flex; align-items:center; flex-wrap:wrap; gap:12px; padding:20px; color:var(--ecp-muted); font-size:13px; }
 .ecp-interview { min-width:0; }
 .ecp-rejection { display:grid; gap:16px; padding:24px; background:var(--ecp-soft); border-radius:24px; }
 .ecp-rejection label,.ecp-comments label { display:grid; gap:8px; font-size:14px; line-height:20px; min-width:0; color:var(--ecp-ink,#121212); }
@@ -51,4 +50,4 @@
   .ecp-file-actions { margin-left:auto; }
   .ecp-rejection { padding:16px; }
 }
-@media(forced-colors:active) { .ecp-resume-text,.ecp-comments,.ecp-rejection,.ecp-saved-rejection { outline:1px solid CanvasText; } }
+@media(forced-colors:active) { .ecp-resume-preview,.ecp-comments,.ecp-rejection,.ecp-saved-rejection { outline:1px solid CanvasText; } }

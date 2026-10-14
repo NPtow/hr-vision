@@ -308,10 +308,8 @@ function RecordingReview({ sourceId, name, chapters: evidence, kind, summary, un
   const recruiterBlock = recruiterContent || ((summary || unknown) && <><span className="ir-eyebrow">Мнение рекрутера</span>{summary && <p>{summary}</p>}{unknown && <><span className="ir-eyebrow">На встрече</span><p className="ir-recruiter-question">{unknown}</p></>}</>);
 
   if (appearance === 'candidate' && !media && !chapters.length && !hasFullTranscript && !additionalCommentTimes.length) return null;
-  if (appearance === 'candidate') return <section className="ir-review ir-candidate-review" aria-labelledby={headingId} data-candidate={sourceId} data-recording-kind={kind}>
-    {(media || chapters.length || additionalCommentTimes.length) ? <div className={`ir-candidate-interview${media ? ' ir-candidate-has-player' : ''}${chapters.length || additionalCommentTimes.length ? ' ir-candidate-has-chapters' : ''}`}>
+  if (appearance === 'candidate') return <section className="ir-review ir-candidate-review" aria-label={meeting ? 'Запись встречи' : 'Интервью с рекрутером'} data-candidate={sourceId} data-recording-kind={kind}>
       {media && <div className="ir-candidate-main">
-        <header className="ir-candidate-heading"><h3 id={headingId}>Интервью с рекрутером</h3></header>
         <div className="ir-candidate-player">
           {videoBlock}
           <div className="ir-candidate-controls" aria-label="Управление видеозаписью">
@@ -328,29 +326,30 @@ function RecordingReview({ sourceId, name, chapters: evidence, kind, summary, un
         </div>
         {notice && <p className="ir-candidate-error" role="alert">{notice}</p>}
       </div>}
+    {!!(chapters.length || additionalCommentTimes.length || fragmentParagraphs.length || quotedFragment || hasFullTranscript) && <div className={`ir-candidate-materials${chapters.length || additionalCommentTimes.length ? ' ir-candidate-has-chapters' : ''}${fragmentParagraphs.length || quotedFragment || hasFullTranscript ? ' ir-candidate-has-transcript' : ''}`}>
       {!!(chapters.length || additionalCommentTimes.length) && <aside className="ir-candidate-chapters" aria-label="Ключевые моменты">
-        {chapters.length ? <><h3 id={!media ? headingId : undefined}>Ключевые моменты</h3><ol ref={chapterList}>{chapters.map(chapter => <li key={`${sourceId}:${mode}:${chapter.index}`} data-selected={selected === chapter.index ? 'true' : undefined}>
+        {chapters.length ? <><h3>Ключевые моменты</h3><ol ref={chapterList}>{chapters.map(chapter => <li key={`${sourceId}:${mode}:${chapter.index}`} data-selected={selected === chapter.index ? 'true' : undefined}>
           <div className="ir-candidate-chapter-row"><button type="button" className="ir-candidate-chapter" aria-pressed={selected === chapter.index} onClick={() => chooseChapter(chapter.index)} aria-label={`${media && !failed && chapter.seconds !== null ? 'Открыть момент' : 'Показать текст'}: ${chapter.title}${chapter.seconds === null ? '' : `, ${formatTime(chapter.seconds)}`}`}><strong>{chapter.title}</strong>{chapter.seconds !== null && <span>{formatTime(chapter.seconds)}{chapter.endSeconds != null ? ` — ${formatTime(chapter.endSeconds)}` : ''}</span>}</button>
             {media && !failed && chapter.seconds !== null && selected === chapter.index && <button type="button" className="ir-candidate-repeat" aria-label={`Повторить: ${chapter.title}`} onClick={() => chooseChapter(chapter.index)}><img src={candidateRepeatAsset} alt=""/></button>}
           </div>
           {chapter.seconds !== null && renderChapterComment && <div className="ir-candidate-chapter-comment" hidden={selected !== chapter.index}>{renderChapterComment(chapter, { sourceId, mode, index: chapter.index })}</div>}
         </li>)}</ol></> : null}
         {renderTimeComment && !!additionalCommentTimes.length && <details className="ir-candidate-saved-comments">
-          <summary id={!media && !chapters.length ? headingId : undefined}>Комментарии · {additionalCommentTimes.reduce((sum, item) => sum + item.count, 0)}</summary>
+          <summary>Комментарии · {additionalCommentTimes.reduce((sum, item) => sum + item.count, 0)}</summary>
           <div className="ir-candidate-comment-times" aria-label="Сохранённые комментарии">{additionalCommentTimes.map(item => <button className="ir-candidate-comment-button" key={item.seconds} type="button" aria-label={`Комментарии к ${formatTime(item.seconds)}, ${item.count}`} disabled={commentTime !== null} onClick={event => { timeCommentReturn.current = event.currentTarget; setCommentTime(item.seconds); candidateClip.current = null; seek(item.seconds); }}>{formatTime(item.seconds)} · {item.count}</button>)}</div>
           {commentTime !== null && <div key={`${sourceId}:${commentTime}`}>{renderTimeComment(commentTime, () => { setCommentTime(null); requestAnimationFrame(() => timeCommentReturn.current?.focus()); })}</div>}
         </details>}
       </aside>}
-    </div> : null}
     {!!(fragmentParagraphs.length || quotedFragment || hasFullTranscript) && <section className="ir-candidate-transcript" aria-label="Расшифровка">
       {!!(fragmentParagraphs.length || quotedFragment) && <>
-        <header className="ir-candidate-fragment-heading"><h3 id={!media && !chapters.length ? headingId : undefined}>Расшифровка</h3>{excerpt?.seconds != null && <span>{formatTime(excerpt.seconds)}{excerptEnd !== null ? ` — ${formatTime(excerptEnd)}` : ''}</span>}</header>
+        <header className="ir-candidate-fragment-heading"><h3>Расшифровка</h3>{excerpt?.seconds != null && <span>{formatTime(excerpt.seconds)}{excerptEnd !== null ? ` — ${formatTime(excerptEnd)}` : ''}</span>}</header>
         <div aria-label="Текст выбранного фрагмента">{fragmentParagraphs.length ? <TranscriptSpeech cues={fragmentParagraphs}/> : <div className="ir-candidate-transcript-speech"><p>{quotedFragment}</p></div>}</div>
       </>}
-      {hasFullTranscript && <details className="ir-candidate-full-transcript"><summary id={!media && !chapters.length && !additionalCommentTimes.length ? headingId : undefined}>Полная расшифровка</summary>
+      {hasFullTranscript && <details className="ir-candidate-full-transcript"><summary>Полная расшифровка</summary>
         {transcriptParagraphs.length ? <TranscriptSpeech cues={transcriptParagraphs}/> : <pre>{transcriptText}</pre>}
       </details>}
     </section>}
+    </div>}
   </section>;
 
   if (appearance === 'panel') return <section className="ir-review ir-panel-review" aria-labelledby={headingId} data-candidate={sourceId} data-recording-kind={kind}>

@@ -2,6 +2,7 @@ import { useId, useRef, useState, type ReactNode } from 'react';
 import { MessageCircle } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { Textarea } from '../../components/ui/textarea';
+import { EmployerResumePreview } from './EmployerResumePreview';
 import type { EmployerCandidateProfileSource, EmployerCandidateResume, EmployerRejectionValues, ScreeningComment } from './employer-candidate-profile-types';
 import fileIcon from './assets/candidate-profile/file.svg';
 import downloadIcon from './assets/candidate-profile/download.svg';
@@ -34,7 +35,7 @@ function CandidateProfile({ person, source, interview, resume, onMeet, meetingUn
   const [localError, setLocalError] = useState('');
   const rejecting = useRef(false);
   const rejectTrigger = useRef<HTMLButtonElement>(null);
-  const hasProfile = !!source.cv || !!source.profile?.length;
+  const hasResume = !!resume || !!source.cv;
   const contacts = source.contacts?.map(contact => contact.value).filter(Boolean).join(' · ') || source.contact;
   const score = typeof source.score === 'number' && Number.isFinite(source.score) ? source.score : null;
   const finishRejection = () => { setRejection(null); requestAnimationFrame(() => rejectTrigger.current?.focus()); };
@@ -48,21 +49,17 @@ function CandidateProfile({ person, source, interview, resume, onMeet, meetingUn
         }}>Отказать</Button>}
       </div>}
     </header>
-    {(contacts || (hasProfile && resume?.onOpen)) && <section className="ecp-overview" aria-label="Профиль кандидата">
-      {contacts && <div className="ecp-meta"><p>{contacts}</p></div>}
-      {hasProfile && resume?.onOpen && <Button className="ecp-profile-toggle" variant="ghost" aria-expanded={profileOpen} aria-controls={profileId} onClick={() => setProfileOpen(value => !value)}>Профиль</Button>}
-    </section>}
-    {(resume || hasProfile) && <div className="ecp-resume">
+    {contacts && <div className="ecp-meta"><p>{contacts}</p></div>}
+    {hasResume && <div className="ecp-resume">
       <span className="ecp-file-icon"><img src={fileIcon} alt=""/></span>
-      <div className="ecp-file-copy"><strong>{resume?.name || (source.cv ? 'Резюме' : 'Профиль')}</strong>{resume?.sizeLabel && <span>{resume.sizeLabel}</span>}</div>
+      <div className="ecp-file-copy"><strong>{resume?.name || 'Резюме'}</strong>{resume?.sizeLabel && <span>{resume.sizeLabel}</span>}</div>
       <div className="ecp-file-actions">
         {resume?.onDownload && <Button variant="ghost" size="icon" aria-label="Скачать резюме" onClick={resume.onDownload}><img src={downloadIcon} alt=""/></Button>}
-        {resume?.onOpen ? <Button variant="secondary" onClick={resume.onOpen}>Открыть</Button> : hasProfile && <Button variant="secondary" aria-expanded={profileOpen} aria-controls={profileId} onClick={() => setProfileOpen(value => !value)}>{profileOpen ? 'Свернуть' : 'Открыть'}</Button>}
+        <Button variant="secondary" aria-expanded={profileOpen} aria-controls={profileId} onClick={() => setProfileOpen(value => !value)}>{profileOpen ? 'Свернуть' : 'Открыть'}</Button>
       </div>
     </div>}
-    {profileOpen && <section className="ecp-resume-text" id={profileId} aria-label="Резюме и профиль">
-      {!!source.profile?.length && <dl>{source.profile.map((fact, index) => <div key={`${fact.label}:${index}`}><dt>{fact.label}</dt><dd>{fact.value}</dd></div>)}</dl>}
-      {source.cv && <p>{source.cv}</p>}
+    {profileOpen && <section className="ecp-resume-preview" id={profileId} aria-label="Резюме">
+      <EmployerResumePreview key={resume?.id || 'source-text'} resume={resume} text={source.cv}/>
     </section>}
     {meetingUnavailableReason && !onMeet && <p className="ecp-caption">{meetingUnavailableReason}</p>}
     {(error || localError) && <p className="ecp-error" role="alert">{error || localError}</p>}

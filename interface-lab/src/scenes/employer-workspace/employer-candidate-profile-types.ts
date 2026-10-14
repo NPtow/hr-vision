@@ -12,5 +12,7 @@ export type EmployerCandidateProfileSource = {
   contacts?: { kind: 'email' | 'phone' | 'telegram'; value: string }[];
 };
 export type EmployerCandidateResume = {
-  name: string; sizeLabel?: string; onOpen?: () => void; onDownload?: () => void;
+  id: string; name: string; sizeLabel?: string;
+  load: (signal: AbortSignal) => Promise<Blob>;
+  onDownload?: () => void;
 };
