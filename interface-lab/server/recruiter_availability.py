@@ -1,4 +1,4 @@
-"""Recurring recruiter availability, expanded into the existing booking slots.
+"""Weekly and date-specific availability in the existing recruiter booking pool.
 
 The caller owns the SQLite transaction and its scheduling lock. Editing an owned
 rule preserves its identity and all booked/history slots. Materialization reconciles
@@ -47,6 +47,13 @@ def init(db):
       recruiter_id TEXT NOT NULL REFERENCES rc_accounts(id))''')
     db.execute('CREATE INDEX IF NOT EXISTS cp_slot_owner ON cp_recruiter_slot_owners(recruiter_id)')
     db.execute('CREATE INDEX IF NOT EXISTS cp_block_owner ON cp_recruiter_block_owners(recruiter_id)')
+    db.execute('''CREATE TABLE IF NOT EXISTS cp_availability_dates (
+      recruiter_id TEXT NOT NULL REFERENCES rc_accounts(id), date TEXT NOT NULL,
+      intervals TEXT NOT NULL, PRIMARY KEY(recruiter_id,date))''')
+    # Retain provenance even when an override is removed: old links/bookings keep
+    # their references, but retired free slots must never become bookable again.
+    db.execute('''CREATE TABLE IF NOT EXISTS cp_date_generated_slots (
+      slot_id TEXT PRIMARY KEY REFERENCES cp_recruiter_slots(id))''')
 
 
 def _block(row):
@@ -72,6 +79,75 @@ def _time(value):
 def _id(prefix, values):
     encoded = json.dumps(values, ensure_ascii=False, separators=(',', ':')).encode()
     return prefix + hashlib.sha256(encoded).hexdigest()[:32]
+
+
+def date_overrides(db, recruiter_id):
+    return [{'date': day, 'intervals': json.loads(intervals)} for day, intervals in db.execute(
+        'SELECT date,intervals FROM cp_availability_dates WHERE recruiter_id=? ORDER BY date', (recruiter_id,))]
+
+
+def set_date_override(db, body, *, recruiter):
+    require(recruiter and not recruiter.get('legacy'), 'Войдите в свой кабинет рекрутера.', 401)
+    require(isinstance(body, dict) and set(body) == {'date', 'intervals'},
+            'Укажите дату и интервалы для интервью.', 400)
+    day = body['date']
+    require(isinstance(day, str) and re.fullmatch(r'\d{4}-\d{2}-\d{2}', day), 'Укажите дату.', 400)
+    try:
+        parsed = dt.date.fromisoformat(day)
+    except ValueError:
+        require(False, 'Некорректная дата.', 400)
+    today = now().astimezone(MOSCOW).date()
+    require(today <= parsed <= today + dt.timedelta(days=370), 'Выберите дату в пределах ближайшего года.', 400)
+    ranges = body['intervals']
+    # null restores the weekly rule; [] explicitly closes this date.
+    if ranges is None:
+        db.execute('DELETE FROM cp_availability_dates WHERE recruiter_id=? AND date=?', (recruiter['id'], day))
+        return
+    require(isinstance(ranges, list) and len(ranges) <= 24, 'Укажите не больше 24 интервалов.', 400)
+    normalized = []
+    for item in ranges:
+        require(isinstance(item, dict) and set(item) == {'startTime', 'endTime'}, 'Проверьте интервал.', 400)
+        start, end = _time(item['startTime']), _time(item['endTime'])
+        minutes = end.hour * 60 + end.minute - start.hour * 60 - start.minute
+        require(30 <= minutes <= 720, 'Интервал должен быть от 30 минут до 12 часов в пределах одного дня.', 400)
+        normalized.append({'startTime': item['startTime'], 'endTime': item['endTime']})
+    normalized.sort(key=lambda item: item['startTime'])
+    require(all(left['endTime'] <= right['startTime'] for left, right in zip(normalized, normalized[1:])),
+            'Интервалы не должны пересекаться.', 400)
+    db.execute('''INSERT INTO cp_availability_dates VALUES (?,?,?)
+      ON CONFLICT(recruiter_id,date) DO UPDATE SET intervals=excluded.intervals''',
+      (recruiter['id'], day, json.dumps(normalized, separators=(',', ':'))))
+
+
+def open_slot_ids(db):
+    """Schedule and overlap policy shared by list reads and booking writes.
+
+    Keep all stored rows and FK references when a date changes; hide obsolete
+    free times instead of deleting history. Includes manual slots in date policy.
+    """
+    overrides = {(owner, day): json.loads(ranges) for owner, day, ranges in db.execute(
+        'SELECT recruiter_id,date,intervals FROM cp_availability_dates')}
+    generated = {row[0] for row in db.execute('SELECT slot_id FROM cp_date_generated_slots')}
+    result, occupied = set(), {}
+    rows = db.execute('''SELECT s.id,s.start,s.end,o.recruiter_id,s.candidate_id,s.recruiter_name
+      FROM cp_recruiter_slots s LEFT JOIN cp_recruiter_slot_owners o ON o.slot_id=s.id
+      ORDER BY (s.candidate_id IS NOT NULL) DESC,s.start,s.id''').fetchall()
+    for sid, start, end, owner, candidate, name in rows:
+        begin, finish = timestamp(start).astimezone(MOSCOW), timestamp(end).astimezone(MOSCOW)
+        ranges = overrides.get((owner, begin.date().isoformat()))
+        permitted = sid not in generated if ranges is None else any(
+            dt.datetime.combine(begin.date(), dt.time.fromisoformat(item['startTime']), MOSCOW) <= begin
+            and finish <= dt.datetime.combine(begin.date(), dt.time.fromisoformat(item['endTime']), MOSCOW)
+            for item in ranges)
+        intervals = occupied.setdefault('account:' + owner if owner else 'legacy:' + recruiter_key(name), [])
+        # Restoring a template can leave historical date/manual rows at the same
+        # time. Offer exactly one free slot, and never overlap a booked interview.
+        if permitted and (candidate or not any(begin < right and left < finish for left, right in intervals)):
+            result.add(sid)
+            intervals.append((begin, finish))
+        elif candidate:
+            intervals.append((begin, finish))
+    return result
 
 
 def add_block(db, body, *, recruiter=None):
@@ -184,11 +260,14 @@ def materialize(db):
     today = instant.astimezone(MOSCOW).date()
     rules = blocks(db)
     _prune_obsolete_free_slots(db, {block['id']: block for block in rules}, instant)
+    overrides = {(owner, day): json.loads(ranges) for owner, day, ranges in db.execute(
+        'SELECT recruiter_id,date,intervals FROM cp_availability_dates')}
+    allowed = open_slot_ids(db)
     occupied = {}
-    for start, end, recruiter, owner in db.execute('''SELECT s.start,s.end,s.recruiter_name,o.recruiter_id
+    for sid, start, end, recruiter, owner, candidate in db.execute('''SELECT s.id,s.start,s.end,s.recruiter_name,o.recruiter_id,s.candidate_id
       FROM cp_recruiter_slots s LEFT JOIN cp_recruiter_slot_owners o ON o.slot_id=s.id'''):
         finish = timestamp(end)
-        if finish > instant:
+        if finish > instant and (candidate or sid in allowed):
             key = 'account:' + owner if owner else recruiter_key(recruiter)
             occupied.setdefault(key, []).append((timestamp(start), finish))
     created = 0
@@ -197,10 +276,12 @@ def materialize(db):
         row = db.execute('SELECT recruiter_key FROM cp_availability_blocks WHERE id=?', (block['id'],)).fetchone()
         key = row[0]
         owner = db.execute('SELECT recruiter_id FROM cp_recruiter_block_owners WHERE block_id=?', (block['id'],)).fetchone()
+        if owner:
+            key = 'account:' + owner[0]
         intervals = occupied.setdefault(key, [])
         for offset in range(HORIZON_DAYS):
             day = first_day + dt.timedelta(days=offset)
-            if day.weekday() not in block['weekdays']:
+            if day.weekday() not in block['weekdays'] or (owner and (owner[0], day.isoformat()) in overrides):
                 continue
             start = dt.datetime.combine(day, dt.time.fromisoformat(block['startTime']), MOSCOW)
             end = dt.datetime.combine(day, dt.time.fromisoformat(block['endTime']), MOSCOW)
@@ -217,6 +298,28 @@ def materialize(db):
                                    (identifier, block['id']))
                         if owner:
                             db.execute('INSERT INTO cp_recruiter_slot_owners VALUES (?,?)', (identifier, owner[0]))
+                        intervals.append((start, finish))
+                        created += 1
+                start = finish
+    for (owner, day_text), ranges in overrides.items():
+        day = dt.date.fromisoformat(day_text)
+        if day < today:
+            continue
+        name = db.execute('SELECT name FROM rc_accounts WHERE id=?', (owner,)).fetchone()[0]
+        key = 'account:' + owner
+        intervals = occupied.setdefault(key, [])
+        for item in ranges:
+            start = dt.datetime.combine(day, dt.time.fromisoformat(item['startTime']), MOSCOW)
+            end = dt.datetime.combine(day, dt.time.fromisoformat(item['endTime']), MOSCOW)
+            while start + STEP <= end:
+                finish = start + STEP
+                if start > instant and not any(start < right and left < finish for left, right in intervals):
+                    identifier = _id('slot_date_', [key, iso(start)])
+                    cursor = db.execute('''INSERT INTO cp_recruiter_slots VALUES (?,?,?,?,NULL)
+                      ON CONFLICT(id) DO NOTHING''', (identifier, iso(start), iso(finish), name))
+                    if cursor.rowcount:
+                        db.execute('INSERT INTO cp_date_generated_slots VALUES (?)', (identifier,))
+                        db.execute('INSERT INTO cp_recruiter_slot_owners VALUES (?,?)', (identifier, owner))
                         intervals.append((start, finish))
                         created += 1
                 start = finish

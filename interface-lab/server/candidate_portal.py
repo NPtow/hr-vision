@@ -573,6 +573,7 @@ class CandidatePortal:
 
     def slots(self, db, internal=False, recruiter_id=None):
         availability.materialize(db)
+        allowed = availability.open_slot_ids(db)
         rows = db.execute('''SELECT s.id,s.start,s.end,COALESCE(a.name,s.recruiter_name),s.candidate_id
             FROM cp_recruiter_slots s LEFT JOIN cp_recruiter_slot_owners o ON o.slot_id=s.id
             LEFT JOIN rc_accounts a ON a.id=o.recruiter_id
@@ -581,7 +582,8 @@ class CandidatePortal:
             (recruiter_id,) if recruiter_id else ())
         return [{'id': row[0], 'start': row[1], 'end': row[2], 'recruiterName': row[3],
                  **({'booked': bool(row[4]), 'candidateId': row[4]} if internal else {})}
-                for row in rows if internal or (not row[4] and timestamp(row[1]) > now())]
+                for row in rows if (row[0] in allowed or row[4])
+                and (internal or (not row[4] and timestamp(row[1]) > now()))]
 
     def recruiter_state(self, db, principal=None):
         personal = principal and not principal['legacy']
@@ -606,6 +608,7 @@ class CandidatePortal:
         return {'candidates': candidates,
                 'slots': self.slots(db, internal=True, recruiter_id=principal['id'] if personal else None),
                 'availabilityBlocks': availability.blocks(db, recruiter_id=principal['id'] if personal else None),
+                'availabilityDates': availability.date_overrides(db, principal['id']) if personal else [],
                 'vacancies': vacancies,
                 'videoConfigured': self.media.configured}
 
@@ -725,6 +728,7 @@ class CandidatePortal:
             return
         require((owner and owner[1] == 1) or (prepared and not owner),
                 'Это время уже недоступно. Выберите другое.', 409)
+        require(slot[0] in availability.open_slot_ids(db), 'Это время уже недоступно. Выберите другое.', 409)
         person = self.candidate_state(db, cid)
         require(person['resume'] is not None, 'Сначала загрузите резюме.', 409)
         if prepared:
@@ -1278,6 +1282,7 @@ class CandidatePortal:
             if not principal['legacy']:
                 require(path in {
                     '/api/hr/recruiter/state', '/api/hr/recruiter/slots', '/api/hr/recruiter/availability',
+                    '/api/hr/recruiter/availability/date',
                     '/api/hr/recruiter/candidates', '/api/hr/recruiter/interview/book',
                     '/api/hr/recruiter/invitations', '/api/hr/recruiter/invitations/revoke',
                     '/api/hr/recruiter/profile', '/api/hr/recruiter/interview/join',
@@ -1407,6 +1412,8 @@ class CandidatePortal:
                 self.add_slot(db, body, principal=principal)
             elif path == '/api/hr/recruiter/availability':
                 availability.add_block(db, body, recruiter=principal if not principal['legacy'] else None)
+            elif path == '/api/hr/recruiter/availability/date':
+                availability.set_date_override(db, body, recruiter=principal)
             elif path in ('/api/hr/recruiter/notifications/email/request', '/api/hr/recruiter/notifications/email/verify',
                           '/api/hr/recruiter/notifications/telegram/link'):
                 require(not principal['legacy'], 'Войдите в свой кабинет рекрутера.', 401)

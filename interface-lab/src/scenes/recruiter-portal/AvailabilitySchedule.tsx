@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Button } from '../../components/ui/button';
-import { moscowInput, type AvailabilityBlock } from './api';
+import { moscowInput, type AvailabilityBlock, type AvailabilityDate, type RecruiterSlot } from './api';
+import { DateAvailability } from './DateAvailability';
 
 const days = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 const dayNames = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье'];
@@ -14,7 +15,9 @@ function scheduleDate(date: string) {
   return new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Moscow' }).format(new Date(`${date}T12:00:00+03:00`));
 }
 
-export function AvailabilitySchedule({ blocks, busy, run, recruiterName }: { blocks: AvailabilityBlock[]; busy: boolean; run: (path: string, body: unknown) => Promise<boolean>; recruiterName?: string }) {
+export function AvailabilitySchedule({ blocks, dates = [], slots = [], busy, run, recruiterName }: { blocks: AvailabilityBlock[]; dates?: AvailabilityDate[]; slots?: RecruiterSlot[]; busy: boolean; run: (path: string, body: unknown) => Promise<boolean>; recruiterName?: string }) {
+  const [mode, setMode] = useState(recruiterName !== undefined ? 'dates' : 'weekly');
+  const [editingDate, setEditingDate] = useState(false);
   const [name, setName] = useState('');
   const [date, setDate] = useState(() => moscowInput(new Date()).slice(0, 10));
   const [weekdays, setWeekdays] = useState<number[]>([0, 1, 2, 3, 4]);
@@ -80,6 +83,11 @@ export function AvailabilitySchedule({ blocks, busy, run, recruiterName }: { blo
   }
   return <section className="rp-card rp-schedule" aria-label={personal ? 'Моё расписание' : 'Время для интервью'}>
     <h2>{personal ? 'Моё расписание' : 'Время для интервью'}</h2>
+    {personal && <div className="rp-schedule-modes" role="group" aria-label="Настройка расписания">
+      <button type="button" aria-pressed={mode === 'dates'} disabled={locked || editingDate || adding || editingId !== null} onClick={() => setMode('dates')}>По датам</button>
+      <button type="button" aria-pressed={mode === 'weekly'} disabled={locked || editingDate || adding || editingId !== null} onClick={() => setMode('weekly')}>Каждую неделю</button>
+    </div>}
+    {mode === 'dates' ? <DateAvailability blocks={blocks} dates={dates} slots={slots} busy={locked} run={run} onEditing={setEditingDate}/> : <>
     {editing ? <form className="rp-slot-form rp-schedule-editor" onSubmit={submit} aria-busy={locked} onChange={() => { setSaved(false); setError(''); }}>
       <div className={personal ? 'rp-schedule-date' : 'rp-fields'}>{!personal && <label>Рекрутер<input required disabled={locked} value={name} onChange={event => setName(event.target.value)} maxLength={120} placeholder="Имя и фамилия"/></label>}<label>Начиная с<input ref={dateInput} required disabled={locked} type="date" value={date} onChange={event => setDate(event.target.value)}/></label></div>
       <fieldset className="rp-weekdays" disabled={locked}><legend>Дни недели</legend>{days.map((day, index) => <button type="button" key={day} aria-pressed={weekdays.includes(index)} aria-label={dayNames[index]} onClick={() => { setSaved(false); setError(''); setWeekdays(current => current.includes(index) ? current.filter(value => value !== index) : [...current, index]); }}>{day}</button>)}</fieldset>
@@ -92,5 +100,6 @@ export function AvailabilitySchedule({ blocks, busy, run, recruiterName }: { blo
       <div className="rp-schedule-day-strip" aria-hidden="true">{days.map((day, index) => <span key={day} data-active={block.weekdays.includes(index)}>{day}</span>)}</div>
     </div>)}<Button ref={addButton} className="rp-schedule-add" type="button" variant="ghost" disabled={locked} onClick={addInterval}>Добавить интервал</Button></div>}
     {saved && <p className="rp-schedule-status" role="status">Расписание сохранено.</p>}
+    </>}
   </section>;
 }

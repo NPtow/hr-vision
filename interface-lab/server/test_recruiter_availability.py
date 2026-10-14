@@ -16,7 +16,7 @@ class RecruiterAvailabilityTest(unittest.TestCase):
         self.db.execute('''CREATE TABLE cp_recruiter_slots (
           id TEXT PRIMARY KEY, start TEXT NOT NULL, end TEXT NOT NULL,
           recruiter_name TEXT NOT NULL, candidate_id TEXT UNIQUE REFERENCES cp_candidates(id))''')
-        self.db.execute('CREATE TABLE rc_accounts (id TEXT PRIMARY KEY)')
+        self.db.execute("CREATE TABLE rc_accounts (id TEXT PRIMARY KEY, name TEXT DEFAULT 'Никита')")
         self.db.execute('''CREATE TABLE cp_interviews (
           id TEXT PRIMARY KEY, slot_id TEXT REFERENCES cp_recruiter_slots(id))''')
         availability.init(self.db)
@@ -204,7 +204,7 @@ class RecruiterAvailabilityTest(unittest.TestCase):
         self.assertEqual([(row[0], row[1]) for row in self.slots()], before)
 
     def owned(self, owner='one', **changes):
-        self.db.execute('INSERT OR IGNORE INTO rc_accounts VALUES (?)', (owner,))
+        self.db.execute('INSERT OR IGNORE INTO rc_accounts(id) VALUES (?)', (owner,))
         return availability.add_block(self.db, self.payload(**changes), recruiter={'id': owner, 'name': 'Никита'})
 
     def edit(self, block, owner='one', **changes):
@@ -305,6 +305,115 @@ class RecruiterAvailabilityTest(unittest.TestCase):
         availability.materialize(self.db)
         self.db.rollback()
         self.assertEqual(self.snapshot(), before)
+
+    def date_override(self, intervals, day='2026-10-12', owner='one'):
+        self.db.execute('INSERT OR IGNORE INTO rc_accounts(id) VALUES (?)', (owner,))
+        availability.set_date_override(self.db, {'date': day, 'intervals': intervals}, recruiter={'id': owner})
+        availability.materialize(self.db)
+
+    def day_slots(self, day='2026-10-12', owner='one'):
+        allowed = availability.open_slot_ids(self.db)
+        owned = {row[0] for row in self.db.execute('SELECT slot_id FROM cp_recruiter_slot_owners WHERE recruiter_id=?', (owner,))}
+        return [row for row in self.slots() if row[0] in owned and row[0] in allowed
+                and timestamp(row[1]).astimezone(availability.MOSCOW).date().isoformat() == day]
+
+    def test_date_override_replaces_one_day_multiple_intervals_and_restores_weekly(self):
+        self.owned()
+        self.owned('two')
+        availability.materialize(self.db)
+        initial, other = self.day_slots(), self.day_slots(owner='two')
+        next_day = self.day_slots('2026-10-13')
+        ranges = [{'startTime': '09:00', 'endTime': '10:00'}, {'startTime': '18:00', 'endTime': '18:30'}]
+        self.date_override(ranges)
+        custom = self.day_slots()
+        self.assertEqual([row[1][11:16] for row in custom], ['06:00', '06:30', '15:00'])
+        self.assertEqual(self.day_slots('2026-10-13'), next_day)
+        self.assertEqual(self.day_slots(owner='two'), other)
+        self.date_override(ranges)
+        self.assertEqual(self.day_slots(), custom)
+        self.date_override([])
+        self.assertEqual(self.day_slots(), [])
+        self.date_override(None)
+        self.assertEqual(self.day_slots(), initial)
+        self.assertEqual(availability.date_overrides(self.db, 'one'), [])
+        self.date_override(ranges)
+        self.assertEqual(self.day_slots(), custom)
+        self.assertEqual(self.db.execute('PRAGMA foreign_key_check').fetchall(), [])
+
+    def test_date_only_schedule_without_weekly_rule_and_moscow_midnight(self):
+        # The selected local date starts on the previous UTC date.
+        self.date_override([{'startTime': '00:00', 'endTime': '01:00'}])
+        self.assertEqual([row[1] for row in self.day_slots()], ['2026-10-11T21:00:00Z', '2026-10-11T21:30:00Z'])
+        self.assertEqual(len(self.slots()), 2)
+        self.assertEqual(availability.blocks(self.db), [])
+        self.date_override(None)
+        self.assertEqual(self.day_slots(), [])
+
+    def test_closed_day_preserves_bookings_references_and_hides_manual_free_times(self):
+        self.owned()
+        availability.materialize(self.db)
+        booked = self.day_slots()[0]
+        self.db.execute("INSERT INTO cp_candidates VALUES ('person')")
+        self.db.execute("UPDATE cp_recruiter_slots SET candidate_id='person' WHERE id=?", (booked[0],))
+        self.db.execute('INSERT INTO cp_interviews VALUES (?,?)', ('interview', booked[0]))
+        self.db.execute('INSERT INTO cp_recruiter_slots VALUES (?,?,?,?,NULL)',
+                        ('manual', '2026-10-12T15:00:00Z', '2026-10-12T15:30:00Z', 'Никита'))
+        self.db.execute("INSERT INTO cp_recruiter_slot_owners VALUES ('manual','one')")
+        self.date_override([])
+        self.assertEqual(self.day_slots(), [])
+        self.assertEqual(self.db.execute('SELECT slot_id FROM cp_interviews').fetchone()[0], booked[0])
+        # Reopening the booked period must not create a second, free slot.
+        self.date_override([{'startTime': '16:00', 'endTime': '17:00'}])
+        self.assertEqual(len(self.day_slots()), 2)
+        self.assertEqual(sum(row[4] is None for row in self.day_slots()), 1)
+        self.date_override([])
+        self.db.execute('DELETE FROM cp_interviews')
+        self.db.execute('UPDATE cp_recruiter_slots SET candidate_id=NULL WHERE id=?', (booked[0],))
+        availability.materialize(self.db)
+        self.assertEqual(self.day_slots(), [])
+        self.assertEqual(self.db.execute('PRAGMA foreign_key_check').fetchall(), [])
+
+    def test_date_override_validation_is_atomic_and_owner_cannot_be_supplied(self):
+        self.date_override([{'startTime': '16:00', 'endTime': '17:00'}])
+        original = availability.date_overrides(self.db, 'one')
+        bad = [None, {}, {'date': '2026-02-30', 'intervals': []}, {'date': '2026-10-10', 'intervals': []},
+               {'date': '9999-12-31', 'intervals': []}, {'date': '2026-10-12', 'intervals': 'closed'},
+               {'date': '2026-10-12', 'intervals': [], 'recruiterId': 'two'},
+               *[{'date': '2026-10-12', 'intervals': ranges} for ranges in [
+                 [{}], [{'startTime': '10:15', 'endTime': '11:00'}],
+                 [{'startTime': '11:00', 'endTime': '10:00'}],
+                 [{'startTime': '10:00', 'endTime': '11:00'}, {'startTime': '10:30', 'endTime': '12:00'}]]]]
+        for body in bad:
+            with self.subTest(body=body), self.assertRaises(Problem):
+                availability.set_date_override(self.db, body, recruiter={'id': 'one'})
+            self.assertEqual(availability.date_overrides(self.db, 'one'), original)
+        with self.assertRaises(Problem):
+            availability.set_date_override(self.db, {'date': '2026-10-12', 'intervals': []}, recruiter={'legacy': True})
+
+    def test_date_changes_rollback_with_caller_transaction(self):
+        self.date_override([])
+        self.db.commit()
+        self.date_override([{'startTime': '16:00', 'endTime': '17:00'}])
+        self.db.rollback()
+        self.assertEqual(availability.date_overrides(self.db, 'one'), [{'date': '2026-10-12', 'intervals': []}])
+        self.assertEqual(self.day_slots(), [])
+
+    def test_switching_date_and_new_weekly_rules_does_not_duplicate_or_overlap_slots(self):
+        ranges = [{'startTime': '16:00', 'endTime': '17:00'}]
+        self.date_override(ranges)
+        self.date_override(None)
+        self.owned()
+        availability.materialize(self.db)
+        self.date_override(ranges)
+        self.assertEqual(len(self.day_slots()), 2)
+        # A manual meeting can be off the half-hour grid. A date edit must not
+        # offer the retained free row that now overlaps that commitment.
+        self.db.execute("INSERT INTO cp_candidates VALUES ('off-grid')")
+        self.db.execute('INSERT INTO cp_recruiter_slots VALUES (?,?,?,?,?)',
+                        ('manual-booked', '2026-10-12T13:15:00Z', '2026-10-12T13:45:00Z', 'Никита', 'off-grid'))
+        self.db.execute("INSERT INTO cp_recruiter_slot_owners VALUES ('manual-booked','one')")
+        availability.materialize(self.db)
+        self.assertEqual([row[0] for row in self.day_slots()], ['manual-booked'])
 
 
 if __name__ == '__main__':

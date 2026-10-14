@@ -16,8 +16,10 @@ export type RecruiterCandidate = {
 };
 export type RecruiterSlot = Availability & { id: string; recruiterName: string; booked: boolean; candidateId?: string };
 export type AvailabilityBlock = { id: string; recruiterName: string; startDate: string; weekdays: number[]; startTime: string; endTime: string; timezone: string };
+export type DayInterval = { startTime: string; endTime: string };
+export type AvailabilityDate = { date: string; intervals: DayInterval[] };
 export type Invitation = { url: string; expiresAt: string | number };
-export type RecruiterState = { availabilityBlocks?: AvailabilityBlock[]; candidates: RecruiterCandidate[]; slots: RecruiterSlot[]; vacancies: Vacancy[]; videoConfigured: boolean };
+export type RecruiterState = { availabilityBlocks?: AvailabilityBlock[]; availabilityDates?: AvailabilityDate[]; candidates: RecruiterCandidate[]; slots: RecruiterSlot[]; vacancies: Vacancy[]; videoConfigured: boolean };
 export type Materials = { status: 'processing' | 'ready'; recordings: { id: string; url: string; duration?: number }[]; transcripts?: { id: string; text: string }[] };
 export type Room = { url: string; token: string };
 export type TranscriptTurn = { id: string; text: string; seconds: number; speaker?: string };
