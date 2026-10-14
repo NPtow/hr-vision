@@ -2,7 +2,6 @@ import { useId, useRef, useState, type ReactNode } from 'react';
 import { MessageCircle } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { Textarea } from '../../components/ui/textarea';
-import { Avatar } from './PeoplePanel';
 import type { EmployerCandidateProfileSource, EmployerCandidateResume, EmployerRejectionValues, ScreeningComment } from './employer-candidate-profile-types';
 import fileIcon from './assets/candidate-profile/file.svg';
 import downloadIcon from './assets/candidate-profile/download.svg';
@@ -36,6 +35,7 @@ function CandidateProfile({ person, source, interview, resume, onMeet, meetingUn
   const rejecting = useRef(false);
   const rejectTrigger = useRef<HTMLButtonElement>(null);
   const hasProfile = !!source.cv || !!source.profile?.length;
+  const contacts = source.contacts?.map(contact => contact.value).filter(Boolean).join(' · ') || source.contact;
   const score = typeof source.score === 'number' && Number.isFinite(source.score) ? source.score : null;
   const finishRejection = () => { setRejection(null); requestAnimationFrame(() => rejectTrigger.current?.focus()); };
   return <article className="ecp-profile" aria-labelledby={headingId} data-candidate-id={person.id}>
@@ -48,15 +48,10 @@ function CandidateProfile({ person, source, interview, resume, onMeet, meetingUn
         }}>Отказать</Button>}
       </div>}
     </header>
-    <section className="ecp-overview" aria-label="Профиль кандидата">
-      <Avatar name={person.name} photo={person.photo}/>
-      <div className="ecp-meta">
-        {(source.interviewRole || person.role || source.role) && <p>{[source.interviewRole || person.role, source.role].filter(Boolean).join(' · ')}</p>}
-        {!!source.contacts?.length && <p>{source.contacts.map(contact => contact.value).filter(Boolean).join(' · ')}</p>}
-        {source.contact && !source.contacts?.length && <p>{source.contact}</p>}
-      </div>
+    {(contacts || (hasProfile && resume?.onOpen)) && <section className="ecp-overview" aria-label="Профиль кандидата">
+      {contacts && <div className="ecp-meta"><p>{contacts}</p></div>}
       {hasProfile && resume?.onOpen && <Button className="ecp-profile-toggle" variant="ghost" aria-expanded={profileOpen} aria-controls={profileId} onClick={() => setProfileOpen(value => !value)}>Профиль</Button>}
-    </section>
+    </section>}
     {(resume || hasProfile) && <div className="ecp-resume">
       <span className="ecp-file-icon"><img src={fileIcon} alt=""/></span>
       <div className="ecp-file-copy"><strong>{resume?.name || (source.cv ? 'Резюме' : 'Профиль')}</strong>{resume?.sizeLabel && <span>{resume.sizeLabel}</span>}</div>

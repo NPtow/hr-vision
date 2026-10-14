@@ -6,7 +6,6 @@
 .ecp-decision { display:flex; align-items:center; gap:8px; flex-wrap:wrap; flex:none; }
 .ecp-profile .ecp-decision button { min-height:44px; height:auto; }
 .ecp-overview { display:flex; flex-direction:column; gap:12px; min-width:0; }
-.ecp-overview>.ew-avatar { width:52px; height:52px; font-size:17px; }
 .ecp-meta { display:grid; gap:4px; min-width:0; }
 .ecp-profile .ecp-meta p,.ecp-profile .ecp-caption { color:var(--ecp-muted); font-size:13px; line-height:20px; overflow-wrap:anywhere; }
 .ecp-profile .ecp-profile-toggle { align-self:flex-start; min-height:36px; padding:6px 0; color:var(--ecp-muted); font-size:12px; }
