@@ -133,7 +133,9 @@ export function ConnectedJourney({ initialRole = 'start' }: { initialRole?: 'sta
   }
   const manager = state?.actor === 'manager';
   const people = state ? personList(journey) : [];
-  const panelPeople = realEmployer ? people.filter(p => p.reviewState === panelMode) : people;
+  // Keep an answered profile in its original list while its private materials remain accessible.
+  const panelPeople = realEmployer ? people.filter(p => p.reviewState === panelMode ||
+    (panelMode === 'proposed' && p.reviewState === 'selected' && p.reviewResponse?.decision === 'invite')) : people;
   const shownPeople = realEmployer && page === 'shortlist' ? panelPeople : people;
   const person = realEmployer && manager && intakeSelected && page === 'shortlist' && panelMode === 'proposed' ? undefined : state ? (realEmployer && manager && selected ? shownPeople.find(p => p.id === selected)
     : shownPeople.find(p => p.id === (manager ? selected : state.actor as CandidateId)) || shownPeople[0]) : undefined;

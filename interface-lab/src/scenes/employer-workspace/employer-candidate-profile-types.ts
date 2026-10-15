@@ -6,11 +6,15 @@ export type EmployerCandidateResponseValues = {
   decision: 'invite' | 'reject';
   reason: string; missing: string; improve: string;
   expectedRevision: number; requestId: string;
+  meetingStart?: string;
 };
+export type EmployerCandidateMeetingOptions = { mode: 'available'; freeSlots: string[] } | { mode: 'proposal' };
 export type EmployerCandidateDecision = {
   decision: 'invite' | 'reject';
   feedback?: { reason: string; missing?: string; improve?: string } | null;
   createdAt?: string;
+  meetingStart?: string;
+  meetingStatus?: 'draft' | 'pending' | 'confirmed' | 'live' | 'completed' | 'cancelled' | 'declined';
 };
 export type EmployerCandidateProfileSource = {
   score?: number | null; role?: string; interviewRole?: string;

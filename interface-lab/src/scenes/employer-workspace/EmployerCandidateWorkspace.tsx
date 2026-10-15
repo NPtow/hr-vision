@@ -58,6 +58,7 @@ export function EmployerCandidateWorkspace({ journey, person, source }: {
       load: loadResume, onDownload: () => { void downloadResume(); },
     } : undefined}
     onRespond={!journey.state!.closedBy && person.reviewState === 'proposed' ? respond : undefined}
+    meetingOptions={{ mode: 'available', freeSlots: person.freeSlots }}
     decision={candidateDecision(person.reviewResponse, person.reviewRejection) || savedDecision}
     responseIdentity={`${journey.token}:${identity.source}:${identity.vacancyId}:${identity.id}:${identity.generation}`}
     workflowRevision={person.workflowRevision || 0} busy={journey.busy || fileBusy || responding}

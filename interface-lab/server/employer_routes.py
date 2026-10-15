@@ -294,7 +294,7 @@ class EmployerRoutes:
     def _respond(self, db, headers, body):
         """One initial review answer over either real application or intake draft."""
         fields = {'source', 'id', 'vacancyId', 'decision', 'expectedRevision', 'requestId'}
-        require(fields <= set(body) and set(body) <= fields | {'generation', 'rejectionAnswers'},
+        require(fields <= set(body) and set(body) <= fields | {'generation', 'rejectionAnswers', 'meetingStart'},
                 'Проверьте ответ по кандидату.', 400)
         require(body['source'] in ('application', 'intake'), 'Выберите источник кандидата.', 400)
         require(body['decision'] in ('invite', 'reject'), 'Выберите ответ.', 400)
@@ -304,9 +304,12 @@ class EmployerRoutes:
                 'Обновите карточку кандидата.', 400)
         normalized = {**body, 'id': cid, 'vacancyId': vid, 'requestId': rid}
         if body['decision'] == 'reject':
+            require('meetingStart' not in body, 'Время встречи не нужно для отказа.', 400)
             normalized['rejectionAnswers'] = workflow.rejection_answers(body.get('rejectionAnswers'))
         else:
             require('rejectionAnswers' not in body, 'Причина отказа не нужна для приглашения.', 400)
+            if 'meetingStart' in body:
+                normalized['meetingStart'] = workflow.review_meeting_start(body['meetingStart'])
         if body['source'] == 'intake':
             require('generation' not in body, 'Проверьте источник кандидата.', 400)
             principal = access.authenticate(db, headers)
@@ -326,11 +329,27 @@ class EmployerRoutes:
             store.require_active(app)
             store.ensure_open(db, wid, vid)
             workflow.check_revision(db, cid, body['expectedRevision'])
-            require(app['reviewState'] == 'proposed' and workflow.review_response(db, cid) is None and
+            response = workflow.review_response(db, cid)
+            adding_time = (body['decision'] == 'invite' and 'meetingStart' in normalized and
+                           response and response['decision'] == 'invite' and 'meetingStart' not in response)
+            require(app['reviewState'] == 'proposed' and (response is None or adding_time) and
                     workflow.load(db, cid)['decision'] != 'declined',
                     'Ответ по кандидату уже сохранён.', 409)
             if body['decision'] == 'invite':
-                store.request_invitation(db, wid, cid, request_id=rid, expected_revision=body['expectedRevision'])
+                if 'meetingStart' in normalized:
+                    workflow.review_meeting_start(normalized['meetingStart'], future=True)
+                if response is None:
+                    store.request_invitation(db, wid, cid, request_id=rid, expected_revision=body['expectedRevision'])
+                if 'meetingStart' in normalized:
+                    # The initial answer and the real proposal share this outer
+                    # transaction. A stale/busy slot rolls back the answer too.
+                    workflow.register_stages(db, cid, vacancy_id=vid)
+                    meeting = self.portal.propose_meeting(db, {'applicationId': cid, 'start': normalized['meetingStart']},
+                                                         manager_id='workspace:' + wid)
+                    store.mark_selected(db, wid, cid, meeting['id'])
+                    db.execute('UPDATE em_reviews SET invitation_meeting_id=?,updated_at=? WHERE application_id=?',
+                               (meeting['id'], iso(now()), cid))
+                    workflow.meeting_changed(db, cid)
             else:
                 self._reject(db, principal, app, command)
             db.execute('''INSERT INTO em_route_commands VALUES (?,?,?,?,?,?,?)''',
@@ -374,6 +393,8 @@ class EmployerRoutes:
                 self._meeting(db, app, command, current=True)
                 meeting = self.portal.reschedule_meeting(db, command, manager_id=manager_id)
                 store.mark_selected(db, wid, aid, meeting['id'])
+                db.execute('''UPDATE em_reviews SET invitation_meeting_id=?
+                  WHERE application_id=? AND invitation_meeting_id=?''', (meeting['id'], aid, current['id']))
             else:
                 if command.get('meetingId') is not None:
                     self._meeting(db, app, command, current=True)

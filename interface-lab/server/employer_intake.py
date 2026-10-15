@@ -227,6 +227,8 @@ def _review_projection(person, events):
     response = ({'decision': 'reject', 'createdAt': rejections[-1]['createdAt']} if rejections else
                 {'decision': 'invite', 'createdAt': person['invitationRequestedAt']}
                 if person.get('invitationRequestedAt') else None)
+    if response and response['decision'] == 'invite' and person.get('invitationMeeting'):
+        response.update(meetingStart=person['invitationMeeting']['start'], meetingStatus='draft')
     # This opaque 52-bit token is exactly representable in JavaScript. Binding
     # it to the current sources prevents a stale index from targeting a newly
     # replaced recording, even before the first comment exists. GET stays read-only.
@@ -234,6 +236,8 @@ def _review_projection(person, events):
                'sources': sources, 'events': len(events)}
     if person.get('invitationRequestedAt'):
         version['invitationRequestedAt'] = person['invitationRequestedAt']
+    if person.get('invitationMeeting'):
+        version['invitationMeeting'] = person['invitationMeeting']
     revision = int(hashlib.sha256(_dump(version).encode()).hexdigest()[:13], 16)
     return {**person, 'screeningComments': comments,
             'reviewRejection': rejections[-1] if rejections else None,
@@ -353,23 +357,35 @@ def review_respond(db, workspace_id, vacancy_id, body):
     fields = {'vacancyId', 'id', 'decision', 'requestId', 'expectedRevision'}
     if body['decision'] == 'reject':
         fields.add('rejectionAnswers')
-    require(set(body) == fields, 'Проверьте данные ответа.', 400)
+    optional = {'meetingStart'} if body['decision'] == 'invite' else set()
+    require(fields <= set(body) <= fields | optional, 'Проверьте данные ответа.', 400)
     request_id = _review_identity(body)
     if body['decision'] == 'reject':
         result = review_reject(db, workspace_id, vacancy_id, {key: value for key, value in body.items() if key != 'decision'})
     else:
         payload = {**body, 'requestId': request_id}
+        if 'meetingStart' in body:
+            payload['meetingStart'] = workflow.review_meeting_start(body['meetingStart'], private=True)
         with store._atomic(db):
             person, projected = _review_person(db, workspace_id, vacancy_id, body)
             previous, digest = store._command(db, workspace_id, request_id, 'intake.invite', payload)
             if previous is None:
                 _require_review_writable(db, workspace_id, vacancy_id, person, projected, body['expectedRevision'])
-                _require_unanswered(projected)
-                person['invitationRequestedAt'] = iso(now())
+                response = projected['reviewResponse']
+                adding_time = ('meetingStart' in payload and response and response['decision'] == 'invite' and
+                               'meetingStart' not in response)
+                require(response is None or adding_time, 'Ответ по этому кандидату уже сохранён.', 409)
+                stamp = iso(now())
+                if 'meetingStart' in payload:
+                    start = workflow.review_meeting_start(payload['meetingStart'], future=True, private=True)
+                    person['invitationMeeting'] = {'start': start, 'createdAt': stamp}
+                person['invitationRequestedAt'] = person.get('invitationRequestedAt') or stamp
                 db.execute('UPDATE em_intake_candidates SET body=? WHERE id=? AND workspace_id=? AND vacancy_id=?',
                            (_dump(person), person['id'], workspace_id, vacancy_id))
                 store._remember(db, workspace_id, request_id, 'intake.invite', digest,
-                                {'decision': 'invite', 'createdAt': person['invitationRequestedAt']})
+                                {'decision': 'invite', 'createdAt': person['invitationRequestedAt'],
+                                 **({'meetingStart': payload['meetingStart'], 'meetingStatus': 'draft'}
+                                    if 'meetingStart' in payload else {})})
             result = list_candidates(db, workspace_id, vacancy_id)
     saved = next(person for person in result['candidates'] if person['id'] == body['id'])
     return {**result, 'response': saved['reviewResponse'], 'reviewRejection': saved['reviewRejection']}

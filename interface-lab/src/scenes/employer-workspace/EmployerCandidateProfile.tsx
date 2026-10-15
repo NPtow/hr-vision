@@ -4,7 +4,7 @@ import { Button } from '../../components/ui/button';
 import { Textarea } from '../../components/ui/textarea';
 import { EmployerResumePreview } from './EmployerResumePreview';
 import { EmployerCandidateResponse } from './EmployerCandidateResponse';
-import type { EmployerCandidateDecision, EmployerCandidateProfileSource, EmployerCandidateResponseValues, EmployerCandidateResume, ScreeningComment } from './employer-candidate-profile-types';
+import type { EmployerCandidateDecision, EmployerCandidateMeetingOptions, EmployerCandidateProfileSource, EmployerCandidateResponseValues, EmployerCandidateResume, ScreeningComment } from './employer-candidate-profile-types';
 import fileIcon from './assets/candidate-profile/file.svg';
 import downloadIcon from './assets/candidate-profile/download.svg';
 import './employer-candidate-profile.css';
@@ -14,6 +14,7 @@ export type EmployerCandidateProfileProps = {
   source: EmployerCandidateProfileSource; interview: ReactNode; resume?: EmployerCandidateResume;
   onRespond?: (values: EmployerCandidateResponseValues) => Promise<boolean>;
   decision?: EmployerCandidateDecision | null;
+  meetingOptions?: EmployerCandidateMeetingOptions;
   responseIdentity?: string;
   workflowRevision: number; busy?: boolean; error?: string;
   rejectQuestions?: readonly [string, string, string];
@@ -25,7 +26,7 @@ export function EmployerCandidateProfile(props: EmployerCandidateProfileProps) {
   return <CandidateProfile key={props.person.id} {...props}/>;
 }
 
-function CandidateProfile({ person, source, interview, resume, onRespond, decision, responseIdentity,
+function CandidateProfile({ person, source, interview, resume, onRespond, decision, meetingOptions, responseIdentity,
   workflowRevision, busy, error, rejectQuestions }: EmployerCandidateProfileProps) {
   const headingId = useId();
   const profileId = useId();
@@ -37,7 +38,7 @@ function CandidateProfile({ person, source, interview, resume, onRespond, decisi
     <header className="ecp-heading">
       <h2 id={headingId}>{person.name}{score !== null && <span className="ecp-score"> · {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(score)}</span>}</h2>
       <EmployerCandidateResponse key={responseIdentity || person.id} onRespond={onRespond} decision={decision}
-        workflowRevision={workflowRevision} busy={busy} rejectQuestions={rejectQuestions}/>
+        workflowRevision={workflowRevision} busy={busy} rejectQuestions={rejectQuestions} meetingOptions={meetingOptions}/>
     </header>
     {contacts && <div className="ecp-meta"><p>{contacts}</p></div>}
     {hasResume && <div className="ecp-resume">

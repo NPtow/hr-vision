@@ -242,7 +242,7 @@ def review_response(db, application_id):
     Imported and older canonical rows need no backfill: an existing refusal has
     its own real timestamp; a selected meeting is never an invented invitation.
     """
-    invitation_at = rejected_at = None
+    invitation_at = rejected_at = meeting_id = None
     if _table_exists(db, 'em_reviews'):
         columns = {row[1] for row in db.execute('PRAGMA table_info(em_reviews)')}
         if {'invitation_requested_at', 'rejected_at'} <= columns:
@@ -250,12 +250,42 @@ def review_response(db, application_id):
                              (application_id,)).fetchone()
             if row:
                 invitation_at, rejected_at = row
+            if 'invitation_meeting_id' in columns:
+                row = db.execute('SELECT invitation_meeting_id FROM em_reviews WHERE application_id=?',
+                                 (application_id,)).fetchone()
+                meeting_id = row[0] if row else None
     rejection = review_rejection(db, application_id)
     if invitation_at:
-        return {'decision': 'invite', 'createdAt': invitation_at}
+        result = {'decision': 'invite', 'createdAt': invitation_at}
+        if meeting_id:
+            meeting = _meeting(db, application_id, meeting_id)
+            result.update(meetingStart=meeting['start'], meetingStatus=meeting['status'])
+        return result
     if rejection or rejected_at:
         return {'decision': 'reject', 'createdAt': rejection['createdAt'] if rejection else rejected_at}
     return None
+
+
+def review_meeting_start(value, *, future=False, private=False):
+    """Normalize the exact proposed time; availability is checked by the portal.
+
+    Parsing happens before idempotency lookup, while time-sensitive validation
+    happens only for a new write so a committed retry remains valid tomorrow.
+    A private draft is an employer preference, never candidate availability.
+    """
+    try:
+        start = timestamp(text(value, 80))
+    except Problem:
+        raise Problem('Выберите дату и время встречи.', 400)
+    require(start.microsecond == 0, 'Выберите время из календаря.', 400)
+    if private:
+        require(start.minute in (0, 30) and start.second == 0,
+                'Выберите время с шагом 30 минут.', 400)
+    if future:
+        tick = now()
+        require(tick < start <= tick + dt.timedelta(days=180),
+                'Выберите будущее время в пределах 180 дней.', 400)
+    return iso(start)
 
 
 def _screening_comment_source(db, info, body):

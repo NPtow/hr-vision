@@ -1,11 +1,14 @@
 """Employer invitation intent stays private and separate from scheduling/account creation."""
 import concurrent.futures
+import datetime as dt
 import json
 import sqlite3
 import unittest
+from unittest.mock import patch
 
-from domain import Problem
+from domain import Problem, iso, now
 import employer_intake as intake
+import employer_workflow
 import test_employer_intake_review as fixture
 from test_employer_dsa_examples import example_payload
 
@@ -218,6 +221,94 @@ class EmployerIntakeResponseTest(unittest.TestCase):
             self.assertIsNone(people[hidden['id']]['reviewResponse'])
             self.assertIsNone(people[hidden['id']]['reviewRejection'])
             self.assertEqual(db.total_changes, before)
+
+    def test_dated_private_invite_survives_reload_without_any_candidate_meeting_or_notification(self):
+        start = now().replace(hour=13, minute=30, second=0, microsecond=0) + dt.timedelta(days=1)
+        with self.connect() as db:
+            person = self.imported(db)
+            before = self.public_snapshot(db)
+            command = self.response(person, meetingStart=start.astimezone(dt.timezone(dt.timedelta(hours=3))).isoformat())
+            result = intake.review_respond(db, 'a', self.va, command)
+            response = result['response']
+            self.assertEqual(response['meetingStart'], iso(start))
+            self.assertEqual(response['meetingStatus'], 'draft')
+            self.assertNotEqual(result['candidates'][0]['reviewRevision'], person['reviewRevision'])
+            self.assertEqual(before, self.public_snapshot(db))
+            self.assertEqual(result['candidates'][0]['preparedProfile'], person['preparedProfile'])
+        with self.connect() as db:
+            current = self.person(db, person['id'])
+            self.assertEqual(current['reviewResponse'], response)
+            self.assertEqual(current['invitationMeeting']['start'], iso(start))
+            before_changes = db.total_changes
+            self.person(db, person['id'])
+            self.assertEqual(db.total_changes, before_changes)
+            with patch.object(employer_workflow, 'now', return_value=start + dt.timedelta(days=1)):
+                self.assertEqual(intake.review_respond(db, 'a', self.va, command)['response'], response)
+            self.assertEqual(before, self.public_snapshot(db))
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM em_store_commands WHERE kind='intake.invite'").fetchone()[0], 1)
+            stored = json.loads(db.execute("SELECT result FROM em_store_commands WHERE kind='intake.invite'").fetchone()[0])
+            self.assertEqual(stored['meetingStart'], iso(start))
+
+    def test_existing_private_invite_accepts_one_date_using_fresh_revision(self):
+        start = iso(now().replace(hour=13, minute=0, second=0, microsecond=0) + dt.timedelta(days=1))
+        with self.connect() as db:
+            person = self.imported(db)
+            old_command = self.response(person)
+            first = intake.review_respond(db, 'a', self.va, old_command)
+            person = self.person(db, person['id'])
+            stale = self.response(person, meetingStart=start, requestId='add-date')
+            intake.screening_comment(db, 'a', self.va, self.comment(person))
+            self.assert_problem(409, intake.review_respond, db, 'a', self.va, stale)
+            person = self.person(db, person['id'])
+            result = intake.review_respond(db, 'a', self.va, {**stale, 'expectedRevision': person['reviewRevision']})
+            self.assertEqual(result['response']['createdAt'], first['response']['createdAt'])
+            self.assertEqual(len(result['candidates'][0]['screeningComments']), 1)
+            current = self.person(db, person['id'])
+            self.assert_problem(409, intake.review_respond, db, 'a', self.va,
+                                self.response(current, meetingStart=start, requestId='second-date'))
+            self.assertEqual(intake.review_respond(db, 'a', self.va, old_command)['response'], result['response'])
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM em_store_commands WHERE kind='intake.invite'").fetchone()[0], 2)
+
+    def test_private_time_validation_and_failed_write_leave_no_partial_date(self):
+        start = now().replace(hour=13, minute=0, second=0, microsecond=0) + dt.timedelta(days=1)
+        with self.connect() as db:
+            person = self.imported(db)
+            command = self.response(person, meetingStart=iso(start))
+            for value in (None, 'invalid', start.replace(tzinfo=None).isoformat(),
+                          iso(start + dt.timedelta(minutes=15)), iso(start + dt.timedelta(seconds=1)),
+                          iso(now() - dt.timedelta(days=1)), iso(start + dt.timedelta(days=181))):
+                with self.subTest(value=value):
+                    self.assert_problem(400, intake.review_respond, db, 'a', self.va, {**command, 'meetingStart': value})
+            self.assert_problem(400, intake.review_respond, db, 'a', self.va,
+                                self.response(person, decision='reject', meetingStart=iso(start)))
+            db.execute('''CREATE TRIGGER fail_dated_invite BEFORE INSERT ON em_store_commands
+              WHEN NEW.kind='intake.invite' BEGIN SELECT RAISE(ABORT,'synthetic'); END''')
+            with self.assertRaises(sqlite3.IntegrityError):
+                intake.review_respond(db, 'a', self.va, command)
+            current = self.person(db, person['id'])
+            self.assertIsNone(current['reviewResponse'])
+            self.assertNotIn('invitationRequestedAt', current)
+            self.assertNotIn('invitationMeeting', current)
+            self.assertEqual(current['reviewRevision'], person['reviewRevision'])
+
+    def test_parallel_private_date_choices_keep_one_immutable_proposal(self):
+        start = now().replace(hour=13, minute=0, second=0, microsecond=0) + dt.timedelta(days=1)
+        with self.connect() as db:
+            person = self.imported(db)
+        def attempt(minutes):
+            command = self.response(person, meetingStart=iso(start + dt.timedelta(minutes=minutes)), requestId='date-' + str(minutes))
+            with self.connect() as db:
+                try:
+                    return intake.review_respond(db, 'a', self.va, command)['response']['meetingStart']
+                except Problem as error:
+                    return error.status
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            results = list(executor.map(attempt, (0, 30)))
+        self.assertEqual(results.count(409), 1)
+        with self.connect() as db:
+            current = self.person(db, person['id'])
+            self.assertEqual(current['reviewResponse']['meetingStart'], next(value for value in results if value != 409))
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM em_store_commands WHERE kind='intake.invite'").fetchone()[0], 1)
 
 
 if __name__ == '__main__':

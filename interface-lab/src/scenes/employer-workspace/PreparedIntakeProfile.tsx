@@ -127,6 +127,7 @@ export function PreparedIntakeProfile({ person, token, vacancyId, onUpdated }: {
       <PreparedInterview key={`${current.id}:${token}`} person={current} profile={profile} index={0} token={token} vacancyId={vacancyId} busy={busy} onComment={values => mutate('comment', values)}/>
     </>}
     onRespond={vacancyId && !current.archived ? respond : undefined}
+    meetingOptions={{ mode: 'proposal' }}
     decision={candidateDecision(current.reviewResponse, current.reviewRejection)}
     responseIdentity={`${token}:intake:${vacancyId}:${current.id}`}
     workflowRevision={current.reviewRevision || 0} busy={busy} error={error}/>;

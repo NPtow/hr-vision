@@ -18,9 +18,10 @@ export function candidateDecision(response?: EmployerReviewResponse | null,
 }
 
 export function respondToCandidate(token: string, identity: ResponseIdentity, values: EmployerCandidateResponseValues) {
-  const { decision, expectedRevision, requestId, reason, missing, improve } = values;
+  const { decision, expectedRevision, requestId, reason, missing, improve, meetingStart } = values;
   return request<CandidateResponseResult>('employer/review/respond', token, {
     ...identity, decision, expectedRevision, requestId,
+    ...(decision === 'invite' && meetingStart ? { meetingStart } : {}),
     ...(decision === 'reject' ? { rejectionAnswers: { reason, missing, improve } } : {}),
   });
 }

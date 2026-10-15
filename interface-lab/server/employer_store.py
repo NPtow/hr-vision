@@ -89,6 +89,8 @@ def init(db):
         db.execute(statement)
     if 'invitation_requested_at' not in {row[1] for row in db.execute('PRAGMA table_info(em_reviews)')}:
         db.execute('ALTER TABLE em_reviews ADD COLUMN invitation_requested_at TEXT')
+    if 'invitation_meeting_id' not in {row[1] for row in db.execute('PRAGMA table_info(em_reviews)')}:
+        db.execute('ALTER TABLE em_reviews ADD COLUMN invitation_meeting_id TEXT REFERENCES cp_meetings(id)')
 
 
 def _workspace(db, workspace_id):

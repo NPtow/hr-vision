@@ -16,7 +16,8 @@ export type SourceProfile = {
 };
 export type ScreeningComment = { id: string; interviewId: string; recordingId: string | null; seconds: number; chapterTitle?: string; text: string; createdAt: string };
 export type RejectionAnswers = { reason: string; missing: string; improve: string };
-export type EmployerReviewResponse = { decision: 'invite' | 'reject'; createdAt: string };
+export type EmployerReviewResponse = { decision: 'invite' | 'reject'; createdAt: string;
+  meetingStart?: string; meetingStatus?: 'draft' | 'pending' | 'confirmed' | 'live' | 'completed' | 'cancelled' | 'declined' };
 export type EmployerReviewReceipt = EmployerReviewResponse & {
   source: 'application'; id: string; applicationId: string; candidateId: string;
   vacancyId: string; name: string; reviewRejection?: (RejectionAnswers & { createdAt?: string }) | null;
