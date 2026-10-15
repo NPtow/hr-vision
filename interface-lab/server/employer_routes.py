@@ -95,7 +95,7 @@ class EmployerRoutes:
                 return vacancy_import.finish(db, principal, iid, prepared, selected, fields, evidence, metadata, redacted, lease)
         except BaseException as error:
             with self.lock, self.connect() as db:
-                vacancy_import.fail(db, iid, lease, transient=isinstance(error, Problem) and error.status in (401, 403, 429, 502, 503, 504))
+                vacancy_import.fail(db, iid, lease, transient=isinstance(error, Problem) and error.status in (401, 403, 429, 502, 503, 504), error=error)
             raise
 
     def _meeting(self, db, app, body, *, current=False):
