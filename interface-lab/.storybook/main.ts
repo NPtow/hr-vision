@@ -6,7 +6,7 @@ if (!['service', 'mockups', 'all'].includes(target)) throw new Error(`Unknown bu
 const config: StorybookConfig = {
   stories: target === 'service' ? ['../src/AgencyProduct.stories.tsx']
     : target === 'mockups' ? ['../src/**/!(AgencyProduct).stories.tsx'] : ['../src/**/*.stories.tsx'],
-  staticDirs: target === 'service' ? [] : ['../public'],
+  staticDirs: ['../browser-assets', ...(target === 'service' ? [] : ['../public'])],
   addons: ['@storybook/addon-docs'],
   framework: '@storybook/react-vite',
   core: { disableTelemetry: true },
