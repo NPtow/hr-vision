@@ -19,6 +19,8 @@ import { MeetingScheduler } from '../employer-workspace/MeetingScheduler';
 import { EmployerAgenda } from '../employer-workspace/EmployerAgenda';
 import { CandidateStageWorkspace } from '../employer-workspace/CandidateStageWorkspace';
 import { EmployerCandidateWorkspace } from '../employer-workspace/EmployerCandidateWorkspace';
+import { EmployerCandidateProfile } from '../employer-workspace/EmployerCandidateProfile';
+import { candidateDecision } from '../employer-workspace/candidate-response';
 import { DsaCandidates } from './DsaCandidates';
 import { MeetingPanel } from './MeetingPanel';
 import { Materials } from './MeetingMaterials';
@@ -319,12 +321,20 @@ function Shortlist({ journey, person, people, selectedId, select, go, intake, in
   const profile = journey.employer ? undefined : candidates.find(c => c.id === person?.id);
   const source = journey.employer && person ? sourceFor(person) : undefined;
   const pendingIntake = intake.people.filter(p => !journey.employer || !personList(journey).some(candidate => candidate.id === p.id || candidate.candidateId === p.id));
-  const added = pendingIntake.find(p => p.id === intakeSelected && !p.archived) || (!person && !selectedId && !intakeSelected ? pendingIntake.find(p => !p.archived) : undefined);
+  const added = pendingIntake.find(p => p.id === intakeSelected && (!p.archived || p.reviewResponse)) || (!person && !selectedId && !intakeSelected ? pendingIntake.find(p => !p.archived || p.reviewResponse) : undefined);
+  // Receipts preserve the employer's own decision without reopening a withdrawn profile.
+  const receipts = journey.employer ? Object.values(journey.state!.reviewResponses || {})
+    .filter(receipt => receipt.vacancyId === journey.state!.vacancy.id && !journey.state!.candidates[receipt.id]) : [];
+  const receipt = !person && !added ? receipts.find(item => item.id === selectedId) : undefined;
   const meetingActive = person?.meeting && ['pending','confirmed','live'].includes(person.meeting.status);
-  const rows = [...people.map(p => ({ id: p.id, name: p.name, meta: journey.employer ? p.summary || p.role || '' : candidates.find(c => c.id === p.id)?.experience || '', status: status(p) })), ...pendingIntake.map(p => ({ id: p.id, name: p.name, meta: p.preparedProfile?.summary || p.role || 'Новый кандидат', status: p.archived ? 'В архиве' : p.preparedProfile?.source?.example ? 'Пример' : p.preparedProfile ? 'Из вашей подборки' : 'Добавлен вручную', added: true, archived: p.archived, example: p.preparedProfile?.source?.example }))];
-  return <PeoplePanel title={journey.state!.vacancy.role} rows={rows} selected={added?.id || person?.id || ''} onAdd={() => go('intake')} onSelect={id => { if (pendingIntake.some(p => p.id === id)) onIntakeSelect(id); else { onIntakeSelect(''); select(id, 'shortlist'); } }}>
-    {added ? <IntakeDetail key={added.id} person={added} token={journey.token} vacancyId={journey.employer ? journey.state!.vacancy.id : undefined} onArchived={() => { void intake.refresh(); }}/>
-      : person && source ? <EmployerCandidateWorkspace key={`${person.vacancyId}:${person.id}`} journey={journey} person={person} source={source}/>
+  const rows = [...people.map(p => ({ id: p.id, name: p.name, meta: journey.employer ? p.summary || p.role || '' : candidates.find(c => c.id === p.id)?.experience || '', status: status(p) })),
+    ...receipts.map(item => ({ id: item.id, name: item.name, meta: '', status: item.decision === 'invite' ? 'Выбран для встречи' : 'Отказ', reviewed: true })),
+    ...pendingIntake.map(p => ({ id: p.id, name: p.name, meta: p.preparedProfile?.summary || p.role || 'Новый кандидат', status: p.reviewResponse ? p.reviewResponse.decision === 'invite' ? 'Выбран для встречи' : 'Отказ' : p.archived ? 'В архиве' : p.preparedProfile?.source?.example ? 'Пример' : p.preparedProfile ? 'Из вашей подборки' : 'Добавлен вручную', added: true, archived: p.archived, reviewed: !!p.reviewResponse, example: p.preparedProfile?.source?.example }))];
+  return <PeoplePanel title={journey.state!.vacancy.role} rows={rows} selected={added?.id || person?.id || receipt?.id || ''} onAdd={() => go('intake')} onSelect={id => { if (pendingIntake.some(p => p.id === id)) onIntakeSelect(id); else { onIntakeSelect(''); select(id, 'shortlist'); } }}>
+    {added ? <IntakeDetail key={`${journey.token}:${journey.state!.vacancy.id}:${added.id}`} person={added} token={journey.token} vacancyId={journey.employer ? journey.state!.vacancy.id : undefined} onArchived={() => { void intake.refresh(); }}/>
+      : person && source ? <EmployerCandidateWorkspace key={`${journey.token}:${person.vacancyId}:${person.id}:${journey.state!.generation}`} journey={journey} person={person} source={source}/>
+      : receipt ? <EmployerCandidateProfile key={`${journey.token}:${receipt.vacancyId}:${receipt.id}`} person={receipt} source={{}} interview={null}
+        workflowRevision={0} decision={candidateDecision(receipt, receipt.reviewRejection)}/>
       : person && profile ? <>
       <header className="ew-person-heading"><Avatar name={person.name} photo={person.photo}/><div className="ew-person-name"><h2>{person.name}</h2><p>{source ? source.interviewRole || person.role : profile!.role}</p><small>{source ? source.role : `${profile!.city} · ${profile!.experience} · ${profile!.salary}`}</small></div><span className="ew-status">{status(person)}</span><Button variant="ghost" size="icon" onClick={() => go('chat')} aria-label={`Написать ${person.name}`}><MessageCircle size={18}/></Button></header>
       <Tabs defaultValue="interview" key={person.id} className="ew-profile-tabs">

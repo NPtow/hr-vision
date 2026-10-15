@@ -354,12 +354,18 @@ class EmployerAcceptanceTest(unittest.TestCase):
         foreign['vacancyId'] = bv['id']
         self.assertEqual(self.request('employer/action', foreign, token=b['token'])[0], 404)
 
-    def test_rejection_and_consent_withdrawal_hide_all_employer_sections(self):
+    def test_rejection_and_consent_withdrawal_hide_profiles_but_keep_own_decision_receipt(self):
         employer = self.employer()
         vacancy = self.vacancy(employer)
         person, aid = self.accepted(employer, vacancy)
         self.act(employer, vacancy, aid, 'review.reject')
         state = self.state(employer, vacancy)
+        receipts = state.pop('reviewResponses')
+        receipt = receipts['application:' + aid]
+        self.assertEqual(set(receipt), {'source', 'id', 'applicationId', 'candidateId', 'vacancyId',
+                                       'name', 'decision', 'createdAt', 'reviewRejection'})
+        self.assertEqual(receipt['decision'], 'reject')
+        self.assertIsNone(receipt['reviewRejection'])  # Legacy action had no form.
         self.assertNotIn(aid, json.dumps(state))
         self.assertNotIn(person['id'], json.dumps(state))
         self.batch(employer, vacancy, [person])

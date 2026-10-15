@@ -225,11 +225,37 @@ def review_rejection(db, application_id):
     return {**json.loads(row[0]), 'createdAt': row[1]} if row else None
 
 
-def _rejection_answers(value):
+def rejection_answers(value):
+    """The same private rejection form for canonical and intake profiles."""
     require(isinstance(value, dict) and set(value) <= {'reason', 'missing', 'improve'},
             'Проверьте ответы о причине отказа.', 400)
-    return {key: text(value.get(key, ''), 4000, required=key == 'reason')
-            for key in ('reason', 'missing', 'improve')}
+    result = {key: text(value.get(key, ''), 4000, required=key == 'reason')
+              for key in ('reason', 'missing', 'improve')}
+    require(not any((ord(ch) < 32 and ch not in '\n\r\t') or ord(ch) == 127
+                    for answer in result.values() for ch in answer), 'Проверьте текст отзыва.', 400)
+    return result
+
+
+def review_response(db, application_id):
+    """Initial employer answer, independent of a later meeting/outcome.
+
+    Imported and older canonical rows need no backfill: an existing refusal has
+    its own real timestamp; a selected meeting is never an invented invitation.
+    """
+    invitation_at = rejected_at = None
+    if _table_exists(db, 'em_reviews'):
+        columns = {row[1] for row in db.execute('PRAGMA table_info(em_reviews)')}
+        if {'invitation_requested_at', 'rejected_at'} <= columns:
+            row = db.execute('SELECT invitation_requested_at,rejected_at FROM em_reviews WHERE application_id=?',
+                             (application_id,)).fetchone()
+            if row:
+                invitation_at, rejected_at = row
+    rejection = review_rejection(db, application_id)
+    if invitation_at:
+        return {'decision': 'invite', 'createdAt': invitation_at}
+    if rejection or rejected_at:
+        return {'decision': 'reject', 'createdAt': rejection['createdAt'] if rejection else rejected_at}
+    return None
 
 
 def _screening_comment_source(db, info, body):
@@ -457,6 +483,11 @@ def check_revision(db, application_id, expected_revision):
 def meeting_changed(db, application_id):
     """The authenticated meeting adapter appends history in its own transaction."""
     register_stages(db, application_id)
+    _touch(db, application_id)
+
+
+def review_changed(db, application_id):
+    """Advance the existing revision after an atomic, private review answer."""
     _touch(db, application_id)
 
 
@@ -728,7 +759,7 @@ def _apply(db, info, state, action, body, actor, actor_id, events):
                            'Компания решила не продолжать подбор с вами по этой вакансии.', system=True)
             events.append(_event(info, 'employer.declined', mid))
     elif action == 'reject':
-        answers = _rejection_answers(body['rejectionAnswers']) if 'rejectionAnswers' in body else None
+        answers = rejection_answers(body['rejectionAnswers']) if 'rejectionAnswers' in body else None
         if state['decision'] == 'declined':
             if answers is not None:
                 saved = review_rejection(db, app_id)

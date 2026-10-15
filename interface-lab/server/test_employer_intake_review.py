@@ -35,7 +35,7 @@ class EmployerIntakeReviewTest(unittest.TestCase):
     def save(db, person):
         # Source replacement is an internal import, never part of a review command.
         clean = {key: value for key, value in person.items()
-                 if key not in ('screeningComments', 'reviewRejection', 'reviewRevision')}
+                 if key not in ('screeningComments', 'reviewRejection', 'reviewResponse', 'reviewRevision')}
         db.execute('UPDATE em_intake_candidates SET body=? WHERE id=?', (json.dumps(clean), person['id']))
 
     def person(self, db, cid, *, wid='a', vid=None):
@@ -106,7 +106,7 @@ class EmployerIntakeReviewTest(unittest.TestCase):
             self.assertEqual(restored['reviewRejection'], result['reviewRejection'])
             self.assertEqual(restored['screeningComments'], result['screeningComments'])
 
-    def test_rejection_requires_only_reason_and_preserves_older_rejection_events(self):
+    def test_rejection_requires_only_reason_and_restore_does_not_reset_saved_response(self):
         with self.connect() as db:
             person = self.imported(db)
             intake.review_reject(db, 'a', self.va, self.rejection(person, rejectionAnswers={'reason': 'Первый отказ'}))
@@ -115,10 +115,10 @@ class EmployerIntakeReviewTest(unittest.TestCase):
             self.assertEqual(saved['reviewRejection']['improve'], '')
             intake.archive(db, 'a', self.va, {'id': person['id'], 'archived': False})
             person = self.person(db, person['id'])
-            intake.review_reject(db, 'a', self.va, self.rejection(person, requestId='second-rejection',
-                rejectionAnswers={'reason': 'Повторный отказ', 'missing': '  ', 'improve': ''}))
-            self.assertEqual(self.person(db, person['id'])['reviewRejection']['reason'], 'Повторный отказ')
-            self.assertEqual(db.execute("SELECT COUNT(*) FROM em_intake_review_events WHERE kind='rejection'").fetchone()[0], 2)
+            self.assert_problem(409, intake.review_reject, db, 'a', self.va, self.rejection(person,
+                requestId='second-rejection', rejectionAnswers={'reason': 'Повторный отказ', 'missing': '  ', 'improve': ''}))
+            self.assertEqual(self.person(db, person['id'])['reviewRejection']['reason'], 'Первый отказ')
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM em_intake_review_events WHERE kind='rejection'").fetchone()[0], 1)
 
     def test_cross_workspace_vacancy_and_candidate_never_share_comments_or_reasons(self):
         with self.connect() as db:

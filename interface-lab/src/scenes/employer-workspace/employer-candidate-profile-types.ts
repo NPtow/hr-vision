@@ -2,8 +2,15 @@ export type ScreeningComment = {
   id: string; interviewId: string; recordingId: string | null; seconds: number;
   chapterTitle?: string; text: string; createdAt: string;
 };
-export type EmployerRejectionValues = {
-  reason: string; missing: string; improve: string; expectedRevision: number; requestId: string;
+export type EmployerCandidateResponseValues = {
+  decision: 'invite' | 'reject';
+  reason: string; missing: string; improve: string;
+  expectedRevision: number; requestId: string;
+};
+export type EmployerCandidateDecision = {
+  decision: 'invite' | 'reject';
+  feedback?: { reason: string; missing?: string; improve?: string } | null;
+  createdAt?: string;
 };
 export type EmployerCandidateProfileSource = {
   score?: number | null; role?: string; interviewRole?: string;

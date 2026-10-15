@@ -16,12 +16,17 @@ export type SourceProfile = {
 };
 export type ScreeningComment = { id: string; interviewId: string; recordingId: string | null; seconds: number; chapterTitle?: string; text: string; createdAt: string };
 export type RejectionAnswers = { reason: string; missing: string; improve: string };
+export type EmployerReviewResponse = { decision: 'invite' | 'reject'; createdAt: string };
+export type EmployerReviewReceipt = EmployerReviewResponse & {
+  source: 'application'; id: string; applicationId: string; candidateId: string;
+  vacancyId: string; name: string; reviewRejection?: (RejectionAnswers & { createdAt?: string }) | null;
+};
 export type Offer = { id?: string; createdAt?: string; status: 'draft' | 'sent' | 'accepted' | 'declined' | 'withdrawn' | 'superseded'; role: string; compensation: string; format: string; expectations: string; startDate: string; version: number };
 export type FeedbackQuestion = { id: string; question: string; seconds: number | null; source: 'live' | 'transcript' | 'manual' };
 export type FeedbackAnswer = { rating: 'clear' | 'unclear' | 'unanswered' | 'not_asked'; comment: string };
 export type Questionnaire = { id: string; meetingId: string; questions: FeedbackQuestion[] };
 export type Meeting = { id: string; revision?: number; start: string; end?: string; startedAt?: string; endedAt?: string; status: 'pending' | 'confirmed' | 'live' | 'cancelled' | 'completed'; testSkip: boolean; joined: Actor[]; questionnaire?: Questionnaire | null; feedbackDraft?: Record<string, FeedbackAnswer> };
-export type Person = { id: CandidateId; candidateId?: string; applicationId?: string; vacancyId?: string; vacancyRole?: string; reviewState?: string; name: string; role?: string; summary?: string; photo?: string | null; sourceProfile?: SourceProfile; interest: 'pending' | 'accepted' | 'declined'; auto: boolean; slots?: string[]; busy?: string[]; freeSlots: string[]; meeting: Meeting | null; meetings?: Meeting[]; offers?: Offer[]; stages?: CandidateStage[]; workflowRevision?: number; screeningComments?: ScreeningComment[]; reviewRejection?: (RejectionAnswers & { createdAt?: string }) | null; feedback?: { example?: string; doubts?: string; check?: string; at: string; questions?: FeedbackQuestion[]; answers?: Record<string, FeedbackAnswer> } | null; afterInterest: 'pending' | 'yes' | 'no'; decision: 'review' | 'pool' | 'declined'; offer: Offer | null; messages: { id: string; actor: string; text: string; at: string; system: boolean }[] };
+export type Person = { id: CandidateId; candidateId?: string; applicationId?: string; vacancyId?: string; vacancyRole?: string; reviewState?: string; name: string; role?: string; summary?: string; photo?: string | null; sourceProfile?: SourceProfile; interest: 'pending' | 'accepted' | 'declined'; auto: boolean; slots?: string[]; busy?: string[]; freeSlots: string[]; meeting: Meeting | null; meetings?: Meeting[]; offers?: Offer[]; stages?: CandidateStage[]; workflowRevision?: number; reviewResponse?: EmployerReviewResponse | null; screeningComments?: ScreeningComment[]; reviewRejection?: (RejectionAnswers & { createdAt?: string }) | null; feedback?: { example?: string; doubts?: string; check?: string; at: string; questions?: FeedbackQuestion[]; answers?: Record<string, FeedbackAnswer> } | null; afterInterest: 'pending' | 'yes' | 'no'; decision: 'review' | 'pool' | 'declined'; offer: Offer | null; messages: { id: string; actor: string; text: string; at: string; system: boolean }[] };
 export type Vacancy = { id?: string; company: string; role: string; problem: string; salary: string; format: string; expectations: string; proposedCount?: number; selectedCount?: number };
 export type EmployerVacancyDetails = {
   address: string;
@@ -52,7 +57,7 @@ export type EmployerVacancyImport = {
   warnings: string[];
   importId: string;
 };
-export type SharedState = { mode?: 'employer'; workspaceId?: string; workspaceName?: string; scope: Scope; generation: string; revision: number; actor: Actor; actorName: string; closedBy: CandidateId | null; videoConfigured: boolean; vacancy: Vacancy; vacancies?: Vacancy[]; candidates: Partial<Record<CandidateId, Person>>; meetings?: Person[]; offerCandidates?: Person[]; pendingFeedback?: Person[] };
+export type SharedState = { mode?: 'employer'; workspaceId?: string; workspaceName?: string; scope: Scope; generation: string; revision: number; actor: Actor; actorName: string; closedBy: CandidateId | null; videoConfigured: boolean; vacancy: Vacancy; vacancies?: Vacancy[]; candidates: Partial<Record<CandidateId, Person>>; meetings?: Person[]; offerCandidates?: Person[]; pendingFeedback?: Person[]; reviewResponses?: Record<string, EmployerReviewReceipt> };
 export type EmployerCredentials = { email: string; password: string; name?: string; workspaceName?: string };
 type EmployerSession = { token: string; state: SharedState };
 export const sessionKey = 'hr-vision-connected-session';
@@ -323,4 +328,4 @@ export const actorName = (state: SharedState, actor: string) => (state.mode === 
   || state.candidates[actor]?.name || Object.values(state.candidates).find(person => person?.candidateId === actor)?.name || names[actor] || state.actorName;
 export const meetingLabels = { pending: 'Ждём подтверждения', confirmed: 'Встреча подтверждена', live: 'Идёт встреча', cancelled: 'Нужно новое время', completed: 'Встреча завершена' };
 export const offerLabels = { draft: 'Черновик оффера', sent: 'Оффер отправлен', accepted: 'Оффер принят', declined: 'Отказ от оффера', withdrawn: 'Оффер отозван', superseded: 'Предыдущая версия оффера' };
-export const candidateStatus = (p: Person) => p.offer ? offerLabels[p.offer.status] : p.decision === 'pool' ? 'В пуле для оффера' : p.decision === 'declined' ? 'Не продолжаем' : p.meeting ? meetingLabels[p.meeting.status] : 'Готов знакомиться';
+export const candidateStatus = (p: Person) => p.offer ? offerLabels[p.offer.status] : p.decision === 'pool' ? 'В пуле для оффера' : p.decision === 'declined' ? 'Не продолжаем' : p.meeting ? meetingLabels[p.meeting.status] : p.reviewResponse?.decision === 'invite' ? 'Выбран для встречи' : 'Готов знакомиться';

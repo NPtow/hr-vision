@@ -3,7 +3,8 @@ import { MessageCircle } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { Textarea } from '../../components/ui/textarea';
 import { EmployerResumePreview } from './EmployerResumePreview';
-import type { EmployerCandidateProfileSource, EmployerCandidateResume, EmployerRejectionValues, ScreeningComment } from './employer-candidate-profile-types';
+import { EmployerCandidateResponse } from './EmployerCandidateResponse';
+import type { EmployerCandidateDecision, EmployerCandidateProfileSource, EmployerCandidateResponseValues, EmployerCandidateResume, ScreeningComment } from './employer-candidate-profile-types';
 import fileIcon from './assets/candidate-profile/file.svg';
 import downloadIcon from './assets/candidate-profile/download.svg';
 import './employer-candidate-profile.css';
@@ -11,13 +12,12 @@ import './employer-candidate-profile.css';
 export type EmployerCandidateProfileProps = {
   person: { id: string; name: string; role?: string; photo?: string | null };
   source: EmployerCandidateProfileSource; interview: ReactNode; resume?: EmployerCandidateResume;
-  onMeet?: () => void; meetingUnavailableReason?: string;
-  onReject?: (values: EmployerRejectionValues) => Promise<boolean>;
+  onRespond?: (values: EmployerCandidateResponseValues) => Promise<boolean>;
+  decision?: EmployerCandidateDecision | null;
+  responseIdentity?: string;
   workflowRevision: number; busy?: boolean; error?: string;
   rejectQuestions?: readonly [string, string, string];
-  decisionFeedback?: { reason: string; missing?: string; improve?: string } | null;
 };
-const defaultQuestions = ['Что не подошло?', 'Какого опыта или навыков не хватило?', 'Что стоит изменить в следующих кандидатах?'] as const;
 
 /** Review-stage profile only. The permanent stage history is a separate surface. */
 export function EmployerCandidateProfile(props: EmployerCandidateProfileProps) {
@@ -25,29 +25,19 @@ export function EmployerCandidateProfile(props: EmployerCandidateProfileProps) {
   return <CandidateProfile key={props.person.id} {...props}/>;
 }
 
-function CandidateProfile({ person, source, interview, resume, onMeet, meetingUnavailableReason, onReject,
-  workflowRevision, busy, error, rejectQuestions = defaultQuestions, decisionFeedback }: EmployerCandidateProfileProps) {
+function CandidateProfile({ person, source, interview, resume, onRespond, decision, responseIdentity,
+  workflowRevision, busy, error, rejectQuestions }: EmployerCandidateProfileProps) {
   const headingId = useId();
   const profileId = useId();
   const [profileOpen, setProfileOpen] = useState(false);
-  const [rejection, setRejection] = useState<EmployerRejectionValues | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [localError, setLocalError] = useState('');
-  const rejecting = useRef(false);
-  const rejectTrigger = useRef<HTMLButtonElement>(null);
   const hasResume = !!resume || !!source.cv;
   const contacts = source.contacts?.map(contact => contact.value).filter(Boolean).join(' · ') || source.contact;
   const score = typeof source.score === 'number' && Number.isFinite(source.score) ? source.score : null;
-  const finishRejection = () => { setRejection(null); requestAnimationFrame(() => rejectTrigger.current?.focus()); };
   return <article className="ecp-profile" aria-labelledby={headingId} data-candidate-id={person.id}>
     <header className="ecp-heading">
       <h2 id={headingId}>{person.name}{score !== null && <span className="ecp-score"> · {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(score)}</span>}</h2>
-      {(onMeet || onReject) && <div className="ecp-decision" aria-label="Решение по кандидату">
-        {onMeet && <Button disabled={busy || saving} onClick={onMeet}>Назначить встречу</Button>}
-        {onReject && <Button ref={rejectTrigger} variant="ghost" disabled={busy || saving || !!rejection} onClick={() => {
-          setLocalError(''); setRejection({ reason: '', missing: '', improve: '', expectedRevision: workflowRevision, requestId: crypto.randomUUID() });
-        }}>Отказать</Button>}
-      </div>}
+      <EmployerCandidateResponse key={responseIdentity || person.id} onRespond={onRespond} decision={decision}
+        workflowRevision={workflowRevision} busy={busy} rejectQuestions={rejectQuestions}/>
     </header>
     {contacts && <div className="ecp-meta"><p>{contacts}</p></div>}
     {hasResume && <div className="ecp-resume">
@@ -61,21 +51,7 @@ function CandidateProfile({ person, source, interview, resume, onMeet, meetingUn
     {profileOpen && <section className="ecp-resume-preview" id={profileId} aria-label="Резюме">
       <EmployerResumePreview key={resume?.id || 'source-text'} resume={resume} text={source.cv}/>
     </section>}
-    {meetingUnavailableReason && !onMeet && <p className="ecp-caption">{meetingUnavailableReason}</p>}
-    {(error || localError) && <p className="ecp-error" role="alert">{error || localError}</p>}
-    {rejection && <form className="ecp-rejection" aria-label="Обратная связь при отказе" onSubmit={async event => {
-      event.preventDefault(); if (!onReject || rejecting.current || busy) return;
-      rejecting.current = true; setSaving(true); setLocalError('');
-      try { if (await onReject(rejection)) finishRejection(); else setLocalError('Не удалось сохранить отказ. Ваши ответы остались в форме.'); }
-      catch (cause) { setLocalError(cause instanceof Error ? cause.message : 'Не удалось сохранить отказ.'); }
-      finally { rejecting.current = false; setSaving(false); }
-    }}>
-      {(['reason', 'missing', 'improve'] as const).map((key, index) => <label key={key} htmlFor={`${headingId}-${key}`}>{rejectQuestions[index]}
-        <Textarea id={`${headingId}-${key}`} autoFocus={index === 0} required={key === 'reason'} maxLength={4000} value={rejection[key]} disabled={busy || saving} onChange={event => setRejection({ ...rejection, [key]: event.target.value })}/>
-      </label>)}
-      <div className="ecp-form-actions"><Button type="submit" disabled={busy || saving}>{saving ? 'Сохраняем…' : 'Сохранить отказ'}</Button><Button type="button" variant="ghost" disabled={saving} onClick={finishRejection}>Отмена</Button></div>
-    </form>}
-    {decisionFeedback && <details className="ecp-saved-rejection"><summary>Обратная связь по отказу</summary>{(['reason', 'missing', 'improve'] as const).map((key, index) => decisionFeedback[key] && <div key={key}><h3>{rejectQuestions[index]}</h3><p>{decisionFeedback[key]}</p></div>)}</details>}
+    {error && <p className="ecp-error" role="alert">{error}</p>}
     <div className="ecp-interview">{interview}</div>
   </article>;
 }

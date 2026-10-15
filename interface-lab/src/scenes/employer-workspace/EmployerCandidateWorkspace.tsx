@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { EmployerScreening } from '../connected-journey/EmployerScreening';
 import { request, type Journey, type Person, type SourceProfile } from '../connected-journey/api';
 import { EmployerCandidateProfile } from './EmployerCandidateProfile';
+import { candidateDecision, respondToCandidate } from './candidate-response';
+import type { EmployerCandidateDecision, EmployerCandidateResponseValues } from './employer-candidate-profile-types';
 
 /** The proposed-candidate view. Progress through stages remains in the task card. */
 export function EmployerCandidateWorkspace({ journey, person, source }: {
@@ -9,6 +11,25 @@ export function EmployerCandidateWorkspace({ journey, person, source }: {
 }) {
   const [fileBusy, setFileBusy] = useState(false);
   const [fileError, setFileError] = useState('');
+  const [responding, setResponding] = useState(false);
+  const [savedDecision, setSavedDecision] = useState<EmployerCandidateDecision | null>(null);
+  const pending = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const identity = { source: 'application' as const, id: person.applicationId || person.id,
+    vacancyId: person.vacancyId || journey.state!.vacancy.id!, generation: journey.state!.generation };
+  async function respond(values: EmployerCandidateResponseValues) {
+    if (pending.current || !mounted.current) return false;
+    pending.current = true; setResponding(true);
+    try {
+      const result = await respondToCandidate(journey.token, identity, values);
+      if (mounted.current) {
+        setSavedDecision(candidateDecision(result.response, result.reviewRejection));
+        void journey.refresh();
+      }
+      return true;
+    } finally { pending.current = false; if (mounted.current) setResponding(false); }
+  }
   async function loadResume(signal: AbortSignal) {
     const file = await request<{ filename: string; mime: string; contentBase64: string }>('employer/screening/resume', journey.token, {
       candidate: person.id, applicationId: person.applicationId || person.id,
@@ -36,7 +57,10 @@ export function EmployerCandidateWorkspace({ journey, person, source }: {
       sizeLabel: `${Math.max(1, Math.ceil(source.resume.size / 1024))} КБ`,
       load: loadResume, onDownload: () => { void downloadResume(); },
     } : undefined}
-    workflowRevision={person.workflowRevision || 0} busy={journey.busy || fileBusy}
+    onRespond={!journey.state!.closedBy && person.reviewState === 'proposed' ? respond : undefined}
+    decision={candidateDecision(person.reviewResponse, person.reviewRejection) || savedDecision}
+    responseIdentity={`${journey.token}:${identity.source}:${identity.vacancyId}:${identity.id}:${identity.generation}`}
+    workflowRevision={person.workflowRevision || 0} busy={journey.busy || fileBusy || responding}
     error={fileError || journey.error}/>
   ;
 }

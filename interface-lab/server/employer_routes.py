@@ -241,6 +241,8 @@ class EmployerRoutes:
             if route == '/screening/resume' and method == 'POST':
                 _, app, _ = self._identity(db, headers, body)
                 return self.portal.download_resume(db, app['candidateId']), {}
+            if route == '/review/respond' and method == 'POST':
+                return self._respond(db, headers, body), {}
             if route == '/action' and method == 'POST':
                 return self._action(db, headers, body), {}
             raise Problem('Действие не найдено.', 404)
@@ -288,6 +290,54 @@ class EmployerRoutes:
             require(tuple(row) == (body['action'], fingerprint, app['applicationId']),
                     'Этот запрос уже использован для другого действия.', 409)
         return rid, fingerprint, bool(row)
+
+    def _respond(self, db, headers, body):
+        """One initial review answer over either real application or intake draft."""
+        fields = {'source', 'id', 'vacancyId', 'decision', 'expectedRevision', 'requestId'}
+        require(fields <= set(body) and set(body) <= fields | {'generation', 'rejectionAnswers'},
+                'Проверьте ответ по кандидату.', 400)
+        require(body['source'] in ('application', 'intake'), 'Выберите источник кандидата.', 400)
+        require(body['decision'] in ('invite', 'reject'), 'Выберите ответ.', 400)
+        cid, vid, rid = text(body['id'], 160), text(body['vacancyId'], 160), text(body['requestId'], 120)
+        require(not any(ord(ch) < 32 or ord(ch) == 127 for ch in rid), 'Некорректный запрос.', 400)
+        require(type(body['expectedRevision']) is int and 0 <= body['expectedRevision'] < 2 ** 53,
+                'Обновите карточку кандидата.', 400)
+        normalized = {**body, 'id': cid, 'vacancyId': vid, 'requestId': rid}
+        if body['decision'] == 'reject':
+            normalized['rejectionAnswers'] = workflow.rejection_answers(body.get('rejectionAnswers'))
+        else:
+            require('rejectionAnswers' not in body, 'Причина отказа не нужна для приглашения.', 400)
+        if body['source'] == 'intake':
+            require('generation' not in body, 'Проверьте источник кандидата.', 400)
+            principal = access.authenticate(db, headers)
+            return self.intake.review_respond(db, principal['workspaceId'], vid,
+                                             {k: v for k, v in normalized.items() if k != 'source'})
+        require('generation' in body, 'Обновите вакансию перед ответом.', 409)
+        db.execute('BEGIN IMMEDIATE')
+        command = {**normalized, 'action': 'review.respond', 'applicationId': cid}
+        # A committed retry can read its minimal receipt after consent changes.
+        # New writes below still require the normal active/approved identity.
+        principal, app, _ = self._identity(db, headers, command, include_rejected=True,
+                                          include_unapproved=True, allow_archived=True)
+        rid, fingerprint, replay = self._command(db, principal, app, command)
+        wid = principal['workspaceId']
+        if not replay:
+            app = store.application(db, wid, cid, include_rejected=True)
+            store.require_active(app)
+            store.ensure_open(db, wid, vid)
+            workflow.check_revision(db, cid, body['expectedRevision'])
+            require(app['reviewState'] == 'proposed' and workflow.review_response(db, cid) is None and
+                    workflow.load(db, cid)['decision'] != 'declined',
+                    'Ответ по кандидату уже сохранён.', 409)
+            if body['decision'] == 'invite':
+                store.request_invitation(db, wid, cid, request_id=rid, expected_revision=body['expectedRevision'])
+            else:
+                self._reject(db, principal, app, command)
+            db.execute('''INSERT INTO em_route_commands VALUES (?,?,?,?,?,?,?)''',
+                       (wid, principal['accountId'], rid, command['action'], fingerprint, cid, iso(now())))
+        return {'response': workflow.review_response(db, cid),
+                'reviewRejection': workflow.review_rejection(db, cid),
+                'state': self._state(db, principal, vid)}
 
     def _action(self, db, headers, body):
         require(isinstance(body.get('action'), str), 'Укажите действие.', 400)
@@ -362,6 +412,9 @@ class EmployerRoutes:
               (meeting['id'], aid, wid, saved[0] if saved else principal['name'], _dump(turns), joined_at, iso(now())))
             store.bump_revision(db, wid, app['vacancyId'])
         else:
+            if action == 'decision' and body.get('value') == 'declined':
+                require(app['reviewState'] != 'proposed' or not app.get('invitationRequestedAt'),
+                        'Ответ по кандидату уже сохранён.', 409)
             result = workflow.manager_action(db, aid, action, body, manager_id=manager_id, vacancy_id=app['vacancyId'])
             events = result['events']
             if action == 'decision' and body.get('value') == 'declined':
@@ -376,6 +429,10 @@ class EmployerRoutes:
 
     def _reject(self, db, principal, app, body):
         aid, wid = app['applicationId'], principal['workspaceId']
+        # The older initial-review endpoint obeys the same one-answer rule.
+        # A later selected-stage outcome remains a separate workflow action.
+        require(app['reviewState'] != 'proposed' or not app.get('invitationRequestedAt'),
+                'Ответ по кандидату уже сохранён.', 409)
         if 'expectedRevision' in body:
             workflow.check_revision(db, aid, body['expectedRevision'])
         if 'rejectionAnswers' in body:

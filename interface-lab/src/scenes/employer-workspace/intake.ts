@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { journeyRequestTarget, request } from '../connected-journey/api';
+import { journeyRequestTarget, request, type EmployerReviewResponse } from '../connected-journey/api';
 import type { Scope } from './EmployerShell';
 import type { RecordingChapter } from '../interview-review/InterviewReview';
 
@@ -19,19 +19,25 @@ export type PreparedProfile = {
   source?: { kind: 'dsa-panel'; candidateId: string; example: boolean };
 };
 export type IntakeComment = { id: string; recordingIndex: number; recordingId: string; seconds: number; chapterTitle?: string; text: string; createdAt: string };
-export type IntakePerson = { id: string; name: string; role: string; contact: string; link: string; note: string; scope: Scope; files: IntakeFile[]; createdAt: string; archived: boolean; preparedProfile?: PreparedProfile; screeningComments?: IntakeComment[]; reviewRevision?: number; reviewRejection?: { reason: string; missing: string; improve: string; createdAt?: string } | null };
+export type IntakePerson = { id: string; name: string; role: string; contact: string; link: string; note: string; scope: Scope; files: IntakeFile[]; createdAt: string; archived: boolean; preparedProfile?: PreparedProfile; screeningComments?: IntakeComment[]; reviewRevision?: number; reviewResponse?: EmployerReviewResponse | null; reviewRejection?: { reason: string; missing: string; improve: string; createdAt?: string } | null };
 export function useIntake(token: string, scope: Scope, vacancyId?: string) {
   const context = JSON.stringify([token, scope, vacancyId || '']);
   const [result, setResult] = useState<{ context: string; people: IntakePerson[]; error: string; loading: boolean } | null>(null);
   const sequence = useRef(0);
+  const currentContext = useRef<string | null>(context);
+  currentContext.current = context;
   const refresh = useCallback(async () => {
+    if (!token || currentContext.current !== context) return;
     const seq = ++sequence.current;
-    if (!token) return;
     setResult(previous => ({ context, people: previous?.context === context ? previous.people : [], error: '', loading: true }));
-    try { const data = await request<{ candidates: IntakePerson[] }>(`intake?scope=${scope}${vacancyId ? '&vacancyId=' + encodeURIComponent(vacancyId) : ''}`, token); if (sequence.current === seq) setResult({ context, people: data.candidates, error: '', loading: false }); }
-    catch (e) { if (sequence.current === seq) setResult(previous => ({ context, people: previous?.context === context ? previous.people : [], error: (e as Error).message, loading: false })); }
+    try { const data = await request<{ candidates: IntakePerson[] }>(`intake?scope=${scope}${vacancyId ? '&vacancyId=' + encodeURIComponent(vacancyId) : ''}`, token); if (sequence.current === seq && currentContext.current === context) setResult({ context, people: data.candidates, error: '', loading: false }); }
+    catch (e) { if (sequence.current === seq && currentContext.current === context) setResult(previous => ({ context, people: previous?.context === context ? previous.people : [], error: (e as Error).message, loading: false })); }
   }, [token, scope, vacancyId, context]);
-  useEffect(() => { void refresh(); return () => { sequence.current++; }; }, [refresh]);
+  useEffect(() => {
+    currentContext.current = context;
+    void refresh();
+    return () => { sequence.current++; if (currentContext.current === context) currentContext.current = null; };
+  }, [refresh, context]);
   // The new vacancy renders before effects run; never expose the previous result in that frame.
   const current = result?.context === context ? result : null;
   return { people: current?.people || [], error: current?.error || '', loading: !!token && (!current || current.loading), refresh };

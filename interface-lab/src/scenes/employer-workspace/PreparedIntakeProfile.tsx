@@ -5,6 +5,8 @@ import { parseMeetingTranscript } from '../connected-journey/transcript';
 import { SourceScreeningReview } from '../interview-review/InterviewReview';
 import { downloadResume, loadResumeFile, type IntakePerson, type PreparedProfile } from './intake';
 import { EmployerCandidateProfile, EmployerTimecodeComment } from './EmployerCandidateProfile';
+import { candidateDecision, respondToCandidate } from './candidate-response';
+import type { EmployerCandidateResponseValues } from './employer-candidate-profile-types';
 
 function webUrl(value: string) {
   if (!value.trim()) return '';
@@ -86,12 +88,27 @@ export function PreparedIntakeProfile({ person, token, vacancyId, onUpdated }: {
       const saved = result.candidates.find(candidate => candidate.id === current.id);
       if (mounted.current) {
         if (saved) setCurrent(saved);
-        onUpdated?.();
       }
+      onUpdated?.();
       return true;
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Не удалось сохранить.'); return false;
-    } finally { saving.current = false; setBusy(false); }
+      if (mounted.current) setError(cause instanceof Error ? cause.message : 'Не удалось сохранить.'); return false;
+    } finally { saving.current = false; if (mounted.current) setBusy(false); }
+  }
+  async function respond(values: EmployerCandidateResponseValues) {
+    if (!vacancyId || saving.current || !mounted.current) return false;
+    saving.current = true; setBusy(true); setError('');
+    try {
+      const result = await respondToCandidate(token, { source: 'intake', id: current.id, vacancyId }, values);
+      if (mounted.current) {
+        const saved = result.candidates?.find(candidate => candidate.id === current.id);
+        if (saved) setCurrent(saved);
+      }
+      // Refresh the exact list even when this card was closed during the request.
+      // useIntake ignores stale refresh callbacks after a workspace/vacancy switch.
+      onUpdated?.();
+      return true;
+    } finally { saving.current = false; if (mounted.current) setBusy(false); }
   }
   const download = (file: typeof firstFile) => {
     setError(''); void downloadResume(token, file).catch(cause => setError(cause instanceof Error ? cause.message : 'Не удалось загрузить резюме.'));
@@ -109,5 +126,8 @@ export function PreparedIntakeProfile({ person, token, vacancyId, onUpdated }: {
       {current.files.slice(1).map(file => <button key={file.id} type="button" className="ew-file-row" onClick={() => download(file)}>{file.name}</button>)}
       <PreparedInterview key={`${current.id}:${token}`} person={current} profile={profile} index={0} token={token} vacancyId={vacancyId} busy={busy} onComment={values => mutate('comment', values)}/>
     </>}
+    onRespond={vacancyId && !current.archived ? respond : undefined}
+    decision={candidateDecision(current.reviewResponse, current.reviewRejection)}
+    responseIdentity={`${token}:intake:${vacancyId}:${current.id}`}
     workflowRevision={current.reviewRevision || 0} busy={busy} error={error}/>;
 }

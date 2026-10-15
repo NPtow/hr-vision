@@ -22,6 +22,7 @@ from candidate_resume import MAX_BYTES, MAX_ENCODED, parse_upload
 from domain import Problem, iso, now, require, text
 from dsa_panel import SOURCE as DSA_PANEL_SOURCE
 import employer_store as store
+import employer_workflow as workflow
 
 MAX_BATCH_BYTES = 8 * 1024 * 1024
 MAX_STORAGE_BYTES = 128 * 1024 * 1024
@@ -223,14 +224,20 @@ def _review_projection(person, events):
     comments = [value for kind, value in events if kind == 'comment' and
                 sources.get(value['recordingIndex']) == value['recordingId']]
     rejections = [value for kind, value in events if kind == 'rejection']
+    response = ({'decision': 'reject', 'createdAt': rejections[-1]['createdAt']} if rejections else
+                {'decision': 'invite', 'createdAt': person['invitationRequestedAt']}
+                if person.get('invitationRequestedAt') else None)
     # This opaque 52-bit token is exactly representable in JavaScript. Binding
     # it to the current sources prevents a stale index from targeting a newly
     # replaced recording, even before the first comment exists. GET stays read-only.
     version = {'id': person['id'], 'archived': bool(person.get('archived')),
                'sources': sources, 'events': len(events)}
+    if person.get('invitationRequestedAt'):
+        version['invitationRequestedAt'] = person['invitationRequestedAt']
     revision = int(hashlib.sha256(_dump(version).encode()).hexdigest()[:13], 16)
     return {**person, 'screeningComments': comments,
-            'reviewRejection': rejections[-1] if rejections else None, 'reviewRevision': revision}
+            'reviewRejection': rejections[-1] if rejections else None,
+            'reviewResponse': response, 'reviewRevision': revision}
 
 
 def _review_person(db, workspace_id, vacancy_id, body):
@@ -251,6 +258,10 @@ def _review_body(body, *, comment):
     required = common | (fields - {'chapterTitle'} if comment else fields)
     require(isinstance(body, dict) and required <= set(body) <= common | fields,
             'Проверьте данные отзыва.', 400)
+    return _review_identity(body)
+
+
+def _review_identity(body):
     require(isinstance(body['id'], str) and re.fullmatch(r'[a-f0-9]{24}', body['id']),
             'Кандидат не найден.', 404)
     require(isinstance(body['vacancyId'], str) and bool(body['vacancyId']), 'Выберите вакансию.', 400)
@@ -273,6 +284,10 @@ def _require_review_writable(db, workspace_id, vacancy_id, person, projected, ex
             'Карточка изменилась. Обновите её перед сохранением.', 409)
     store.ensure_open(db, workspace_id, vacancy_id)
     require(not person.get('archived'), 'Кандидат уже в архиве.', 409)
+
+
+def _require_unanswered(projected):
+    require(projected['reviewResponse'] is None, 'Ответ по этому кандидату уже сохранён.', 409)
 
 
 def screening_comment(db, workspace_id, vacancy_id, body):
@@ -311,11 +326,7 @@ def screening_comment(db, workspace_id, vacancy_id, body):
 def review_reject(db, workspace_id, vacancy_id, body):
     """Keep the rejection answers and archive the draft in one transaction."""
     request_id = _review_body(body, comment=False)
-    answers = body['rejectionAnswers']
-    require(isinstance(answers, dict) and 'reason' in answers and
-            set(answers) <= {'reason', 'missing', 'improve'}, 'Проверьте причины отказа.', 400)
-    answers = {key: _review_text(answers.get(key, ''), required=key == 'reason')
-               for key in ('reason', 'missing', 'improve')}
+    answers = workflow.rejection_answers(body['rejectionAnswers'])
     payload = {**body, 'requestId': request_id, 'rejectionAnswers': answers}
     with store._atomic(db):
         person, projected = _review_person(db, workspace_id, vacancy_id, body)
@@ -323,6 +334,7 @@ def review_reject(db, workspace_id, vacancy_id, body):
         if previous is not None:
             return list_candidates(db, workspace_id, vacancy_id)
         _require_review_writable(db, workspace_id, vacancy_id, person, projected, body['expectedRevision'])
+        _require_unanswered(projected)
         created_at = iso(now())
         event = {**answers, 'id': secrets.token_hex(12), 'createdAt': created_at}
         db.execute('INSERT INTO em_intake_review_events VALUES (?,?,?,?,?,?,?)',
@@ -332,6 +344,35 @@ def review_reject(db, workspace_id, vacancy_id, body):
                    (_dump(person), person['id'], workspace_id, vacancy_id))
         store._remember(db, workspace_id, request_id, 'intake.reject', digest, {'eventId': event['id']})
         return list_candidates(db, workspace_id, vacancy_id)
+
+
+def review_respond(db, workspace_id, vacancy_id, body):
+    """Persist private employer intent; this never creates a candidate or meeting."""
+    require(isinstance(body, dict) and body.get('decision') in ('invite', 'reject'),
+            'Выберите ответ по кандидату.', 400)
+    fields = {'vacancyId', 'id', 'decision', 'requestId', 'expectedRevision'}
+    if body['decision'] == 'reject':
+        fields.add('rejectionAnswers')
+    require(set(body) == fields, 'Проверьте данные ответа.', 400)
+    request_id = _review_identity(body)
+    if body['decision'] == 'reject':
+        result = review_reject(db, workspace_id, vacancy_id, {key: value for key, value in body.items() if key != 'decision'})
+    else:
+        payload = {**body, 'requestId': request_id}
+        with store._atomic(db):
+            person, projected = _review_person(db, workspace_id, vacancy_id, body)
+            previous, digest = store._command(db, workspace_id, request_id, 'intake.invite', payload)
+            if previous is None:
+                _require_review_writable(db, workspace_id, vacancy_id, person, projected, body['expectedRevision'])
+                _require_unanswered(projected)
+                person['invitationRequestedAt'] = iso(now())
+                db.execute('UPDATE em_intake_candidates SET body=? WHERE id=? AND workspace_id=? AND vacancy_id=?',
+                           (_dump(person), person['id'], workspace_id, vacancy_id))
+                store._remember(db, workspace_id, request_id, 'intake.invite', digest,
+                                {'decision': 'invite', 'createdAt': person['invitationRequestedAt']})
+            result = list_candidates(db, workspace_id, vacancy_id)
+    saved = next(person for person in result['candidates'] if person['id'] == body['id'])
+    return {**result, 'response': saved['reviewResponse'], 'reviewRejection': saved['reviewRejection']}
 
 
 def existing(db, workspace_id, vacancy_id, body):
