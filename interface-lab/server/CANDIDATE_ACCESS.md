@@ -1,5 +1,43 @@
 # Candidate access from an HH interview
 
+## Personal outreach with a local CV
+
+`scripts/candidate-outreach.py` is the trusted operator entry for a PDF, DOCX or
+TXT received outside HH. It uses the existing CV extractor → structured model →
+summary → grounding judge; there is no regex fallback if the model fails. Run it
+on the API host under the service identity/environment, with `--server-dir` set to
+the deployed release. `prepare` without `--apply` only validates/extracts the file.
+
+```sh
+python3 candidate-outreach.py --server-dir /opt/hr-vision-api/current prepare \
+  --resume /private/resume.pdf --campaign personal-outreach --recipient person-001
+python3 candidate-outreach.py --server-dir /opt/hr-vision-api/current prepare \
+  --resume /private/resume.pdf --campaign personal-outreach --recipient person-001 \
+  --apply --output /private/invitation.json
+python3 candidate-outreach.py --server-dir /opt/hr-vision-api/current status \
+  --invitation booking_ID
+```
+
+The operator must have permission to use the supplied CV. The script creates an
+inactive prepared profile with source `manual`, preserves the original file and
+issues a scoped booking invitation with `utm_source=personal`. No HH identity,
+outbox entry, consent, booked interview, login or outgoing message is fabricated.
+The JSON result is private (0600); stdout does not print its capability token.
+Campaign/recipient is the idempotency key; the same CV recovers the same link.
+A changed file for that identity is rejected, never used to overwrite edits.
+
+The recipient enters their email and explicitly consents when choosing a slot.
+An already registered email is rejected before reserving a slot or notifying a
+recruiter. Manual booking consent is versioned `manual-cv-profile-v1`. The assigned
+recruiter's ordinary send-access action activates this same candidate and sends
+the existing credentials email. Manual CV profiles without booking consent keep
+the legacy claim path and do not gain this access action automatically.
+
+`status` reports unique page-load/booking events, current interview state and
+access-email status. Personal-message sending/read receipts are external and
+reported as `external_not_observed`; loading a page is not proof of a human read.
+This entry shares the existing UI and booking rules; the HH sender is not run.
+
 The personal HH booking link resolves to one prepared candidate and a preserved
 full CV. The candidate chooses a recruiter slot, supplies their email and
 explicitly agrees to preparation of their profile from that CV. The booking

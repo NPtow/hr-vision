@@ -143,7 +143,7 @@ class CandidateAccess:
         else:
             consent = self._consent(db, cid, interview['id'])
             intake = db.execute('SELECT source FROM cp_intake WHERE candidate_id=?', (cid,)).fetchone()
-            if not consent or not intake or intake[0] != 'hh':
+            if not consent or not intake or intake[0] not in ('hh', 'manual'):
                 return person, 'credentials', None, 'booking_consent_required'
             if not db.execute('SELECT 1 FROM cp_resumes WHERE candidate_id=? AND length(content)>0', (cid,)).fetchone():
                 return person, 'credentials', None, 'resume_required'

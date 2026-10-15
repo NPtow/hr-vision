@@ -82,6 +82,14 @@ def init(db):
           interview_id TEXT PRIMARY KEY REFERENCES cp_interviews(id),
           call_invitation_id TEXT NOT NULL REFERENCES cp_invitations(id),
           url TEXT NOT NULL, expires_at TEXT NOT NULL)''',
+        '''CREATE TABLE IF NOT EXISTS cp_booking_manual_sources (
+          candidate_id TEXT PRIMARY KEY REFERENCES cp_candidates(id),
+          campaign_id TEXT NOT NULL, recipient_id TEXT NOT NULL,
+          cv_sha256 TEXT NOT NULL, created_at TEXT NOT NULL,
+          UNIQUE(campaign_id,recipient_id))''',
+        '''CREATE TABLE IF NOT EXISTS cp_booking_manual_events (
+          event_key TEXT PRIMARY KEY, invitation_id TEXT NOT NULL REFERENCES cp_booking_invitations(id),
+          kind TEXT NOT NULL, interview_id TEXT REFERENCES cp_interviews(id), created_at TEXT NOT NULL)''',
     ):
         db.execute(statement)
     if 'request_hash' not in {row[1] for row in db.execute('PRAGMA table_info(cp_booking_requests)')}:
@@ -121,8 +129,33 @@ class CandidateBooking:
     def _prepared(db, candidate_id):
         return db.execute('''SELECT 1 FROM cp_candidates c JOIN cp_intake t ON t.candidate_id=c.id
           JOIN cp_resumes r ON r.candidate_id=c.id
-          WHERE c.id=? AND t.source='hh' AND length(r.content)>0 AND length(trim(r.text_content))>0''',
+          WHERE c.id=? AND (t.source='hh' OR (t.source='manual' AND EXISTS
+            (SELECT 1 FROM cp_booking_manual_sources m WHERE m.candidate_id=c.id)))
+          AND length(r.content)>0 AND length(trim(r.text_content))>0''',
                           (candidate_id,)).fetchone() is not None
+
+    def issue_manual(self, db, resume, campaign_id, recipient_id):
+        """Trusted operator entry. The caller supplies a model-validated CV.
+
+        No account, consent, booking or outgoing message is created here.
+        The same campaign/recipient/file always returns the same invitation.
+        """
+        for value in (campaign_id, recipient_id):
+            _id(value)
+        digest = hashlib.sha256(resume['content']).hexdigest()
+        old = db.execute('''SELECT candidate_id,cv_sha256 FROM cp_booking_manual_sources
+          WHERE campaign_id=? AND recipient_id=?''', (campaign_id, recipient_id)).fetchone()
+        if old:
+            require(old[1] == digest, 'Для этого получателя уже использовано другое резюме.', 409)
+            cid = old[0]
+        else:
+            key = 'manual-outreach:' + hashlib.sha256((campaign_id + ':' + recipient_id).encode()).hexdigest()
+            cid = invites.create_prepared(db, profile_value(resume['fields']), source='manual',
+                                          external_key=key, cv=resume)
+            db.execute('INSERT INTO cp_booking_manual_sources VALUES (?,?,?,?,?)',
+                       (cid, campaign_id, recipient_id, digest, iso(now())))
+        issued = self.issue(db, cid, campaign_id, recipient_id)
+        return {'candidateId': cid, **issued}
 
     def issue(self, db, candidate_id, campaign_id, recipient_id, *, ttl_seconds=TTL_SECONDS):
         """Trusted only; caller owns authorization and the SQLite transaction."""
@@ -141,7 +174,7 @@ class CandidateBooking:
             require(not old[3] and old[2] > int(now().timestamp()), 'Приглашение истекло или отозвано.', 410)
             identifier, expires = old[0], old[2]
         else:
-            require(self._prepared(db, candidate_id), 'Сначала подготовьте профиль и резюме из HH.', 409)
+            require(self._prepared(db, candidate_id), 'Сначала подготовьте профиль и резюме.', 409)
             require(not db.execute('SELECT 1 FROM cp_interviews WHERE candidate_id=?', (candidate_id,)).fetchone(),
                     'Кандидат уже записан на интервью.', 409)
             identifier, expires = 'booking_' + secrets.token_hex(16), int(now().timestamp()) + ttl_seconds
@@ -149,10 +182,12 @@ class CandidateBooking:
             db.execute('INSERT INTO cp_booking_invitations VALUES (?,?,?,?,?,?,NULL,?)',
                        (identifier, hashlib.sha256(token.encode()).hexdigest(), candidate_id,
                         campaign_id, recipient_id, expires, iso(now())))
+        source = db.execute('SELECT source FROM cp_intake WHERE candidate_id=?', (candidate_id,)).fetchone()[0]
         return {'invitationId': identifier,
                 'url': self.portal.origin.rstrip('/') + '/iframe.html?id=hr-vision-product--candidate'
                        '&viewMode=story&cp=invite-booking&' + urlencode({
-                           'utm_source': 'hh', 'utm_medium': 'outreach', 'utm_campaign': campaign_id})
+                           'utm_source': 'hh' if source == 'hh' else 'personal',
+                           'utm_medium': 'outreach', 'utm_campaign': campaign_id})
                        + '#booking=' + quote(self._token(db, identifier)),
                 'expiresAt': iso(dt.datetime.fromtimestamp(expires, dt.timezone.utc))}
 
@@ -224,6 +259,14 @@ class CandidateBooking:
         return dict(zip(('id', 'candidateId', 'campaignId', 'recipientId', 'expires', 'revokedAt'), row))
 
     def _event(self, db, event, invitation, *, interview_id=None, key):
+        manual = db.execute('''SELECT candidate_id FROM cp_booking_manual_sources
+          WHERE campaign_id=? AND recipient_id=?''',
+                            (invitation['campaignId'], invitation['recipientId'])).fetchone()
+        if manual:
+            require(manual[0] == invitation['candidateId'], 'Получатель не совпадает с приглашением.', 409)
+            db.execute('INSERT OR IGNORE INTO cp_booking_manual_events VALUES (?,?,?,?,?)',
+                       (key, invitation['id'], event, interview_id, iso(now())))
+            return
         if self.event_sink:
             self.event_sink(db, event, invitation['recipientId'], campaign_id=invitation['campaignId'],
                             invitation_id=invitation['id'], interview_id=interview_id, event_key=key)
@@ -268,9 +311,10 @@ class CandidateBooking:
         if profile.get('resumeReviewed'):
             return
         raw = re.sub(r'^Резюме из HH · [^\n]+\n\n', '', row[1], count=1)
-        facts = extract_preferences(raw)
         extracted = json.loads(row[2])
-        if isinstance(extracted, dict):
+        source = db.execute('SELECT source FROM cp_intake WHERE candidate_id=?', (cid,)).fetchone()
+        facts = extracted if source and source[0] == 'manual' else extract_preferences(raw)
+        if isinstance(extracted, dict) and (not source or source[0] != 'manual'):
             facts = {**{key: value for key, value in extracted.items() if key in CV_PROFILE_FIELDS}, **facts}
         patch = {key: value for key, value in facts.items() if key in CV_PROFILE_FIELDS
                  and not profile.get(key) and value not in ('', None)}
@@ -312,6 +356,11 @@ class CandidateBooking:
         person = db.execute('SELECT email FROM cp_candidates WHERE id=?', (cid,)).fetchone()
         require(person and (person[0] is None or person[0] == email),
                 'Профиль уже связан с другой почтой. Свяжитесь с командой HR Vision.', 409)
+        manual = db.execute('SELECT 1 FROM cp_booking_manual_sources WHERE candidate_id=?', (cid,)).fetchone()
+        if manual:
+            require(not db.execute('SELECT 1 FROM cp_candidates WHERE lower(email)=? AND id<>?',
+                                   (email, cid)).fetchone(),
+                    'Эта почта уже зарегистрирована. Используйте другую свою почту или обратитесь к команде.', 409)
         require(self._prepared(db, cid), 'Сначала подготовьте резюме.', 409)
         if existing:
             require(existing['slotId'] == slot_id, 'Вы уже записаны. Для переноса свяжитесь с командой.', 409)
@@ -329,8 +378,10 @@ class CandidateBooking:
         if not saved:
             self._prepare_profile(db, cid)
             prepared_at = iso(now())
+            source = db.execute('SELECT source FROM cp_intake WHERE candidate_id=?', (cid,)).fetchone()
+            version = 'manual-cv-profile-v1' if source and source[0] == 'manual' else PROFILE_CONSENT_VERSION
             db.execute('INSERT INTO cp_booking_profile_consents VALUES (?,?,?,?,?,?,?)',
-                       (interview_id, cid, invitation['id'], email, PROFILE_CONSENT_VERSION, prepared_at, prepared_at))
+                       (interview_id, cid, invitation['id'], email, version, prepared_at, prepared_at))
             db.execute('UPDATE cp_intake SET contact_email=? WHERE candidate_id=?', (email, cid))
         if previous:
             # Legacy booking rows acquire the new payload fingerprint only after

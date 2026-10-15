@@ -173,7 +173,7 @@ function BookingInvitation({ token }: { token: string }) {
         <label htmlFor="bp-email">Ваша почта</label>
         <input id="bp-email" type="email" name="email" autoComplete="email" required maxLength={254} value={email} onChange={event => setEmail(event.target.value)} disabled={busy || loading || uncertain} aria-describedby="bp-email-help"/>
         <p className="bp-muted" id="bp-email-help">На созвоне рекрутер отправит сюда ссылку на ваш профиль, логин и пароль.</p>
-        <label className="bp-consent"><input type="checkbox" name="consentProfile" required checked={consent} onChange={event => setConsent(event.target.checked)} disabled={busy || loading}/><span>Согласен на интервью и подготовку моего профиля HR Vision из резюме на HH.</span></label>
+        <label className="bp-consent"><input type="checkbox" name="consentProfile" required checked={consent} onChange={event => setConsent(event.target.checked)} disabled={busy || loading}/><span>Согласен на интервью и подготовку моего профиля HR Vision из резюме.</span></label>
       </div>;
   if (!state) return <section className="bp-surface" aria-busy={loading}>
     <span className="bp-symbol"><CalendarDays size={26}/></span>
