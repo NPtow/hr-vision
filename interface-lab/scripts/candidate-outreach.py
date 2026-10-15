@@ -55,7 +55,8 @@ def prepare(service, resume, campaign, recipient):
         if old:
             return {'candidateId': old[0], **service.BOOKING.issue(db, old[0], campaign, recipient),
                     'reused': True, 'cvSha256': digest}
-    owner = 'manual-outreach:' + hashlib.sha256((campaign + ':' + recipient).encode()).hexdigest()
+    owner = 'manual-outreach:' + hashlib.sha256(
+        json.dumps([campaign, recipient], separators=(',', ':')).encode()).hexdigest()
     generated = service.CANDIDATE_PORTAL.resume_model.generate(resume, owner, authorize)
     with service.CANDIDATE_PORTAL.lock, service.connect() as db:
         db.execute('BEGIN IMMEDIATE')

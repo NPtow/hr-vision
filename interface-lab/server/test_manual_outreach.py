@@ -94,6 +94,13 @@ class ManualOutreachTest(unittest.TestCase):
         self.assertEqual([], self.rows('SELECT * FROM cp_interviews'))
         self.assertEqual([], self.rows('SELECT * FROM rn_outbox'))
 
+    def test_compound_identifiers_cannot_merge_two_people(self):
+        with self.connect() as db:
+            first = self.bookings.issue_manual(db, self.resume(), 'campaign:a', 'b')
+            second = self.bookings.issue_manual(db, self.resume(), 'campaign', 'a:b')
+        self.assertNotEqual(first['candidateId'], second['candidateId'])
+        self.assertNotEqual(first['url'], second['url'])
+
     def test_actual_cli_applies_and_recovers_without_second_model_run(self):
         import tempfile
         service = SimpleNamespace(CANDIDATE_PORTAL=self.portal, BOOKING=self.bookings, connect=self.connect)

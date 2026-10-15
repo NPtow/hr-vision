@@ -149,7 +149,8 @@ class CandidateBooking:
             require(old[1] == digest, 'Для этого получателя уже использовано другое резюме.', 409)
             cid = old[0]
         else:
-            key = 'manual-outreach:' + hashlib.sha256((campaign_id + ':' + recipient_id).encode()).hexdigest()
+            key = 'manual-outreach:' + hashlib.sha256(
+                json.dumps([campaign_id, recipient_id], separators=(',', ':')).encode()).hexdigest()
             cid = invites.create_prepared(db, profile_value(resume['fields']), source='manual',
                                           external_key=key, cv=resume)
             db.execute('INSERT INTO cp_booking_manual_sources VALUES (?,?,?,?,?)',
