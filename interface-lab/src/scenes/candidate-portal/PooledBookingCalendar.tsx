@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { DayPicker } from '@daypicker/react';
 import { ru } from '@daypicker/react/locale';
 import { ArrowRight, Check, Globe2 } from 'lucide-react';
@@ -10,12 +10,12 @@ const zones = [ ['Europe/Moscow', 'Москва · UTC+3'], ['Europe/Kaliningrad
   ['Asia/Yekaterinburg', 'Екатеринбург · UTC+5'] ];
 type Props = {
   slots: BookingSlot[]; selectedId: string; onSelect: (id: string) => void;
-  timezone: string; onTimezone: (zone: string) => void; onContinue: () => void;
-  disabled?: boolean; continueLabel?: string;
+  timezone: string; onTimezone: (zone: string) => void; onContinue?: () => void;
+  disabled?: boolean; continueLabel?: string; action?: ReactNode;
 };
 
 /** Shared by personal invitations and the signed-in candidate cabinet. */
-export function PooledBookingCalendar({ slots, selectedId, onSelect, timezone, onTimezone, onContinue, disabled = false, continueLabel = 'Продолжить' }: Props) {
+export function PooledBookingCalendar({ slots, selectedId, onSelect, timezone, onTimezone, onContinue, disabled = false, continueLabel = 'Продолжить', action }: Props) {
   const days = useMemo(() => bookingDays(slots, timezone), [slots, timezone]);
   const [dayKey, setDayKey] = useState('');
   const selectedDay = days.find(day => day.slots.some(slot => slot.id === selectedId));
@@ -63,7 +63,7 @@ export function PooledBookingCalendar({ slots, selectedId, onSelect, timezone, o
             aria-label={`${dateLabel}, ${slotLabel(slot.start, timezone)}–${slotLabel(slot.end, timezone)}`}>
             {slotLabel(slot.start, timezone)}{slot.id === selectedId && <Check size={17}/>}</button>)}
         </div>
-        <button type="button" className="pbc-primary" disabled={disabled || !selected} onClick={onContinue}>{continueLabel}<ArrowRight size={17}/></button>
+        {action ?? <button type="button" className="pbc-primary" disabled={disabled || !selected} onClick={onContinue}>{continueLabel}<ArrowRight size={17}/></button>}
       </section>
     </div>
   </div>;

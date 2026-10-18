@@ -15,8 +15,9 @@ checks; the engine separately checks campaign/audience/browser state.
 
 Invitation rows contain a digest only. A private per-database HMAC key allows
 the trusted issuer to recover the same URL; keep the database/backups private,
-as with the existing HH outbox. Public DTOs never expose CV, contacts, internal
-profile, campaign identifiers or media tokens. Public booking records only explicit
+as with the existing HH outbox. The personal capability exposes only the name and
+booking contact, not the CV, internal profile, campaign identifiers or media tokens.
+Public booking records only explicit
 CV-profile preparation consent and contact email; it creates no account and grants
 no recording, reuse or automatic-vacancy consent. Existing call rules remain in force.
 """
@@ -30,6 +31,7 @@ import secrets
 from urllib.parse import parse_qs, quote, urlencode, urlsplit
 
 import candidate_invites as invites
+import candidate_notifications as notifications
 import interview_scheduler
 from candidate_notifications import _email as delivery_email
 from candidate_portal import email_value, profile_value
@@ -113,6 +115,7 @@ class CandidateBooking:
         self.portal, self.event_sink = portal, event_sink
         with portal.connect() as db:
             init(db)
+            notifications.init(db)
         portal.booking_invitation_lookup = self.existing_invitation
         portal.booking_invitation_store = self.remember_invitation
 
@@ -292,14 +295,36 @@ class CandidateBooking:
         if not booking:
             require(self._prepared(db, cid), 'Резюме пока недоступно. Свяжитесь с командой HR Vision.', 409)
             slots = self.portal.booking_slots(db)
-        # The capability needs no profile projection; only the person's name.
+        # Only contact details needed for this personal invitation, never the CV.
         row = db.execute('SELECT profile FROM cp_candidates WHERE id=?', (cid,)).fetchone()
         require(row, 'Приглашение не найдено.', 404)
         name = json.loads(row[0]).get('name', '')
         return {'status': 'booked' if booking else 'available', 'candidateName': name,
+                'contactEmail': self._contact_email(db, cid),
                 'timezone': 'Europe/Moscow', 'slots': slots,
                 'profileReady': bool(booking and profile_consent(db, cid, booking['id'])),
+                'delivery': notifications.booking_delivery_status(db, cid, invitation['id']),
                 'booking': booking}
+
+    @staticmethod
+    def _contact_email(db, cid):
+        row = db.execute('''SELECT t.contact_email,r.text_content FROM cp_intake t
+          LEFT JOIN cp_resumes r ON r.candidate_id=t.candidate_id WHERE t.candidate_id=?''', (cid,)).fetchone()
+        if not row:
+            return ''
+        if row[0]:
+            try:
+                return delivery_email(email_value(row[0]))
+            except Problem:
+                pass
+        # Explicit email only. Multiple different contacts in a CV are ambiguous.
+        addresses = set()
+        for value in re.findall(r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", row[1] or ''):
+            try:
+                addresses.add(delivery_email(value))
+            except Problem:
+                pass
+        return next(iter(addresses)) if len(addresses) == 1 else ''
 
     @staticmethod
     def _prepare_profile(db, cid):
@@ -357,11 +382,8 @@ class CandidateBooking:
         person = db.execute('SELECT email FROM cp_candidates WHERE id=?', (cid,)).fetchone()
         require(person and (person[0] is None or person[0] == email),
                 'Профиль уже связан с другой почтой. Свяжитесь с командой HR Vision.', 409)
-        manual = db.execute('SELECT 1 FROM cp_booking_manual_sources WHERE candidate_id=?', (cid,)).fetchone()
-        if manual:
-            require(not db.execute('SELECT 1 FROM cp_candidates WHERE lower(email)=? AND id<>?',
-                                   (email, cid)).fetchone(),
-                    'Эта почта уже зарегистрирована. Используйте другую свою почту или обратитесь к команде.', 409)
+        # A meeting contact is not a login identity. Never merge accounts or change
+        # credentials merely because an invitation uses an already known email.
         require(self._prepared(db, cid), 'Сначала подготовьте резюме.', 409)
         if existing:
             require(interview_scheduler.same_window(db, slot_id, existing['slotId']),
@@ -396,7 +418,19 @@ class CandidateBooking:
         retain_until = int(timestamp(booked['end']).timestamp()) + 90 * 60
         db.execute('UPDATE cp_booking_invitations SET expires=MAX(expires,?) WHERE id=?',
                    (retain_until, invitation['id']))
+        if not saved and booked['status'] in ('booked', 'live'):
+            link = self.issue(db, cid, invitation['campaignId'], invitation['recipientId'])['url']
+            notifications.enqueue_booking_confirmation(db, cid, invitation['id'], interview_id, email, link)
         return self._state(db, invitation)
+
+    def _telegram(self, db, invitation):
+        cid = invitation['candidateId']
+        booking = self._interview(db, cid)
+        require(booking and profile_consent(db, cid, booking['id']), 'Сначала подтвердите запись на интервью.', 409)
+        original = db.execute('''SELECT b.id,b.campaign_id,b.recipient_id FROM cp_booking_profile_consents c
+          JOIN cp_booking_invitations b ON b.id=c.invitation_id WHERE c.interview_id=?''', (booking['id'],)).fetchone()
+        link = self.issue(db, cid, original[1], original[2])['url']
+        return notifications.create_booking_telegram_link(db, cid, original[0], link)
 
     def _call(self, db, invitation):
         cid = invitation['candidateId']
@@ -422,7 +456,7 @@ class CandidateBooking:
 
     def handle(self, method, raw_path, headers, body, ip):
         parsed = urlsplit(raw_path)
-        require(parsed.path in (PREFIX + 'state', PREFIX + 'book', PREFIX + 'call'), 'Не найдено.', 404)
+        require(parsed.path in (PREFIX + 'state', PREFIX + 'book', PREFIX + 'call', PREFIX + 'telegram'), 'Не найдено.', 404)
         require(method == 'POST', 'Откройте персональную ссылку.', 405)
         require(not parsed.query and not parsed.fragment, 'Передайте ссылку в теле запроса.', 400)
         allowed = getattr(self.portal, 'origins', frozenset((self.portal.origin,)))
@@ -440,6 +474,8 @@ class CandidateBooking:
                 self._event(db, 'booking.page_loaded', invitation, key='booking.page_loaded:' + invitation['id'])
             elif parsed.path.endswith('/book'):
                 result = self._book(db, invitation, body)
+            elif parsed.path.endswith('/telegram'):
+                result = self._telegram(db, invitation)
             else:
                 result = self._call(db, invitation)
             return result, {'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer'}

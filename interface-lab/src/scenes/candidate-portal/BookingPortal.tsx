@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, CalendarDays, Check, Video } from 'lucide-react';
+import { CalendarDays, Check, Send, Video } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import logo from '../employer-workspace/assets/hr-vision-logo.svg';
 import { bookingAttempt, restoreBookingAttempt, type BookingAttempt } from './booking-attempt';
@@ -9,7 +9,8 @@ import './booking-portal.css';
 
 type Slot = BookingSlot;
 type Booking = Slot & { slotId: string; status: string; canOpenCall: boolean };
-type BookingState = { status: 'available' | 'booked'; candidateName: string; profileReady: boolean; timezone: string; slots: Slot[]; booking: Booking | null };
+type BookingState = { status: 'available' | 'booked'; candidateName: string; contactEmail: string; profileReady: boolean; timezone: string; slots: Slot[]; booking: Booking | null;
+  delivery: { email: string | null; telegramAvailable: boolean; telegramLinked: boolean } };
 const tokenKey = 'hr-vision-invitation:booking';
 const attemptKey = 'hr-vision-invitation:booking-request';
 
@@ -89,10 +90,9 @@ function BookingInvitation({ token }: { token: string }) {
   const [email, setEmail] = useState(() => previousAttempt(token)?.email || '');
   const [consent, setConsent] = useState(false);
   const [uncertain, setUncertain] = useState(false);
-  const [stage, setStage] = useState<'time' | 'details'>('time');
+  const [editingEmail, setEditingEmail] = useState(false);
+  const [connectingTelegram, setConnectingTelegram] = useState(false);
   const [timezone, setTimezone] = useState('Europe/Moscow');
-  const detailsHeading = useRef<HTMLHeadingElement>(null);
-  useEffect(() => { if (stage === 'details') detailsHeading.current?.focus(); }, [stage]);
   const attempt = useRef<BookingAttempt | null>(previousAttempt(token));
   const controller = useRef(new AbortController());
   const sequence = useRef(0);
@@ -106,7 +106,7 @@ function BookingInvitation({ token }: { token: string }) {
       if (signal.aborted || current !== sequence.current) return;
       if (!Array.isArray(next.slots) || !['available', 'booked'].includes(next.status)) throw new Error('invalid_state');
       setState(next); setSelectedId(value => next.slots.some(slot => slot.id === value) ? value : '');
-      if (keepError && !next.booking) setStage('time');
+      setEmail(value => value || next.contactEmail || '');
       if (!keepError) setError('');
     } catch (cause) {
       if (signal.aborted || current !== sequence.current) return;
@@ -118,6 +118,17 @@ function BookingInvitation({ token }: { token: string }) {
     controller.current = new AbortController(); void refresh();
     return () => { controller.current.abort(); sequence.current++; };
   }, [refresh]);
+  useEffect(() => {
+    if (!state?.booking) return;
+    const onReturn = () => { if (document.visibilityState === 'visible') void refresh(); };
+    window.addEventListener('focus', onReturn);
+    let checks = 0;
+    const timer = ['pending', 'sending'].includes(state.delivery.email || '') ? window.setInterval(() => {
+      if (++checks >= 6) window.clearInterval(timer);
+      void refresh();
+    }, 5000) : undefined;
+    return () => { window.removeEventListener('focus', onReturn); window.clearInterval(timer); };
+  }, [state?.booking?.id, state?.delivery.email, refresh]);
   async function book() {
     const slotId = state?.booking && !state.profileReady ? state.booking.slotId : selectedId;
     if (pending.current || !slotId || !email.trim() || !consent) return;
@@ -159,13 +170,27 @@ function BookingInvitation({ token }: { token: string }) {
       }
     } finally { pending.current = false; if (!signal.aborted) setEntering(false); }
   }
+  async function connectTelegram() {
+    if (connectingTelegram) return;
+    setConnectingTelegram(true); setError('');
+    try {
+      const result = await request<{ status: string; url: string | null }>('telegram', { token }, controller.current.signal);
+      if (controller.current.signal.aborted) return;
+      if (result.status === 'linked') { await refresh(); return; }
+      const url = new URL(result.url || '');
+      if (url.protocol !== 'https:' || url.hostname !== 't.me' || !url.searchParams.get('start')?.startsWith('bk_')) throw new Error('invalid_telegram_link');
+      location.assign(url.href);
+    } catch { if (!controller.current.signal.aborted) setError('Не удалось подключить Telegram. Попробуйте ещё раз.'); }
+    finally { if (!controller.current.signal.aborted) setConnectingTelegram(false); }
+  }
   const selected = state?.slots.find(slot => slot.id === selectedId);
   const booking = state?.booking;
   const contactFields = <div className="bp-booking-contact">
-        <label htmlFor="bp-email">Ваша почта</label>
-        <input id="bp-email" type="email" name="email" autoComplete="email" required maxLength={254} value={email} onChange={event => setEmail(event.target.value)} disabled={busy || loading || uncertain} aria-describedby="bp-email-help"/>
-        <p className="bp-muted" id="bp-email-help">На созвоне рекрутер отправит сюда ссылку на ваш профиль, логин и пароль.</p>
-        <label className="bp-consent"><input type="checkbox" name="consentProfile" required checked={consent} onChange={event => setConsent(event.target.checked)} disabled={busy || loading}/><span>Согласен на интервью и подготовку моего профиля HR Vision из резюме.</span></label>
+        {state?.contactEmail && !editingEmail ? <div className="bp-known-email"><span><small>Приглашение придёт на</small>{email}</span><button type="button" disabled={busy || loading || uncertain} onClick={() => setEditingEmail(true)}>Изменить</button></div> : <>
+          <label htmlFor="bp-email">Почта для приглашения</label>
+          <input id="bp-email" type="email" name="email" autoComplete="email" required maxLength={254} value={email} onChange={event => setEmail(event.target.value)} disabled={busy || loading || uncertain} placeholder="you@example.com"/>
+        </>}
+        <label className="bp-consent"><input type="checkbox" name="consentProfile" required checked={consent} onChange={event => setConsent(event.target.checked)} disabled={busy || loading || uncertain}/><span>Согласен на интервью и подготовку профиля из резюме.</span></label>
       </div>;
   if (!state) return <section className="bp-surface" aria-busy={loading}>
     <span className="bp-symbol"><CalendarDays size={26}/></span>
@@ -178,8 +203,11 @@ function BookingInvitation({ token }: { token: string }) {
     {booking.status === 'completed' ? <p className="bp-muted">Рекрутер пришлёт ссылку на ваш готовый профиль.</p> : <>
       <div className="bp-booked-time"><strong>{label(booking.start, timezone, { day: 'numeric', month: 'long', weekday: 'long' })}</strong><span>{time(booking.start, timezone)}–{time(booking.end, timezone)}</span></div>
       <p className="bp-muted">{timezone === 'Europe/Moscow' ? 'Московское время' : timezone} · 30 минут</p>
-      <p>{state.profileReady ? 'Профиль подготовлен из вашего резюме. На созвоне рекрутер отправит вам на почту ссылку и данные для входа.' : 'На созвоне рекрутер поможет получить доступ к вашему профилю.'}</p>
+      {state.profileReady && <p className="bp-muted">{state.delivery.email === 'delivered' ? 'Приглашение отправлено на ' : state.delivery.email === 'pending' || state.delivery.email === 'sending' ? 'Отправляем приглашение на ' : 'Почта для приглашения: '}{state.contactEmail}</p>}
       {booking.canOpenCall && <Button disabled={entering} onClick={() => void openCall()}><Video size={18}/>{entering ? 'Открываем встречу…' : 'Перейти к встрече'}</Button>}
+      {state.profileReady && state.delivery.telegramAvailable && <div className="bp-telegram">
+        {state.delivery.telegramLinked ? <span><Check size={17}/>Telegram подключён</span> : <button type="button" disabled={connectingTelegram} onClick={() => void connectTelegram()}><Send size={17}/>{connectingTelegram ? 'Подключаем…' : 'Подключить Telegram'}</button>}
+      </div>}
     </>}
     {!state.profileReady && booking.slotId && <form className="bp-profile-confirmation" onSubmit={event => { event.preventDefault(); void book(); }} aria-busy={busy}>
       <h2>Подготовим ваш профиль</h2>
@@ -188,17 +216,17 @@ function BookingInvitation({ token }: { token: string }) {
     </form>}
     {error && <p className="bp-error" role="alert">{error}</p>}
   </section>;
-  return <section className={`pbc-surface bp-calendar-surface${stage === 'details' && selected ? ' bp-details' : ''}`}>
+  return <section className="pbc-surface bp-calendar-surface">
+    <div className="bp-greeting"><h1>{state.candidateName.trim() ? `Привет, ${state.candidateName.trim().split(/\s+/)[0]}` : 'Выберите время'}</h1><p>Когда удобно поговорить?</p></div>
     {error && <p className="bp-error" role="alert">{error}</p>}
-    {stage === 'details' && selected ? <form onSubmit={event => { event.preventDefault(); void book(); }} aria-busy={busy || loading}>
-      <h1 className="pbc-sr-only" tabIndex={-1} ref={detailsHeading}>Подтвердите запись</h1>
-      <button className="pbc-back" type="button" disabled={busy || loading || uncertain} onClick={() => setStage('time')}><ArrowLeft size={17}/>Изменить время</button>
-      <div className="bp-selection"><CalendarDays size={22}/><div><strong>{label(selected.start, timezone, { day: 'numeric', month: 'long' })}, {time(selected.start, timezone)}</strong><span>30 минут · {timezone === 'Europe/Moscow' ? 'московское время' : timezone}</span></div></div>
-      {contactFields}
-      {uncertain && <p className="bp-muted" role="status">Проверим ту же запись — время и почта сохранены.</p>}
-      <button className="pbc-primary bp-submit" type="submit" disabled={!email.trim() || !consent || busy || loading}>{busy ? 'Бронируем…' : uncertain ? 'Проверить запись' : 'Подтвердить запись'}</button>
-    </form> : !state.slots.length ? <div className="bp-empty"><h2>Пока нет свободного времени</h2><p className="bp-muted">Вернитесь по этой ссылке позже.</p><Button variant="secondary" disabled={loading} onClick={() => void refresh()}>{loading ? 'Проверяем…' : 'Проверить расписание'}</Button></div> :
+    {!state.slots.length ? <div className="bp-empty"><h2>Пока нет свободного времени</h2><p className="bp-muted">Вернитесь по этой ссылке позже.</p><Button variant="secondary" disabled={loading} onClick={() => void refresh()}>{loading ? 'Проверяем…' : 'Проверить расписание'}</Button></div> : <form onSubmit={event => { event.preventDefault(); void book(); }} aria-busy={busy || loading}>
       <PooledBookingCalendar slots={state.slots} selectedId={selectedId} onSelect={id => { setSelectedId(id); setError(''); }}
-        timezone={timezone} onTimezone={setTimezone} disabled={busy || loading || uncertain} onContinue={() => setStage('details')}/>}
+        timezone={timezone} onTimezone={setTimezone} disabled={busy || loading || uncertain} action={<div className="bp-inline-booking">
+          {selected && <p className="bp-selection" aria-live="polite">{label(selected.start, timezone, { day: 'numeric', month: 'long' })}, {time(selected.start, timezone)} · 30 минут</p>}
+          {contactFields}
+          {uncertain && <p className="bp-muted" role="status">Проверим ту же запись — время и почта сохранены.</p>}
+          <button className="pbc-primary bp-submit" type="submit" disabled={!selected || !email.trim() || !consent || busy || loading}>{busy ? 'Бронируем…' : uncertain ? 'Проверить запись' : 'Записаться'}</button>
+        </div>}/>
+    </form>}
   </section>;
 }

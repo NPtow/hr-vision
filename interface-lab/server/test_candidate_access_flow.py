@@ -201,7 +201,7 @@ class CandidateAccessFlowTest(unittest.TestCase):
         self.assertEqual('booked', public['status'])
         self.assertEqual([], public['slots'])
         self.assertEqual(self.owner_slot['id'], public['booking']['slotId'])
-        self.assertNotIn('old-cv@example.test', json.dumps(public))
+        self.assertEqual('old-cv@example.test', public['contactEmail'])
         self.assertEqual([], self.rows('SELECT * FROM cp_booking_profile_consents'))
         completion = {'token': token, 'slotId': public['booking']['slotId'],
                       'requestId': 'legacy-profile-consent-1', 'email': 'candidate@example.test', 'consentProfile': True}

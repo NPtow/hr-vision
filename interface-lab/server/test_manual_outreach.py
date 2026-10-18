@@ -82,17 +82,19 @@ class ManualOutreachTest(unittest.TestCase):
         self.assertEqual(1, len(self.rows('SELECT * FROM cp_candidates')))
         self.assertEqual(1, len(self.rows('SELECT * FROM cp_booking_invitations')))
 
-    def test_registered_email_conflict_does_not_book_or_notify(self):
+    def test_existing_login_email_does_not_block_contact_booking_or_change_account(self):
         self.call('candidate/register', {'email': 'taken@example.test', 'password': 'Example-password-12',
                                         'name': 'Existing Candidate', 'consentReuse': True})
         cid, token = self.imported()
-        with self.assertRaises(Problem) as error:
-            self.bookings.handle('POST', '/api/hr/booking/book', {'Content-Type': 'application/json'},
-                {'token': token, 'slotId': self.owner_slot['id'], 'requestId': 'book-one',
-                 'email': 'taken@example.test', 'consentProfile': True}, '127.0.0.1')
-        self.assertEqual(409, error.exception.status)
-        self.assertEqual([], self.rows('SELECT * FROM cp_interviews'))
-        self.assertEqual([], self.rows('SELECT * FROM rn_outbox'))
+        before = self.rows("SELECT * FROM cp_candidates WHERE email='taken@example.test'")
+        result, _ = self.bookings.handle('POST', '/api/hr/booking/book', {'Content-Type': 'application/json'},
+            {'token': token, 'slotId': self.owner_slot['id'], 'requestId': 'book-one',
+             'email': 'taken@example.test', 'consentProfile': True}, '127.0.0.1')
+        self.assertEqual('booked', result['status'])
+        self.assertEqual(before, self.rows("SELECT * FROM cp_candidates WHERE email='taken@example.test'"))
+        self.assertEqual([(None, None)], self.rows('SELECT email,password_hash FROM cp_candidates WHERE id=?', (cid,)))
+        self.assertEqual([(cid,)], self.rows('SELECT candidate_id FROM cp_interviews'))
+        self.assertEqual(2, len(self.rows('SELECT * FROM rn_outbox')))
 
     def test_compound_identifiers_cannot_merge_two_people(self):
         with self.connect() as db:

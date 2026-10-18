@@ -55,15 +55,25 @@
 .bp-profile-confirmation .bp-actions { margin-top: 18px; justify-content: flex-start; }
 
 .bp-calendar-surface .bp-error { font-size: 13px; line-height: 1.5; color: #9e273d; background: #fff0f1; padding: 12px; border-radius: 10px; margin: 0 0 20px; }
-.bp-details { max-width: 480px; margin: auto; }
-.bp-selection { display: flex; align-items: center; gap: 14px; color: #655775; margin-bottom: 28px; }
-.bp-selection strong { display: block; color: #302b38; font-size: 18px; font-weight: 600; }
-.bp-selection span { display: block; font-size: 12px; color: #8d8299; margin-top: 6px; }
-.bp-details .bp-booking-contact { margin-top: 0; }
-.bp-details .bp-booking-contact > label { font-size: 13px; }
-.bp-details .bp-booking-contact > input { font-size: 14px; }
-.bp-details .bp-booking-contact .bp-muted { font-size: 12px; line-height: 1.6; color: #797083; }
-.bp-details .bp-consent { font-size: 12px; line-height: 1.6; color: #797083; }
-.bp-submit { width: 100%; margin-top: 24px; border: 0; cursor: pointer; }
-.bp-details > form > .bp-muted { font-size: 12px; line-height: 1.6; color: #797083; }
+.bp-greeting { margin-bottom: 28px; }
+.bp-greeting h1 { margin: 0 0 8px; font-size: clamp(24px, 3vw, 30px); line-height: 1.2; font-weight: 650; letter-spacing: -.04em; }
+.bp-greeting p { margin: 0; font-size: 14px; color: #797083; }
+.bp-calendar-surface .pbc-picker { grid-template-columns: minmax(290px, 1.1fr) minmax(260px, 1fr); gap: 32px; }
+.bp-calendar-surface .pbc-calendar { justify-content: flex-start; }
+.bp-calendar-surface .pbc-time-list { max-height: 210px; }
+.bp-inline-booking { margin-top: auto; }
+.bp-selection { color: #655775; font-size: 12px; margin: 0 0 16px; }
+.bp-inline-booking .bp-booking-contact { margin-top: 0; }
+.bp-inline-booking .bp-booking-contact > label { font-size: 13px; }
+.bp-inline-booking .bp-booking-contact > input { font-size: 14px; }
+.bp-inline-booking .bp-consent { font-size: 12px; line-height: 1.6; color: #686073; margin-top: 8px; }
+.bp-known-email { display: flex; align-items: center; gap: 10px; min-width: 0; font-size: 13px; }
+.bp-known-email span { min-width: 0; overflow-wrap: anywhere; }
+.bp-known-email small { display: block; color: #797083; font-size: 11px; margin-bottom: 5px; }
+.bp-known-email button { color: #6958cc; background: transparent; font-size: 11px; padding: 8px 0 8px 6px; margin-left: auto; min-height: 44px; }
+.bp-submit { width: 100%; margin-top: 16px; border: 0; cursor: pointer; }
+.bp-inline-booking > .bp-muted { color: #797083; font-size: 12px; line-height: 1.6; }
+.bp-telegram { margin-top: 22px; color: #6551ba; font-size: 14px; }
+.bp-telegram > span, .bp-telegram button { display: inline-flex; align-items: center; gap: 9px; }
+.bp-telegram button { background: #f0edf9; border: 0; border-radius: 12px; padding: 12px 16px; cursor: pointer; color: inherit; font: inherit; }
 @media (max-width: 700px) { .bp-main { margin-top: 20px; max-width: 460px; padding: 0 16px 40px; } }

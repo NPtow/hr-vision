@@ -42,12 +42,17 @@ because SMTP/Telegram cannot provide exactly-once delivery after a process crash
 Default lifecycle delivery sends generic notices and an authenticated portal link.
 Injected bot handlers/renderers may send candidate details only to the candidate's
 currently verified Telegram chat and, when available, an active canonical account.
-Verification emails are the sole exception allowed to an unverified address: a generic ownership check,
+Verification emails and explicitly requested booking confirmations are the only
+exceptions allowed to an unverified address. Booking confirmations carry only the
+consented interview time and its scoped invitation; they never verify an account.
+Verification is a generic ownership check,
 with no person/profile/vacancy data. Tokens are generated at dispatch, SHA256-only
 at rest, single-use, and redeemable only by the same authenticated candidate.
 """
 import argparse
 from dataclasses import dataclass, field
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from email.message import EmailMessage
 import hashlib
 import hmac
@@ -213,6 +218,9 @@ def init(db):
         '''CREATE TABLE IF NOT EXISTS cn_telegram_updates (
             update_id INTEGER PRIMARY KEY, received_at INTEGER NOT NULL)''',
         'CREATE TABLE IF NOT EXISTS cn_worker_state (name TEXT PRIMARY KEY, value TEXT NOT NULL)',
+        '''CREATE TABLE IF NOT EXISTS cn_booking_telegram (
+            invitation_id TEXT PRIMARY KEY, candidate_id TEXT NOT NULL,
+            chat_id TEXT NOT NULL, linked_at INTEGER NOT NULL)''',
     ]
     for statement in statements:
         db.execute(statement)
@@ -569,6 +577,111 @@ def create_telegram_link(db, candidate_id, settings=None, now=None):
             'expiresAt': timestamp + LINK_SECONDS}
 
 
+def booking_delivery_status(db, candidate_id, invitation_id, settings=None):
+    config = _config(settings)
+    consent = db.execute('SELECT invitation_id FROM cp_booking_profile_consents WHERE candidate_id=?', (candidate_id,)).fetchone()
+    invitation_id = consent[0] if consent else invitation_id
+    row = db.execute('''SELECT status FROM cn_outbox WHERE candidate_id=? AND event_key=? AND channel='email' ''',
+                     (candidate_id, 'booking:' + invitation_id)).fetchone()
+    bound = db.execute('SELECT 1 FROM cn_booking_telegram WHERE invitation_id=? AND candidate_id=?',
+                       (invitation_id, candidate_id)).fetchone()
+    return {'email': row[0] if row else None, 'telegramAvailable': bool(config.telegram_binding_available
+            and _booking_record(db, candidate_id, invitation_id, _now(None))),
+            'telegramLinked': bool(bound)}
+
+
+def _booking_record(db, candidate_id, invitation_id, timestamp):
+    record = _dict(db.execute('''SELECT c.interview_id,c.contact_email,s.start,s.end FROM cp_booking_profile_consents c
+      JOIN cp_booking_invitations b ON b.id=c.invitation_id AND b.candidate_id=c.candidate_id
+      JOIN cp_interviews i ON i.id=c.interview_id AND i.candidate_id=c.candidate_id
+      JOIN cp_recruiter_slots s ON s.id=i.slot_id
+      JOIN cp_recruiter_slot_owners o ON o.slot_id=s.id
+      JOIN rc_accounts a ON a.id=o.recruiter_id AND a.active=1
+      WHERE c.candidate_id=? AND b.id=? AND b.revoked_at IS NULL AND b.expires>?
+      AND s.candidate_id=i.candidate_id AND i.status IN ('booked','live')''', (candidate_id, invitation_id, timestamp)))
+    return record if record and datetime.fromisoformat(record['end'].replace('Z', '+00:00')).timestamp() > timestamp else None
+
+
+def _booking_readiness(db, row, config, timestamp):
+    payload = json.loads(row['payload_json'])
+    booking = _booking_record(db, row['candidate_id'], payload['invitationId'], timestamp)
+    if not booking or booking['interview_id'] != payload['interviewId']:
+        return 'error'
+    if row['channel'] == 'email':
+        recipient = _recipient(db, row['candidate_id'])
+        if row['recipient'] != booking['contact_email'] or row['recipient'] != recipient['email']:
+            return 'error'
+        return 'pending' if config.email_configured else 'disabled'
+    bound = db.execute('SELECT chat_id FROM cn_booking_telegram WHERE invitation_id=? AND candidate_id=?',
+                       (payload['invitationId'], row['candidate_id'])).fetchone()
+    if not bound or bound[0] != row['recipient']:
+        return 'error'
+    return 'pending' if config.telegram_configured else 'disabled'
+
+
+def enqueue_booking_confirmation(db, candidate_id, invitation_id, interview_id, email, url, settings=None, now=None):
+    """Explicit booking consent authorizes this one invitation, not general mail."""
+    config, tick = _config(settings), _now(now)
+    consent = db.execute('''SELECT 1 FROM cp_booking_profile_consents
+      WHERE candidate_id=? AND invitation_id=? AND interview_id=? AND contact_email=?''',
+      (candidate_id, invitation_id, interview_id, email)).fetchone()
+    require(consent, 'Запись не подтверждена.', 409)
+    record = _booking_record(db, candidate_id, invitation_id, tick)
+    if not record:
+        return  # Legacy profile consent remains valid after the meeting stops being deliverable.
+    set_email(db, candidate_id, email, now=tick)
+    payload = json.dumps({'invitationId': invitation_id, 'interviewId': interview_id, 'url': url})
+    db.execute('''INSERT OR IGNORE INTO cn_outbox
+      (id,candidate_id,event_key,event_type,channel,recipient,created_at,status,next_attempt_at,payload_json)
+      VALUES (?,?,?,'booking.confirmed','email',?,?,?,?,?)''',
+      (secrets.token_hex(16), candidate_id, 'booking:' + invitation_id, email, tick,
+       'pending' if config.email_configured else 'disabled', tick, payload))
+
+
+def create_booking_telegram_link(db, candidate_id, invitation_id, url, settings=None, now=None):
+    config, tick = _config(settings), _now(now)
+    booking = _booking_record(db, candidate_id, invitation_id, tick)
+    require(booking, 'Сначала подтвердите запись.', 409)
+    if not config.telegram_binding_available:
+        return {'status': 'disabled', 'url': None}
+    if db.execute('SELECT 1 FROM cn_booking_telegram WHERE invitation_id=? AND candidate_id=?',
+                  (invitation_id, candidate_id)).fetchone():
+        return {'status': 'linked', 'url': None}
+    payload = json.dumps({'invitationId': invitation_id, 'interviewId': booking['interview_id'], 'url': url})
+    raw = _token(db, candidate_id, 'booking_telegram', payload, tick, LINK_SECONDS)
+    return {'status': 'ready', 'url': 'https://t.me/' + config.telegram_username + '?start=bk_' + raw}
+
+
+def _consume_booking_telegram_link(db, token, chat_id, tick, config):
+    row = _dict(db.execute("SELECT * FROM cn_tokens WHERE digest=? AND purpose='booking_telegram' AND used_at IS NULL AND expires_at>?",
+                           (_hash(token), tick)))
+    payload = json.loads(row['recipient']) if row else None
+    booking = _booking_record(db, row['candidate_id'], payload['invitationId'], tick) if row else None
+    if not booking or booking['interview_id'] != payload['interviewId']:
+        return {'status': 'invalid_link'}
+    cid, chat = row['candidate_id'], str(chat_id)
+    # Only this consented interview becomes available; no portal session, account,
+    # generic candidate notifications or interactive vacancy access is granted.
+    db.execute('UPDATE cn_tokens SET used_at=? WHERE digest=? AND used_at IS NULL', (tick, row['digest']))
+    db.execute('INSERT OR IGNORE INTO cn_booking_telegram VALUES (?,?,?,?)', (payload['invitationId'], cid, chat, tick))
+    db.execute('''INSERT OR IGNORE INTO cn_outbox
+      (id,candidate_id,event_key,event_type,channel,recipient,created_at,status,next_attempt_at,payload_json)
+      VALUES (?,?,?,'booking.confirmed','telegram',?,?,?,?,?)''',
+      (secrets.token_hex(16), cid, 'booking:' + payload['invitationId'], chat, tick,
+       'pending' if config.telegram_configured else 'disabled', tick, row['recipient']))
+    return {'status': 'linked'}
+
+
+def _booking_message(db, row, tick):
+    payload = json.loads(row['payload_json'])
+    booking = _booking_record(db, row['candidate_id'], payload['invitationId'], tick)
+    start = datetime.fromisoformat(booking['start'].replace('Z', '+00:00')).astimezone(ZoneInfo('Europe/Moscow'))
+    end = datetime.fromisoformat(booking['end'].replace('Z', '+00:00')).astimezone(ZoneInfo('Europe/Moscow'))
+    prefix = 'Telegram подключён.\n\n' if row['channel'] == 'telegram' else ''
+    return ('Вы записаны на интервью · МашаДаша', prefix + 'Ваше интервью: ' + start.strftime('%d.%m.%Y, %H:%M')
+            + '–' + end.strftime('%H:%M') + ' МСК.\n\nВремя и подключение к встрече:\n' + payload['url'])
+
+
 def _consume_telegram_update(db, update, timestamp, settings=None, update_handler=None):
     require(isinstance(update, dict) and type(update.get('update_id')) is int
             and 0 <= update['update_id'] < 2 ** 63, 'Некорректное обновление.', 400)
@@ -595,6 +708,13 @@ def _consume_telegram_update(db, update, timestamp, settings=None, update_handle
             and chat['id'] == sender.get('id') and not sender.get('is_bot')):
         return {'status': 'ignored'}
     content = message.get('text', '') if callback is None else ''
+    booking_match = re.fullmatch(r'/start(?:@[A-Za-z0-9_]+)? bk_([A-Za-z0-9_-]{43})', content) if isinstance(content, str) else None
+    if booking_match:
+        result = _consume_booking_telegram_link(db, booking_match[1], chat['id'], timestamp, _config(settings))
+        if result['status'] != 'linked':
+            text = 'Этот Telegram уже подключён к другому профилю. Обратитесь к команде.' if result['status'] == 'chat_already_linked' else 'Ссылка истекла. Вернитесь к записи на интервью и нажмите «Подключить Telegram» ещё раз.'
+            enqueue_telegram_reply(db, str(chat['id']), 'booking-link:' + str(update['update_id']), text, settings=settings, now=timestamp)
+        return result
     if isinstance(content, str) and re.fullmatch(r'/start(?:@[A-Za-z0-9_]+)? rc_[A-Za-z0-9_-]{43}', content):
         # One bot/polling offset, separate identity namespaces and link tokens.
         # Recruiter capabilities must not reach candidate binding or bot commands.
@@ -651,7 +771,10 @@ def retry(db, notification_id, settings=None, now=None, candidate_id=None):
         db.execute("UPDATE cn_outbox SET status='error',last_error=?,lease_id=NULL,lease_until=NULL WHERE id=?",
                    (reason, notification_id))
         return _safe(_dict(db.execute('SELECT * FROM cn_outbox WHERE id=?', (notification_id,))))
-    if row['event_type'] in BOT_EVENTS:
+    if row['event_type'] == 'booking.confirmed':
+        target = row['recipient']
+        state = _booking_readiness(db, row, config, timestamp)
+    elif row['event_type'] in BOT_EVENTS:
         # Replaying a private reply must never retarget its stored content.
         target = row['recipient']
         state = _bot_readiness(db, row['candidate_id'], target, config)
@@ -841,7 +964,9 @@ def process_pending(connect, settings=None, limit=10, now=None, transport=None, 
                 db.commit()
                 counts['error'] += 1
                 continue
-            if row['event_type'] in BOT_EVENTS:
+            if row['event_type'] == 'booking.confirmed':
+                state = _booking_readiness(db, row, config, timestamp)
+            elif row['event_type'] in BOT_EVENTS:
                 state = _bot_readiness(db, row['candidate_id'], row['recipient'], config)
             else:
                 recipient = _recipient(db, row['candidate_id'])
@@ -859,7 +984,9 @@ def process_pending(connect, settings=None, limit=10, now=None, transport=None, 
             db.execute("UPDATE cn_outbox SET status='sending',attempts=attempts+1,lease_id=?,lease_until=? WHERE id=?",
                        (lease, timestamp + LEASE_SECONDS, row['id']))
             reply_markup, bot_payload = None, None
-            if row['event_type'] in BOT_EVENTS:
+            if row['event_type'] == 'booking.confirmed':
+                subject, content = _booking_message(db, row, timestamp)
+            elif row['event_type'] in BOT_EVENTS:
                 bot_payload = json.loads(row['payload_json'])
                 subject, content = '', bot_payload.get('text', '')
                 reply_markup = bot_payload.get('reply_markup')

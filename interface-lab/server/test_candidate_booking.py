@@ -12,6 +12,7 @@ from urllib.parse import parse_qs, urlsplit
 import candidate_booking as booking
 import candidate_invites as invites
 import recruiter_notifications
+import candidate_notifications as notifications
 from candidate_portal import profile_value
 from domain import Problem, iso, now
 import test_candidate_portal as fixture
@@ -137,7 +138,7 @@ class CandidateBookingTest(unittest.TestCase):
             db.execute('INSERT INTO cp_recruiter_slots VALUES (?,?,?,?,NULL)',
                        ('past-slot', iso(now() - dt.timedelta(hours=1)), iso(now() - dt.timedelta(minutes=30)), 'Первый'))
         state, headers = self.request('state', token)
-        self.assertEqual({'status', 'candidateName', 'timezone', 'slots', 'booking', 'profileReady'}, set(state))
+        self.assertEqual({'status', 'candidateName', 'contactEmail', 'timezone', 'slots', 'booking', 'profileReady', 'delivery'}, set(state))
         self.assertEqual('available', state['status'])
         self.assertEqual(1, len(state['slots']))
         self.assertEqual({'id', 'start', 'end'}, set(state['slots'][0]))
@@ -155,6 +156,149 @@ class CandidateBookingTest(unittest.TestCase):
             self.request('state', token)
         rows = self.rows('SELECT kind,invitation_id,interview_id FROM booking_test_events')
         self.assertEqual([('booking.page_loaded', issued['invitationId'], None)], rows)
+
+    def test_contact_is_prefilled_from_intake_or_unambiguous_cv_without_account_creation(self):
+        cid, _, token = self.issue()
+        self.assertEqual('', self.request('state', token)[0]['contactEmail'])
+        with self.connect() as db:
+            db.execute('UPDATE cp_resumes SET text_content=? WHERE candidate_id=?',
+                       ('Contact: Person@Example.test\nExperience', cid))
+        self.assertEqual('person@example.test', self.request('state', token)[0]['contactEmail'])
+        with self.connect() as db:
+            db.execute('UPDATE cp_resumes SET text_content=? WHERE candidate_id=?',
+                       ('person@example.test other@example.test', cid))
+        self.assertEqual('', self.request('state', token)[0]['contactEmail'])
+        with self.connect() as db:
+            db.execute('UPDATE cp_intake SET contact_email=? WHERE candidate_id=?', ('known@example.test', cid))
+        self.assertEqual('known@example.test', self.request('state', token)[0]['contactEmail'])
+        self.assertEqual([(None, None)], self.rows('SELECT email,password_hash FROM cp_candidates WHERE id=?', (cid,)))
+
+    @staticmethod
+    def notification_config():
+        return notifications.settings({'HR_NOTIFICATIONS_ENABLED': '1', 'HR_ORIGIN': 'https://portal.example',
+            'HR_SMTP_HOST': 'smtp.example.test', 'HR_SMTP_FROM': 'team@example.test',
+            'HR_TELEGRAM_BOT_TOKEN': 'test-token', 'HR_TELEGRAM_BOT_USERNAME': 'test_bot',
+            'HR_TELEGRAM_POLLING': '1'})
+
+    def test_booking_invitation_is_transactional_and_once_without_verifying_login_email(self):
+        cid, issued, token = self.issue()
+        slot = self.slot()
+        config = self.notification_config()
+        with patch.object(notifications, 'settings', return_value=config):
+            self.book(token, slot)
+            self.book(token, slot)
+        transport = Mock()
+        transport.send_email.return_value = 'smtp_accepted'
+        self.assertEqual([(0,)], self.rows('SELECT email_verified FROM cn_recipients WHERE candidate_id=?', (cid,)))
+        result = notifications.process_pending(self.connect, config, transport=transport)
+        self.assertEqual(1, result['delivered'])
+        self.assertEqual(0, notifications.process_pending(self.connect, config, transport=transport)['delivered'])
+        args = transport.send_email.call_args.args
+        self.assertEqual('candidate@example.test', args[0])
+        self.assertIn(issued['url'], args[2])
+        self.assertIn('МСК', args[2])
+        self.assertNotIn('Private CV detail', args[2])
+        transport.send_telegram.assert_not_called()
+        self.assertEqual('delivered', self.request('state', token)[0]['delivery']['email'])
+
+    def test_booking_telegram_is_scoped_to_consented_interview_not_login_identity(self):
+        cid, _, token = self.issue()
+        self.expect(409, 'telegram', token)
+        config = self.notification_config()
+        with patch.object(notifications, 'settings', return_value=config):
+            self.book(token, self.slot())
+            result = self.request('telegram', token)[0]
+        raw = parse_qs(urlsplit(result['url']).query)['start'][0]
+        update = {'update_id': 932, 'message': {'text': '/start ' + raw,
+            'from': {'id': 901, 'is_bot': False}, 'chat': {'id': 901, 'type': 'private'}}}
+        with self.connect() as db:
+            self.assertEqual('linked', notifications._consume_telegram_update(db, update, int(now().timestamp()), config)['status'])
+            self.assertFalse(notifications._telegram_identity_active(db, notifications._recipient(db, cid)))
+            self.assertEqual('duplicate', notifications._consume_telegram_update(db, update, int(now().timestamp()), config)['status'])
+            db.execute('UPDATE cp_candidates SET email=? WHERE id=?', ('candidate@example.test', cid))
+            self.assertFalse(notifications._telegram_identity_active(db, notifications._recipient(db, cid)))
+            from candidate_bot import CandidateBot
+            self.assertIsNone(CandidateBot._candidate(None, db, '901'))
+            db.execute('UPDATE cp_candidates SET email=NULL WHERE id=?', (cid,))
+        transport = Mock()
+        transport.send_email.return_value = 'accepted'
+        transport.send_telegram.return_value = 'accepted'
+        notifications.process_pending(self.connect, config, transport=transport)
+        transport.send_telegram.assert_called_once()
+        self.assertEqual('901', transport.send_telegram.call_args.args[0])
+        self.assertIn('Telegram подключён', transport.send_telegram.call_args.args[1])
+        self.assertEqual([(None, None)], self.rows('SELECT email,password_hash FROM cp_candidates WHERE id=?', (cid,)))
+
+    def test_revoked_invitation_cannot_dispatch_pending_confirmation(self):
+        _, issued, token = self.issue()
+        config = self.notification_config()
+        with patch.object(notifications, 'settings', return_value=config):
+            self.book(token, self.slot())
+        with self.connect() as db:
+            self.service.revoke(db, issued['invitationId'])
+        transport = Mock()
+        result = notifications.process_pending(self.connect, config, transport=transport)
+        self.assertEqual(1, result['error'])
+        transport.send_email.assert_not_called()
+
+    def test_past_interview_cannot_dispatch_stale_confirmation(self):
+        _, _, token = self.issue()
+        config = self.notification_config()
+        with patch.object(notifications, 'settings', return_value=config):
+            self.book(token, self.slot())
+        transport = Mock()
+        result = notifications.process_pending(self.connect, config, transport=transport,
+                                               now=int((now() + dt.timedelta(hours=3)).timestamp()))
+        self.assertEqual(1, result['error'])
+        transport.send_email.assert_not_called()
+
+    def test_legacy_booked_candidate_can_connect_telegram_without_an_email_outbox(self):
+        cid, _, token = self.issue()
+        config = self.notification_config()
+        with patch.object(notifications, 'settings', return_value=config):
+            self.book(token, self.slot())
+            with self.connect() as db:
+                db.execute('DELETE FROM cn_outbox')
+                db.execute('DELETE FROM cn_recipients')
+            result = self.request('telegram', token)[0]
+        raw = parse_qs(urlsplit(result['url']).query)['start'][0]
+        update = {'update_id': 933, 'message': {'text': '/start ' + raw,
+            'from': {'id': 902, 'is_bot': False}, 'chat': {'id': 902, 'type': 'private'}}}
+        with self.connect() as db:
+            self.assertEqual('linked', notifications._consume_telegram_update(db, update, int(now().timestamp()), config)['status'])
+        transport = Mock()
+        transport.send_telegram.return_value = 'accepted'
+        self.assertEqual(1, notifications.process_pending(self.connect, config, transport=transport)['delivered'])
+        transport.send_email.assert_not_called()
+        self.assertEqual([], self.rows('SELECT * FROM cn_recipients'))
+
+    def test_completed_legacy_interview_can_finish_profile_consent_without_new_meeting_email(self):
+        cid, _, token = self.issue()
+        slot = self.slot()
+        self.call('recruiter/interview/book', {'candidateId': cid, 'slotId': slot['id']}, manager=True)
+        with self.connect() as db:
+            db.execute("UPDATE cp_interviews SET status='completed' WHERE candidate_id=?", (cid,))
+        result = self.book(token, slot)
+        self.assertTrue(result['profileReady'])
+        self.assertEqual('completed', result['booking']['status'])
+        self.assertEqual([], self.rows("SELECT * FROM cn_outbox WHERE event_type='booking.confirmed'"))
+
+    def test_stale_legacy_booking_saves_profile_consent_without_inviting_to_unavailable_meeting(self):
+        for reason in ('past', 'inactive-owner'):
+            with self.subTest(reason=reason):
+                cid, _, token = self.issue()
+                slot = self.slot(recruiter=reason)
+                self.call('recruiter/interview/book', {'candidateId': cid, 'slotId': slot['id']}, manager=True)
+                with self.connect() as db:
+                    if reason == 'past':
+                        db.execute('UPDATE cp_recruiter_slots SET start=?,end=? WHERE id=?',
+                                   (iso(now() - dt.timedelta(hours=2)), iso(now() - dt.timedelta(hours=1)), slot['id']))
+                    else:
+                        db.execute('UPDATE rc_accounts SET active=0 WHERE id IN '
+                                   '(SELECT recruiter_id FROM cp_recruiter_slot_owners WHERE slot_id=?)', (slot['id'],))
+                result = self.book(token, slot)
+                self.assertTrue(result['profileReady'])
+                self.assertEqual([], self.rows("SELECT * FROM cn_outbox WHERE event_type='booking.confirmed'"))
 
     def test_booking_accepts_explicit_product_alias_during_domain_migration(self):
         _, _, token = self.issue()
@@ -538,7 +682,7 @@ class CandidateBookingTest(unittest.TestCase):
             self.expect(409, 'book', token, slotId=slot['id'], requestId=request_id, consentProfile=False)
         self.expect(409, 'book', second_token, slotId=slot['id'], requestId='other-link', email='other@example.test')
         self.assertEqual([('candidate@example.test',)], self.rows('SELECT contact_email FROM cp_booking_profile_consents'))
-        self.assertNotIn('candidate@example.test', json.dumps(self.request('state', token)[0]))
+        self.assertEqual('candidate@example.test', self.request('state', token)[0]['contactEmail'])
 
     def test_utm_is_non_authoritative_and_old_personal_link_still_resolves(self):
         cid, issued, token = self.issue()
