@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { CalendarDays, Check, Clock3, Video } from 'lucide-react';
+import { ArrowLeft, CalendarDays, Check, Video } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import logo from '../employer-workspace/assets/hr-vision-logo.svg';
 import { bookingAttempt, restoreBookingAttempt, type BookingAttempt } from './booking-attempt';
+import { PooledBookingCalendar } from './PooledBookingCalendar';
+import type { BookingSlot } from './pooled-booking-model';
 import './booking-portal.css';
 
-type Slot = { id: string; start: string; end: string; recruiterName: string };
+type Slot = BookingSlot;
 type Booking = Slot & { slotId: string; status: string; canOpenCall: boolean };
 type BookingState = { status: 'available' | 'booked'; candidateName: string; profileReady: boolean; timezone: string; slots: Slot[]; booking: Booking | null };
 const tokenKey = 'hr-vision-invitation:booking';
@@ -51,23 +53,10 @@ async function request<T>(path: string, body: unknown, signal: AbortSignal): Pro
 }
 function unavailable(cause: unknown) { return cause instanceof BookingError && [400, 401, 403, 404, 410].includes(cause.status); }
 function message(cause: unknown) { return cause instanceof BookingError ? cause.message : 'Не удалось загрузить расписание. Попробуйте ещё раз.'; }
-function zone(value?: string) {
-  try { new Intl.DateTimeFormat('ru', { timeZone: value || 'Europe/Moscow' }).format(); return value || 'Europe/Moscow'; }
-  catch { return 'Europe/Moscow'; }
-}
 function label(value: string, timezone: string, options: Intl.DateTimeFormatOptions) {
   return new Intl.DateTimeFormat('ru-RU', { ...options, timeZone: timezone }).format(new Date(value));
 }
 function time(value: string, timezone: string) { return label(value, timezone, { hour: '2-digit', minute: '2-digit' }); }
-function days(slots: Slot[], timezone: string) {
-  const groups = new Map<string, Slot[]>();
-  for (const slot of [...slots].filter(slot => Number.isFinite(Date.parse(slot.start)) && Number.isFinite(Date.parse(slot.end))).sort((a, b) => Date.parse(a.start) - Date.parse(b.start) || a.id.localeCompare(b.id))) {
-    const day = label(slot.start, timezone, { day: 'numeric', month: 'long', weekday: 'long', year: 'numeric' });
-    groups.set(day, [...(groups.get(day) || []), slot]);
-  }
-  return [...groups];
-}
-
 /** Public booking capability: no login, CV upload, or candidate session is needed. */
 export function BookingPortal() {
   const [token, setToken] = useState(initialToken);
@@ -100,6 +89,10 @@ function BookingInvitation({ token }: { token: string }) {
   const [email, setEmail] = useState(() => previousAttempt(token)?.email || '');
   const [consent, setConsent] = useState(false);
   const [uncertain, setUncertain] = useState(false);
+  const [stage, setStage] = useState<'time' | 'details'>('time');
+  const [timezone, setTimezone] = useState('Europe/Moscow');
+  const detailsHeading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => { if (stage === 'details') detailsHeading.current?.focus(); }, [stage]);
   const attempt = useRef<BookingAttempt | null>(previousAttempt(token));
   const controller = useRef(new AbortController());
   const sequence = useRef(0);
@@ -113,6 +106,7 @@ function BookingInvitation({ token }: { token: string }) {
       if (signal.aborted || current !== sequence.current) return;
       if (!Array.isArray(next.slots) || !['available', 'booked'].includes(next.status)) throw new Error('invalid_state');
       setState(next); setSelectedId(value => next.slots.some(slot => slot.id === value) ? value : '');
+      if (keepError && !next.booking) setStage('time');
       if (!keepError) setError('');
     } catch (cause) {
       if (signal.aborted || current !== sequence.current) return;
@@ -165,8 +159,6 @@ function BookingInvitation({ token }: { token: string }) {
       }
     } finally { pending.current = false; if (!signal.aborted) setEntering(false); }
   }
-  const timezone = zone(state?.timezone);
-  const groups = days(state?.slots || [], timezone);
   const selected = state?.slots.find(slot => slot.id === selectedId);
   const booking = state?.booking;
   const contactFields = <div className="bp-booking-contact">
@@ -185,7 +177,7 @@ function BookingInvitation({ token }: { token: string }) {
     <h1>{booking.status === 'completed' ? 'Спасибо за разговор' : 'Вы записаны на интервью'}</h1>
     {booking.status === 'completed' ? <p className="bp-muted">Рекрутер пришлёт ссылку на ваш готовый профиль.</p> : <>
       <div className="bp-booked-time"><strong>{label(booking.start, timezone, { day: 'numeric', month: 'long', weekday: 'long' })}</strong><span>{time(booking.start, timezone)}–{time(booking.end, timezone)}</span></div>
-      <p className="bp-muted">{timezone === 'Europe/Moscow' ? 'Московское время' : timezone} · 30 минут<br/>Ваш рекрутер — {booking.recruiterName}.</p>
+      <p className="bp-muted">{timezone === 'Europe/Moscow' ? 'Московское время' : timezone} · 30 минут</p>
       <p>{state.profileReady ? 'Профиль подготовлен из вашего резюме. На созвоне рекрутер отправит вам на почту ссылку и данные для входа.' : 'На созвоне рекрутер поможет получить доступ к вашему профилю.'}</p>
       {booking.canOpenCall && <Button disabled={entering} onClick={() => void openCall()}><Video size={18}/>{entering ? 'Открываем встречу…' : 'Перейти к встрече'}</Button>}
     </>}
@@ -196,17 +188,17 @@ function BookingInvitation({ token }: { token: string }) {
     </form>}
     {error && <p className="bp-error" role="alert">{error}</p>}
   </section>;
-  return <section className="bp-surface">
-    <div className="bp-heading"><span className="bp-symbol"><CalendarDays size={26}/></span><h1>Выберите время интервью</h1><p className="bp-muted">{state.candidateName ? `${state.candidateName}, п` : 'П'}оговорим о вашем опыте и подходящей работе.</p><p className="bp-duration"><Clock3 size={16}/>30 минут · {timezone === 'Europe/Moscow' ? 'московское время' : timezone}</p></div>
+  return <section className={`pbc-surface bp-calendar-surface${stage === 'details' && selected ? ' bp-details' : ''}`}>
     {error && <p className="bp-error" role="alert">{error}</p>}
-    {!groups.length ? <div className="bp-empty"><h2>Пока нет свободного времени</h2><p className="bp-muted">Рекрутеры ещё не открыли новые слоты. Вернитесь по этой ссылке позже.</p><Button variant="secondary" disabled={loading} onClick={() => void refresh()}>{loading ? 'Проверяем…' : 'Проверить расписание'}</Button></div> : <form onSubmit={event => { event.preventDefault(); void book(); }} aria-busy={busy || loading}>
-      <div className="bp-days">{groups.map(([day, slots]) => <fieldset className="bp-day" key={day} disabled={busy || loading || uncertain}><legend>{day}</legend><div className="bp-slots">{slots.map(slot => <label className="bp-slot" key={slot.id} data-selected={selectedId === slot.id}>
-        <input type="radio" name="interview-slot" value={slot.id} checked={selectedId === slot.id} onChange={() => { setSelectedId(slot.id); setError(''); }} aria-label={`${day}, ${time(slot.start, timezone)}–${time(slot.end, timezone)}, ${slot.recruiterName}`}/>
-        <span className="bp-slot-time">{time(slot.start, timezone)}<span aria-hidden="true" className="bp-slot-check">{selectedId === slot.id && <Check size={15}/>}</span></span><span className="bp-slot-recruiter">{slot.recruiterName}</span>
-      </label>)}</div></fieldset>)}</div>
+    {stage === 'details' && selected ? <form onSubmit={event => { event.preventDefault(); void book(); }} aria-busy={busy || loading}>
+      <h1 className="pbc-sr-only" tabIndex={-1} ref={detailsHeading}>Подтвердите запись</h1>
+      <button className="pbc-back" type="button" disabled={busy || loading || uncertain} onClick={() => setStage('time')}><ArrowLeft size={17}/>Изменить время</button>
+      <div className="bp-selection"><CalendarDays size={22}/><div><strong>{label(selected.start, timezone, { day: 'numeric', month: 'long' })}, {time(selected.start, timezone)}</strong><span>30 минут · {timezone === 'Europe/Moscow' ? 'московское время' : timezone}</span></div></div>
       {contactFields}
-      {uncertain && <p className="bp-muted" role="status">Проверим ту же запись — выбранное время и почта сохранены.</p>}
-      <div className="bp-actions"><p className="bp-muted" aria-live="polite">{selected ? `${label(selected.start, timezone, { day: 'numeric', month: 'long' })}, ${time(selected.start, timezone)} · ${selected.recruiterName}` : 'Выберите удобный день и время'}</p><Button type="submit" disabled={!selected || !email.trim() || !consent || busy || loading}>{busy ? 'Бронируем…' : uncertain ? 'Проверить запись' : 'Записаться на интервью'}</Button></div>
-    </form>}
+      {uncertain && <p className="bp-muted" role="status">Проверим ту же запись — время и почта сохранены.</p>}
+      <button className="pbc-primary bp-submit" type="submit" disabled={!email.trim() || !consent || busy || loading}>{busy ? 'Бронируем…' : uncertain ? 'Проверить запись' : 'Подтвердить запись'}</button>
+    </form> : !state.slots.length ? <div className="bp-empty"><h2>Пока нет свободного времени</h2><p className="bp-muted">Вернитесь по этой ссылке позже.</p><Button variant="secondary" disabled={loading} onClick={() => void refresh()}>{loading ? 'Проверяем…' : 'Проверить расписание'}</Button></div> :
+      <PooledBookingCalendar slots={state.slots} selectedId={selectedId} onSelect={id => { setSelectedId(id); setError(''); }}
+        timezone={timezone} onTimezone={setTimezone} disabled={busy || loading || uncertain} onContinue={() => setStage('details')}/>}
   </section>;
 }

@@ -1,0 +1,62 @@
+.pbc-surface { background: #fff; border-radius: 28px; box-shadow: 0 3px 8px #352b5208, 0 22px 55px -23px #352b522e; padding: 32px; }
+.pbc { color: #24232b; font-family: 'Inter Variable', Inter, sans-serif; letter-spacing: -.025em; }
+.pbc button { border: 0; font-family: inherit; cursor: pointer; min-height: 0; }
+.pbc button:disabled { cursor: default; }
+.pbc-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px!important; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.pbc-empty { color: #797083; font-size: 14px; }
+.cp-pooled-booking { max-width: 780px; margin: 32px auto; padding: 0 24px 48px; }
+.pbc-back { display: inline-flex; align-items: center; gap: 8px; border: 0; background: transparent; color: #797083; font: inherit; font-size: 13px; padding: 10px 0; margin-bottom: 20px; cursor: pointer; }
+.pbc-picker { min-width: 0; display: grid; grid-template-columns: minmax(290px,1.4fr) minmax(190px,1fr); gap: 40px; }
+.pbc-calendar { min-width: 0; display: flex; flex-direction: column; justify-content: space-between; }
+.pbc-calendar .rdp-root { --rdp-accent-color: #6958cc; --rdp-accent-background-color: #f1ecff; --rdp-day_button-width: 40px; --rdp-day_button-height: 40px; --rdp-day-width: 44px; --rdp-day-height: 48px; width: 100%; font-size: 13px; }
+.pbc-calendar .rdp-months, .pbc-calendar .rdp-month, .pbc-calendar .rdp-month_grid { width: 100%; max-width: none; }
+.pbc-calendar .rdp-month_caption { font-size: 15px; height: 38px; margin-bottom: 19px; font-weight: 600; text-transform: capitalize; letter-spacing: -.02em; }
+.pbc-calendar .rdp-caption_label { padding-left: 2px; }
+.pbc-calendar .rdp-nav { gap: 9px; height: 34px; }
+.pbc-calendar .rdp-button_next, .pbc-calendar .rdp-button_previous { background: #f7f6fa; width: 29px; height: 29px; border-radius: 50%; }
+.pbc-calendar .rdp-chevron { fill: #8a8298; width: 16px; height: 16px; }
+.pbc-calendar .rdp-weekday { font-size: 10px; font-weight: 500; color: #9b94a4; padding: 0 0 10px; opacity: 1; }
+.pbc-calendar .rdp-day_button { margin: auto; font-weight: 550; font-size: 13px; background: #f1ecfb; border-radius: 50%; color: #6454b8; }
+.pbc-calendar .rdp-disabled .rdp-day_button { background: transparent; color: #aaa4b2; font-weight: 400; }
+.pbc-calendar .rdp-disabled { opacity: .5; }
+.pbc-calendar .rdp-selected .rdp-day_button { background: #6958cc; color: white; box-shadow: 0 5px 13px #6958cc30; border: 0; font-weight: 600; }
+.pbc-calendar .rdp-today:not(.rdp-selected) { color: inherit; }
+.pbc-zone { display: flex; align-items: center; gap: 8px; color: #8a8297; margin-top: 20px; padding: 8px 0; font-size: 12px; }
+.pbc-zone select { background: transparent; border: 0; color: #797083; font-family: inherit; max-width: 100%; font-size: 11px; outline-offset: 4px; }
+.pbc-times { min-width: 0; display: flex; flex-direction: column; gap: 20px; }
+.pbc-time-list { display: grid; grid-template-columns: 1fr; gap: 9px; max-height: 320px; overflow: auto; padding: 3px; scrollbar-width: thin; scrollbar-color: #e0dbe8 transparent; }
+.pbc-time { height: 44px; width: 100%; position: relative; background: #f7f6fa; border-radius: 10px; color: #5e566f; font-size: 13px; font-weight: 530; transition: background .14s, box-shadow .14s; }
+.pbc-time:hover { background: #ede8fa; }
+.pbc-time.selected { background: #eee8ff; color: #6551ba; box-shadow: inset 0 0 0 1.5px #b9a9ec; }
+.pbc-time svg { position: absolute; right: 14px; top: 14px; }
+.pbc-primary { display: flex; gap: 16px; align-items: center; justify-content: center; min-height: 44px; border-radius: 11px; background: #6c5bc5; color: white; font-weight: 550; font-size: 12px; padding: 12px 20px; box-shadow: 0 5px 15px #6c5bc526; transition: background .15s; }
+.pbc-primary:hover:not(:disabled) { background: #5948b0; }
+.pbc-primary:disabled { background: #eeebf4; color: #a6a0b2; box-shadow: none; }
+.pbc-times>.pbc-primary { margin-top: auto; }
+.pbc button:focus-visible, .pbc-zone select:focus-visible { outline: 2px solid #8977d2; outline-offset: 3px; }
+
+@media (max-width: 700px) {
+  .cp-pooled-booking { max-width: 460px; padding: 0 16px 32px; margin-top: 20px; }
+  .pbc-surface { border-radius: 23px; padding: 22px 20px; }
+  .pbc-picker { display: flex; flex-direction: column; gap: 22px; }
+  .pbc-calendar .rdp-root { --rdp-day_button-width: 38px; --rdp-day_button-height: 38px; --rdp-day-height: 44px; --rdp-day-width: 40px; }
+  .pbc-calendar .rdp-month_caption { font-size: 14px; margin-bottom: 12px; }
+  .pbc-zone { margin-top: 12px; }
+  .pbc-times { gap: 14px; }
+  .pbc-time-list { grid-template-columns: repeat(3, 1fr); max-height: 280px; padding: 2px; gap: 9px; }
+  .pbc-time { font-size: 12px; }
+  .pbc-time svg { width: 13px; height: 13px; right: 7px; top: 15px; }
+  .pbc-times>.pbc-primary { min-height: 46px; font-size: 13px; }
+}
+@media (max-width: 400px) {
+  .pbc-surface { padding: 20px 14px; }
+  .pbc-calendar .rdp-root { --rdp-day_button-width: 34px; --rdp-day_button-height: 34px; --rdp-day-width: 36px; }
+}
+@media (prefers-reduced-motion: reduce) { .pbc button { transition: none; } }
+@media (forced-colors: active) {
+  .pbc button, .pbc-surface { border: 1px solid ButtonText; }
+  .pbc-time.selected, .pbc-calendar .rdp-selected { outline: 2px solid Highlight; }
+}
+.pbc .rdp-day_button { min-height: var(--rdp-day_button-height); }
+.pbc .rdp-button_next, .pbc .rdp-button_previous { min-height: 29px; }
+.pbc .pbc-primary { min-height: 44px; }

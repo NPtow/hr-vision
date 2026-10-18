@@ -30,6 +30,7 @@ import secrets
 from urllib.parse import parse_qs, quote, urlencode, urlsplit
 
 import candidate_invites as invites
+import interview_scheduler
 from candidate_notifications import _email as delivery_email
 from candidate_portal import email_value, profile_value
 from candidate_resume import extract_preferences, start_date_value
@@ -290,8 +291,7 @@ class CandidateBooking:
         slots = []
         if not booking:
             require(self._prepared(db, cid), 'Резюме пока недоступно. Свяжитесь с командой HR Vision.', 409)
-            slots = [slot for slot in self.portal.slots(db)
-                     if timestamp(slot['end']) - timestamp(slot['start']) == dt.timedelta(minutes=30)]
+            slots = self.portal.booking_slots(db)
         # The capability needs no profile projection; only the person's name.
         row = db.execute('SELECT profile FROM cp_candidates WHERE id=?', (cid,)).fetchone()
         require(row, 'Приглашение не найдено.', 404)
@@ -344,7 +344,7 @@ class CandidateBooking:
         previous = db.execute('''SELECT slot_id,request_hash FROM cp_booking_requests
           WHERE invitation_id=? AND request_id=?''', (invitation['id'], request_id)).fetchone()
         if previous:
-            require(previous[0] == slot_id and (previous[1] is None or previous[1] == fingerprint),
+            require(previous[1] == fingerprint if previous[1] is not None else previous[0] == slot_id,
                     'Этот запрос уже использован с другими данными.', 409)
         cid = invitation['candidateId']
         existing = self._interview(db, cid)
@@ -364,14 +364,11 @@ class CandidateBooking:
                     'Эта почта уже зарегистрирована. Используйте другую свою почту или обратитесь к команде.', 409)
         require(self._prepared(db, cid), 'Сначала подготовьте резюме.', 409)
         if existing:
-            require(existing['slotId'] == slot_id, 'Вы уже записаны. Для переноса свяжитесь с командой.', 409)
+            require(interview_scheduler.same_window(db, slot_id, existing['slotId']),
+                    'Вы уже записаны. Для переноса свяжитесь с командой.', 409)
             interview_id = existing['id']
         else:
-            # Unlike legacy prepared booking, a public link cannot choose an unowned slot.
-            available = next((slot for slot in self.portal.slots(db) if slot['id'] == slot_id), None)
-            require(available and timestamp(available['end']) - timestamp(available['start']) == dt.timedelta(minutes=30),
-                    'Это время уже недоступно. Выберите другое.', 409)
-            self.portal.book(db, cid, {'slotId': slot_id}, prepared=True)
+            self.portal.book(db, cid, {'slotId': slot_id}, prepared=True, pooled=True)
             interview_id = self._interview(db, cid)['id']
             db.execute('INSERT INTO cp_booking_attribution VALUES (?,?,?,?,?)',
                        (interview_id, invitation['id'], invitation['campaignId'], invitation['recipientId'], iso(now())))
@@ -392,7 +389,7 @@ class CandidateBooking:
         else:
             db.execute('''INSERT INTO cp_booking_requests
               (invitation_id,request_id,slot_id,interview_id,created_at,request_hash) VALUES (?,?,?,?,?,?)''',
-                       (invitation['id'], request_id, slot_id, interview_id, iso(now()), fingerprint))
+                       (invitation['id'], request_id, self._interview(db, cid)['slotId'], interview_id, iso(now()), fingerprint))
         # A booking can lie beyond the initial invitation window. Keep this same
         # personal page available through the meeting without rotating its URL.
         booked = self._interview(db, cid)

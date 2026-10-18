@@ -1,7 +1,7 @@
 .bp-root { min-height: 100vh; background: #f4f3f7; color: #232128; }
 .bp-header { padding: 28px 40px; }
 .bp-header img { display: block; width: 156px; max-width: 100%; height: auto; }
-.bp-main { max-width: 840px; margin: 32px auto 0; padding: 0 24px 64px; }
+.bp-main { max-width: 780px; margin: 48px auto 0; padding: 0 24px 64px; }
 .bp-surface { background: #fff; border-radius: 28px; padding: 40px; box-shadow: 0 3px 8px #352b5210, 0 18px 42px -15px #352b5224; }
 .bp-surface h1 { margin: 20px 0 12px; font-size: clamp(26px, 3.2vw, 34px); line-height: 1.2; letter-spacing: -.035em; font-weight: 700; }
 .bp-surface h2 { font-size: 19px; line-height: 1.4; font-weight: 650; margin: 0 0 10px; }
@@ -9,21 +9,6 @@
 .bp-surface .bp-muted { color: #686473; }
 .bp-symbol { display: inline-flex; align-items: center; justify-content: center; width: 56px; height: 56px; border-radius: 18px; background: #eeebfc; color: #6756ce; }
 .bp-symbol.bp-success { background: #e8f4ed; color: #24774b; }
-.bp-heading { margin-bottom: 32px; }
-.bp-surface .bp-duration { display: flex; align-items: center; gap: 8px; color: #686473; font-size: 14px; margin: 0; }
-.bp-days { display: flex; flex-direction: column; gap: 28px; }
-.bp-day { min-width: 0; border: 0; padding: 0; margin: 0; }
-.bp-day legend { padding: 0; margin-bottom: 12px; font-size: 15px; font-weight: 650; }
-.bp-slots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-.bp-slot { position: relative; min-height: 76px; padding: 13px 16px; cursor: pointer; background: #f5f5f7; border-radius: 15px; transition: background 120ms ease; }
-.bp-slot:hover { background: #eeedf3; }
-.bp-slot[data-selected='true'] { background: #ede9ff; color: #4c3bab; }
-.bp-slot input { position: absolute; width: 1px; height: 1px; opacity: 0; }
-.bp-slot:has(input:focus-visible) { outline: 3px solid #6756ce; outline-offset: 3px; }
-.bp-slot-time { display: flex; justify-content: space-between; align-items: center; font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; }
-.bp-slot-check { display: inline-flex; width: 18px; }
-.bp-slot-recruiter { display: block; color: #686473; margin-top: 5px; font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
-.bp-day:disabled .bp-slot { cursor: default; opacity: .6; }
 .bp-actions { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-top: 36px; }
 .bp-actions .bp-muted { font-size: 14px; margin: 0; }
 .bp-root button { min-height: 44px; }
@@ -49,7 +34,7 @@
   .bp-actions { flex-direction: column; align-items: stretch; gap: 16px; }
   .bp-empty { padding: 24px 20px; }
 }
-@media (prefers-reduced-motion: reduce) { .bp-slot { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .bp-root button { transition: none; } }
 @media (prefers-contrast: more) { .bp-surface, .bp-slot { outline: 1px solid currentColor; } }
 @media (forced-colors: active) {
   .bp-surface, .bp-slot, .bp-error, .bp-empty { outline: 1px solid CanvasText; }
@@ -68,3 +53,17 @@
 .bp-profile-confirmation { margin-top: 28px; }
 .bp-profile-confirmation .bp-booking-contact { margin-top: 14px; }
 .bp-profile-confirmation .bp-actions { margin-top: 18px; justify-content: flex-start; }
+
+.bp-calendar-surface .bp-error { font-size: 13px; line-height: 1.5; color: #9e273d; background: #fff0f1; padding: 12px; border-radius: 10px; margin: 0 0 20px; }
+.bp-details { max-width: 480px; margin: auto; }
+.bp-selection { display: flex; align-items: center; gap: 14px; color: #655775; margin-bottom: 28px; }
+.bp-selection strong { display: block; color: #302b38; font-size: 18px; font-weight: 600; }
+.bp-selection span { display: block; font-size: 12px; color: #8d8299; margin-top: 6px; }
+.bp-details .bp-booking-contact { margin-top: 0; }
+.bp-details .bp-booking-contact > label { font-size: 13px; }
+.bp-details .bp-booking-contact > input { font-size: 14px; }
+.bp-details .bp-booking-contact .bp-muted { font-size: 12px; line-height: 1.6; color: #797083; }
+.bp-details .bp-consent { font-size: 12px; line-height: 1.6; color: #797083; }
+.bp-submit { width: 100%; margin-top: 24px; border: 0; cursor: pointer; }
+.bp-details > form > .bp-muted { font-size: 12px; line-height: 1.6; color: #797083; }
+@media (max-width: 700px) { .bp-main { margin-top: 20px; max-width: 460px; padding: 0 16px 40px; } }

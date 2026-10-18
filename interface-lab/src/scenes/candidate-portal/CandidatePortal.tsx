@@ -4,12 +4,14 @@ import { Tooltip } from 'radix-ui';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import logo from '../employer-workspace/assets/hr-vision-logo.svg';
-import { CandidateApiError, candidateRequest, dateLabel, dateTimeLabel, localDate, timeLabel, timeZone, type CandidateApplication, type CandidateWorkflowCommand, type CandidateSession, type CandidateState, type Channels, type RecruiterSlot } from './api';
+import { CandidateApiError, candidateRequest, dateLabel, dateTimeLabel, timeLabel, type CandidateApplication, type CandidateWorkflowCommand, type CandidateSession, type CandidateState, type Channels } from './api';
 import { PreferencesForm } from './PreferencesForm';
 import { ResumeUpload } from './ResumeUpload';
 import { InterviewRoom } from './InterviewRoom';
 import { InvitationPortal } from './InvitationPortal';
 import { BookingPortal } from './BookingPortal';
+import { PooledBookingCalendar } from './PooledBookingCalendar';
+import type { BookingSlot } from './pooled-booking-model';
 import { TelegramHandoff } from './TelegramHandoff';
 import { CandidateSearch } from './CandidateSearch';
 import { CandidateSchedule } from './CandidateSchedule';
@@ -254,9 +256,9 @@ function AuthenticatedCandidatePortal() {
           {candidate && page === 'preferences' && <section className="cp-form-page"><div className="cp-page-heading"><h1>Проверьте данные</h1><p>{candidate.resume?.extractedFields.some(field => ['about', 'city', 'residence', 'employmentType', 'salaryMin', 'salaryMax', 'latestStartDate'].includes(field)) ? 'Проверьте данные из резюме и дополните недостающие.' : 'Резюме сохранено. Заполнить поля автоматически не удалось.'}</p></div><PreferencesForm key={candidate.id} initial={candidate} missingFields={candidate.onboarding.missingFields} busy={busy} onSubmit={async profile => { const next = await mutate('profile', profile); if (next) go(setupPage(next, true) || 'booking', true); }}/></section>}
           {candidate && ['welcome', 'login', 'register', 'home', 'vacancies'].includes(page) && <CandidateSearch candidate={candidate} busy={busy} selectedId={selectedId} onSelect={setSelectedId} onDecision={decide} onMeetingReply={replyToMeeting} onWorkflow={workflow} onJoin={(applicationId, targetMeetingId) => go('meeting', false, applicationId, targetMeetingId)} onBookInterview={() => go('booking')} onInterview={() => go('interview')} onResumeSearch={() => changeSearch(true)}/>}
           {candidate && page === 'calendar' && <CandidateSchedule candidate={candidate} busy={busy} onAvailability={async availability => !!await mutate('profile', { availability }, 'Доступность сохранена.')} onMeetingReply={replyToMeeting} onOpenVacancy={openVacancy} onJoin={(applicationId, targetMeetingId) => go('meeting', false, applicationId, targetMeetingId)} onInterview={() => go('interview')} onBookInterview={() => go('booking')}/>}
-          {candidate && page === 'booking' && <RecruiterCalendar candidate={candidate} busy={busy} onBack={() => go('calendar')} onBook={async slotId => { if (await mutate('book', { slotId })) go('home'); }}/>}
+          {candidate && page === 'booking' && <RecruiterCalendar candidate={candidate} busy={busy} onBack={() => go('calendar')} onBook={async slotId => { const booked = await mutate('book', { slotId }); if (booked) go('home'); return Boolean(booked); }}/>}
           {candidate && page === 'profile' && <CandidateProfile candidate={candidate} busy={busy} onSave={async profile => !!await mutate('profile', profile, 'Изменения сохранены.')} onUpload={async payload => !!await mutate('resume', payload, 'Резюме сохранено.')} onSearchChange={changeSearch} contacts={<ContactSettings candidate={candidate} channels={channels} onRefresh={refresh}/>} onBack={() => go('home')}/>}
-          {candidate && page === 'interview' && (candidate.interview ? <InterviewRoom key={candidate.interview.id} title="Интервью с рекрутером" start={candidate.interview.start} completed={candidate.interview.status === 'completed'} configured={candidate.videoConfigured} onRefresh={refresh} onBack={() => go('home')}/> : <RecruiterCalendar candidate={candidate} busy={busy} onBack={() => go('home')} onBook={async slotId => { if (await mutate('book', { slotId })) go('home'); }}/>) }
+          {candidate && page === 'interview' && (candidate.interview ? <InterviewRoom key={candidate.interview.id} title="Интервью с рекрутером" start={candidate.interview.start} completed={candidate.interview.status === 'completed'} configured={candidate.videoConfigured} onRefresh={refresh} onBack={() => go('home')}/> : <RecruiterCalendar candidate={candidate} busy={busy} onBack={() => go('home')} onBook={async slotId => { const booked = await mutate('book', { slotId }); if (booked) go('home'); return Boolean(booked); }}/>) }
           {candidate && page === 'meeting' && (currentMeeting && ['confirmed', 'live', 'completed'].includes(currentMeeting.status) && (!currentApplication?.archivedAt || currentMeeting.status === 'completed') ? <InterviewRoom key={currentMeeting.id} title={`Встреча · ${currentApplication?.vacancy.company}`} start={currentMeeting.start} completed={currentMeeting.status === 'completed'} configured={candidate.videoConfigured} applicationId={currentApplication!.id} meetingId={currentMeeting.id} onRefresh={refresh} onBack={() => openVacancy(currentApplication!.id)}/> : <section className="cp-narrow cp-empty"><h1>Встреча недоступна</h1><p>Откройте вакансию, чтобы посмотреть актуальное время и историю встреч.</p><Button onClick={() => currentApplication ? openVacancy(currentApplication.id) : go('home')}>К поиску</Button></section>)}
         </>}
       </main>
@@ -278,23 +280,35 @@ function Welcome({ onStart }: { onStart: () => void }) {
   </section>;
 }
 
-function RecruiterCalendar({ candidate, busy, onBook, onBack }: { candidate: CandidateState; busy: boolean; onBook: (slotId: string) => Promise<void>; onBack: () => void }) {
-  const [slots, setSlots] = useState<RecruiterSlot[]>([]);
+function RecruiterCalendar({ candidate, busy, onBook, onBack }: { candidate: CandidateState; busy: boolean; onBook: (slotId: string) => Promise<boolean>; onBack: () => void }) {
+  const [slots, setSlots] = useState<BookingSlot[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [day, setDay] = useState('');
   const [selected, setSelected] = useState('');
+  const [timezone, setTimezone] = useState('Europe/Moscow');
+  const pending = useRef(false);
   const load = useCallback(async () => {
     setLoading(true); setError('');
-    try { const result = await candidateRequest<{ slots: RecruiterSlot[] }>('slots'); const future = result.slots.filter(slot => new Date(slot.start).getTime() > Date.now()).sort((left, right) => left.start.localeCompare(right.start)); setSlots(future); setDay(previous => future.some(slot => localDate(new Date(slot.start)) === previous) ? previous : future[0] ? localDate(new Date(future[0].start)) : ''); setSelected(''); }
+    try { const result = await candidateRequest<{ slots: BookingSlot[] }>('slots'); setSlots(result.slots); setSelected(value => result.slots.some(slot => slot.id === value) ? value : ''); }
     catch (cause) { setError((cause as Error).message); }
     finally { setLoading(false); }
   }, []);
   useEffect(() => { void load(); }, [load]);
-  const days = [...new Set(slots.map(slot => localDate(new Date(slot.start))))];
-  const selectedSlot = slots.find(slot => slot.id === selected);
+  async function book() {
+    if (pending.current || !selected) return;
+    pending.current = true;
+    try { if (!await onBook(selected)) await load(); }
+    finally { pending.current = false; }
+  }
   if (candidate.interview && candidate.interview.status !== 'completed') return <section className="cp-narrow cp-empty"><CalendarDays size={32}/><h1>Вы уже записаны</h1><p>{dateTimeLabel(candidate.interview.start)}</p><Button onClick={onBack}>К интервью</Button></section>;
-  return <section className="cp-calendar-page"><Button variant="ghost" className="cp-back" onClick={onBack}><ArrowLeft size={16}/>В кабинет</Button><div className="cp-page-heading"><h1>Выберите время интервью</h1><p>30 минут с рекрутером · {timeZone()}</p></div>{loading ? <div className="cp-loading" role="status"><span className="cp-spinner"/>Загружаем расписание…</div> : error ? <div className="cp-empty"><p role="alert" className="cp-error">{error}</p><Button variant="secondary" onClick={load}>Попробовать ещё раз</Button></div> : !slots.length ? <div className="cp-empty cp-card"><CalendarDays size={32}/><h2>Пока нет свободного времени</h2><Button variant="ghost" onClick={load}>Обновить расписание</Button></div> : <div className="cp-calendar-grid"><div className="cp-days" role="group" aria-label="Даты интервью">{days.map(value => <button key={value} aria-pressed={day === value} onClick={() => { setDay(value); setSelected(''); }}><span>{new Intl.DateTimeFormat('ru-RU', { weekday: 'short' }).format(new Date(`${value}T12:00:00`))}</span><strong>{new Date(`${value}T12:00:00`).getDate()}</strong><span>{new Intl.DateTimeFormat('ru-RU', { month: 'short' }).format(new Date(`${value}T12:00:00`))}</span></button>)}</div><div className="cp-slot-panel"><h2>{day ? dateLabel(`${day}T12:00:00`) : 'Выберите дату'}</h2><div className="cp-slots" role="group" aria-label="Доступное время">{slots.filter(slot => localDate(new Date(slot.start)) === day).map(slot => <button key={slot.id} aria-pressed={selected === slot.id} onClick={() => setSelected(slot.id)}><strong>{timeLabel(slot.start)}</strong><span>{slot.recruiterName}</span>{selected === slot.id && <Check size={16}/>}</button>)}</div>{selectedSlot && <div className="cp-book-confirm"><p>{dateTimeLabel(selectedSlot.start)}<br/><span>{selectedSlot.recruiterName} · 30 минут</span></p><Button disabled={busy} onClick={() => onBook(selectedSlot.id)}>{busy ? 'Записываем…' : 'Записаться'}</Button></div>}</div></div>}</section>;
+  return <section className="cp-pooled-booking">
+    <button className="pbc-back" type="button" disabled={busy} onClick={onBack}><ArrowLeft size={16}/>В кабинет</button>
+    <div className="pbc-surface">
+      {loading ? <div className="cp-loading" role="status">Загружаем расписание…</div> : error ? <div className="cp-empty"><p role="alert" className="cp-error">{error}</p><Button variant="secondary" onClick={load}>Попробовать ещё раз</Button></div> : !slots.length ? <div className="cp-empty"><h2>Пока нет свободного времени</h2><Button variant="ghost" onClick={load}>Проверить расписание</Button></div> :
+        <PooledBookingCalendar slots={slots} selectedId={selected} onSelect={setSelected} timezone={timezone} onTimezone={setTimezone} disabled={busy}
+          continueLabel={busy ? 'Бронируем…' : 'Записаться'} onContinue={() => void book()}/>}
+    </div>
+  </section>;
 }
 
 function ContactSettings({ candidate, channels, onRefresh, compact = false }: { candidate: CandidateState; channels: Channels; onRefresh: () => Promise<void>; compact?: boolean }) {

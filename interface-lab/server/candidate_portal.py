@@ -23,6 +23,7 @@ from candidate_resume import parse_upload, salary_value, start_date_value
 import candidate_resume_model
 import candidate_invites as invites
 import recruiter_availability as availability
+import interview_scheduler
 import employer_workflow
 import recruiter_access
 import recruiter_notifications
@@ -588,6 +589,9 @@ class CandidatePortal:
                 for row in rows if (row[0] in allowed or row[4])
                 and (internal or (not row[4] and timestamp(row[1]) > now()))]
 
+    def booking_slots(self, db):
+        return interview_scheduler.public_slots(db)
+
     def recruiter_state(self, db, principal=None):
         personal = principal and not principal['legacy']
         if personal:
@@ -723,16 +727,19 @@ class CandidatePortal:
         if personal:
             db.execute('INSERT INTO cp_recruiter_slot_owners VALUES (?,?)', (slot_id, principal['id']))
 
-    def book(self, db, cid, body, *, prepared=False):
+    def book(self, db, cid, body, *, prepared=False, pooled=False):
         availability.materialize(db)
-        slot = db.execute('SELECT id,start,end,candidate_id FROM cp_recruiter_slots WHERE id=?', (body.get('slotId'),)).fetchone()
+        requested = body.get('slotId')
+        existing = db.execute('SELECT slot_id FROM cp_interviews WHERE candidate_id=?', (cid,)).fetchone()
+        if existing:
+            matches = interview_scheduler.same_window(db, requested, existing[0]) if pooled else existing[0] == requested
+            require(matches, 'Вы уже записаны. Для переноса свяжитесь с командой.', 409)
+            return
+        chosen = interview_scheduler.select_slot(db, requested) if pooled else requested
+        slot = db.execute('SELECT id,start,end,candidate_id FROM cp_recruiter_slots WHERE id=?', (chosen,)).fetchone()
         require(slot is not None, 'Слот не найден.', 404)
         owner = db.execute('''SELECT o.recruiter_id,a.active FROM cp_recruiter_slot_owners o
             JOIN rc_accounts a ON a.id=o.recruiter_id WHERE o.slot_id=?''', (slot[0],)).fetchone()
-        existing = db.execute('SELECT slot_id FROM cp_interviews WHERE candidate_id=?', (cid,)).fetchone()
-        if existing:
-            require(existing[0] == slot[0], 'Вы уже записаны. Для переноса свяжитесь с командой.', 409)
-            return
         require((owner and owner[1] == 1) or (prepared and not owner),
                 'Это время уже недоступно. Выберите другое.', 409)
         require(slot[0] in availability.open_slot_ids(db), 'Это время уже недоступно. Выберите другое.', 409)
@@ -746,7 +753,8 @@ class CandidatePortal:
         require(slot[3] is None and timestamp(slot[1]) > now(), 'Это время уже недоступно. Выберите другое.', 409)
         self.ensure_candidate_free(db, cid, {'start': slot[1], 'end': slot[2]})
         iid = uid('interview')
-        db.execute('UPDATE cp_recruiter_slots SET candidate_id=? WHERE id=? AND candidate_id IS NULL', (cid, slot[0]))
+        reserved = db.execute('UPDATE cp_recruiter_slots SET candidate_id=? WHERE id=? AND candidate_id IS NULL', (cid, slot[0]))
+        require(reserved.rowcount == 1, 'Это время уже недоступно. Выберите другое.', 409)
         db.execute('INSERT INTO cp_interviews VALUES (?,?,?,\'booked\',NULL,?,NULL)', (iid, cid, slot[0], iso(now())))
         if owner:
             recruiter_notifications.enqueue_booking(db, owner[0], iid)
@@ -1367,7 +1375,7 @@ class CandidatePortal:
                 if path == '/api/hr/candidate/resume':
                     return self.download_resume(db, cid), {}
                 if path == '/api/hr/candidate/slots':
-                    return {'slots': self.slots(db)}, {}
+                    return {'slots': self.booking_slots(db)}, {}
                 if path == '/api/hr/candidate/notifications':
                     return self.channels(db, cid), {}
                 if path == '/api/hr/recruiter/state':
@@ -1407,7 +1415,7 @@ class CandidatePortal:
             elif path == '/api/hr/candidate/resume':
                 self.save_resume(db, cid, parsed_resume)
             elif path == '/api/hr/candidate/book':
-                self.book(db, cid, body)
+                self.book(db, cid, body, pooled=True)
             elif path == '/api/hr/candidate/application/decision':
                 self.decide_application(db, cid, body)
             elif path == '/api/hr/candidate/meeting/confirm':

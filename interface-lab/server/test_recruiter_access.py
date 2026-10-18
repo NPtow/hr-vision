@@ -61,6 +61,13 @@ class RecruiterAccessTest(unittest.TestCase):
     def book(self, person, cookie, slot):
         return self.call('candidate/book', {'slotId': slot['id']}, cookie)
 
+    def assign_fixture(self, person, slot):
+        # Ownership/edit tests need a known historical assignment, independent
+        # of public load balancing (covered by test_interview_scheduler).
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            self.portal.book(db, person['id'], {'slotId': slot['id']})
+
     def state(self, auth):
         return self.request('state', auth=auth)[0]
 
@@ -174,7 +181,7 @@ class RecruiterAccessTest(unittest.TestCase):
         block = initial['availabilityBlocks'][0]
         booked = initial['slots'][0]
         person, cookie = self.register_candidate()
-        self.book(person, cookie, booked)
+        self.assign_fixture(person, booked)
         update = {**body, 'blockId': block['id'], 'startTime': '18:00', 'endTime': '19:00'}
         self.expect(404, 'availability', update, two)
         self.expect(401, 'availability', update, manager=True)
@@ -202,7 +209,7 @@ class RecruiterAccessTest(unittest.TestCase):
         unscheduled, _ = self.register_candidate()
         mine, theirs = self.slot(one), self.slot(two)
         self.assertEqual(self.state(one)['candidates'], [])
-        self.book(person, cookie, mine)
+        self.assign_fixture(person, mine)
         self.assertEqual([p['id'] for p in self.state(one)['candidates']], [person['id']])
         self.assertEqual(self.state(two)['candidates'], [])
         for route, extra in [('profile', {'summary': 'x'}), ('invitations', {'scope': 'claim'}),
@@ -216,7 +223,7 @@ class RecruiterAccessTest(unittest.TestCase):
         self.assertFalse(self.media.rooms)
         self.assertEqual(self.state(one)['candidates'][0]['source']['kind'], 'registration')
 
-    def test_personal_date_overrides_filter_pool_and_reject_stale_booking_links(self):
+    def test_personal_date_overrides_filter_pool_and_route_stale_time_to_available_owner(self):
         from recruiter_availability import MOSCOW
         one, two = self.recruiter('date-one'), self.recruiter('date-two')
         day = (self.tick + dt.timedelta(days=1)).astimezone(MOSCOW).date().isoformat()
@@ -227,24 +234,24 @@ class RecruiterAccessTest(unittest.TestCase):
         self.assertEqual(initial['availabilityDates'], [body])
         person, cookie = self.register_candidate()
         booked, unused = initial['slots']
-        self.book(person, cookie, booked)
+        self.assign_fixture(person, booked)
         closed, _ = self.request('availability/date', {'date': day, 'intervals': []}, one)
         self.assertEqual([slot['id'] for slot in closed['slots']], [booked['id']])
         self.assertEqual(closed['candidates'][0]['id'], person['id'])
         public, _ = self.call('candidate/slots', cookie=cookie)
-        self.assertEqual({slot['id'] for slot in public['slots']}, {slot['id'] for slot in other['slots']})
+        self.assertEqual({(slot['start'], slot['end']) for slot in public['slots']},
+                         {(slot['start'], slot['end']) for slot in other['slots']})
         new_person, new_cookie = self.register_candidate()
-        with self.assertRaises(Problem) as raised:
-            self.book(new_person, new_cookie, unused)
-        self.assertEqual(raised.exception.status, 409)
+        self.book(new_person, new_cookie, unused)
+        self.assertEqual([p['id'] for p in self.state(two)['candidates']], [new_person['id']])
         self.book(person, cookie, booked)  # existing commitment remains idempotent
         self.expect(400, 'availability/date', {**body, 'recruiterId': two['recruiter']['id']}, one)
         self.expect(401, 'availability/date', body, manager=True)
-        self.assertEqual(self.state(two), other)
         reopened, _ = self.request('availability/date', body, one)
         self.assertEqual(len(reopened['slots']), 2)
         self.book(new_person, new_cookie, unused)
-        self.assertEqual(len(self.state(one)['candidates']), 2)
+        self.assertEqual(len(self.state(one)['candidates']), 1)
+        self.assertEqual(len(self.state(two)['candidates']), 1)
 
     def test_session_revoked_during_provider_io_does_not_issue_room_token(self):
         recruiter = self.recruiter()

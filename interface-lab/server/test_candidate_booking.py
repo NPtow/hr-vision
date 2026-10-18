@@ -139,7 +139,10 @@ class CandidateBookingTest(unittest.TestCase):
         state, headers = self.request('state', token)
         self.assertEqual({'status', 'candidateName', 'timezone', 'slots', 'booking', 'profileReady'}, set(state))
         self.assertEqual('available', state['status'])
-        self.assertEqual({first['id'], second['id']}, {slot['id'] for slot in state['slots']})
+        self.assertEqual(1, len(state['slots']))
+        self.assertEqual({'id', 'start', 'end'}, set(state['slots'][0]))
+        self.assertEqual(first['start'], state['slots'][0]['start'])
+        self.assertNotIn(state['slots'][0]['id'], (first['id'], second['id']))
         self.assertNotIn('Set-Cookie', headers)
         self.assertEqual('no-store', headers['Cache-Control'])
         self.assertNotIn('Private CV detail', json.dumps(state))
@@ -203,18 +206,19 @@ class CandidateBookingTest(unittest.TestCase):
         cid, issued, token = self.issue()
         slot = self.slot(recruiter='Первый')
         other = self.slot(recruiter='Второй')
-        owner = self.rows('SELECT recruiter_id FROM cp_recruiter_slot_owners WHERE slot_id=?', (slot['id'],))[0][0]
         state = self.book(token, slot)
+        assigned = state['booking']['slotId']
+        owner = self.rows('SELECT recruiter_id FROM cp_recruiter_slot_owners WHERE slot_id=?', (assigned,))[0][0]
         self.assertEqual('booked', state['status'])
         self.assertEqual([], state['slots'])
-        self.assertEqual('Первый', state['booking']['recruiterName'])
+        self.assertIn(state['booking']['recruiterName'], ('Первый', 'Второй'))
         self.assertNotIn('room', state['booking'])
-        self.assertEqual(slot['id'], state['booking']['slotId'])
+        self.assertIn(assigned, (slot['id'], other['id']))
         self.assertEqual([(issued['invitationId'], 'campaign-1', 'recipient-' + cid)],
             self.rows('SELECT invitation_id,campaign_id,recipient_id FROM cp_booking_attribution'))
         self.assertEqual([(owner, 'email'), (owner, 'telegram')],
                          self.rows('SELECT recruiter_id,channel FROM rn_outbox ORDER BY channel'))
-        self.assertEqual([(None,)], self.rows('SELECT candidate_id FROM cp_recruiter_slots WHERE id=?', (other['id'],)))
+        self.assertEqual([(None,)], self.rows('SELECT candidate_id FROM cp_recruiter_slots WHERE id<>?', (assigned,)))
         self.assertEqual([('booking.created', state['booking']['id'])],
                          self.rows('SELECT kind,interview_id FROM booking_test_events'))
         self.assertEqual([(None, None)], self.rows('SELECT email,password_hash FROM cp_candidates WHERE id=?', (cid,)))
@@ -242,11 +246,11 @@ class CandidateBookingTest(unittest.TestCase):
         transport = Mock()
         transport.send_email.return_value = 'smtp_accepted'
         with patch.object(recruiter_notifications, 'settings', return_value=config):
-            self.book(token, selected)
+            booked = self.book(token, selected)
             self.book(token, selected)
             self.book(token, selected, 'request-2')
         owner_email = self.rows('''SELECT a.email FROM rc_accounts a
-            JOIN cp_recruiter_slot_owners o ON o.recruiter_id=a.id WHERE o.slot_id=?''', (selected['id'],))[0][0]
+            JOIN cp_recruiter_slot_owners o ON o.recruiter_id=a.id WHERE o.slot_id=?''', (booked['booking']['slotId'],))[0][0]
         self.assertEqual([(0,)], self.rows('SELECT email_verified FROM rn_channels'))
         self.assertEqual([(1,)], self.rows("SELECT count(*) FROM rn_outbox WHERE channel='email'"))
         result = recruiter_notifications.process_pending(self.connect, config, transport=transport)
