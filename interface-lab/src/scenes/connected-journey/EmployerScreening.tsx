@@ -49,6 +49,7 @@ function Screening({ journey, person, source, appearance = 'panel', enableCommen
   function comment(seconds: number, recordingId: string | null, chapterTitle = '', onClose?: () => void) {
     if (!showComments) return null;
     return <EmployerTimecodeComment key={`${source.interviewId}:${recordingId}:${seconds}`} seconds={seconds}
+      appearance={appearance === 'candidate' ? 'player' : undefined}
       comments={(person.screeningComments || []).filter(item => item.interviewId === source.interviewId
         && (item.recordingId === recordingId || (recordings.length <= 1 && item.recordingId === null))
         && Math.abs(item.seconds - seconds) < 0.001)}
@@ -65,6 +66,8 @@ function Screening({ journey, person, source, appearance = 'panel', enableCommen
     renderChapterComment={showComments ? chapter => chapter.seconds === null ? null : comment(chapter.seconds, recording?.id || null, chapter.title) : undefined}
     renderTimeComment={showComments ? (seconds, onClose) => comment(seconds, recording?.id || null, '', onClose) : undefined}
     commentTimestamps={enableComments ? commentTimestamps(recording?.id || null) : undefined}
+    canComment={canComment} comments={showComments ? (person.screeningComments || []).filter(item => item.interviewId === source.interviewId
+      && (item.recordingId === (recording?.id || null) || (recordings.length <= 1 && item.recordingId === null))) : []}
     emptyMessage={emptyMessage} recruiterContent={index === 0 && (source.conclusion.length || source.questions.length) ? <>
       <span className="ir-eyebrow">Мнение рекрутера{source.score !== null ? ` · ${source.score} / 5` : ''}</span>
       {source.conclusion.map((text, item) => <p key={item}>{text}</p>)}

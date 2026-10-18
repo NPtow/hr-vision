@@ -43,6 +43,15 @@
 .ecp-comments li p { margin:0; color:#121212; font-size:13px; line-height:20px; white-space:pre-wrap; overflow-wrap:anywhere; }
 .ecp-comments time { display:block; margin-top:4px; color:#757575; font-size:11px; line-height:16px; }
 .ecp-comments form { display:grid; gap:12px; min-width:0; }
+.ecp-player-comment { padding:14px; border-radius:16px; border:1px solid #e9e9e9; background:#fff; box-shadow:0 3px 16px #00000006; }
+.ecp-player-comment-top,.ecp-player-comment-bottom { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.ecp-player-comment-top>span { display:flex; align-items:center; gap:4px; padding:3px 6px; font-size:11px; color:#777; background:#f7f7f7; border-radius:5px; font-variant-numeric:tabular-nums; }
+.ecp-player-comment-top>button { display:grid; place-items:center; width:26px; height:26px; color:#999; border-radius:50%; }
+.ecp-player-comment textarea { display:block; min-width:0; width:100%; min-height:90px; max-height:160px; padding:14px 2px; resize:vertical; border:0; background:transparent; color:#222; font:inherit; font-size:13px; line-height:1.6; box-shadow:none; }
+.ecp-player-comment textarea::placeholder { color:#aaa; }
+.ecp-player-comment-bottom>span { color:#aaa; font-size:10px; }
+.ecp-player-comment-bottom>button { display:grid; place-items:center; width:30px; height:30px; border-radius:50%; color:#fff; background:#111; }
+.ecp-player-comment :is(button,textarea):focus-visible { outline:2px solid #6554e8; outline-offset:3px; }
 .ecp-comments .ecp-form-actions button { font-size:12px; }
 .ecp-profile .ecp-comment-trigger { justify-content:flex-start; min-height:36px; padding:6px 10px; color:#757575; font-size:12px; }
 @media(max-width:700px) {

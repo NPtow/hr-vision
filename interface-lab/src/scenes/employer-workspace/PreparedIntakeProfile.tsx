@@ -50,6 +50,7 @@ function PreparedInterview({ person, profile, index, token, vacancyId, busy, onC
   }
   function comment(seconds: number, chapterTitle = '', onClose?: () => void) {
     return <EmployerTimecodeComment key={`${person.id}:${index}:${seconds}`} seconds={seconds}
+      appearance="player"
       comments={(person.screeningComments || []).filter(item => item.recordingIndex === index && Math.abs(item.seconds - seconds) < 0.001)}
       workflowRevision={person.reviewRevision || 0} busy={busy} initiallyOpen={!!onClose} onClose={onClose}
       onSave={canComment ? (text, expectedRevision, requestId) => onComment({ recordingIndex: index, seconds, chapterTitle, text, expectedRevision, requestId }) : undefined}/>;
@@ -62,6 +63,7 @@ function PreparedInterview({ person, profile, index, token, vacancyId, busy, onC
       renderChapterComment={chapter => chapter.seconds === null ? null : comment(chapter.seconds, chapter.title)}
       renderTimeComment={(seconds, onClose) => comment(seconds, '', onClose)}
       commentTimestamps={[...commentCounts].sort(([a], [b]) => a - b).map(([seconds, count]) => ({ seconds, count }))}
+      canComment={canComment} comments={(person.screeningComments || []).filter(item => item.recordingIndex === index)}
       emptyMessage={loading ? 'Загружаем запись…' : error || 'Запись интервью не добавлена.'}/>
   </>;
 }

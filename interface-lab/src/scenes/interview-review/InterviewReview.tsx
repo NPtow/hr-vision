@@ -8,6 +8,7 @@ import candidatePlayAsset from '../employer-workspace/assets/candidate-profile/p
 import candidateVolumeAsset from '../employer-workspace/assets/candidate-profile/volume.svg';
 import candidateRepeatAsset from '../employer-workspace/assets/candidate-profile/repeat.svg';
 import { groupTranscriptTurns, parseMeetingTranscript, transcriptInRange } from '../connected-journey/transcript';
+import { CandidateInterviewPlayer } from './CandidateInterviewPlayer';
 
 export type { InterviewMedia } from './InterviewMediaContext';
 export type InterviewReviewProps = {
@@ -49,6 +50,8 @@ export type RecordingReviewProps = {
   renderChapterComment?: (chapter: RecordingChapter, context: RecordingChapterContext) => ReactNode;
   renderTimeComment?: (seconds: number, onClose: () => void) => ReactNode;
   commentTimestamps?: { seconds: number; count: number }[];
+  comments?: { id: string; seconds: number; text: string; createdAt: string }[];
+  canComment?: boolean;
 };
 
 /** Parse a source's mm:ss or hh:mm:ss. A missing timestamp is never a seekable chapter. */
@@ -93,7 +96,8 @@ export function MeetingRecordingReview(props: Omit<RecordingReviewProps, 'kind' 
 
 /** Existing HR materials retain their actual cuts, chapters and source text. */
 export function SourceScreeningReview(props: Omit<RecordingReviewProps, 'kind'>) {
-  return <RecordingReview key={props.appearance === 'candidate' ? props.sourceId : `${props.sourceId}:${props.media?.src || 'missing'}`} {...props} kind="screening"/>;
+  if (props.appearance === 'candidate') return <CandidateInterviewPlayer key={props.sourceId} {...props} kind="screening"/>;
+  return <RecordingReview key={`${props.sourceId}:${props.media?.src || 'missing'}`} {...props} kind="screening"/>;
 }
 
 function RecordingReview({ sourceId, name, chapters: evidence, kind, summary, unknown, transcriptText,
