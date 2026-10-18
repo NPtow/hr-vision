@@ -1,13 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import { EmployerScreening } from '../connected-journey/EmployerScreening';
-import { request, type Journey, type Person, type SourceProfile } from '../connected-journey/api';
+import { initials, request, type Journey, type Person, type SourceProfile } from '../connected-journey/api';
 import { EmployerCandidateProfile } from './EmployerCandidateProfile';
 import { candidateDecision, respondToCandidate } from './candidate-response';
 import type { EmployerCandidateDecision, EmployerCandidateResponseValues } from './employer-candidate-profile-types';
 
+export function sourceFor(person: Person): SourceProfile {
+  return person.sourceProfile || { id: person.candidateId || person.id, name: person.name, initials: initials(person.name), role: person.summary || '', interviewRole: person.role || '', interviewDate: '', score: null, duration: null, photo: person.photo || null, video: null, shortChapters: [], fullChapters: [], shortSummary: '', profile: [], cv: '', conclusion: [], questions: [] };
+}
+
 /** The proposed-candidate view. Progress through stages remains in the task card. */
-export function EmployerCandidateWorkspace({ journey, person, source }: {
+export function EmployerCandidateWorkspace({ journey, person, source, onResponseStart, onResponded }: {
   journey: Journey; person: Person; source: SourceProfile;
+  onResponseStart?: () => void; onResponded?: () => void;
 }) {
   const [fileBusy, setFileBusy] = useState(false);
   const [fileError, setFileError] = useState('');
@@ -21,10 +26,12 @@ export function EmployerCandidateWorkspace({ journey, person, source }: {
   async function respond(values: EmployerCandidateResponseValues) {
     if (pending.current || !mounted.current) return false;
     pending.current = true; setResponding(true);
+    onResponseStart?.();
     try {
       const result = await respondToCandidate(journey.token, identity, values);
       if (mounted.current) {
         setSavedDecision(candidateDecision(result.response, result.reviewRejection));
+        onResponded?.();
         void journey.refresh();
       }
       return true;

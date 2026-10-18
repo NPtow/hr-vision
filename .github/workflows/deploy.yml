@@ -53,6 +53,7 @@ jobs:
           npm run typecheck
           node scripts/transcript-check.mjs
           node --test scripts/candidate-player-model.test.ts
+          node --test scripts/candidate-review-queue.test.ts
           node --test scripts/employer-entry.test.ts
           node --test scripts/employer-agenda.test.ts
           node --test scripts/candidate-workspace.test.ts

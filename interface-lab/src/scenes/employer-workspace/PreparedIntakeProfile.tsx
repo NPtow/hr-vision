@@ -68,8 +68,9 @@ function PreparedInterview({ person, profile, index, token, vacancyId, busy, onC
   </>;
 }
 
-export function PreparedIntakeProfile({ person, token, vacancyId, onUpdated }: {
+export function PreparedIntakeProfile({ person, token, vacancyId, onUpdated, onResponseStart, onResponded }: {
   person: IntakePerson; token: string; vacancyId?: string; onUpdated?: () => void;
+  onResponseStart?: () => void; onResponded?: () => void;
 }) {
   const [current, setCurrent] = useState(person);
   const [error, setError] = useState('');
@@ -100,11 +101,13 @@ export function PreparedIntakeProfile({ person, token, vacancyId, onUpdated }: {
   async function respond(values: EmployerCandidateResponseValues) {
     if (!vacancyId || saving.current || !mounted.current) return false;
     saving.current = true; setBusy(true); setError('');
+    onResponseStart?.();
     try {
       const result = await respondToCandidate(token, { source: 'intake', id: current.id, vacancyId }, values);
       if (mounted.current) {
         const saved = result.candidates?.find(candidate => candidate.id === current.id);
         if (saved) setCurrent(saved);
+        onResponded?.();
       }
       // Refresh the exact list even when this card was closed during the request.
       // useIntake ignores stale refresh callbacks after a workspace/vacancy switch.

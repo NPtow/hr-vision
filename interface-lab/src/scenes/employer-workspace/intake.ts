@@ -22,16 +22,17 @@ export type IntakeComment = { id: string; recordingIndex: number; recordingId: s
 export type IntakePerson = { id: string; name: string; role: string; contact: string; link: string; note: string; scope: Scope; files: IntakeFile[]; createdAt: string; archived: boolean; preparedProfile?: PreparedProfile; screeningComments?: IntakeComment[]; reviewRevision?: number; reviewResponse?: EmployerReviewResponse | null; reviewRejection?: { reason: string; missing: string; improve: string; createdAt?: string } | null };
 export function useIntake(token: string, scope: Scope, vacancyId?: string) {
   const context = JSON.stringify([token, scope, vacancyId || '']);
-  const [result, setResult] = useState<{ context: string; people: IntakePerson[]; error: string; loading: boolean } | null>(null);
+  const [result, setResult] = useState<{ context: string; people: IntakePerson[]; error: string; loading: boolean; initialized: boolean } | null>(null);
   const sequence = useRef(0);
   const currentContext = useRef<string | null>(context);
   currentContext.current = context;
   const refresh = useCallback(async () => {
     if (!token || currentContext.current !== context) return;
     const seq = ++sequence.current;
-    setResult(previous => ({ context, people: previous?.context === context ? previous.people : [], error: '', loading: true }));
-    try { const data = await request<{ candidates: IntakePerson[] }>(`intake?scope=${scope}${vacancyId ? '&vacancyId=' + encodeURIComponent(vacancyId) : ''}`, token); if (sequence.current === seq && currentContext.current === context) setResult({ context, people: data.candidates, error: '', loading: false }); }
-    catch (e) { if (sequence.current === seq && currentContext.current === context) setResult(previous => ({ context, people: previous?.context === context ? previous.people : [], error: (e as Error).message, loading: false })); }
+    setResult(previous => ({ context, people: previous?.context === context ? previous.people : [], error: '', loading: true,
+      initialized: previous?.context === context && previous.initialized }));
+    try { const data = await request<{ candidates: IntakePerson[] }>(`intake?scope=${scope}${vacancyId ? '&vacancyId=' + encodeURIComponent(vacancyId) : ''}`, token); if (sequence.current === seq && currentContext.current === context) setResult({ context, people: data.candidates, error: '', loading: false, initialized: true }); }
+    catch (e) { if (sequence.current === seq && currentContext.current === context) setResult(previous => ({ context, people: previous?.context === context ? previous.people : [], error: (e as Error).message, loading: false, initialized: true })); }
   }, [token, scope, vacancyId, context]);
   useEffect(() => {
     currentContext.current = context;
@@ -40,7 +41,7 @@ export function useIntake(token: string, scope: Scope, vacancyId?: string) {
   }, [refresh, context]);
   // The new vacancy renders before effects run; never expose the previous result in that frame.
   const current = result?.context === context ? result : null;
-  return { people: current?.people || [], error: current?.error || '', loading: !!token && (!current || current.loading), refresh };
+  return { people: current?.people || [], error: current?.error || '', loading: !!token && (!current || current.loading), initialized: current?.initialized || false, refresh };
 }
 export async function loadResumeFile(token: string, file: IntakeFile, signal?: AbortSignal) {
   const target = journeyRequestTarget(`intake/files/${encodeURIComponent(file.id)}`, token);

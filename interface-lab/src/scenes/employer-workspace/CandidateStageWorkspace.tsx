@@ -23,10 +23,12 @@ const queryStage = () => {
 };
 
 /** The application and canonical stage IDs stay fixed throughout each edit. */
-export function CandidateStageWorkspace({ journey, person, source, entry, onChat, onCallChange, callActive }: {
+export function CandidateStageWorkspace({ journey, person, source, entry, onChat, onCallChange, callActive, embedded = false }: {
   journey: Journey; person: Person; source: SourceProfile; entry?: 'meeting' | 'review' | 'offer';
   onChat: () => void; onCallChange: (open: boolean) => void; callActive: boolean;
+  embedded?: boolean;
 }) {
+  const Container = embedded ? 'div' : 'main';
   const stages = person.stages || [];
   const [selectedId, setSelectedId] = useState(() => queryStage() ||
     (entry === 'meeting' || entry === 'review' ? [...stages].reverse().find(stage => stage.kind === 'meeting')?.id :
@@ -134,12 +136,12 @@ export function CandidateStageWorkspace({ journey, person, source, entry, onChat
 
   if (profileOpen) form = <section className="esc-materials"><h3>Профиль</h3>{source.profile.map((fact, index) => <p key={index}><strong>{fact.label}</strong><br/>{fact.value}</p>)}{source.cv && <p>{source.cv}</p>}<Button variant="ghost" onClick={() => setProfileOpen(false)}>К этапам</Button></section>;
 
-  if (selectedId && !stages.some(stage => stage.id === selectedId)) return <main className="esc-workspace"><section className="esc-card esc-unavailable">
+  if (selectedId && !stages.some(stage => stage.id === selectedId)) return <Container className="esc-workspace"><section className="esc-card esc-unavailable">
     <h2>Этап недоступен</h2><p>Этого этапа нет в истории выбранного кандидата.</p>
     {stages.length > 0 && <Button onClick={() => selectStage(stages.at(-1)!.id, true)}>Открыть текущий этап</Button>}
-  </section></main>;
+  </section></Container>;
 
-  return <main className="esc-workspace"><CandidateStageCard
+  return <Container className="esc-workspace"><CandidateStageCard
     person={{ id: person.id, name: person.name, photo: person.photo, role: person.role, meta: [source.interviewRole || person.role, source.role].filter(Boolean).join(' · ') }}
     stages={stages} selectedStageId={selectedId} workflowRevision={person.workflowRevision || 0}
     onSelectStage={selectStage} onAddStage={locked ? undefined : kind => openEditor(kind)}
@@ -156,5 +158,5 @@ export function CandidateStageWorkspace({ journey, person, source, entry, onChat
         {!stages.some(stage => stage.kind === 'interview') && (source.cv || source.profile.length > 0) && <DropdownMenu.Item className="esc-menu-item" onSelect={() => { setEditor(null); setProfileOpen(true); }}>Профиль</DropdownMenu.Item>}
         {!locked && <DropdownMenu.Item className="esc-menu-item" onSelect={() => { void journey.act('reject', person.id, { expectedRevision: person.workflowRevision || 0 }); }}>Отказать</DropdownMenu.Item>}
       </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>}
-  /></main>;
+  /></Container>;
 }
