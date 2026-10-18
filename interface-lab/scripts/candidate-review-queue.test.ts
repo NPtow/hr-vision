@@ -3,7 +3,7 @@ import test from 'node:test';
 import type { EmployerReviewReceipt, Person } from '../src/scenes/connected-journey/api.ts';
 import type { IntakePerson } from '../src/scenes/employer-workspace/intake.ts';
 import { candidateReviewQueue, currentReviewCandidate, emptyReviewQueueSession, reviewCandidateKey,
-  reviewQueueSession, selectedReviewCandidates } from '../src/scenes/employer-workspace/candidate-review-queue.ts';
+  reviewQueueSession } from '../src/scenes/employer-workspace/candidate-review-queue.ts';
 
 const vacancyId = 'vacancy-a';
 const invite = { decision: 'invite' as const, createdAt: '2026-10-18T23:00:00Z' };
@@ -88,15 +88,4 @@ test('a new vacancy/session does not inherit a held candidate or acknowledgement
   const otherQueue = candidateReviewQueue({ vacancyId: 'vacancy-b', people: [app('second', { vacancyId: 'vacancy-b' })], intake: [] });
   assert.equal(oldSession.held?.id, 'first');
   assert.equal(currentReviewCandidate(otherQueue, { source: 'application', id: 'first' }, emptyReviewQueueSession)?.id, 'second');
-});
-
-test('selected candidates include real funnel applications and private invited profiles without rejected or foreign entries', () => {
-  const privateDraft = intake('private-invite', { reviewResponse: { ...invite, meetingStatus: 'draft', meetingStart: '2026-10-20T10:00:00Z' } });
-  const selected = selectedReviewCandidates({ vacancyId, people: [app('unreviewed'),
-    app('in-funnel', { reviewState: 'selected' }), app('pending-invite', { reviewResponse: invite }),
-    app('rejected', { reviewState: 'selected', decision: 'declined' }), app('foreign', { vacancyId: 'vacancy-b', reviewState: 'selected' })],
-    intake: [intake('not-reviewed'), privateDraft, intake('rejected-import', { archived: true, reviewResponse: reject })] });
-  assert.deepEqual(keys(selected), ['application:in-funnel', 'application:pending-invite', 'intake:private-invite']);
-  assert.equal(selected[2].person, privateDraft);
-  assert.equal('meeting' in selected[2].person, false);
 });

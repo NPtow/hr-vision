@@ -27,20 +27,6 @@ export function candidateReviewQueue({ vacancyId, people, intake, receipts = {} 
   ];
 }
 
-/** A private DSA invitation stays an intake profile, not a fabricated meeting/application. */
-export function selectedReviewCandidates({ vacancyId, people, intake }: ReviewSources): ReviewCandidate[] {
-  if (!vacancyId) return [];
-  const scoped = people.filter(person => person.vacancyId === vacancyId);
-  return [
-    ...scoped.filter(person => person.decision !== 'declined' && person.reviewResponse?.decision !== 'reject' && !person.reviewRejection &&
-      (person.reviewState === 'selected' || person.reviewResponse?.decision === 'invite'))
-      .map(person => ({ source: 'application' as const, id: person.id, person })),
-    ...intake.filter(person => !person.archived && person.reviewResponse?.decision === 'invite' &&
-      !scoped.some(application => application.id === person.id || application.candidateId === person.id))
-      .map(person => ({ source: 'intake' as const, id: person.id, person })),
-  ];
-}
-
 export type ReviewQueueSession = { held: ReviewCandidate | null; acknowledged: readonly string[] };
 export const emptyReviewQueueSession: ReviewQueueSession = { held: null, acknowledged: [] };
 export function reviewQueueSession(session: ReviewQueueSession, event:

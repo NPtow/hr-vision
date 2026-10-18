@@ -9,8 +9,6 @@
   min-height:320px; text-align:center; color:#837d91;
 }
 .ew-root .ew-review-empty h2 { font-size:20px; font-weight:550; color:#686473; }
-.ew-root .ew-selected-candidates .esc-workspace { padding:0; max-width:none; }
-.ew-root .ew-selected-candidates .esc-card { box-shadow:none; }
 @media(max-width:1100px) {
   .ew-root .ew-review-queue { padding:0 20px 24px; }
   .ew-root .ew-review-card { padding:24px; }
