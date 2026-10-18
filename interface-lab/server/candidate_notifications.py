@@ -115,11 +115,11 @@ def _email(value):
     return value.strip().lower()
 
 
-def _url(value):
+def _url(value, *, allow_fragment=False):
     try:
         parsed = urllib.parse.urlsplit(value)
         return bool(parsed.scheme == 'https' and parsed.hostname and not parsed.username
-                    and not parsed.password and not parsed.fragment
+                    and not parsed.password and (allow_fragment or not parsed.fragment)
                     and not any(ord(c) < 32 for c in value))
     except (ValueError, TypeError):
         return False
@@ -366,7 +366,7 @@ def _reply_markup(value):
                     and isinstance(button.get('text'), str) and 1 <= len(button['text']) <= 128,
                     'Некорректная кнопка.', 400)
             require(_callback_data_valid(button['callback_data']) if 'callback_data' in button
-                    else _url(button['url']), 'Некорректная кнопка.', 400)
+                    else _url(button['url'], allow_fragment=True), 'Некорректная кнопка.', 400)
             count += 1
     require(count <= 100, 'Слишком много кнопок.', 400)
     return value
@@ -677,9 +677,14 @@ def _booking_message(db, row, tick):
     booking = _booking_record(db, row['candidate_id'], payload['invitationId'], tick)
     start = datetime.fromisoformat(booking['start'].replace('Z', '+00:00')).astimezone(ZoneInfo('Europe/Moscow'))
     end = datetime.fromisoformat(booking['end'].replace('Z', '+00:00')).astimezone(ZoneInfo('Europe/Moscow'))
-    prefix = 'Telegram подключён.\n\n' if row['channel'] == 'telegram' else ''
-    return ('Вы записаны на интервью · МашаДаша', prefix + 'Ваше интервью: ' + start.strftime('%d.%m.%Y, %H:%M')
-            + '–' + end.strftime('%H:%M') + ' МСК.\n\nВремя и подключение к встрече:\n' + payload['url'])
+    content = 'Ваше интервью: ' + start.strftime('%d.%m.%Y, %H:%M') + '–' + end.strftime('%H:%M') + ' МСК.'
+    reply_markup = None
+    if row['channel'] == 'telegram':
+        content = 'Telegram подключён.\n\n' + content
+        reply_markup = {'inline_keyboard': [[{'text': 'Открыть встречу', 'url': payload['url']}]]}
+    else:
+        content += '\n\nВремя и подключение к встрече:\n' + payload['url']
+    return 'Вы записаны на интервью · МашаДаша', content, reply_markup
 
 
 def _consume_telegram_update(db, update, timestamp, settings=None, update_handler=None):
@@ -985,7 +990,7 @@ def process_pending(connect, settings=None, limit=10, now=None, transport=None, 
                        (lease, timestamp + LEASE_SECONDS, row['id']))
             reply_markup, bot_payload = None, None
             if row['event_type'] == 'booking.confirmed':
-                subject, content = _booking_message(db, row, timestamp)
+                subject, content, reply_markup = _booking_message(db, row, timestamp)
             elif row['event_type'] in BOT_EVENTS:
                 bot_payload = json.loads(row['payload_json'])
                 subject, content = '', bot_payload.get('text', '')

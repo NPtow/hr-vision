@@ -202,7 +202,7 @@ class CandidateBookingTest(unittest.TestCase):
         self.assertEqual('delivered', self.request('state', token)[0]['delivery']['email'])
 
     def test_booking_telegram_is_scoped_to_consented_interview_not_login_identity(self):
-        cid, _, token = self.issue()
+        cid, issued, token = self.issue()
         self.expect(409, 'telegram', token)
         config = self.notification_config()
         with patch.object(notifications, 'settings', return_value=config):
@@ -220,13 +220,19 @@ class CandidateBookingTest(unittest.TestCase):
             from candidate_bot import CandidateBot
             self.assertIsNone(CandidateBot._candidate(None, db, '901'))
             db.execute('UPDATE cp_candidates SET email=NULL WHERE id=?', (cid,))
-        transport = Mock()
-        transport.send_email.return_value = 'accepted'
-        transport.send_telegram.return_value = 'accepted'
-        notifications.process_pending(self.connect, config, transport=transport)
-        transport.send_telegram.assert_called_once()
-        self.assertEqual('901', transport.send_telegram.call_args.args[0])
-        self.assertIn('Telegram подключён', transport.send_telegram.call_args.args[1])
+        transport = notifications.Transport(config)
+        with patch.object(transport, 'send_email', return_value='accepted'), \
+             patch.object(transport, 'telegram_request', return_value={'message_id': 123}) as request:
+            self.assertEqual(2, notifications.process_pending(self.connect, config, transport=transport)['delivered'])
+        request.assert_called_once()
+        method, message = request.call_args.args
+        self.assertEqual('sendMessage', method)
+        self.assertEqual('901', message['chat_id'])
+        self.assertIn('Telegram подключён', message['text'])
+        self.assertIn('МСК', message['text'])
+        self.assertNotIn(issued['url'], message['text'])
+        self.assertEqual({'inline_keyboard': [[{'text': 'Открыть встречу', 'url': issued['url']}]]},
+                         message['reply_markup'])
         self.assertEqual([(None, None)], self.rows('SELECT email,password_hash FROM cp_candidates WHERE id=?', (cid,)))
 
     def test_revoked_invitation_cannot_dispatch_pending_confirmation(self):
