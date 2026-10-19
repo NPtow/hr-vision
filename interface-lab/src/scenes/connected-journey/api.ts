@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { loadEmployerTelegram, prepareEmployerTelegram, restoreEmployerIdentity } from '../../lib/telegram-employer';
 import type { RecordingChapter } from '../interview-review/InterviewReview';
 import type { CandidateStage } from '../employer-workspace/candidate-stage-types';
 export type Scope = 'sfera' | 'dsa';
@@ -165,6 +166,7 @@ export function useJourney(scope: Scope = 'sfera', options: { employer?: boolean
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [initializing, setInitializing] = useState(employer);
+  const [entryWarning, setEntryWarning] = useState('');
   const busyRef = useRef(false);
   const operation = useRef(false);
   busyRef.current = busy;
@@ -185,13 +187,26 @@ export function useJourney(scope: Scope = 'sfera', options: { employer?: boolean
     setInitializing(true);
     // Restore the HttpOnly session even in a new tab. A team grant/cookie is not
     // a registration and must never bypass the public employer entry.
-    void request<EmployerSession>('employer/session?personal=1').then(async next => {
+    let cleanupTelegram: (() => void) | undefined;
+    const restore = async () => {
+      const app = await loadEmployerTelegram();
+      if (!current) return null;
+      if (app && (app.initData || app.platform && app.platform !== 'unknown')) {
+        cleanupTelegram = prepareEmployerTelegram(app);
+      }
+      return restoreEmployerIdentity(app,
+        () => request<EmployerSession>('employer/session?personal=1'),
+        initData => request<EmployerSession>('employer/telegram/session', undefined, { initData }));
+    };
+    void restore().then(async next => {
+      if (!next) return;
       let restored = next.state;
       const wanted = vacancyId.current;
       if (wanted && wanted !== restored.vacancy.id && restored.vacancies?.some(v => v.id === wanted)) {
         restored = await request<SharedState>('employer/state?vacancyId=' + encodeURIComponent(wanted), next.token);
       }
       if (!current) return;
+      if (wanted && wanted !== restored.vacancy.id) setEntryWarning('Подборка по этой ссылке недоступна. Выберите другую вакансию в своём кабинете.');
       sessionStorage.setItem(employerSessionKey, next.token);
       acceptState(restored, next.token);
       setSession({ key: employerSessionKey, token: next.token });
@@ -199,9 +214,9 @@ export function useJourney(scope: Scope = 'sfera', options: { employer?: boolean
       if (!current) return;
       sessionStorage.removeItem(employerSessionKey);
       setSession({ key: employerSessionKey, token: '' }); setState(null);
-      if (!(cause instanceof RequestError && cause.status === 401)) setError((cause as Error).message);
+      if (!(cause instanceof RequestError && cause.status === 401) || new URLSearchParams(location.search).get('miniapp') === 'employer') setError((cause as Error).message);
     }).finally(() => { if (current) setInitializing(false); });
-    return () => { current = false; };
+    return () => { current = false; cleanupTelegram?.(); };
   }, [employer, acceptState]);
   const refresh = useCallback(async () => {
     if (!token || initializing) return;
@@ -319,7 +334,7 @@ export function useJourney(scope: Scope = 'sfera', options: { employer?: boolean
     } catch (e) { if (seq === sequence.current) setError((e as Error).message); return false; }
     finally { operation.current = false; setBusy(false); }
   }
-  return { state: employer || state?.scope === scope ? state : null, token, error, setError, busy, initializing, login, authenticate, logout, createVacancy, act, refresh, openVacancy, employer };
+  return { entryWarning, clearEntryWarning: () => setEntryWarning(''), state: employer || state?.scope === scope ? state : null, token, error, setError, busy, initializing, login, authenticate, logout, createVacancy, act, refresh, openVacancy, employer };
 }
 export type Journey = ReturnType<typeof useJourney>;
 export const dateTime = (value: string) => new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Moscow' }).format(new Date(value)) + ' МСК';

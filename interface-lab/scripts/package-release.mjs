@@ -53,6 +53,7 @@ if (target === 'service') for (const name of [
   'candidate_booking.py', 'candidate_access.py', 'hh_outreach.py', 'hh_outreach_routes.py', 'hh_outreach_worker.py',
   'hh_browser/__init__.py', 'hh_browser/adapter.py', 'hh_browser/store.py', 'hh_browser/bridge.py',
   'recruiter_access.py', 'recruiter_sources.py', 'recruiter_notifications.py',
+  'employer_notifications.py', 'telegram_miniapp.py',
   'employer_access.py', 'employer_store.py', 'employer_workflow.py', 'employer_routes.py',
   'employer_projection.py', 'employer_intake.py', 'vacancy_import.py', 'vacancy_sources.py',
   'daily_media.py', 'domain.py', 'dsa_panel.py', 'feedback.py',

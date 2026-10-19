@@ -810,6 +810,8 @@ class CandidatePortal:
             require(decision != 'accepted' or self.person(db, cid)['consentReuse'], 'Подтвердите использование интервью в профиле.', 409)
             db.execute('UPDATE cp_applications SET status=?,approved_automatically=0,decided_at=? WHERE id=?',
                        (decision, iso(now()), application['id']))
+            import employer_notifications
+            employer_notifications.collect(db)
 
     def _application_open_for_meeting(self, db, application):
         self.require_application_active(db, application)

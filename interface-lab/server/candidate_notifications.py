@@ -128,6 +128,7 @@ def _url(value, *, allow_fragment=False):
 @dataclass(frozen=True)
 class Settings:
     enabled: bool = False
+    product_origin: str = 'https://hr-vision.158-160-179-53.sslip.io'
     public_url: str = 'https://hr-vision.158-160-179-53.sslip.io/iframe.html?id=hr-vision-product--candidate&viewMode=story'
     smtp_host: str = ''
     smtp_port: int = 587
@@ -169,6 +170,7 @@ def settings(env=None):
     security = env.get('HR_SMTP_SECURITY', 'starttls')
     return Settings(
         enabled=env.get('HR_NOTIFICATIONS_ENABLED') == '1',
+        product_origin=env.get('HR_ORIGIN', 'https://hr-vision.158-160-179-53.sslip.io').rstrip('/'),
         public_url=env.get('HR_CANDIDATE_PUBLIC_URL', default_url),
         smtp_host=env.get('HR_SMTP_HOST', ''),
         smtp_port=_number(env.get('HR_SMTP_PORT'), 465 if security == 'ssl' else 587, 1, 65535),
@@ -351,7 +353,7 @@ def _callback_data_valid(value):
         return False
 
 
-def _reply_markup(value):
+def _reply_markup(value, product_origin=None):
     if value is None:
         return None
     require(isinstance(value, dict) and set(value) == {'inline_keyboard'},
@@ -362,20 +364,25 @@ def _reply_markup(value):
     for row in rows:
         require(isinstance(row, list) and 1 <= len(row) <= 8, 'Некорректная клавиатура.', 400)
         for button in row:
-            require(isinstance(button, dict) and set(button) in ({'text', 'callback_data'}, {'text', 'url'})
+            require(isinstance(button, dict) and set(button) in ({'text', 'callback_data'}, {'text', 'url'}, {'text', 'web_app'})
                     and isinstance(button.get('text'), str) and 1 <= len(button['text']) <= 128,
                     'Некорректная кнопка.', 400)
-            require(_callback_data_valid(button['callback_data']) if 'callback_data' in button
-                    else _url(button['url'], allow_fragment=True), 'Некорректная кнопка.', 400)
+            if 'web_app' in button:
+                from telegram_miniapp import valid_app_url
+                app = button['web_app']
+                require(isinstance(app, dict) and set(app) == {'url'} and valid_app_url(app['url'], product_origin or settings().product_origin), 'Некорректная кнопка.', 400)
+            else:
+                require(_callback_data_valid(button['callback_data']) if 'callback_data' in button
+                        else _url(button['url'], allow_fragment=True), 'Некорректная кнопка.', 400)
             count += 1
     require(count <= 100, 'Слишком много кнопок.', 400)
     return value
 
 
-def _telegram_message(text, reply_markup=None):
+def _telegram_message(text, reply_markup=None, product_origin=None):
     require(isinstance(text, str) and 1 <= len(text) <= 4096, 'Некорректный текст сообщения.', 400)
     result = {'text': text}
-    markup = _reply_markup(reply_markup)
+    markup = _reply_markup(reply_markup, product_origin)
     if markup is not None:
         result['reply_markup'] = markup
     return result
@@ -429,7 +436,7 @@ def enqueue_telegram_reply(db, chat_id, event_key, text, reply_markup=None, cand
     Candidate-specific content must pass the linked owner for dispatch revalidation.
     No provider I/O occurs until the caller transaction commits and a worker claims it.
     """
-    payload = _telegram_message(text, reply_markup)
+    payload = _telegram_message(text, reply_markup, _config(settings).product_origin)
     _tag_application(payload, application_id, candidate_id)
     return _enqueue_telegram(db, chat_id, event_key, 'telegram.reply', payload,
                              candidate_id, _config(settings), _now(now))
@@ -713,6 +720,9 @@ def _consume_telegram_update(db, update, timestamp, settings=None, update_handle
             and chat['id'] == sender.get('id') and not sender.get('is_bot')):
         return {'status': 'ignored'}
     content = message.get('text', '') if callback is None else ''
+    if isinstance(content, str) and re.match(r'/start(?:@[A-Za-z0-9_]+)? em_', content):
+        import employer_notifications
+        return employer_notifications.consume(db, update, timestamp, _config(settings))
     booking_match = re.fullmatch(r'/start(?:@[A-Za-z0-9_]+)? bk_([A-Za-z0-9_-]{43})', content) if isinstance(content, str) else None
     if booking_match:
         result = _consume_booking_telegram_link(db, booking_match[1], chat['id'], timestamp, _config(settings))
@@ -769,9 +779,10 @@ def retry(db, notification_id, settings=None, now=None, candidate_id=None):
     require(row['status'] != 'sending', 'Отправка уже выполняется.', 409)
     if row['status'] == 'delivered':
         return _safe(row)
-    if row['status'] == 'error' and row['last_error'] in ('application_archived', 'search_stopped'):
+    if row['status'] == 'error' and row['last_error'] in ('application_archived', 'search_stopped', 'employer_binding_changed', 'employer_shortlist_unavailable'):
         return _safe(row)
-    reason = _delivery_block_reason(db, row)
+    import employer_notifications
+    reason = employer_notifications.prepare(db, row, config) or _delivery_block_reason(db, row)
     if reason:
         db.execute("UPDATE cn_outbox SET status='error',last_error=?,lease_id=NULL,lease_until=NULL WHERE id=?",
                    (reason, notification_id))
@@ -922,7 +933,7 @@ class Transport:
         return raw[:-4]
 
     def send_telegram(self, recipient, content, reply_markup=None):
-        payload = _telegram_message(content, reply_markup)
+        payload = _telegram_message(content, reply_markup, self.config.product_origin)
         payload.update({'chat_id': _private_chat_id(recipient), 'link_preview_options': {'is_disabled': True}})
         result = self.telegram_request('sendMessage', payload)
         if not isinstance(result, dict) or type(result.get('message_id')) is not int or result['message_id'] <= 0:
@@ -951,6 +962,14 @@ def process_pending(connect, settings=None, limit=10, now=None, transport=None, 
     config, timestamp = _config(settings), _now(now)
     sender = transport if transport is not None else Transport(config)
     counts = {'delivered': 0, 'pending': 0, 'error': 0, 'disabled': 0, 'unverified': 0, 'unbound': 0}
+    import employer_notifications
+    observation_db = connect()
+    try:
+        with observation_db:
+            observation_db.execute('BEGIN IMMEDIATE')
+            employer_notifications.collect(observation_db, config, timestamp)
+    finally:
+        observation_db.close()
     for _ in range(_number(limit, 10, 0, 100)):
         timestamp = _now(now)
         db = connect()
@@ -963,7 +982,7 @@ def process_pending(connect, settings=None, limit=10, now=None, transport=None, 
             if not row:
                 db.commit()
                 break
-            reason = _delivery_block_reason(db, row)
+            reason = employer_notifications.prepare(db, row, config) or _delivery_block_reason(db, row)
             if reason:
                 db.execute("UPDATE cn_outbox SET status='error',last_error=? WHERE id=?", (reason, row['id']))
                 db.commit()

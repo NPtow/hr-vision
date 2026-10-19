@@ -133,3 +133,38 @@ must preserve neighbouring sites, validate first, compare the previous hash and
 take a backup before graceful reload. If rollback is needed, restore the saved
 Caddy/env files, then return the two A records to their saved values. Database
 snapshots are recovery material; never restore them merely to revert routing.
+
+## Employer Telegram Mini App
+
+Employer Telegram uses the existing bot, notification worker and delivery configuration.
+`HR_ORIGIN` must be the canonical HTTPS product origin. No employer URL override,
+new service or new credentials are required. Inline `web_app` buttons point to the
+existing manager story with `miniapp=employer`, `screen=shortlist` and optionally
+an opaque `vacancyId`. These are public navigation links, never login capabilities.
+The official SDK is loaded only for that entry. Check bot/domain and inline Mini App
+availability in the native Telegram clients before declaring the feature accepted.
+
+Authenticated personal accounts use `GET /api/hr/employer/telegram`,
+`POST /api/hr/employer/telegram/link {}` and
+`POST /api/hr/employer/telegram/disconnect {}`. Team grants cannot bind.
+One-use `em_` start links expire after ten minutes. The public same-origin
+`POST /api/hr/employer/telegram/session {"initData":"…"}` exchanges only signed,
+fresh Telegram data for the existing employer session/cookie. Raw initData is
+not stored; never include it, binding links or session tokens in logs or reports.
+Rebinding/disconnecting revokes Mini App-issued sessions and invalidates queued
+notices from the previous binding, without revoking independent password sessions.
+
+`employer_notifications.py` observes the canonical proposed shortlist at batch
+publication, later candidate approval and worker cycles. Newly visible applications
+are recorded once and aggregated per vacancy before dispatch. Binding baselines
+already visible profiles; unbound/disabled observations are consumed without replay.
+Dispatch rechecks the active personal account, binding generation, vacancy ownership
+and current candidate visibility. Telegram receives the vacancy title and count,
+never a CV or contact information. The shared outbox keeps its existing bounded
+retry and terminal uncertainty behavior.
+
+The new `en_bindings`, `en_tokens`, `en_seen` and `en_sessions` tables initialize
+transactionally. Install the updated CI receiver before publishing a service
+archive containing `employer_notifications.py` and `telegram_miniapp.py`; the old
+complete runtime remains an accepted rollback layout. This documentation describes
+implementation requirements, not evidence of a production or native-client rollout.

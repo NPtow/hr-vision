@@ -13,6 +13,7 @@ from domain import Problem, iso, now, require, text
 from feedback import vtt_turns
 import employer_access as access
 import employer_store as store
+import employer_notifications as notifications
 import employer_workflow as workflow
 import vacancy_import
 
@@ -34,6 +35,7 @@ class EmployerRoutes:
             workflow.init(db)
             access.init(db)
             store.init(db)
+            notifications.init(db)
             intake.init(db)
             vacancy_import.init(db)
             db.execute('''CREATE TABLE IF NOT EXISTS em_meeting_transcripts (
@@ -169,6 +171,11 @@ class EmployerRoutes:
         vacancy_id = query.get('vacancyId', [None])[0]
         if route in ('/register', '/login') and method == 'POST':
             return self._auth(route[1:], headers, body, ip)
+        if route == '/telegram/session' and method == 'POST':
+            with self.lock, self.connect() as db:
+                auth = notifications.exchange(db, body)
+                principal = access.authenticate(db, {'Authorization': 'Bearer ' + auth['token']})
+                return {'token': auth['token'], 'state': self._state(db, principal)}, {'Set-Cookie': access.session_cookie(auth['token'])}
         if route == '/session':
             # Public entry restores only a registered employer, never an internal
             # team account merely because this browser has a recruiter grant.
@@ -197,6 +204,12 @@ class EmployerRoutes:
         with self.lock, self.connect() as db:
             principal = access.authenticate(db, headers)
             wid = principal['workspaceId']
+            if route == '/telegram' and method == 'GET':
+                return notifications.status(db, principal), {}
+            if route in ('/telegram/link', '/telegram/disconnect') and method == 'POST':
+                require(not body, 'Проверьте поля запроса.', 400)
+                action = notifications.create_link if route.endswith('/link') else notifications.disconnect
+                return action(db, principal), {}
             if route == '/state' and method == 'GET':
                 return self._state(db, principal, vacancy_id), {}
             if route == '/vacancies' and method == 'GET':
