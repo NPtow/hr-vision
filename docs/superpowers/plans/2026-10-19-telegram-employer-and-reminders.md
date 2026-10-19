@@ -68,4 +68,3 @@ Implement after Task 1 review is clean. Approved scope: reminders for confirmed 
 - Install a reviewed receiver allowlist update if necessary, with backup and its tests; do not manually rsync the application.
 - Verify public revision, actual runtime module hashes/config and migration shape without sending historical messages. Native Telegram rendering is only claimed if actually observed.
 - Deliver the concrete notification catalogue and explain approved/deployed versus still-awaiting-confirmation items. Keep evidence under output/telegram-employer-miniapp-20261019.
-
