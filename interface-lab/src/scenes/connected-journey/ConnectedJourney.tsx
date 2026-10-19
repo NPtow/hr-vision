@@ -87,7 +87,7 @@ export function ConnectedJourney({ initialRole = 'start' }: { initialRole?: 'sta
     const url = new URL(location.href);
     url.searchParams.set('screen', 'create-vacancy');
     url.searchParams.delete('applicationId'); url.searchParams.delete('intakeId'); url.searchParams.delete('pool');
-    url.searchParams.delete('stageId'); url.searchParams.delete('meetingId');
+    url.searchParams.delete('stageId'); url.searchParams.delete('meetingId'); url.searchParams.delete('view');
     history.replaceState(history.state, '', url);
   }
   useEffect(() => {
@@ -152,7 +152,7 @@ export function ConnectedJourney({ initialRole = 'start' }: { initialRole?: 'sta
       if (vacancyId) url.searchParams.set('vacancyId', vacancyId);
       if (id) url.searchParams.set('applicationId', id); else url.searchParams.delete('applicationId');
       url.searchParams.delete('intakeId');
-      url.searchParams.set('screen', next); url.searchParams.delete('stageId'); url.searchParams.delete('meetingId');
+      url.searchParams.set('screen', next); url.searchParams.delete('stageId'); url.searchParams.delete('meetingId'); url.searchParams.delete('view');
       if (leavingIntake && id && next === 'shortlist') history.pushState(history.state, '', url);
       else history.replaceState(history.state, '', url);
     }
@@ -167,7 +167,7 @@ export function ConnectedJourney({ initialRole = 'start' }: { initialRole?: 'sta
     if (state?.vacancy.id) url.searchParams.set('vacancyId', state.vacancy.id);
     url.searchParams.set('intakeId', id);
     url.searchParams.set('screen', 'shortlist'); url.searchParams.set('pool', 'proposed');
-    url.searchParams.delete('applicationId'); url.searchParams.delete('stageId'); url.searchParams.delete('meetingId');
+    url.searchParams.delete('applicationId'); url.searchParams.delete('stageId'); url.searchParams.delete('meetingId'); url.searchParams.delete('view');
     if (changed) history.pushState(history.state, '', url);
     else history.replaceState(history.state, '', url);
   };
@@ -182,7 +182,7 @@ export function ConnectedJourney({ initialRole = 'start' }: { initialRole?: 'sta
     if (candidate) url.searchParams.set(candidate.source === 'application' ? 'applicationId' : 'intakeId', candidate.id);
     if (state?.vacancy.id) url.searchParams.set('vacancyId', state.vacancy.id);
     url.searchParams.set('screen', 'shortlist'); url.searchParams.set('pool', 'proposed');
-    if (!unchanged) for (const key of ['interview', 't', 'stageId', 'meetingId']) url.searchParams.delete(key);
+    if (!unchanged) for (const key of ['interview', 't', 'stageId', 'meetingId', 'view']) url.searchParams.delete(key);
     history.replaceState(history.state, '', url);
   }
   const meetings = realEmployer ? state?.meetings || [] : people.filter(p => p.meeting && p.meeting.status !== 'cancelled').sort((a,b) => a.meeting!.start.localeCompare(b.meeting!.start));
@@ -202,7 +202,7 @@ export function ConnectedJourney({ initialRole = 'start' }: { initialRole?: 'sta
       setPanelMode('proposed'); setPage('shortlist');
       const url = new URL(location.href);
       url.searchParams.set('screen', 'shortlist'); url.searchParams.set('pool', 'proposed');
-      url.searchParams.delete('applicationId'); url.searchParams.delete('intakeId'); url.searchParams.delete('stageId'); url.searchParams.delete('meetingId');
+      url.searchParams.delete('applicationId'); url.searchParams.delete('intakeId'); url.searchParams.delete('stageId'); url.searchParams.delete('meetingId'); url.searchParams.delete('view');
       history.replaceState(history.state, '', url);
     } finally { vacancySwitch.current = false; setVacancyLoading(false); }
   }

@@ -19,6 +19,8 @@ import urllib.parse
 from domain import Problem, iso, now, require, text, timestamp
 from feedback import questionnaire
 
+ARCHIVED_STAGE_KINDS = frozenset({'test'})
+
 
 def _json(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
@@ -415,6 +417,23 @@ def _stage(db, app_id, stage_id):
     stage = next((row for row in stage_history(db, app_id) if row['id'] == stage_id), None)
     require(stage is not None, 'Этап не найден.', 404)
     return stage
+
+
+def require_current_stage_action(db, application_id, action, body):
+    """Retire test assignments at the public employer boundary without erasing them.
+
+    The authenticated adapter calls this after application/workspace ownership is
+    checked, before replay or mutation. Legacy history and offline fixture/import
+    helpers keep the original records, IDs and documents readable.
+    """
+    if action == 'test.create':
+        raise Problem('Тестовые задания архивированы.', 410)
+    stage_id = 'test:' + text(body.get('testId'), 160) if action == 'test.update' else (
+        text(body.get('stageId'), 220) if action == 'stage.update' else None)
+    if isinstance(stage_id, str) and stage_id.startswith('test:'):
+        # A foreign or invented ID stays 404; it must not reveal archive membership.
+        _stage(db, application_id, stage_id)
+        raise Problem('Тестовые задания архивированы.', 410)
 
 
 def _documents(value):

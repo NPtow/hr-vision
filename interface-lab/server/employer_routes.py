@@ -379,6 +379,7 @@ class EmployerRoutes:
         require(action in allowed, 'Это действие недоступно работодателю.', 403)
         db.execute('BEGIN IMMEDIATE')
         principal, app, vacancy = self._identity(db, headers, body, include_rejected=action == 'review.reject')
+        workflow.require_current_stage_action(db, app['applicationId'], action, body)
         rid, fingerprint, replay = self._command(db, principal, app, body)
         if replay:
             return self._state(db, principal, app['vacancyId'])

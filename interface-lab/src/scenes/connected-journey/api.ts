@@ -28,7 +28,7 @@ export type FeedbackQuestion = { id: string; question: string; seconds: number |
 export type FeedbackAnswer = { rating: 'clear' | 'unclear' | 'unanswered' | 'not_asked'; comment: string };
 export type Questionnaire = { id: string; meetingId: string; questions: FeedbackQuestion[] };
 export type Meeting = { id: string; revision?: number; start: string; end?: string; startedAt?: string; endedAt?: string; status: 'pending' | 'confirmed' | 'live' | 'cancelled' | 'completed'; testSkip: boolean; joined: Actor[]; questionnaire?: Questionnaire | null; feedbackDraft?: Record<string, FeedbackAnswer> };
-export type Person = { id: CandidateId; candidateId?: string; applicationId?: string; vacancyId?: string; vacancyRole?: string; reviewState?: string; name: string; role?: string; summary?: string; photo?: string | null; sourceProfile?: SourceProfile; interest: 'pending' | 'accepted' | 'declined'; auto: boolean; slots?: string[]; busy?: string[]; freeSlots: string[]; meeting: Meeting | null; meetings?: Meeting[]; offers?: Offer[]; stages?: CandidateStage[]; workflowRevision?: number; reviewResponse?: EmployerReviewResponse | null; screeningComments?: ScreeningComment[]; reviewRejection?: (RejectionAnswers & { createdAt?: string }) | null; feedback?: { example?: string; doubts?: string; check?: string; at: string; questions?: FeedbackQuestion[]; answers?: Record<string, FeedbackAnswer> } | null; afterInterest: 'pending' | 'yes' | 'no'; decision: 'review' | 'pool' | 'declined'; offer: Offer | null; messages: { id: string; actor: string; text: string; at: string; system: boolean }[] };
+export type Person = { id: CandidateId; candidateId?: string; applicationId?: string; vacancyId?: string; vacancyRole?: string; reviewState?: string; name: string; role?: string; summary?: string; photo?: string | null; sourceProfile?: SourceProfile; interest: 'pending' | 'accepted' | 'declined'; auto: boolean; slots?: string[]; busy?: string[]; freeSlots: string[]; meeting: Meeting | null; meetings?: Meeting[]; offers?: Offer[]; stages?: CandidateStage[]; archivedStageIds?: string[]; workflowRevision?: number; reviewResponse?: EmployerReviewResponse | null; screeningComments?: ScreeningComment[]; reviewRejection?: (RejectionAnswers & { createdAt?: string }) | null; feedback?: { example?: string; doubts?: string; check?: string; at: string; questions?: FeedbackQuestion[]; answers?: Record<string, FeedbackAnswer> } | null; afterInterest: 'pending' | 'yes' | 'no'; decision: 'review' | 'pool' | 'declined'; offer: Offer | null; messages: { id: string; actor: string; text: string; at: string; system: boolean }[] };
 export type Vacancy = { id?: string; company: string; role: string; problem: string; salary: string; format: string; expectations: string; proposedCount?: number; selectedCount?: number };
 export type EmployerVacancyDetails = {
   address: string;
@@ -251,7 +251,7 @@ export function useJourney(scope: Scope = 'sfera', options: { employer?: boolean
   }
   const clearLocation = () => {
     const url = new URL(location.href);
-    for (const key of ['vacancyId', 'applicationId', 'intakeId', 'screen', 'pool', 'task', 'stageId', 'meetingId']) url.searchParams.delete(key);
+    for (const key of ['vacancyId', 'applicationId', 'intakeId', 'screen', 'pool', 'task', 'stageId', 'meetingId', 'view']) url.searchParams.delete(key);
     history.replaceState(history.state, '', url);
   };
   async function authenticate(mode: 'register' | 'login', credentials: EmployerCredentials) {

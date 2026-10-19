@@ -9,6 +9,14 @@
 .esc-person > .ew-avatar { flex:none; width:40px; height:40px; font-size:14px; background:#f5f5f5; }
 .esc-person-copy { flex:1; min-width:0; display:grid; gap:4px; }
 .esc-person-copy h2 { font-size:30px; line-height:1.2; font-weight:600; overflow-wrap:anywhere; }
+.esc-card .esc-profile-trigger { padding:0; border:0; border-radius:4px; color:inherit; background:transparent; font:inherit; text-align:left; cursor:pointer; }
+.esc-profile-trigger:hover { text-decoration:underline; text-decoration-thickness:1px; text-underline-offset:5px; }
+.esc-profile-trigger[aria-expanded=true] { color:var(--esc-focus); }
+.esc-profile-view { display:grid; gap:24px; min-width:0; }
+.esc-profile-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+.esc-profile-heading h3 { margin:0; font-size:18px; line-height:28px; font-weight:600; }
+.esc-profile-heading h3:focus { outline:none; }
+.esc-profile-heading button { color:var(--esc-muted); }
 .esc-person-copy p { color:var(--esc-muted); font-size:16px; line-height:24px; overflow-wrap:anywhere; }
 .esc-person-copy .esc-person-preferences { font-size:14px; line-height:20px; }
 .esc-person-actions { flex:none; align-self:flex-start; }

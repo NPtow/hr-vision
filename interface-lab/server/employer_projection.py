@@ -119,7 +119,10 @@ def person(db, principal, portal, record, vacancy):
     aid, cid = record['applicationId'], record['candidateId']
     profile = record['profile']
     state = workflow.load(db, aid, actor='manager', vacancy_id=vacancy['id'])
-    stages = state['stages']
+    # The archive remains in canonical storage; only current product stages are
+    # projected. Known old deep links can be restored without accepting foreign IDs.
+    archived_stage_ids = [stage['id'] for stage in state['stages'] if stage['kind'] in workflow.ARCHIVED_STAGE_KINDS]
+    stages = [stage for stage in state['stages'] if stage['kind'] not in workflow.ARCHIVED_STAGE_KINDS]
     for stage in stages:
         if stage['kind'] == 'meeting':
             stage['meeting'] = _safe_meeting(db, principal, portal, aid, stage['meetingId'], stage['meeting'])
@@ -142,7 +145,7 @@ def person(db, principal, portal, record, vacancy):
         'meeting': meeting, 'feedback': state['feedback'],
         'screeningComments': state['screeningComments'], 'reviewRejection': state['reviewRejection'],
         'reviewResponse': workflow.review_response(db, aid),
-        'meetings': meetings, 'stages': stages, 'offers': state['offers'],
+        'meetings': meetings, 'stages': stages, 'archivedStageIds': archived_stage_ids, 'offers': state['offers'],
         'afterInterest': state['afterInterest'], 'decision': state['decision'],
         'offer': state['offer'], 'messages': messages, 'workflowRevision': state['revision'],
     }

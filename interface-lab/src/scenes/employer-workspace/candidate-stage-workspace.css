@@ -17,11 +17,19 @@
 .ew-root .esc-card .cj-meeting { padding:0; border:0; box-shadow:none; background:transparent; }
 .ew-root .esc-card .cj-meeting>.cj-section-heading { display:none; }
 .ew-root .esc-card .cj-materials { margin-top:24px; padding-top:0; border:0; }
-.ew-root .esc-resume { margin-top:20px; color:#716b80; }
-.ew-root .esc-resume summary { cursor:pointer; padding:12px 0; }
-.ew-root .esc-resume p { white-space:pre-wrap; }
+.esc-profile-content { --ecp-muted:var(--esc-muted); --ecp-soft:var(--esc-inset); display:grid; gap:28px; min-width:0; }
+.esc-profile-summary { font-size:16px; line-height:24px; white-space:pre-wrap; overflow-wrap:anywhere; }
+.esc-profile-facts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px 32px; }
+.esc-profile-facts > div { display:grid; gap:6px; align-content:start; min-width:0; }
+.esc-profile-facts dt { color:var(--esc-muted); font-size:14px; line-height:20px; }
+.esc-profile-facts dd { white-space:pre-wrap; overflow-wrap:anywhere; font-size:16px; line-height:24px; }
+.esc-profile-resume { display:grid; gap:12px; min-width:0; }
+.esc-profile-resume .ecp-resume { padding:12px 0; }
+.esc-profile-resume .ecp-resume-source-text { padding:0; }
+.esc-profile-resume .ecp-resume-preview { overflow:auto; }
 @media(max-width:700px) {
   .ew-root .esc-workspace { padding:12px 16px 32px; }
   .ew-root .esc-candidate-nav { max-width:100%; }
   .ew-root .esc-card .ew-stage-book .ew-days-strip { overflow-x:auto; }
+  .esc-profile-facts { grid-template-columns:1fr; gap:20px; }
 }

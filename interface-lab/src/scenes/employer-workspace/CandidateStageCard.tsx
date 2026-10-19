@@ -1,24 +1,23 @@
 import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { ArrowLeft } from 'lucide-react';
 import { DropdownMenu, Tabs } from 'radix-ui';
 import { Button } from '../../components/ui/button';
 import { Textarea } from '../../components/ui/textarea';
 import { Avatar } from './PeoplePanel';
 import { answerLabels } from '../connected-journey/FeedbackGate';
-import type { CandidateStage, CandidateStageDocument, CandidateStageKind, CandidateStageNotes, CandidateStagePerson, CandidateTestStatus } from './candidate-stage-types';
+import type { CandidateStage, CandidateStageDocument, CandidateStageKind, CandidateStageNotes, CandidateStagePerson } from './candidate-stage-types';
 import interviewLayer from './assets/candidate-stages/interview.svg';
 import interviewMuted from './assets/candidate-stages/interview-muted.svg';
 import meetingLayer from './assets/candidate-stages/meeting.svg';
 import meetingMuted from './assets/candidate-stages/meeting-muted.svg';
-import testLayer from './assets/candidate-stages/test.svg';
-import testMuted from './assets/candidate-stages/test-muted.svg';
 import offerLayer from './assets/candidate-stages/offer.svg';
 import offerMuted from './assets/candidate-stages/offer-muted.svg';
 import documentIcon from './assets/candidate-stages/file.svg';
 import './candidate-stage-card.css';
 
-const stageLayers: Record<CandidateStageKind, [string, string]> = {
+const stageLayers: Record<Exclude<CandidateStageKind, 'test'>, [string, string]> = {
   interview: [interviewLayer, interviewMuted], meeting: [meetingLayer, meetingMuted],
-  test: [testLayer, testMuted], offer: [offerLayer, offerMuted],
+  offer: [offerLayer, offerMuted],
 };
 const statusLabels: Record<string, string> = {
   draft: 'Черновик', sent: 'Отправлен', accepted: 'Принят', declined: 'Отклонён', superseded: 'Предыдущая версия', withdrawn: 'Отозван',
@@ -37,10 +36,11 @@ const documentUrl = (value: string) => {
 export type CandidateStageCardProps = {
   person: CandidateStagePerson; stages: CandidateStage[]; workflowRevision: number;
   selectedStageId?: string; onSelectStage: (id: string) => void;
-  onAddStage?: (kind: Exclude<CandidateStageKind, 'interview'>) => void;
+  onAddStage?: (kind: Exclude<CandidateStageKind, 'interview' | 'test'>) => void;
   renderInterview: (stage: CandidateStage) => ReactNode;
   renderMeeting?: (stage: CandidateStage) => ReactNode;
   renderOffer?: (stage: CandidateStage) => ReactNode;
+  profile?: ReactNode; profileOpen?: boolean; onOpenProfile?: () => void; onCloseProfile?: () => void;
   editor?: ReactNode; headerActions?: ReactNode; busy?: boolean; error?: string;
   onEditStage?: (stage: CandidateStage) => void;
   onSaveStageNotes?: (stageId: string, values: CandidateStageNotes) => Promise<boolean>;
@@ -49,17 +49,26 @@ export type CandidateStageCardProps = {
 
 /** A stage selection is a view change only. Mutations stay in explicit parent callbacks. */
 export function CandidateStageCard(props: CandidateStageCardProps) {
-  const { person, stages, selectedStageId, onSelectStage, onAddStage, editor, headerActions, busy, error } = props;
+  const { person, selectedStageId, onSelectStage, onAddStage, editor, headerActions, busy, error, profile, profileOpen, onOpenProfile, onCloseProfile } = props;
+  const stages = props.stages.filter((stage): stage is CandidateStage & { kind: Exclude<CandidateStageKind, 'test'> } => stage.kind !== 'test');
   const selected = stages.find(stage => stage.id === selectedStageId) || stages.at(-1);
-  const counts = { interview: 0, meeting: 0, test: 0, offer: 0 };
+  const counts = { interview: 0, meeting: 0, offer: 0 };
   const labels = stages.map(stage => {
     const number = ++counts[stage.kind];
     if (stage.kind === 'interview') return 'Интервью';
     if (stage.kind === 'meeting') return `Встреча ${number}`;
-    if (stage.kind === 'test') return `Тестовое${number > 1 ? ` ${number}` : ''}`;
     return `Оффер${number > 1 ? ` ${number}` : ''}`;
   });
   const headingId = useId();
+  const profileId = useId();
+  const profileHeading = useRef<HTMLHeadingElement>(null);
+  const nameButton = useRef<HTMLButtonElement>(null);
+  const wasProfileOpen = useRef(profileOpen);
+  useLayoutEffect(() => {
+    if (profileOpen) profileHeading.current?.focus();
+    else if (wasProfileOpen.current) nameButton.current?.focus();
+    wasProfileOpen.current = profileOpen;
+  }, [profileOpen]);
   const stageScroll = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const scroller = stageScroll.current;
@@ -79,15 +88,15 @@ export function CandidateStageCard(props: CandidateStageCardProps) {
     const observer = new ResizeObserver(revealSelected);
     observer.observe(scroller);
     return () => observer.disconnect();
-  }, [selected?.id, stages.length]);
+  }, [selected?.id, stages.length, profileOpen]);
   return <Tabs.Root value={selected?.id || ''} onValueChange={onSelectStage} activationMode="manual" asChild>
     <article className="esc-card" aria-labelledby={headingId} data-candidate-id={person.id}>
       <header className="esc-person">
         <Avatar key={person.id} name={person.name} photo={person.photo}/>
-        <div className="esc-person-copy"><h2 id={headingId}>{person.name}</h2>{(person.meta || person.role) && <p>{person.meta || person.role}</p>}{person.preferences && <p className="esc-person-preferences">{person.preferences}</p>}</div>
+        <div className="esc-person-copy"><h2 id={headingId}>{onOpenProfile ? <button ref={nameButton} className="esc-profile-trigger" type="button" aria-label={`Профиль: ${person.name}`} aria-expanded={!!profileOpen} aria-controls={profileId} disabled={busy} onClick={onOpenProfile}>{person.name}</button> : person.name}</h2>{(person.meta || person.role) && <p>{person.meta || person.role}</p>}{person.preferences && <p className="esc-person-preferences">{person.preferences}</p>}</div>
         {headerActions && <div className="esc-person-actions">{headerActions}</div>}
       </header>
-      <div className="esc-stages">
+      {!profileOpen && <div className="esc-stages">
         <div className="esc-stage-scroll" ref={stageScroll}><Tabs.List className="esc-stage-list" aria-label="Этапы кандидата">
           {stages.map((stage, index) => <Tabs.Trigger className="esc-stage-tab" key={stage.id} value={stage.id} disabled={busy} title={stage.title}>
             <span className="esc-stage-layer" aria-hidden="true"><img src={stageLayers[stage.kind][selected?.id === stage.id ? 0 : 1]} alt=""/></span>
@@ -100,13 +109,15 @@ export function CandidateStageCard(props: CandidateStageCardProps) {
           <DropdownMenu.Portal><DropdownMenu.Content className="esc-menu" sideOffset={12} align="end" collisionPadding={16}>
             <DropdownMenu.Label className="esc-menu-label">Что дальше?</DropdownMenu.Label>
             <DropdownMenu.Item className="esc-menu-item" onSelect={() => onAddStage('meeting')}>Встреча</DropdownMenu.Item>
-            <DropdownMenu.Item className="esc-menu-item" onSelect={() => onAddStage('test')}>Тестовое</DropdownMenu.Item>
             <DropdownMenu.Item className="esc-menu-item" onSelect={() => onAddStage('offer')}>Оффер</DropdownMenu.Item>
           </DropdownMenu.Content></DropdownMenu.Portal>
         </DropdownMenu.Root>}
-      </div>
+      </div>}
       {error && <p className="esc-error" role="alert">{error}</p>}
-      {editor ? <div className="esc-stage-editor">{editor}</div> : selected ? <Tabs.Content className="esc-stage-panel" key={selected.id} value={selected.id}>
+      {profileOpen ? <section className="esc-profile-view" id={profileId} aria-labelledby={`${profileId}-heading`}>
+        <div className="esc-profile-heading"><h3 ref={profileHeading} id={`${profileId}-heading`} tabIndex={-1}>Профиль</h3>{onCloseProfile && <Button variant="ghost" onClick={onCloseProfile}><ArrowLeft size={16} aria-hidden="true"/>К этапам</Button>}</div>
+        {profile}
+      </section> : editor ? <div className="esc-stage-editor">{editor}</div> : selected ? <Tabs.Content className="esc-stage-panel" key={selected.id} value={selected.id}>
         <StageMaterials {...props} stage={selected}/>
       </Tabs.Content> : <p className="esc-empty">Материалы кандидата появятся здесь.</p>}
     </article>
@@ -133,17 +144,13 @@ function StageMaterials(props: CandidateStageCardProps & { stage: CandidateStage
       {onEditStage && ['draft', 'sent'].includes(stage.status) && <div className="esc-stage-actions"><Button className="esc-secondary" variant="secondary" disabled={busy} onClick={() => onEditStage(stage)}>Изменить оффер</Button></div>}
     </section>;
   }
-  const test = stage.test;
   return <section className="esc-materials" data-stage-id={stage.id}>
-    <div className="esc-materials-heading"><h3>{stage.kind === 'test' ? test?.title || stage.title : stage.title}</h3><p>{[statusLabels[stage.status] || stage.status, dateLabel(stage.date)].filter(Boolean).join(' · ')}</p></div>
+    <div className="esc-materials-heading"><h3>{stage.title}</h3><p>{[statusLabels[stage.status] || stage.status, dateLabel(stage.date)].filter(Boolean).join(' · ')}</p></div>
     {stage.kind === 'meeting' && <dl className="esc-facts"><div><dt>Кандидат</dt><dd>{person.name}</dd></div>{stage.meeting?.start && <div><dt>Время встречи · МСК</dt><dd>{new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Moscow' }).format(new Date(stage.meeting.start))}</dd></div>}</dl>}
-    {test?.instructions && <p>{test.instructions}</p>}
-    {test?.dueAt && <p className="esc-caption">Срок: {new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Moscow' }).format(new Date(test.dueAt))} МСК</p>}
     <StageDocuments stage={stage} onOpen={onOpenDocument}/>
     <StageNotes key={stage.id} stage={stage} workflowRevision={props.workflowRevision} busy={busy} onSave={props.onSaveStageNotes}/>
     {stage.kind === 'meeting' && <MeetingFeedback stage={stage}/>}
     {stage.kind === 'meeting' && renderMeeting?.(stage)}
-    {stage.kind === 'test' && onEditStage && <div className="esc-stage-actions"><Button className="esc-secondary" variant="ghost" disabled={busy} onClick={() => onEditStage(stage)}>Изменить задание</Button></div>}
   </section>;
 }
 
@@ -193,20 +200,16 @@ function StageNotes({ stage, workflowRevision, busy, onSave }: { stage: Candidat
     catch (cause) { setError(cause instanceof Error ? cause.message : 'Не удалось сохранить изменения.'); }
     finally { pending.current = false; setSaving(false); }
   }}>
-    <h3>{stage.kind === 'test' ? 'Результат тестового' : 'Заметка по встрече'}</h3>
-    {stage.kind === 'test' && <><label htmlFor={`${fieldId}-status`}>Статус<select id={`${fieldId}-status`} value={values.status} disabled={busy || saving} onChange={event => setValues({ ...values, status: event.target.value as CandidateTestStatus })}>
-      <option value="assigned">Задание подготовлено</option><option value="in_progress">В работе</option><option value="completed">Выполнено</option><option value="cancelled">Отменено</option>
-    </select></label><label htmlFor={`${fieldId}-result`}>Результат<Textarea id={`${fieldId}-result`} maxLength={12000} value={values.result || ''} disabled={busy || saving} onChange={event => setValues({ ...values, result: event.target.value })}/></label></>}
+    <h3>Заметка по встрече</h3>
     <label htmlFor={`${fieldId}-notes`}>Моя заметка<Textarea id={`${fieldId}-notes`} maxLength={12000} value={values.notes} disabled={busy || saving} onChange={event => setValues({ ...values, notes: event.target.value })}/></label>
     {error && <p className="esc-error" role="alert">{error}</p>}
     <div className="esc-form-actions"><Button type="submit" disabled={busy || saving}>{saving ? 'Сохраняем…' : 'Сохранить'}</Button><Button type="button" variant="ghost" disabled={saving} onClick={finish}>Отмена</Button></div>
   </form>;
   return <>
-    {stage.test?.result && <div className="esc-text-block"><h4>Результат</h4><p>{stage.test.result}</p></div>}
     {stage.notes && <div className="esc-text-block"><h4>Моя заметка</h4><p>{stage.notes}</p></div>}
     {onSave && <div className="esc-notes-controls"><Button ref={trigger} className="esc-secondary" variant="ghost" disabled={busy} onClick={() => {
-      setValues({ notes: stage.notes, expectedRevision: workflowRevision, ...(stage.test ? { result: stage.test.result, status: stage.test.status } : {}) });
+      setValues({ notes: stage.notes, expectedRevision: workflowRevision });
       setError(''); setEditing(true);
-    }}>{stage.kind === 'test' ? stage.test?.result ? 'Изменить результат' : 'Добавить результат' : stage.notes ? 'Изменить заметку' : 'Добавить заметку'}</Button></div>}
+    }}>{stage.notes ? 'Изменить заметку' : 'Добавить заметку'}</Button></div>}
   </>;
 }
