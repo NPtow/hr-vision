@@ -31,7 +31,7 @@ updating environment. With webhook instead of polling, set WEBHOOK_SECRET above,
 register the actual HTTPS API route with that same secret_token, and omit POLLING.
 For a controlled check, first bind and verify a test account, then trigger a NEW
 event. Enabling settings never drains old disabled events. Delivered means provider
-acceptance; verify actual receipt separately. No automatic reminder schedule exists.
+acceptance; verify actual receipt separately. Confirmed meetings use the bounded meeting_reminders scheduler.
 
 Disabled/unbound/unverified records never wake automatically after configuration or
 recipient changes. retry() is an explicit operator action. A provider acceptance is
@@ -141,6 +141,7 @@ class Settings:
     telegram_username: str = ''
     telegram_webhook_secret: str = field(default='', repr=False)
     telegram_polling: bool = False
+    product_aliases: tuple = ()
 
     @property
     def email_configured(self):
@@ -171,6 +172,7 @@ def settings(env=None):
     return Settings(
         enabled=env.get('HR_NOTIFICATIONS_ENABLED') == '1',
         product_origin=env.get('HR_ORIGIN', 'https://hr-vision.158-160-179-53.sslip.io').rstrip('/'),
+        product_aliases=tuple(value.strip() for value in env.get('HR_ADDITIONAL_ORIGINS', '').split(',') if value.strip()),
         public_url=env.get('HR_CANDIDATE_PUBLIC_URL', default_url),
         smtp_host=env.get('HR_SMTP_HOST', ''),
         smtp_port=_number(env.get('HR_SMTP_PORT'), 465 if security == 'ssl' else 587, 1, 65535),
@@ -592,9 +594,12 @@ def booking_delivery_status(db, candidate_id, invitation_id, settings=None):
                      (candidate_id, 'booking:' + invitation_id)).fetchone()
     bound = db.execute('SELECT 1 FROM cn_booking_telegram WHERE invitation_id=? AND candidate_id=?',
                        (invitation_id, candidate_id)).fetchone()
-    return {'email': row[0] if row else None, 'telegramAvailable': bool(config.telegram_binding_available
-            and _booking_record(db, candidate_id, invitation_id, _now(None))),
-            'telegramLinked': bool(bound)}
+    current = _booking_record(db, candidate_id, invitation_id, _now(None))
+    return {'email': row[0] if row else None, 'telegramAvailable': bool(config.telegram_binding_available and current),
+            'telegramLinked': bool(bound),
+            'reminderChannels': {'email': ('ready' if current else 'unavailable') if config.email_configured else 'disabled',
+                                 'telegram': 'unavailable' if not current else 'ready' if bound and config.telegram_configured else
+                                     'unbound' if config.telegram_configured else 'disabled'}}
 
 
 def _booking_record(db, candidate_id, invitation_id, timestamp):
@@ -734,7 +739,7 @@ def _consume_telegram_update(db, update, timestamp, settings=None, update_handle
         # One bot/polling offset, separate identity namespaces and link tokens.
         # Recruiter capabilities must not reach candidate binding or bot commands.
         import recruiter_notifications
-        return recruiter_notifications.consume_telegram_update(db, update, timestamp)
+        return recruiter_notifications.consume_telegram_update(db, update, timestamp, _config(settings))
     match = re.fullmatch(r'/start(?:@[A-Za-z0-9_]+)? ([A-Za-z0-9_-]{40,64})', content) if isinstance(content, str) else None
     binding_result = _consume_telegram_link(db, match[1], chat['id'], timestamp) if match else None
     if update_handler is not None:
@@ -777,7 +782,8 @@ def retry(db, notification_id, settings=None, now=None, candidate_id=None):
     row = _dict(db.execute('SELECT * FROM cn_outbox WHERE id=?', (notification_id,)))
     require(row and (candidate_id is None or row['candidate_id'] == candidate_id), 'Уведомление не найдено.', 404)
     require(row['status'] != 'sending', 'Отправка уже выполняется.', 409)
-    if row['status'] == 'delivered':
+    if row['status'] == 'delivered' or row['event_type'] == 'meeting.reminder':
+        # Reminders never replay on explicit retry after a missing channel or uncertainty.
         return _safe(row)
     if row['status'] == 'error' and row['last_error'] in ('application_archived', 'search_stopped', 'employer_binding_changed', 'employer_shortlist_unavailable'):
         return _safe(row)
@@ -963,11 +969,13 @@ def process_pending(connect, settings=None, limit=10, now=None, transport=None, 
     sender = transport if transport is not None else Transport(config)
     counts = {'delivered': 0, 'pending': 0, 'error': 0, 'disabled': 0, 'unverified': 0, 'unbound': 0}
     import employer_notifications
+    import meeting_reminders
     observation_db = connect()
     try:
         with observation_db:
             observation_db.execute('BEGIN IMMEDIATE')
             employer_notifications.collect(observation_db, config, timestamp)
+            meeting_reminders.collect(observation_db, config, timestamp)
     finally:
         observation_db.close()
     for _ in range(_number(limit, 10, 0, 100)):
@@ -982,13 +990,16 @@ def process_pending(connect, settings=None, limit=10, now=None, transport=None, 
             if not row:
                 db.commit()
                 break
-            reason = employer_notifications.prepare(db, row, config) or _delivery_block_reason(db, row)
+            reminder = row['event_type'] == meeting_reminders.EVENT
+            reason = None if reminder else employer_notifications.prepare(db, row, config) or _delivery_block_reason(db, row)
             if reason:
                 db.execute("UPDATE cn_outbox SET status='error',last_error=? WHERE id=?", (reason, row['id']))
                 db.commit()
                 counts['error'] += 1
                 continue
-            if row['event_type'] == 'booking.confirmed':
+            if reminder:
+                state, reason = meeting_reminders.prepare(db, row, config, timestamp)
+            elif row['event_type'] == 'booking.confirmed':
                 state = _booking_readiness(db, row, config, timestamp)
             elif row['event_type'] in BOT_EVENTS:
                 state = _bot_readiness(db, row['candidate_id'], row['recipient'], config)
@@ -1000,7 +1011,7 @@ def process_pending(connect, settings=None, limit=10, now=None, transport=None, 
                     state = 'error'
             if state != 'pending':
                 db.execute('UPDATE cn_outbox SET status=?,last_error=? WHERE id=?',
-                           (state, 'recipient_changed' if state == 'error' else None, row['id']))
+                           (state, reason or ('recipient_changed' if state == 'error' else None), row['id']))
                 db.commit()
                 counts[state] += 1
                 continue
@@ -1008,7 +1019,9 @@ def process_pending(connect, settings=None, limit=10, now=None, transport=None, 
             db.execute("UPDATE cn_outbox SET status='sending',attempts=attempts+1,lease_id=?,lease_until=? WHERE id=?",
                        (lease, timestamp + LEASE_SECONDS, row['id']))
             reply_markup, bot_payload = None, None
-            if row['event_type'] == 'booking.confirmed':
+            if reminder:
+                subject, content, reply_markup = meeting_reminders.message(db, row, config, timestamp)
+            elif row['event_type'] == 'booking.confirmed':
                 subject, content, reply_markup = _booking_message(db, row, timestamp)
             elif row['event_type'] in BOT_EVENTS:
                 bot_payload = json.loads(row['payload_json'])

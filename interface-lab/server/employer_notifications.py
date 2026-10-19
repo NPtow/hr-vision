@@ -56,7 +56,10 @@ def status(db, principal, config=None):
     config = delivery._config(config)
     linked = db.execute('SELECT 1 FROM en_bindings WHERE account_id=?', (principal['accountId'],)).fetchone()
     return {'linked': bool(linked), 'available': config.telegram_binding_available,
-            'status': 'connected' if linked else 'not_connected'}
+            'status': 'connected' if linked else 'not_connected',
+            'reminderChannels': {'email': 'ready' if config.email_configured else 'disabled',
+                                 'telegram': 'ready' if linked and config.telegram_configured else
+                                     'unbound' if config.telegram_configured else 'disabled'}}
 
 
 def create_link(db, principal, config=None, tick=None):

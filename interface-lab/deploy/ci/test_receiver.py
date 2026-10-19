@@ -129,9 +129,10 @@ class ReceiverTest(unittest.TestCase):
         self.assertEqual(r.PRE_CV_RUNTIME - r.PRE_ACCESS_RUNTIME, {'candidate_access.py'})
         self.assertEqual(r.PRE_POOLED_RUNTIME - r.PRE_CV_RUNTIME, {'structured_model.py', 'candidate_resume_model.py', 'candidate_resume_prompts.py'})
         self.assertEqual(r.PRE_EMPLOYER_TELEGRAM_RUNTIME - r.PRE_POOLED_RUNTIME, {'interview_scheduler.py'})
-        self.assertEqual(r.RUNTIME - r.PRE_EMPLOYER_TELEGRAM_RUNTIME, {'employer_notifications.py', 'telegram_miniapp.py'})
+        self.assertEqual(r.PRE_REMINDERS_RUNTIME - r.PRE_EMPLOYER_TELEGRAM_RUNTIME, {'employer_notifications.py', 'telegram_miniapp.py'})
+        self.assertEqual(r.RUNTIME - r.PRE_REMINDERS_RUNTIME, {'meeting_reminders.py'})
         for runtime in (r.LEGACY_RUNTIME, r.BOT_RUNTIME, r.PRE_IMPORT_RUNTIME, r.PRE_OUTREACH_RUNTIME,
-                        r.PRE_ACCESS_RUNTIME, r.PRE_CV_RUNTIME, r.PRE_POOLED_RUNTIME, r.PRE_EMPLOYER_TELEGRAM_RUNTIME, r.RUNTIME):
+                        r.PRE_ACCESS_RUNTIME, r.PRE_CV_RUNTIME, r.PRE_POOLED_RUNTIME, r.PRE_EMPLOYER_TELEGRAM_RUNTIME, r.PRE_REMINDERS_RUNTIME, r.RUNTIME):
             with self.subTest(count=len(runtime)):
                 a, s, m = self.bundle('service', runtime=runtime)
                 self.assertEqual(r.unpack(a, s, 'service'), m)

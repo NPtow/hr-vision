@@ -67,6 +67,8 @@ def init(db):
             update_id INTEGER PRIMARY KEY, received_at INTEGER NOT NULL)''',
     ]:
         db.execute(statement)
+    if 'telegram_generation' not in delivery._columns(db, 'rn_channels'):
+        db.execute('ALTER TABLE rn_channels ADD COLUMN telegram_generation TEXT')
 
 
 def _recipient(db, recruiter_id, now=None, *, active=True):
@@ -211,7 +213,7 @@ def create_telegram_link(db, recruiter_id, settings=None, now=None):
             'expiresAt': tick + delivery.LINK_SECONDS}
 
 
-def consume_telegram_update(db, update, tick):
+def consume_telegram_update(db, update, tick, settings=None):
     """Internal only: shared webhook validates provider secret / polling owns transport."""
     require(isinstance(update, dict) and type(update.get('update_id')) is int, 'Некорректное обновление.', 400)
     init(db)
@@ -243,9 +245,24 @@ def consume_telegram_update(db, update, tick):
     changed = db.execute('UPDATE rn_tokens SET used_at=? WHERE digest=? AND used_at IS NULL', (tick, row['digest']))
     if changed.rowcount != 1:
         return {'status': 'invalid_link'}
-    db.execute('UPDATE rn_channels SET telegram_chat_id=?,telegram_verified_at=?,updated_at=? WHERE recruiter_id=?',
-               (chat_id, tick, tick, row['recruiter_id']))
+    db.execute('UPDATE rn_channels SET telegram_chat_id=?,telegram_verified_at=?,telegram_generation=?,updated_at=? WHERE recruiter_id=?',
+               (chat_id, tick, secrets.token_hex(16), tick, row['recruiter_id']))
+    delivery.enqueue_telegram_reply(db, chat_id, 'recruiter-link:' + str(update['update_id']),
+        'Telegram рекрутера подключён. Здесь будут напоминания об интервью. Открыть свои встречи можно в кабинете.',
+        {'inline_keyboard': [[{'text': 'Открыть кабинет рекрутера', 'url': _config(settings).product_origin.rstrip('/') + '/iframe.html?id=hr-vision-product--manager&viewMode=story&workspace=recruiter'}]]}, settings=_config(settings), now=tick)
     return {'status': 'linked'}
+
+
+def disconnect_telegram(db, recruiter_id, now=None):
+    """Own recruiter binding only; candidate and employer capabilities are untouched."""
+    tick = delivery._now(now)
+    _recipient(db, recruiter_id, tick)
+    db.execute('UPDATE rn_channels SET telegram_chat_id=NULL,telegram_verified_at=NULL,telegram_generation=?,updated_at=? WHERE recruiter_id=?',
+               (secrets.token_hex(16), tick, recruiter_id))
+    db.execute("UPDATE rn_tokens SET used_at=? WHERE recruiter_id=? AND purpose='telegram' AND used_at IS NULL", (tick, recruiter_id))
+    db.execute("""UPDATE rn_outbox SET status='cancelled',last_error='telegram_disconnected'
+        WHERE recruiter_id=? AND channel='telegram' AND status IN ('pending','unbound','disabled','error')""", (recruiter_id,))
+    return {'linked': False}
 
 
 def _verification_message(db, row, config, tick):
@@ -275,7 +292,7 @@ def retry(db, recruiter_id, notification_id, settings=None, now=None):
     row = delivery._dict(db.execute('SELECT * FROM rn_outbox WHERE id=? AND recruiter_id=?', (notification_id, recruiter_id)))
     require(row, 'Уведомление не найдено.', 404)
     require(row['status'] != 'sending', 'Отправка уже выполняется.', 409)
-    if row['status'] == 'delivered':
+    if row['status'] == 'delivered' or row['event_type'] == 'meeting.reminder' or row['last_error'] == 'telegram_disconnected':
         return delivery._safe(row)
     recipient = _recipient(db, recruiter_id, tick)
     state = _readiness(recipient, row['channel'], config)
@@ -286,6 +303,7 @@ def retry(db, recruiter_id, notification_id, settings=None, now=None):
 
 
 def process_pending(connect, settings=None, limit=10, now=None, transport=None):
+    import meeting_reminders
     config, tick = _config(settings), delivery._now(now)
     sender = transport if transport is not None else delivery.Transport(config)
     counts = {key: 0 for key in ('delivered', 'pending', 'error', 'disabled', 'unverified', 'unbound', 'cancelled')}
@@ -302,6 +320,14 @@ def process_pending(connect, settings=None, limit=10, now=None, transport=None):
             if not row:
                 db.commit()
                 break
+            reminder = row['event_type'] == meeting_reminders.EVENT
+            if reminder:
+                state, reason = meeting_reminders.prepare(db, row, config, tick)
+                if state != 'pending':
+                    db.execute('UPDATE rn_outbox SET status=?,last_error=? WHERE id=?', (state, reason, row['id']))
+                    db.commit()
+                    counts[state] += 1
+                    continue
             active = db.execute('SELECT active FROM rc_accounts WHERE id=?', (row['recruiter_id'],)).fetchone()
             booking = _booking(db, row['recruiter_id'], row['interview_id']) if row['interview_id'] else None
             if not active or not active[0] or (row['interview_id'] and (not booking or booking['status'] != 'booked'
@@ -324,7 +350,11 @@ def process_pending(connect, settings=None, limit=10, now=None, transport=None):
             lease = secrets.token_hex(16)
             db.execute("UPDATE rn_outbox SET status='sending',attempts=attempts+1,lease_id=?,lease_until=? WHERE id=?",
                        (lease, tick + delivery.LEASE_SECONDS, row['id']))
-            subject, content = (_verification_message(db, row, config, tick) if row['event_type'] == 'email.verification'
+            reply_markup = None
+            if reminder:
+                subject, content, reply_markup = meeting_reminders.message(db, row, config, tick)
+            else:
+                subject, content = (_verification_message(db, row, config, tick) if row['event_type'] == 'email.verification'
                                 else _booking_message(row, config))
             db.commit()
         except Exception:
@@ -333,8 +363,12 @@ def process_pending(connect, settings=None, limit=10, now=None, transport=None):
         finally:
             db.close()
         try:
-            provider_ref = (sender.send_email(row['recipient'], subject, content, row['id']) if row['channel'] == 'email'
-                            else sender.send_telegram(row['recipient'], content))
+            if row['channel'] == 'email':
+                provider_ref = sender.send_email(row['recipient'], subject, content, row['id'])
+            elif reply_markup is not None:
+                provider_ref = sender.send_telegram(row['recipient'], content, reply_markup=reply_markup)
+            else:
+                provider_ref = sender.send_telegram(row['recipient'], content)
             state, error, delay = 'delivered', None, 0
         except delivery.DeliveryFailure as failure:
             state = 'pending' if failure.retryable and row['attempts'] + 1 < delivery.MAX_ATTEMPTS else 'error'

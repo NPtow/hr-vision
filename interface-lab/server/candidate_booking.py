@@ -100,6 +100,9 @@ def init(db):
     db.execute('INSERT OR IGNORE INTO cp_booking_config VALUES (1,?)', (secrets.token_bytes(32),))
 
 
+CALL_GRACE_SECONDS = 90 * 60
+
+
 def profile_consent(db, candidate_id, interview_id):
     """Trusted exact-person/interview lookup; never exposes contacts publicly."""
     if not db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='cp_booking_profile_consents'").fetchone():
@@ -286,7 +289,7 @@ class CandidateBooking:
             return None
         return {'id': row[0], 'slotId': row[1], 'status': row[2], 'start': row[3], 'end': row[4],
                 'recruiterName': row[5], 'canOpenCall': bool(row[6] == 1 and row[2] in ('booked', 'live')
-                  and timestamp(row[4]) + dt.timedelta(minutes=90) > now())}
+                  and timestamp(row[4]) + dt.timedelta(seconds=CALL_GRACE_SECONDS) > now())}
 
     def _state(self, db, invitation):
         cid = invitation['candidateId']

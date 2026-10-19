@@ -319,6 +319,21 @@ class RecruiterAccessTest(unittest.TestCase):
             self.assertEqual(result['email']['address'], 'o***@example.test')
             self.expect(400, 'notifications/email/request', {'recruiterId': two['recruiter']['id']}, one)
 
+    def test_telegram_disconnect_is_personal_and_rejects_recipient_override(self):
+        one, two = self.recruiter('one'), self.recruiter('two')
+        self.request('notifications', auth=one)
+        self.request('notifications', auth=two)
+        with self.connect() as db:
+            db.execute("UPDATE rn_channels SET telegram_chat_id='101',telegram_verified_at=1 WHERE recruiter_id=?", (one['recruiter']['id'],))
+            db.execute("UPDATE rn_channels SET telegram_chat_id='202',telegram_verified_at=1 WHERE recruiter_id=?", (two['recruiter']['id'],))
+        self.expect(400, 'notifications/telegram/disconnect', {'recruiterId': two['recruiter']['id']}, one)
+        self.expect(401, 'notifications/telegram/disconnect', {})
+        response, _ = self.request('notifications/telegram/disconnect', {}, one)
+        self.assertEqual(response, {'linked': False})
+        with self.connect() as db:
+            self.assertIsNone(db.execute('SELECT telegram_chat_id FROM rn_channels WHERE recruiter_id=?', (one['recruiter']['id'],)).fetchone()[0])
+            self.assertEqual(db.execute('SELECT telegram_chat_id FROM rn_channels WHERE recruiter_id=?', (two['recruiter']['id'],)).fetchone()[0], '202')
+
     def test_unowned_legacy_slot_hidden_and_unbookable_without_erasing_history(self):
         person, cookie = self.register_candidate()
         state, _ = self.call('recruiter/slots', {'recruiterName': 'Старое расписание', 'start': iso(self.tick)}, manager=True)

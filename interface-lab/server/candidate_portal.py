@@ -1306,7 +1306,7 @@ class CandidatePortal:
                     '/api/hr/recruiter/interview/complete', '/api/hr/recruiter/interview/start',
                     '/api/hr/recruiter/interview/materials', '/api/hr/recruiter/notifications',
                     '/api/hr/recruiter/notifications/email/request', '/api/hr/recruiter/notifications/email/verify',
-                    '/api/hr/recruiter/notifications/telegram/link',
+                    '/api/hr/recruiter/notifications/telegram/link', '/api/hr/recruiter/notifications/telegram/disconnect',
                     '/api/hr/recruiter/candidate-access/state', '/api/hr/recruiter/candidate-access/send'},
                     'Доступно только команде HR Vision.', 403)
         capability_paths = ('/api/hr/candidate/guest/state', '/api/hr/candidate/guest/join',
@@ -1443,7 +1443,7 @@ class CandidatePortal:
             elif path == '/api/hr/recruiter/availability/date':
                 availability.set_date_override(db, body, recruiter=principal)
             elif path in ('/api/hr/recruiter/notifications/email/request', '/api/hr/recruiter/notifications/email/verify',
-                          '/api/hr/recruiter/notifications/telegram/link'):
+                          '/api/hr/recruiter/notifications/telegram/link', '/api/hr/recruiter/notifications/telegram/disconnect'):
                 require(not principal['legacy'], 'Войдите в свой кабинет рекрутера.', 401)
                 if path.endswith('/email/request'):
                     require(not body, 'Проверьте поля запроса.', 400)
@@ -1452,6 +1452,8 @@ class CandidatePortal:
                     require(set(body) == {'token'}, 'Проверьте поля подтверждения.', 400)
                     return recruiter_notifications.verify_email(db, principal['id'], body.get('token')), {}
                 require(not body, 'Проверьте поля запроса.', 400)
+                if path.endswith('/telegram/disconnect'):
+                    return recruiter_notifications.disconnect_telegram(db, principal['id']), {}
                 return recruiter_notifications.create_telegram_link(db, principal['id']), {}
             elif path == '/api/hr/recruiter/candidates':
                 cid = self.create_prepared(db, parsed_resume, body.get('contactEmail', ''))

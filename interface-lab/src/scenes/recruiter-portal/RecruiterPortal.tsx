@@ -149,7 +149,7 @@ function RecruiterWorkspace() {
               })}</ul>}
             </section>}
           </>}
-          {page === 'profile' && <RecruiterProfile key={identity.generation} recruiter={auth.recruiter} blocks={state.availabilityBlocks || []} dates={state.availabilityDates || []} slots={state.slots} busy={busy || auth.busy} run={run} onLogout={() => { void auth.logout(); }}/ >}
+          {page === 'profile' && <RecruiterProfile key={identity.generation} token={token} onError={setError} recruiter={auth.recruiter} blocks={state.availabilityBlocks || []} dates={state.availabilityDates || []} slots={state.slots} busy={busy || auth.busy} run={run} onLogout={() => { void auth.logout(); }}/ >}
         </>}
       </main>
     </div>
