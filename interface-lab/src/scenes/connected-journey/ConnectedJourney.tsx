@@ -9,8 +9,10 @@ import { candidates } from '../agency-product/model';
 import { InterviewReview } from '../interview-review/InterviewReview';
 import { InterviewMediaProvider, LabMediaControl } from '../interview-review/InterviewMediaContext';
 import { EmployerShell, type Scope, type EmployerPage } from '../employer-workspace/EmployerShell';
+import { EmployerTelegramAction } from '../employer-workspace/EmployerTelegramAction';
 import { EmployerAuth } from '../employer-workspace/EmployerAuth';
 import { VacancyCreate } from '../employer-workspace/VacancyCreate';
+import { isEmployerMiniApp } from '../../lib/telegram-employer';
 import { captureEmployerEntry, clearEmployerEntry } from '../../lib/employer-entry';
 import { Avatar, PeoplePanel } from '../employer-workspace/PeoplePanel';
 import { CandidateIntake, IntakeDetail } from '../employer-workspace/CandidateIntake';
@@ -52,7 +54,7 @@ export function ConnectedJourney({ initialRole = 'start' }: { initialRole?: 'sta
     const url = new URL(location.href);
     const entry = captureEmployerEntry(url, sessionStorage);
     if (url.href !== location.href) history.replaceState(history.state, '', url);
-    return entry;
+    return isEmployerMiniApp() ? { mode: 'login' as const, createVacancy: false, description: '' } : entry;
   });
   const [scope, setScope] = useState<Scope>(!realEmployer && new URLSearchParams(location.search).get('task') === 'dsa' ? 'dsa' : 'sfera');
   const journey = useJourney(scope, { employer: realEmployer });
@@ -284,8 +286,9 @@ export function ConnectedJourney({ initialRole = 'start' }: { initialRole?: 'sta
     if (page === 'create-vacancy' || siteEntry?.createVacancy) openVacancyEditor(); else setPage('tasks');
     return true;
   }}/>;
-  return <InterviewMediaProvider><div className={`agency-product agency-product-theme cj-app ${inEmployer ? 'ew-root' : ''}`}><EmployerShell enabled={inEmployer} page={page} scope={scope} vacancy={state?.vacancy.role || (realEmployer ? 'Кандидаты' : 'Менеджер по работе с клиентами')} vacancyId={state?.vacancy.id} vacancies={vacancyOptions} onVacancyChange={realEmployer ? id => { void switchVacancy(id); } : undefined} navigationBusy={busy || vacancyLoading || callActive} name={state?.actorName || ''} hasOffers={pool.length > 0} candidateContext={realEmployer ? stageWorkspace ? 'vacancy' : 'queue' : undefined} candidateNavigation={stageWorkspace && people.filter(p => p.reviewState === 'selected').length > 0 ? <nav className="esc-candidate-nav" aria-label="Кандидаты в работе">{people.filter(p => p.reviewState === 'selected').map(p => <button type="button" className="esc-candidate-switch" key={p.id} aria-label={p.name} title={p.name} aria-pressed={person?.id === p.id} disabled={busy || callActive} onClick={() => { setPanelMode('selected'); select(p.id, 'shortlist'); }}><Avatar name={p.name} photo={p.photo}/></button>)}</nav> : undefined} onNavigate={navigate} onAccount={() => setPicker(true)} accountBusy={busy || callActive} onLogout={realEmployer ? async () => { if (await journey.logout()) { finishSiteEntry(); setSiteEntry({ mode: 'login', createVacancy: false, description: '' }); setPage('tasks'); setSelected(''); setIntakeSelected(''); setToast(''); } } : undefined}>
+  return <InterviewMediaProvider><div className={`agency-product agency-product-theme cj-app ${inEmployer ? 'ew-root' : ''}`}><EmployerShell enabled={inEmployer} page={page} scope={scope} vacancy={state?.vacancy.role || (realEmployer ? 'Кандидаты' : 'Менеджер по работе с клиентами')} vacancyId={state?.vacancy.id} vacancies={vacancyOptions} onVacancyChange={realEmployer ? id => { void switchVacancy(id); } : undefined} navigationBusy={busy || vacancyLoading || callActive} name={state?.actorName || ''} hasOffers={pool.length > 0} candidateContext={realEmployer ? stageWorkspace ? 'vacancy' : 'queue' : undefined} candidateNavigation={stageWorkspace && people.filter(p => p.reviewState === 'selected').length > 0 ? <nav className="esc-candidate-nav" aria-label="Кандидаты в работе">{people.filter(p => p.reviewState === 'selected').map(p => <button type="button" className="esc-candidate-switch" key={p.id} aria-label={p.name} title={p.name} aria-pressed={person?.id === p.id} disabled={busy || callActive} onClick={() => { setPanelMode('selected'); select(p.id, 'shortlist'); }}><Avatar name={p.name} photo={p.photo}/></button>)}</nav> : undefined} onNavigate={navigate} onAccount={() => setPicker(true)} accountBusy={busy || callActive} accountActions={realEmployer && journey.token ? <EmployerTelegramAction token={journey.token} disabled={busy || callActive} onError={setError}/> : undefined} onLogout={realEmployer ? async () => { if (await journey.logout()) { finishSiteEntry(); setSiteEntry({ mode: 'login', createVacancy: false, description: '' }); setPage('tasks'); setSelected(''); setIntakeSelected(''); setToast(''); } } : undefined}>
     <header className="cj-header"><button className="cj-brand" onClick={() => setPicker(true)}>HR Vision<span>.</span></button>{state && !picker && <button className="cj-account" onClick={() => setPicker(true)}><span className="cj-avatar">{initials(state.actorName)}</span>{state.actorName}<ChevronRight size={14}/></button>}</header>
+    {journey.entryWarning && <div className="cj-error" role="alert"><span>{journey.entryWarning}</span><Button variant="secondary" onClick={() => { journey.clearEntryWarning(); navigate('tasks'); }}>К моим вакансиям</Button></div>}
     {error && page !== 'create-vacancy' && !stageWorkspace && <div className="cj-error" role="alert"><span>{error}</span><Button variant="ghost" size="icon-sm" aria-label="Закрыть ошибку" onClick={() => setError('')}><X size={16}/></Button></div>}
     {(picker || !state) ? <main className="cj-start">
       <h1>Выберите аккаунт</h1>

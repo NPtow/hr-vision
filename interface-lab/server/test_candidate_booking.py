@@ -235,6 +235,42 @@ class CandidateBookingTest(unittest.TestCase):
                          message['reply_markup'])
         self.assertEqual([(None, None)], self.rows('SELECT email,password_hash FROM cp_candidates WHERE id=?', (cid,)))
 
+    def test_booking_only_meetings_command_recovers_exact_link_without_account_scope(self):
+        from dataclasses import replace
+        from candidate_bot import CandidateBot
+        cid, issued, token = self.issue()
+        config = replace(self.notification_config(), product_origin=self.portal.origin)
+        with patch.object(notifications, 'settings', return_value=config):
+            self.book(token, self.slot())
+            link = self.request('telegram', token)[0]
+        raw = parse_qs(urlsplit(link['url']).query)['start'][0]
+        bot = CandidateBot(self.portal, notifications)
+        def command(number, text, chat=901):
+            update = {'update_id': number, 'message': {'text': text,
+                'from': {'id': chat}, 'chat': {'id': chat, 'type': 'private'}}}
+            with self.connect() as db:
+                return notifications._consume_telegram_update(db, update, int(now().timestamp()), config, bot.handle_update)
+        self.assertEqual(command(940, '/start ' + raw)['status'], 'linked')
+        transport = Mock()
+        transport.send_email.return_value = transport.send_telegram.return_value = 'accepted'
+        notifications.process_pending(self.connect, config, transport=transport)
+        transport.reset_mock()
+        self.assertEqual(command(941, '/meetings')['status'], 'replied')
+        notifications.process_pending(self.connect, config, transport=transport)
+        args, kwargs = transport.send_telegram.call_args
+        self.assertEqual(args[0], '901')
+        self.assertIn('Моя запись', args[1])
+        self.assertEqual(kwargs['reply_markup']['inline_keyboard'][0][0]['url'], issued['url'])
+        self.assertEqual([(None, None)], self.rows('SELECT email,password_hash FROM cp_candidates WHERE id=?', (cid,)))
+        self.assertEqual([], self.rows('SELECT * FROM cb_actions'))
+        self.assertEqual([], self.rows('SELECT * FROM cp_sessions'))
+        transport.reset_mock()
+        command(942, '/vacancies')
+        command(943, '/meetings', 902)
+        notifications.process_pending(self.connect, config, transport=transport)
+        self.assertNotIn(issued['url'], str(transport.send_telegram.call_args_list))
+        self.assertEqual([], self.rows('SELECT * FROM cb_actions'))
+
     def test_revoked_invitation_cannot_dispatch_pending_confirmation(self):
         _, issued, token = self.issue()
         config = self.notification_config()

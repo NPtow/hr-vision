@@ -31,7 +31,7 @@ updating environment. With webhook instead of polling, set WEBHOOK_SECRET above,
 register the actual HTTPS API route with that same secret_token, and omit POLLING.
 For a controlled check, first bind and verify a test account, then trigger a NEW
 event. Enabling settings never drains old disabled events. Delivered means provider
-acceptance; verify actual receipt separately. No automatic reminder schedule exists.
+acceptance; verify actual receipt separately. Confirmed meetings use the bounded meeting_reminders scheduler.
 
 Disabled/unbound/unverified records never wake automatically after configuration or
 recipient changes. retry() is an explicit operator action. A provider acceptance is
@@ -80,6 +80,7 @@ EVENTS = {
     'interview.completed': ('После интервью', 'Интервью завершено. Следующий статус и предложения вакансий появятся в кабинете.'),
     'application.proposed': ('Предложение вакансии', 'В кабинете появилось предложение вакансии. Проверьте его и выбранный вами режим согласования. Время встречи подтверждается отдельно.'),
     'meeting.proposed': ('Предложено время встречи', 'Работодатель предложил время встречи. Откройте кабинет: если вы ещё не подтвердили время, встреча ожидает вашего решения.'),
+    'meeting.completed': ('Как прошла встреча?', 'Сообщите, хотите ли вы продолжить.'),
     'meeting.confirmed': ('Встреча подтверждена', 'Вы подтвердили время встречи. Время и вход на встречу — в кабинете.'),
     'meeting.rescheduled': ('Предложено новое время', 'Время встречи изменилось. Проверьте и подтвердите новое время в кабинете.'),
     'meeting.cancelled': ('Встреча отменена', 'Встреча отменена. Актуальные предложения и встречи доступны в кабинете.'),
@@ -128,6 +129,7 @@ def _url(value, *, allow_fragment=False):
 @dataclass(frozen=True)
 class Settings:
     enabled: bool = False
+    product_origin: str = 'https://hr-vision.158-160-179-53.sslip.io'
     public_url: str = 'https://hr-vision.158-160-179-53.sslip.io/iframe.html?id=hr-vision-product--candidate&viewMode=story'
     smtp_host: str = ''
     smtp_port: int = 587
@@ -140,6 +142,7 @@ class Settings:
     telegram_username: str = ''
     telegram_webhook_secret: str = field(default='', repr=False)
     telegram_polling: bool = False
+    product_aliases: tuple = ()
 
     @property
     def email_configured(self):
@@ -169,6 +172,8 @@ def settings(env=None):
     security = env.get('HR_SMTP_SECURITY', 'starttls')
     return Settings(
         enabled=env.get('HR_NOTIFICATIONS_ENABLED') == '1',
+        product_origin=env.get('HR_ORIGIN', 'https://hr-vision.158-160-179-53.sslip.io').rstrip('/'),
+        product_aliases=tuple(value.strip() for value in env.get('HR_ADDITIONAL_ORIGINS', '').split(',') if value.strip()),
         public_url=env.get('HR_CANDIDATE_PUBLIC_URL', default_url),
         smtp_host=env.get('HR_SMTP_HOST', ''),
         smtp_port=_number(env.get('HR_SMTP_PORT'), 465 if security == 'ssl' else 587, 1, 65535),
@@ -328,6 +333,10 @@ def enqueue(db, candidate_id, event_key, event_type, channel='all', settings=Non
     require(isinstance(event_key, str) and 1 <= len(event_key) <= 240, 'Не указан ключ события.', 400)
     require(channel in ('all', 'email', 'telegram'), 'Неизвестный канал.', 400)
     config, timestamp = _config(settings), _now(now)
+    import meeting_notifications
+    if meeting_notifications.supported(db, event_type, event_key):
+        return meeting_notifications.enqueue(db, candidate_id, event_key, event_type,
+            ('email', 'telegram') if channel == 'all' else (channel,), config, timestamp)
     return [_enqueue_one(db, candidate_id, event_key, event_type, item, config, timestamp)
             for item in (('email', 'telegram') if channel == 'all' else (channel,))]
 
@@ -351,7 +360,7 @@ def _callback_data_valid(value):
         return False
 
 
-def _reply_markup(value):
+def _reply_markup(value, product_origin=None):
     if value is None:
         return None
     require(isinstance(value, dict) and set(value) == {'inline_keyboard'},
@@ -362,20 +371,25 @@ def _reply_markup(value):
     for row in rows:
         require(isinstance(row, list) and 1 <= len(row) <= 8, 'Некорректная клавиатура.', 400)
         for button in row:
-            require(isinstance(button, dict) and set(button) in ({'text', 'callback_data'}, {'text', 'url'})
+            require(isinstance(button, dict) and set(button) in ({'text', 'callback_data'}, {'text', 'url'}, {'text', 'web_app'})
                     and isinstance(button.get('text'), str) and 1 <= len(button['text']) <= 128,
                     'Некорректная кнопка.', 400)
-            require(_callback_data_valid(button['callback_data']) if 'callback_data' in button
-                    else _url(button['url'], allow_fragment=True), 'Некорректная кнопка.', 400)
+            if 'web_app' in button:
+                from telegram_miniapp import valid_app_url
+                app = button['web_app']
+                require(isinstance(app, dict) and set(app) == {'url'} and valid_app_url(app['url'], product_origin or settings().product_origin), 'Некорректная кнопка.', 400)
+            else:
+                require(_callback_data_valid(button['callback_data']) if 'callback_data' in button
+                        else _url(button['url'], allow_fragment=True), 'Некорректная кнопка.', 400)
             count += 1
     require(count <= 100, 'Слишком много кнопок.', 400)
     return value
 
 
-def _telegram_message(text, reply_markup=None):
+def _telegram_message(text, reply_markup=None, product_origin=None):
     require(isinstance(text, str) and 1 <= len(text) <= 4096, 'Некорректный текст сообщения.', 400)
     result = {'text': text}
-    markup = _reply_markup(reply_markup)
+    markup = _reply_markup(reply_markup, product_origin)
     if markup is not None:
         result['reply_markup'] = markup
     return result
@@ -429,7 +443,7 @@ def enqueue_telegram_reply(db, chat_id, event_key, text, reply_markup=None, cand
     Candidate-specific content must pass the linked owner for dispatch revalidation.
     No provider I/O occurs until the caller transaction commits and a worker claims it.
     """
-    payload = _telegram_message(text, reply_markup)
+    payload = _telegram_message(text, reply_markup, _config(settings).product_origin)
     _tag_application(payload, application_id, candidate_id)
     return _enqueue_telegram(db, chat_id, event_key, 'telegram.reply', payload,
                              candidate_id, _config(settings), _now(now))
@@ -585,9 +599,12 @@ def booking_delivery_status(db, candidate_id, invitation_id, settings=None):
                      (candidate_id, 'booking:' + invitation_id)).fetchone()
     bound = db.execute('SELECT 1 FROM cn_booking_telegram WHERE invitation_id=? AND candidate_id=?',
                        (invitation_id, candidate_id)).fetchone()
-    return {'email': row[0] if row else None, 'telegramAvailable': bool(config.telegram_binding_available
-            and _booking_record(db, candidate_id, invitation_id, _now(None))),
-            'telegramLinked': bool(bound)}
+    current = _booking_record(db, candidate_id, invitation_id, _now(None))
+    return {'email': row[0] if row else None, 'telegramAvailable': bool(config.telegram_binding_available and current),
+            'telegramLinked': bool(bound),
+            'reminderChannels': {'email': ('ready' if current else 'unavailable') if config.email_configured else 'disabled',
+                                 'telegram': 'unavailable' if not current else 'ready' if bound and config.telegram_configured else
+                                     'unbound' if config.telegram_configured else 'disabled'}}
 
 
 def _booking_record(db, candidate_id, invitation_id, timestamp):
@@ -713,6 +730,9 @@ def _consume_telegram_update(db, update, timestamp, settings=None, update_handle
             and chat['id'] == sender.get('id') and not sender.get('is_bot')):
         return {'status': 'ignored'}
     content = message.get('text', '') if callback is None else ''
+    if isinstance(content, str) and re.match(r'/start(?:@[A-Za-z0-9_]+)? em_', content):
+        import employer_notifications
+        return employer_notifications.consume(db, update, timestamp, _config(settings))
     booking_match = re.fullmatch(r'/start(?:@[A-Za-z0-9_]+)? bk_([A-Za-z0-9_-]{43})', content) if isinstance(content, str) else None
     if booking_match:
         result = _consume_booking_telegram_link(db, booking_match[1], chat['id'], timestamp, _config(settings))
@@ -724,7 +744,7 @@ def _consume_telegram_update(db, update, timestamp, settings=None, update_handle
         # One bot/polling offset, separate identity namespaces and link tokens.
         # Recruiter capabilities must not reach candidate binding or bot commands.
         import recruiter_notifications
-        return recruiter_notifications.consume_telegram_update(db, update, timestamp)
+        return recruiter_notifications.consume_telegram_update(db, update, timestamp, _config(settings))
     match = re.fullmatch(r'/start(?:@[A-Za-z0-9_]+)? ([A-Za-z0-9_-]{40,64})', content) if isinstance(content, str) else None
     binding_result = _consume_telegram_link(db, match[1], chat['id'], timestamp) if match else None
     if update_handler is not None:
@@ -767,11 +787,14 @@ def retry(db, notification_id, settings=None, now=None, candidate_id=None):
     row = _dict(db.execute('SELECT * FROM cn_outbox WHERE id=?', (notification_id,)))
     require(row and (candidate_id is None or row['candidate_id'] == candidate_id), 'Уведомление не найдено.', 404)
     require(row['status'] != 'sending', 'Отправка уже выполняется.', 409)
-    if row['status'] == 'delivered':
+    import meeting_notifications
+    if row['status'] == 'delivered' or row['event_type'] == 'meeting.reminder' or meeting_notifications.is_lifecycle(row):
+        # Reminders never replay on explicit retry after a missing channel or uncertainty.
         return _safe(row)
-    if row['status'] == 'error' and row['last_error'] in ('application_archived', 'search_stopped'):
+    if row['status'] == 'error' and row['last_error'] in ('application_archived', 'search_stopped', 'employer_binding_changed', 'employer_shortlist_unavailable'):
         return _safe(row)
-    reason = _delivery_block_reason(db, row)
+    import employer_notifications
+    reason = employer_notifications.prepare(db, row, config) or _delivery_block_reason(db, row)
     if reason:
         db.execute("UPDATE cn_outbox SET status='error',last_error=?,lease_id=NULL,lease_until=NULL WHERE id=?",
                    (reason, notification_id))
@@ -922,7 +945,7 @@ class Transport:
         return raw[:-4]
 
     def send_telegram(self, recipient, content, reply_markup=None):
-        payload = _telegram_message(content, reply_markup)
+        payload = _telegram_message(content, reply_markup, self.config.product_origin)
         payload.update({'chat_id': _private_chat_id(recipient), 'link_preview_options': {'is_disabled': True}})
         result = self.telegram_request('sendMessage', payload)
         if not isinstance(result, dict) or type(result.get('message_id')) is not int or result['message_id'] <= 0:
@@ -951,6 +974,17 @@ def process_pending(connect, settings=None, limit=10, now=None, transport=None, 
     config, timestamp = _config(settings), _now(now)
     sender = transport if transport is not None else Transport(config)
     counts = {'delivered': 0, 'pending': 0, 'error': 0, 'disabled': 0, 'unverified': 0, 'unbound': 0}
+    import employer_notifications
+    import meeting_reminders
+    import meeting_notifications
+    observation_db = connect()
+    try:
+        with observation_db:
+            observation_db.execute('BEGIN IMMEDIATE')
+            employer_notifications.collect(observation_db, config, timestamp)
+            meeting_reminders.collect(observation_db, config, timestamp)
+    finally:
+        observation_db.close()
     for _ in range(_number(limit, 10, 0, 100)):
         timestamp = _now(now)
         db = connect()
@@ -963,13 +997,19 @@ def process_pending(connect, settings=None, limit=10, now=None, transport=None, 
             if not row:
                 db.commit()
                 break
-            reason = _delivery_block_reason(db, row)
+            reminder = row['event_type'] == meeting_reminders.EVENT
+            lifecycle = meeting_notifications.is_lifecycle(row)
+            reason = None if reminder or lifecycle else employer_notifications.prepare(db, row, config) or _delivery_block_reason(db, row)
             if reason:
                 db.execute("UPDATE cn_outbox SET status='error',last_error=? WHERE id=?", (reason, row['id']))
                 db.commit()
                 counts['error'] += 1
                 continue
-            if row['event_type'] == 'booking.confirmed':
+            if lifecycle:
+                state, reason = meeting_notifications.prepare(db, row, config, timestamp)
+            elif reminder:
+                state, reason = meeting_reminders.prepare(db, row, config, timestamp)
+            elif row['event_type'] == 'booking.confirmed':
                 state = _booking_readiness(db, row, config, timestamp)
             elif row['event_type'] in BOT_EVENTS:
                 state = _bot_readiness(db, row['candidate_id'], row['recipient'], config)
@@ -981,7 +1021,7 @@ def process_pending(connect, settings=None, limit=10, now=None, transport=None, 
                     state = 'error'
             if state != 'pending':
                 db.execute('UPDATE cn_outbox SET status=?,last_error=? WHERE id=?',
-                           (state, 'recipient_changed' if state == 'error' else None, row['id']))
+                           (state, reason or ('recipient_changed' if state == 'error' else None), row['id']))
                 db.commit()
                 counts[state] += 1
                 continue
@@ -989,7 +1029,11 @@ def process_pending(connect, settings=None, limit=10, now=None, transport=None, 
             db.execute("UPDATE cn_outbox SET status='sending',attempts=attempts+1,lease_id=?,lease_until=? WHERE id=?",
                        (lease, timestamp + LEASE_SECONDS, row['id']))
             reply_markup, bot_payload = None, None
-            if row['event_type'] == 'booking.confirmed':
+            if lifecycle:
+                subject, content, reply_markup = meeting_notifications.message(db, row, config, timestamp)
+            elif reminder:
+                subject, content, reply_markup = meeting_reminders.message(db, row, config, timestamp)
+            elif row['event_type'] == 'booking.confirmed':
                 subject, content, reply_markup = _booking_message(db, row, timestamp)
             elif row['event_type'] in BOT_EVENTS:
                 bot_payload = json.loads(row['payload_json'])

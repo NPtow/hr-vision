@@ -405,6 +405,8 @@ def import_batch(db, workspace_id, vacancy_id, body, portal=None):
         db.execute('UPDATE em_batches SET result=? WHERE id=?', (_dump(result), bid))
         if result['addedApplicationIds']:
             bump_revision(db, workspace_id, vacancy_id)
+        import employer_notifications
+        employer_notifications.collect(db)
         return result
 
 

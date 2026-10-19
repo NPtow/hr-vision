@@ -487,6 +487,8 @@ class Handler(BaseHTTPRequestHandler):
                 require(self.headers.get('Sec-Fetch-Site') not in ('cross-site', 'none') or
                         self.headers.get('Sec-Fetch-Site') == 'none' and self.headers.get('Origin') in ORIGINS,
                         'Другой источник запроса.', 403)
+            if path == '/api/hr/employer/telegram/session':
+                require(self.headers.get('Origin') in ORIGINS, 'Другой источник запроса.', 403)
             size = int(self.headers.get('Content-Length', '0'))
             if path in ('/api/hr/employer/intake', '/api/hr/employer/vacancies/import'):
                 with connect() as db:

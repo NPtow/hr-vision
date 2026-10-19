@@ -810,6 +810,8 @@ class CandidatePortal:
             require(decision != 'accepted' or self.person(db, cid)['consentReuse'], 'Подтвердите использование интервью в профиле.', 409)
             db.execute('UPDATE cp_applications SET status=?,approved_automatically=0,decided_at=? WHERE id=?',
                        (decision, iso(now()), application['id']))
+            import employer_notifications
+            employer_notifications.collect(db)
 
     def _application_open_for_meeting(self, db, application):
         self.require_application_active(db, application)
@@ -1200,8 +1202,8 @@ class CandidatePortal:
             table = 'cp_meetings' if application_id else 'cp_interviews'
             changed = db.execute(f"UPDATE {table} SET status='completed',completed_at=? WHERE id=? AND status='live'",
                                  (iso(now()), mid)).rowcount
-            if changed and not application_id:
-                self.event(db, cid, 'interview.completed', mid)
+            if changed:
+                self.event(db, cid, 'meeting.completed' if application_id else 'interview.completed', mid)
 
     def materials(self, cid, application_id=None, meeting_id=None, *, access_check=None):
         kind = 'meeting' if application_id else 'interview'
@@ -1304,7 +1306,7 @@ class CandidatePortal:
                     '/api/hr/recruiter/interview/complete', '/api/hr/recruiter/interview/start',
                     '/api/hr/recruiter/interview/materials', '/api/hr/recruiter/notifications',
                     '/api/hr/recruiter/notifications/email/request', '/api/hr/recruiter/notifications/email/verify',
-                    '/api/hr/recruiter/notifications/telegram/link',
+                    '/api/hr/recruiter/notifications/telegram/link', '/api/hr/recruiter/notifications/telegram/disconnect',
                     '/api/hr/recruiter/candidate-access/state', '/api/hr/recruiter/candidate-access/send'},
                     'Доступно только команде HR Vision.', 403)
         capability_paths = ('/api/hr/candidate/guest/state', '/api/hr/candidate/guest/join',
@@ -1441,7 +1443,7 @@ class CandidatePortal:
             elif path == '/api/hr/recruiter/availability/date':
                 availability.set_date_override(db, body, recruiter=principal)
             elif path in ('/api/hr/recruiter/notifications/email/request', '/api/hr/recruiter/notifications/email/verify',
-                          '/api/hr/recruiter/notifications/telegram/link'):
+                          '/api/hr/recruiter/notifications/telegram/link', '/api/hr/recruiter/notifications/telegram/disconnect'):
                 require(not principal['legacy'], 'Войдите в свой кабинет рекрутера.', 401)
                 if path.endswith('/email/request'):
                     require(not body, 'Проверьте поля запроса.', 400)
@@ -1450,6 +1452,8 @@ class CandidatePortal:
                     require(set(body) == {'token'}, 'Проверьте поля подтверждения.', 400)
                     return recruiter_notifications.verify_email(db, principal['id'], body.get('token')), {}
                 require(not body, 'Проверьте поля запроса.', 400)
+                if path.endswith('/telegram/disconnect'):
+                    return recruiter_notifications.disconnect_telegram(db, principal['id']), {}
                 return recruiter_notifications.create_telegram_link(db, principal['id']), {}
             elif path == '/api/hr/recruiter/candidates':
                 cid = self.create_prepared(db, parsed_resume, body.get('contactEmail', ''))

@@ -17,16 +17,15 @@ import { CandidateSearch } from './CandidateSearch';
 import { CandidateSchedule } from './CandidateSchedule';
 import { CandidateProfile } from './CandidateProfile';
 import { applicationGroup, currentApplicationMeeting } from './workspace-model';
+import { candidatePage, candidateLoginTarget, candidateNavigationURL, authenticatedCandidatePage as authenticatedPage, type CandidatePage as Page } from './candidate-navigation';
 import '@fontsource-variable/inter';
 import '../agency-product/theme.css';
 import './candidate-portal.css';
 import './candidate-cabinet.css';
 import './candidate-surfaces.css';
 
-type Page = 'welcome' | 'login' | 'register' | 'resume' | 'preferences' | 'home' | 'calendar' | 'booking' | 'profile' | 'vacancies' | 'interview' | 'meeting';
-const pages: Page[] = ['welcome', 'login', 'register', 'resume', 'preferences', 'home', 'calendar', 'booking', 'profile', 'vacancies', 'interview', 'meeting'];
-const readPage = (): Page => { const value = new URLSearchParams(location.search).get('cp') as Page; return pages.includes(value) ? value : 'welcome'; };
-const authenticatedPage = (page: Page) => !['welcome', 'login', 'register'].includes(page);
+const readPage = (): Page => candidatePage(new URLSearchParams(location.search));
+const loginTarget = (): Page => candidateLoginTarget(new URLSearchParams(location.search));
 function setupPage(candidate: CandidateState, newBooking = false): 'resume' | 'preferences' | null {
   if (candidate.interview && !newBooking) return null;
   if (!candidate.resume) return 'resume';
@@ -72,10 +71,10 @@ function AuthenticatedCandidatePortal() {
   const authGeneration = useRef(0);
   const refreshSequence = useRef(0);
   const mutating = useRef(false);
-  const go = useCallback((next: Page, replace = false, applicationId?: string, targetMeetingId?: string) => {
-    const url = new URL(location.href); url.searchParams.set('cp', next); url.searchParams.delete('filter');
-    if (applicationId) url.searchParams.set('application', applicationId); else url.searchParams.delete('application');
-    if (targetMeetingId) url.searchParams.set('meeting', targetMeetingId); else url.searchParams.delete('meeting');
+  const go = useCallback((next: Page, replace = false, applicationId?: string, targetMeetingId?: string, preserveLoginTarget = false) => {
+    const url = candidateNavigationURL(location.href, next, applicationId, targetMeetingId, preserveLoginTarget);
+    applicationId = url.searchParams.get('application') || undefined;
+    targetMeetingId = url.searchParams.get('meeting') || undefined;
     history[replace ? 'replaceState' : 'pushState']({}, '', url);
     setPage(next); setMeetingApplicationId(applicationId || ''); setMeetingId(targetMeetingId || ''); setError(''); setLoadError(''); setNotice(''); setMenuOpen(false);
     window.scrollTo({ top: 0, behavior: 'instant' });
@@ -92,7 +91,7 @@ function AuthenticatedCandidatePortal() {
     try { const next = await candidateRequest<CandidateState>('state'); if (alive.current && generation === authGeneration.current && sequence === refreshSequence.current) { apply(next); setLoadError(''); } }
     catch (cause) {
       if (!alive.current || generation !== authGeneration.current || sequence !== refreshSequence.current) return;
-      if (cause instanceof CandidateApiError && cause.status === 401) { setCandidate(null); go('login', true); setError('Сессия завершилась. Войдите снова.'); }
+      if (cause instanceof CandidateApiError && cause.status === 401) { setCandidate(null); go('login', true, undefined, undefined, true); setError('Сессия завершилась. Войдите снова.'); }
       else setLoadError((cause as Error).message);
     }
   }, [apply, go]);
@@ -105,9 +104,10 @@ function AuthenticatedCandidatePortal() {
       setChannels(result.channels || {});
       if (result.authenticated && result.candidate) {
         apply(result.candidate);
-        const nextPage = destination(result.candidate, readPage());
-        if (nextPage !== readPage()) go(nextPage, true);
-      } else { setCandidate(null); if (authenticatedPage(readPage())) go('login', true); }
+        const query = new URLSearchParams(location.search);
+        const nextPage = destination(result.candidate, readPage() === 'login' ? loginTarget() : readPage());
+        if (nextPage !== readPage()) go(nextPage, true, query.get('application') || undefined, query.get('meeting') || undefined);
+      } else { setCandidate(null); if (authenticatedPage(readPage())) go('login', true, undefined, undefined, true); }
     } catch (cause) { if (alive.current && generation === authGeneration.current) setLoadError((cause as Error).message); }
     finally { if (alive.current && generation === authGeneration.current) setLoading(false); }
   }, [apply, go]);
@@ -147,8 +147,9 @@ function AuthenticatedCandidatePortal() {
   }, [candidate?.id, refresh]);
   useEffect(() => {
     if (!candidate || loading) return;
-    const nextPage = destination(candidate, page);
-    if (nextPage !== page) go(nextPage, true);
+    const query = new URLSearchParams(location.search);
+    const nextPage = destination(candidate, page === 'login' ? loginTarget() : page);
+    if (nextPage !== page) go(nextPage, true, query.get('application') || undefined, query.get('meeting') || undefined);
   }, [candidate, page, loading, go]);
   async function mutate(path: string, body: unknown, success?: string): Promise<CandidateState | null> {
     if (mutating.current) return null;
@@ -241,7 +242,7 @@ function AuthenticatedCandidatePortal() {
           {notice && <div className="cp-message cp-success" role="status"><Check size={17}/>{notice}<button aria-label="Закрыть сообщение" onClick={() => setNotice('')}><X size={16}/></button></div>}
           {candidate && telegramEntry && !telegramChannel?.linked && !['interview', 'meeting'].includes(page) && <TelegramHandoff key={candidate.id} available={telegramChannel?.canLink === true || channels.telegramBindingAvailable === true}/>}
           {!candidate && page === 'welcome' && <Welcome onStart={() => go('register')}/>}
-          {!candidate && (page === 'login' || authenticatedPage(page)) && <section className="cp-auth-card"><h1>С возвращением</h1><p className="cp-muted">Войдите в свой кабинет HR Vision.</p><form className="cp-auth-form" onSubmit={async event => { event.preventDefault(); const next = await mutate('login', { email: credentials.email.trim(), password: credentials.password }); if (next) { setCredentials(value => ({ ...value, password: '' })); go(destination(next), true); } }}>
+          {!candidate && (page === 'login' || authenticatedPage(page)) && <section className="cp-auth-card"><h1>С возвращением</h1><p className="cp-muted">Войдите в свой кабинет HR Vision.</p><form className="cp-auth-form" onSubmit={async event => { event.preventDefault(); const next = await mutate('login', { email: credentials.email.trim(), password: credentials.password }); if (next) { setCredentials(value => ({ ...value, password: '' })); const query = new URLSearchParams(location.search); go(destination(next, loginTarget()), true, query.get('application') || undefined, query.get('meeting') || undefined); } }}>
             <label htmlFor="cp-login-email">Почта<Input id="cp-login-email" type="email" autoComplete="username" required value={credentials.email} onChange={event => setCredentials(value => ({ ...value, email: event.target.value }))}/></label>
             <label htmlFor="cp-login-password">Пароль<Input id="cp-login-password" type="password" autoComplete="current-password" required value={credentials.password} onChange={event => setCredentials(value => ({ ...value, password: event.target.value }))}/></label>
             <Button disabled={busy}>{busy ? 'Входим…' : 'Войти'}</Button>
