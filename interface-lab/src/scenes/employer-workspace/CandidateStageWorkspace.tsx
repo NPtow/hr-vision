@@ -103,7 +103,7 @@ export function CandidateStageWorkspace({ journey, person, source, entry, onChat
     const meeting = stage.meeting || person.meetings?.find(item => item.id === stage.meetingId);
     if (!meeting) return <p className="esc-empty">Материалы этой встречи пока недоступны.</p>;
     const historical = { ...person, meeting, feedback: stage.feedback };
-    if (meeting.status === 'completed') return <Materials journey={journey} person={historical}/>;
+    if (meeting.status === 'completed') return <Materials journey={journey} person={historical} appearance="candidate"/>;
     if (meeting.id !== person.meeting?.id || meeting.status === 'cancelled') return null;
     return <MeetingPanel key={meeting.id} journey={journey} person={historical} onCallChange={onCallChange}
       onReschedule={() => openEditor('meeting', stage, true)}/>;
@@ -145,7 +145,7 @@ export function CandidateStageWorkspace({ journey, person, source, entry, onChat
     onSelectStage={selectStage} onAddStage={locked ? undefined : kind => openEditor(kind)}
     onEditStage={locked ? undefined : stage => { if (stage.kind === 'offer' || stage.kind === 'test') openEditor(stage.kind, stage); }}
     onSaveStageNotes={locked ? undefined : saveNotes} busy={journey.busy || callActive} error={editor ? undefined : journey.error} editor={form}
-    renderInterview={() => <><EmployerScreening journey={journey} person={person} source={source}/>
+    renderInterview={() => <><EmployerScreening journey={journey} person={person} source={source} appearance="candidate" enableComments/>
       {(source.cv || source.profile.length > 0) && <details className="esc-resume"><summary>Резюме</summary>
         {source.profile.map((fact, index) => <p key={index}><strong>{fact.label}</strong><br/>{fact.value}</p>)}{source.cv && <p>{source.cv}</p>}
       </details>}</>}

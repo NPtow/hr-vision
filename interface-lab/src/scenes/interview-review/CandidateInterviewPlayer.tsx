@@ -19,7 +19,7 @@ function IconButton({ label, children, onClick, className = '', pressed, expande
 
 /** Candidate materials are supplied by the authorised caller. No fixtures or local comment store. */
 export function CandidateInterviewPlayer({ sourceId, name, media, chapters, fullChapters, transcriptText = '', emptyMessage,
-  initialEvidenceIndex, renderTimeComment, comments = [], canComment = false }: RecordingReviewProps) {
+  initialEvidenceIndex, renderTimeComment, comments = [], canComment = false, transcriptSeekable = true }: RecordingReviewProps) {
   const id = useId();
   const root = useRef<HTMLDivElement>(null);
   const video = useRef<HTMLVideoElement>(null);
@@ -57,7 +57,7 @@ export function CandidateInterviewPlayer({ sourceId, name, media, chapters, full
   const topics = useMemo(() => (fullChapters?.length ? fullChapters : chapters), [chapters, fullChapters]);
   const segments = useMemo(() => interviewTimeline(topics, duration), [topics, duration]);
   const activeIndex = paragraphs.reduce((found, row, index) => row.start <= current ? index : found, 0);
-  const active = paragraphs[activeIndex];
+  const active = transcriptSeekable ? paragraphs[activeIndex] : undefined;
   const activeChapter = topics.reduce((found, row, index) => row.seconds !== null && row.seconds <= current ? index : found, -1);
   const matches = query.trim().length > 1 ? paragraphs.filter(row => row.text.toLocaleLowerCase('ru').includes(query.trim().toLocaleLowerCase('ru'))).slice(0, 30) : [];
 
@@ -73,10 +73,10 @@ export function CandidateInterviewPlayer({ sourceId, name, media, chapters, full
     list.scrollTo({ top: Math.max(0, top - list.clientHeight * .32), behavior: smooth && !matchMedia('(prefers-reduced-motion: reduce)').matches ? 'smooth' : 'instant' });
   }, [tab]);
   useEffect(() => {
-    if (!follow || theatre) return;
+    if (!follow || theatre || (tab === 'transcript' && !transcriptSeekable)) return;
     const frame = requestAnimationFrame(() => followMoment(playing));
     return () => cancelAnimationFrame(frame);
-  }, [follow, activeIndex, activeChapter, tab, full, theatre, paragraphs, playing, followMoment]);
+  }, [follow, activeIndex, activeChapter, tab, full, theatre, paragraphs, playing, followMoment, transcriptSeekable]);
   useEffect(() => {
     if (!side.current || !follow) return;
     const observer = new ResizeObserver(() => followMoment());
@@ -230,7 +230,7 @@ export function CandidateInterviewPlayer({ sourceId, name, media, chapters, full
               {menu === 'speed' && <div className="iv-popover iv-option-menu" role="menu" aria-label="Скорость воспроизведения">{[.8, 1, 1.2, 1.5, 1.7, 2].map(value => <button type="button" role="menuitemradio" aria-checked={speed === value} key={value} onClick={() => { setSpeed(value); setMenu(null); }}>{value}×{speed === value && <Check size={14}/>}</button>)}</div>}
             </div>
             <div className="iv-menu-anchor" data-iv-menu><IconButton label="Качество записи" expanded={menu === 'quality'} onClick={() => setMenu(menu === 'quality' ? null : 'quality')}><span className="iv-quality-badge">HD</span></IconButton>{menu === 'quality' && <div className="iv-popover iv-source-quality">Оригинал{resolution && <span>{resolution}</span>}</div>}</div>
-            <IconButton label={captions ? 'Выключить субтитры' : 'Включить субтитры'} pressed={captions} disabled={!paragraphs.length} onClick={() => setCaptions(value => !value)}>{captions ? <Captions/> : <CaptionsOff/>}</IconButton>
+            <IconButton label={captions ? 'Выключить субтитры' : 'Включить субтитры'} pressed={captions} disabled={!paragraphs.length || !transcriptSeekable} onClick={() => setCaptions(value => !value)}>{captions ? <Captions/> : <CaptionsOff/>}</IconButton>
             <IconButton label={theatre ? 'Показать расшифровку' : 'Режим кинотеатра'} pressed={theatre} onClick={() => setTheatre(value => !value)}><Tv/></IconButton>
             <IconButton label={full ? 'Выйти из полноэкранного режима' : 'На весь экран'} pressed={full} onClick={toggleFull}>{full ? <Minimize2/> : <Maximize2/>}</IconButton>
           </div>
@@ -246,9 +246,9 @@ export function CandidateInterviewPlayer({ sourceId, name, media, chapters, full
 
         {tab === 'transcript' && <div className="iv-panel iv-transcript-panel" id={`${id}-transcript`} role="tabpanel" aria-labelledby={`${id}-transcript-tab`}>
           <div ref={transcriptList} className="iv-transcript" onWheel={() => setFollow(false)} onTouchMove={() => setFollow(false)}>
-            {paragraphs.map((row, index) => <div key={`${row.start}:${index}`} className="iv-line" data-active={index === activeIndex}>
-              <button type="button" className="iv-line-content" onClick={() => seek(row.start)} aria-label={`${time(row.start)} ${row.text}`} aria-current={index === activeIndex ? 'true' : undefined}><time>{time(row.start)}</time><span>{row.text}</span></button>
-              <div className="iv-line-tools"><IconButton label={`Ссылка на ${time(row.start)}`} onClick={() => { void copyMoment(row.start); }}><LinkIcon/></IconButton>{canComment && <IconButton label={`Комментарий к ${time(row.start)}`} onClick={() => openComment(row.start)}><MessageSquare/></IconButton>}</div>
+            {paragraphs.map((row, index) => <div key={`${row.start}:${index}`} className="iv-line" data-active={transcriptSeekable && index === activeIndex}>
+              <button type="button" className="iv-line-content" disabled={!transcriptSeekable} onClick={() => seek(row.start)} aria-label={`${time(row.start)} ${row.text}`} aria-current={transcriptSeekable && index === activeIndex ? 'true' : undefined}><time>{time(row.start)}</time><span>{row.text}</span></button>
+              {transcriptSeekable && <div className="iv-line-tools"><IconButton label={`Ссылка на ${time(row.start)}`} onClick={() => { void copyMoment(row.start); }}><LinkIcon/></IconButton>{canComment && <IconButton label={`Комментарий к ${time(row.start)}`} onClick={() => openComment(row.start)}><MessageSquare/></IconButton>}</div>}
             </div>)}
             {!paragraphs.length && <p className="iv-plain-transcript">{transcriptText.trim() && !/^\s*WEBVTT\b/.test(transcriptText) ? transcriptText : 'Расшифровки пока нет'}</p>}
           </div>
@@ -259,11 +259,11 @@ export function CandidateInterviewPlayer({ sourceId, name, media, chapters, full
             {!topics.length && <p className="iv-plain-transcript">Ключевых моментов пока нет</p>}
           </div>
         </div>}
-        {tab !== 'comments' && !follow && <button type="button" className="iv-follow" onClick={() => { setFollow(true); followMoment(true); }}><AlignLeft size={14}/>К текущему моменту<ChevronDown size={13}/></button>}
+        {tab !== 'comments' && !follow && transcriptSeekable && <button type="button" className="iv-follow" onClick={() => { setFollow(true); followMoment(true); }}><AlignLeft size={14}/>К текущему моменту<ChevronDown size={13}/></button>}
         {tab === 'comments' && <div className="iv-panel iv-comments" id={`${id}-comments`} role="tabpanel" aria-labelledby={`${id}-comments-tab`}>
           <div className="iv-comment-list">
             {!comments.length && commentTime === null && <div className="iv-no-comments"><MessageSquare size={30}/><span>Нет комментариев</span></div>}
-            {!comments.length && commentTime !== null && <div className="iv-comment-context"><time>{time(commentTime)}</time><blockquote>{paragraphs.filter(row => row.start <= commentTime).at(-1)?.text}</blockquote></div>}
+            {!comments.length && commentTime !== null && <div className="iv-comment-context"><time>{time(commentTime)}</time>{transcriptSeekable && <blockquote>{paragraphs.filter(row => row.start <= commentTime).at(-1)?.text}</blockquote>}</div>}
             {comments.map(comment => <article className="iv-comment" key={comment.id}><div className="iv-comment-body"><div className="iv-comment-meta"><button type="button" className="iv-time-link" onClick={() => seek(comment.seconds)}>{time(comment.seconds)}</button><span>{new Date(comment.createdAt).toLocaleDateString('ru-RU', {day:'numeric', month:'short', timeZone:'Europe/Moscow'})}</span></div><p>{comment.text}</p></div></article>)}
           </div>
           {commentTime !== null && renderTimeComment ? <div className="iv-comment-editor" key={commentTime}>{renderTimeComment(commentTime, () => setCommentTime(null))}</div>
@@ -272,7 +272,7 @@ export function CandidateInterviewPlayer({ sourceId, name, media, chapters, full
       </aside>
       <div className="iv-below-player"><form className="iv-ask" onSubmit={event => { event.preventDefault(); setSearchOpen(true); }}><Sparkles/><input aria-label="Найти в интервью" placeholder="Найти в интервью…" value={query} onChange={event => setQuery(event.target.value)}/><IconButton label="Поиск по расшифровке" onClick={() => setSearchOpen(true)}>{query ? <ArrowUp/> : <Search/>}</IconButton></form>{reactions()}</div>
     </div>
-    {searchOpen && <section className="iv-search-panel" role="dialog" aria-label="Поиск по интервью"><header><span><Search size={18}/>Поиск по интервью</span><IconButton label="Закрыть поиск" onClick={() => setSearchOpen(false)}><X/></IconButton></header><form onSubmit={event => event.preventDefault()}><Search size={18}/><input autoFocus aria-label="Поисковый запрос" value={query} onChange={event => setQuery(event.target.value)} placeholder="Слово или фраза"/></form><div className="iv-search-results">{query.length > 1 && !matches.length && <p>Совпадений нет</p>}{matches.map((row, index) => <button type="button" key={index} onClick={() => { seek(row.start); setTheatre(false); chooseTab('transcript'); setSearchOpen(false); }}><time>{time(row.start)}</time><span>{row.text}</span></button>)}</div></section>}
+    {searchOpen && <section className="iv-search-panel" role="dialog" aria-label="Поиск по интервью"><header><span><Search size={18}/>Поиск по интервью</span><IconButton label="Закрыть поиск" onClick={() => setSearchOpen(false)}><X/></IconButton></header><form onSubmit={event => event.preventDefault()}><Search size={18}/><input autoFocus aria-label="Поисковый запрос" value={query} onChange={event => setQuery(event.target.value)} placeholder="Слово или фраза"/></form><div className="iv-search-results">{query.length > 1 && !matches.length && <p>Совпадений нет</p>}{matches.map((row, index) => <button type="button" key={index} disabled={!transcriptSeekable} onClick={() => { seek(row.start); setTheatre(false); chooseTab('transcript'); setSearchOpen(false); }}><time>{time(row.start)}</time><span>{row.text}</span></button>)}</div></section>}
     {toast && <div className="iv-toast" role="status"><Check size={15}/>{toast}</div>}
   </div>;
 }

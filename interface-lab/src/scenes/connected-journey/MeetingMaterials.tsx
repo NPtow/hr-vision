@@ -11,12 +11,14 @@ type MaterialData = {
   transcription?: { status: 'ready' | 'processing' | 'absent' | 'not_recorded' | 'error' | 'unavailable'; error?: string };
 };
 
-export function Materials({ person, journey }: { person: Person; journey: Journey }) {
+type MaterialsProps = { person: Person; journey: Journey; appearance?: 'panel' | 'candidate' };
+
+export function Materials({ person, journey, appearance }: MaterialsProps) {
   // Keying isolates recordings, failed requests and transcript selection across meetings.
-  return <MeetingMaterials key={`${journey.state!.generation}:${person.meeting?.id}`} person={person} journey={journey}/>;
+  return <MeetingMaterials key={`${journey.state!.generation}:${person.meeting?.id}`} person={person} journey={journey} appearance={appearance}/>;
 }
 
-function MeetingMaterials({ person, journey }: { person: Person; journey: Journey }) {
+function MeetingMaterials({ person, journey, appearance }: MaterialsProps) {
   const [data, setData] = useState<MaterialData | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -59,10 +61,10 @@ function MeetingMaterials({ person, journey }: { person: Person; journey: Journe
     {error && <p className="cj-materials-error" role="alert">{error}</p>}
     {(data?.transcription?.status === 'error' || data?.transcription?.status === 'unavailable') && <p className="cj-info" role="status">Расшифровка сейчас недоступна.{recordings.length > 0 ? ' Готовую запись можно посмотреть.' : ' Попробуйте обновить материалы позже.'}</p>}
     {(recordings.length ? recordings : [null]).map((recording, index) => <MeetingRecordingReview
-      key={recording?.id || 'pending'} sourceId={`${meeting.id}:${recording?.id || 'pending'}`}
+      key={recording?.id || 'pending'} sourceId={`${meeting.id}:${recording?.id || 'pending'}`} appearance={appearance}
       name={person.name} chapters={canSeekTranscript ? chapters : []} emptyMessage={emptyMessage}
       media={recording ? { src: recording.url, label: recordings.length > 1 ? `Запись встречи · часть ${index + 1}` : 'Запись этой встречи' } : undefined}
-      transcriptText={index === 0 ? transcript : undefined}/>) }
+      transcriptText={index === 0 ? transcript : undefined} transcriptSeekable={canSeekTranscript}/>) }
     {!canSeekTranscript && <p className="cj-info">Встреча записана несколькими файлами. Расшифровка доступна целиком; привязка таймкодов к частям ещё не определена.</p>}
   </section>;
 }

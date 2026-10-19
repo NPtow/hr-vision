@@ -44,6 +44,8 @@ export type RecordingReviewProps = {
   summary?: string;
   unknown?: string;
   transcriptText?: string;
+  /** False when transcript timestamps have not been mapped to this recording. */
+  transcriptSeekable?: boolean;
   emptyMessage?: string;
   fullChapters?: RecordingChapter[];
   shortPlaylist?: boolean;
@@ -91,6 +93,7 @@ export function InterviewReview(props: InterviewReviewProps) {
 
 /** Only this meeting's server-supplied materials. It never reads screening fixture media. */
 export function MeetingRecordingReview(props: Omit<RecordingReviewProps, 'kind' | 'summary' | 'unknown'>) {
+  if (props.appearance === 'candidate') return <CandidateInterviewPlayer key={props.sourceId} {...props} kind="meeting"/>;
   return <RecordingReview key={`${props.sourceId}:${props.media?.src || 'missing'}`} {...props} kind="meeting"/>;
 }
 

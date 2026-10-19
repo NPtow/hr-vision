@@ -6,6 +6,7 @@
 .iv-root svg{display:block;flex-shrink:0;stroke-width:1.65}
 .iv-root button:focus-visible,.iv-root input:focus-visible,.iv-root textarea:focus-visible{outline:2px solid #555;outline-offset:4px}
 .iv-root button:disabled{cursor:default;opacity:.3}
+.iv-root .iv-line-content:disabled,.iv-root .iv-search-results button:disabled{opacity:1}
 .iv-root button,.iv-root a{touch-action:manipulation}
 .iv-root [hidden]{display:none!important}
 .iv-root a{color:inherit}

@@ -62,7 +62,7 @@ function Screening({ journey, person, source, appearance = 'panel', enableCommen
     key={recording?.id || 'pending'} appearance={appearance} sourceId={`${source.id}:${recording?.id || 'pending'}`}
     name={person.name} chapters={recordings.length <= 1 ? chapters : []} fullChapters={recordings.length <= 1 ? fullChapters : []}
     shortPlaylist={source.shortChapters.length > 0} media={recording ? { src: recording.url } : undefined}
-    transcriptText={index === 0 ? transcript : undefined} summary={index === 0 ? source.shortSummary : undefined}
+    transcriptText={index === 0 ? transcript : undefined} transcriptSeekable={recordings.length <= 1} summary={index === 0 ? source.shortSummary : undefined}
     renderChapterComment={showComments ? chapter => chapter.seconds === null ? null : comment(chapter.seconds, recording?.id || null, chapter.title) : undefined}
     renderTimeComment={showComments ? (seconds, onClose) => comment(seconds, recording?.id || null, '', onClose) : undefined}
     commentTimestamps={enableComments ? commentTimestamps(recording?.id || null) : undefined}
