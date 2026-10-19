@@ -60,6 +60,7 @@ jobs:
           node --test scripts/candidate-search-model.test.ts
           node --test scripts/candidate-call-connection.test.ts
           node --test scripts/candidate-access.test.ts
+          node --test scripts/candidate-navigation.test.ts
           node --test scripts/pooled-booking.test.ts
           node --test scripts/telegram-employer.test.ts
       - name: Check API against isolated temporary state

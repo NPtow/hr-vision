@@ -80,6 +80,7 @@ EVENTS = {
     'interview.completed': ('После интервью', 'Интервью завершено. Следующий статус и предложения вакансий появятся в кабинете.'),
     'application.proposed': ('Предложение вакансии', 'В кабинете появилось предложение вакансии. Проверьте его и выбранный вами режим согласования. Время встречи подтверждается отдельно.'),
     'meeting.proposed': ('Предложено время встречи', 'Работодатель предложил время встречи. Откройте кабинет: если вы ещё не подтвердили время, встреча ожидает вашего решения.'),
+    'meeting.completed': ('Как прошла встреча?', 'Сообщите, хотите ли вы продолжить.'),
     'meeting.confirmed': ('Встреча подтверждена', 'Вы подтвердили время встречи. Время и вход на встречу — в кабинете.'),
     'meeting.rescheduled': ('Предложено новое время', 'Время встречи изменилось. Проверьте и подтвердите новое время в кабинете.'),
     'meeting.cancelled': ('Встреча отменена', 'Встреча отменена. Актуальные предложения и встречи доступны в кабинете.'),
@@ -332,6 +333,10 @@ def enqueue(db, candidate_id, event_key, event_type, channel='all', settings=Non
     require(isinstance(event_key, str) and 1 <= len(event_key) <= 240, 'Не указан ключ события.', 400)
     require(channel in ('all', 'email', 'telegram'), 'Неизвестный канал.', 400)
     config, timestamp = _config(settings), _now(now)
+    import meeting_notifications
+    if meeting_notifications.supported(db, event_type, event_key):
+        return meeting_notifications.enqueue(db, candidate_id, event_key, event_type,
+            ('email', 'telegram') if channel == 'all' else (channel,), config, timestamp)
     return [_enqueue_one(db, candidate_id, event_key, event_type, item, config, timestamp)
             for item in (('email', 'telegram') if channel == 'all' else (channel,))]
 
@@ -782,7 +787,8 @@ def retry(db, notification_id, settings=None, now=None, candidate_id=None):
     row = _dict(db.execute('SELECT * FROM cn_outbox WHERE id=?', (notification_id,)))
     require(row and (candidate_id is None or row['candidate_id'] == candidate_id), 'Уведомление не найдено.', 404)
     require(row['status'] != 'sending', 'Отправка уже выполняется.', 409)
-    if row['status'] == 'delivered' or row['event_type'] == 'meeting.reminder':
+    import meeting_notifications
+    if row['status'] == 'delivered' or row['event_type'] == 'meeting.reminder' or meeting_notifications.is_lifecycle(row):
         # Reminders never replay on explicit retry after a missing channel or uncertainty.
         return _safe(row)
     if row['status'] == 'error' and row['last_error'] in ('application_archived', 'search_stopped', 'employer_binding_changed', 'employer_shortlist_unavailable'):
@@ -970,6 +976,7 @@ def process_pending(connect, settings=None, limit=10, now=None, transport=None, 
     counts = {'delivered': 0, 'pending': 0, 'error': 0, 'disabled': 0, 'unverified': 0, 'unbound': 0}
     import employer_notifications
     import meeting_reminders
+    import meeting_notifications
     observation_db = connect()
     try:
         with observation_db:
@@ -991,13 +998,16 @@ def process_pending(connect, settings=None, limit=10, now=None, transport=None, 
                 db.commit()
                 break
             reminder = row['event_type'] == meeting_reminders.EVENT
-            reason = None if reminder else employer_notifications.prepare(db, row, config) or _delivery_block_reason(db, row)
+            lifecycle = meeting_notifications.is_lifecycle(row)
+            reason = None if reminder or lifecycle else employer_notifications.prepare(db, row, config) or _delivery_block_reason(db, row)
             if reason:
                 db.execute("UPDATE cn_outbox SET status='error',last_error=? WHERE id=?", (reason, row['id']))
                 db.commit()
                 counts['error'] += 1
                 continue
-            if reminder:
+            if lifecycle:
+                state, reason = meeting_notifications.prepare(db, row, config, timestamp)
+            elif reminder:
                 state, reason = meeting_reminders.prepare(db, row, config, timestamp)
             elif row['event_type'] == 'booking.confirmed':
                 state = _booking_readiness(db, row, config, timestamp)
@@ -1019,7 +1029,9 @@ def process_pending(connect, settings=None, limit=10, now=None, transport=None, 
             db.execute("UPDATE cn_outbox SET status='sending',attempts=attempts+1,lease_id=?,lease_until=? WHERE id=?",
                        (lease, timestamp + LEASE_SECONDS, row['id']))
             reply_markup, bot_payload = None, None
-            if reminder:
+            if lifecycle:
+                subject, content, reply_markup = meeting_notifications.message(db, row, config, timestamp)
+            elif reminder:
                 subject, content, reply_markup = meeting_reminders.message(db, row, config, timestamp)
             elif row['event_type'] == 'booking.confirmed':
                 subject, content, reply_markup = _booking_message(db, row, timestamp)

@@ -1202,8 +1202,8 @@ class CandidatePortal:
             table = 'cp_meetings' if application_id else 'cp_interviews'
             changed = db.execute(f"UPDATE {table} SET status='completed',completed_at=? WHERE id=? AND status='live'",
                                  (iso(now()), mid)).rowcount
-            if changed and not application_id:
-                self.event(db, cid, 'interview.completed', mid)
+            if changed:
+                self.event(db, cid, 'meeting.completed' if application_id else 'interview.completed', mid)
 
     def materials(self, cid, application_id=None, meeting_id=None, *, access_check=None):
         kind = 'meeting' if application_id else 'interview'
