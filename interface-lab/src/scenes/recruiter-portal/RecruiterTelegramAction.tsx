@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '../../components/ui/button';
 import { recruiterRequest } from './api';
 
@@ -8,23 +8,31 @@ export function RecruiterTelegramAction({ token, disabled, onError }: { token: s
   const [status, setStatus] = useState<Status | null>(null);
   const [busy, setBusy] = useState(false);
   const [link, setLink] = useState('');
+  const [loadError, setLoadError] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const active = useRef(true);
   const changing = useRef(false);
   const sequence = useRef(0);
+  const refresh = useCallback(() => {
+    if (changing.current) return;
+    const request = ++sequence.current;
+    const current = () => active.current && request === sequence.current && !changing.current;
+    setRefreshing(true); setLoadError(false);
+    void recruiterRequest<{ telegram: Status }>('notifications', token).then(value => {
+      if (current()) { setStatus(value.telegram); if (value.telegram.linked) setLink(''); }
+    }).catch(() => {
+      if (current()) setLoadError(true);
+    }).finally(() => {
+      if (current()) setRefreshing(false);
+    });
+  }, [token]);
   useEffect(() => {
     active.current = true;
-    const refresh = () => {
-      if (changing.current) return;
-      const request = ++sequence.current;
-      void recruiterRequest<{ telegram: Status }>('notifications', token).then(value => {
-        if (active.current && request === sequence.current && !changing.current) { setStatus(value.telegram); if (value.telegram.linked) setLink(''); }
-      }).catch(() => {});
-    };
     refresh(); window.addEventListener('focus', refresh);
     const visible = () => { if (!document.hidden) refresh(); };
     document.addEventListener('visibilitychange', visible);
     return () => { active.current = false; sequence.current++; window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', visible); };
-  }, [token]);
+  }, [refresh]);
   async function act() {
     if (changing.current) return;
     changing.current = true; sequence.current++; setBusy(true);
@@ -39,9 +47,13 @@ export function RecruiterTelegramAction({ token, disabled, onError }: { token: s
     } catch (error) { if (active.current) onError((error as Error).message); }
     finally { if (active.current) { changing.current = false; setBusy(false); } }
   }
-  if (!status) return null;
+  if (loadError) return <>
+    <span role="status">Не удалось проверить Telegram.</span>
+    <Button type="button" variant="ghost" disabled={disabled || refreshing} onClick={refresh}>Повторить</Button>
+  </>;
+  if (!status) return <Button type="button" variant="ghost" disabled>Проверяем Telegram…</Button>;
   return <>
-    <Button type="button" variant="ghost" disabled={disabled || busy || (!status.linked && !status.canLink)} onClick={() => void act()}>
+    <Button type="button" variant="ghost" disabled={disabled || busy || refreshing || (!status.linked && !status.canLink)} onClick={() => void act()}>
       {busy ? 'Подождите…' : status.linked ? 'Telegram подключён · отключить' : status.canLink ? 'Подключить Telegram' : 'Telegram временно недоступен'}
     </Button>
     {link && <a href={link} target="_blank" rel="noopener noreferrer">Открыть бота и подключить</a>}
