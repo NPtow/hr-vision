@@ -1,4 +1,5 @@
 import ast
+from contextlib import ExitStack, contextmanager
 import importlib.util
 import io
 import json
@@ -220,7 +221,10 @@ class ReceiverTest(unittest.TestCase):
         base, api = self.root / 'site', self.root / 'api'
         base.mkdir(); (base / 'current').symlink_to('releases/old-ui')
         api.mkdir(); (api / 'current').symlink_to('releases/old-api')
+        self.runtime(api / 'releases' / 'old-api', r.LEGACY_RUNTIME)
+        database = self.outbox()
         with patch.dict(r.BASES, service=base), patch.object(r, 'API', api), \
+                patch.object(r, 'DATABASE', database), patch.object(r, 'stop_api'), \
                 patch.object(r, 'current_branch_sha', return_value=m['sha']), \
                 patch.object(r, 'guard_and_backup') as backup, \
                 patch.object(r, 'restart_api') as restart, \
@@ -373,12 +377,248 @@ class ReceiverTest(unittest.TestCase):
         a, s, m = self.bundle('service'); r.unpack(a, s, 'service')
         base = self.root / 'site'; base.mkdir(); (base / 'current').symlink_to('releases/old-ui')
         api = self.root / 'api'; api.mkdir(); (api / 'current').symlink_to('releases/old-api')
-        with patch.dict(r.BASES, service=base), patch.object(r, 'API', api), patch.object(r, 'current_branch_sha', return_value=m['sha']), patch.object(r, 'guard_and_backup') as backup, patch.object(r, 'restart_api') as restart, patch.object(r, 'check_origin', side_effect=RuntimeError('unhealthy')):
+        self.runtime(api / 'releases' / 'old-api', r.PRE_MEETING_NOTICES_RUNTIME)
+        database = self.outbox()
+        with patch.dict(r.BASES, service=base), patch.object(r, 'API', api), patch.object(r, 'DATABASE', database), patch.object(r, 'stop_api'), patch.object(r, 'current_branch_sha', return_value=m['sha']), patch.object(r, 'guard_and_backup') as backup, patch.object(r, 'restart_api') as restart, patch.object(r, 'check_origin', side_effect=RuntimeError('unhealthy')):
             with self.assertRaisesRegex(RuntimeError, 'unhealthy'): r.activate(s, m)
             backup.assert_called_once_with(m['release'])
             self.assertEqual(restart.call_count, 2)
         self.assertEqual(r.pointer(base), 'releases/old-ui')
         self.assertEqual(r.pointer(api), 'releases/old-api')
+
+    def runtime(self, folder, names):
+        for name in names:
+            path = folder / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text('# installed runtime')
+        return folder
+
+    def outbox(self):
+        database = self.root / 'journey.sqlite3'
+        with sqlite3.connect(database) as db:
+            db.execute('CREATE TABLE cn_outbox (event_type TEXT, payload_json TEXT, status TEXT, candidate_id TEXT)')
+        return database
+
+    def insert_notice(self, database, event='meeting.completed', payload=None, status='pending', owner='candidate'):
+        with sqlite3.connect(database) as db:
+            db.execute('INSERT INTO cn_outbox VALUES (?,?,?,?)',
+                       (event, json.dumps({'lifecycle': True}) if payload is None else payload, status, owner))
+
+    @contextmanager
+    def service_activation(self, incoming=None, installed=None):
+        a, stage, manifest = self.bundle('service', runtime=r.RUNTIME if incoming is None else incoming)
+        r.unpack(a, stage, 'service')
+        base, api = self.root / 'site', self.root / 'api'
+        base.mkdir(); (base / 'current').symlink_to('releases/old-ui')
+        api.mkdir(); (api / 'current').symlink_to('releases/old-api')
+        self.runtime(api / 'releases' / 'old-api', r.PRE_MEETING_NOTICES_RUNTIME if installed is None else installed)
+        database = self.outbox()
+        with ExitStack() as stack:
+            stack.enter_context(patch.dict(r.BASES, service=base))
+            for key, value in [('API', api), ('DATABASE', database)]:
+                stack.enter_context(patch.object(r, key, value))
+            stack.enter_context(patch.object(r, 'current_branch_sha', return_value=manifest['sha']))
+            stack.enter_context(patch.object(r, 'guard_and_backup'))
+            stop = stack.enter_context(patch.object(r, 'stop_api'))
+            restart = stack.enter_context(patch.object(r, 'restart_api'))
+            health = stack.enter_context(patch.object(r, 'check_origin'))
+            yield stage, manifest, base, api, database, stop, restart, health
+
+    def test_legacy_target_refuses_lifecycle_for_both_roles_and_all_states(self):
+        old = self.runtime(self.root / 'old', r.PRE_MEETING_NOTICES_RUNTIME)
+        with sqlite3.connect(self.outbox()) as db:
+            for event in ('interview.booked', 'meeting.proposed', 'meeting.confirmed', 'meeting.completed'):
+                for owner in ('candidate', 'employer:account'):
+                    for status in ('pending', 'sending', 'error', 'delivered', 'disabled', 'unbound', 'unverified'):
+                        with self.subTest(event=event, owner=owner, status=status):
+                            db.execute('DELETE FROM cn_outbox')
+                            db.execute('INSERT INTO cn_outbox VALUES (?,?,?,?)',
+                                       (event, '{"lifecycle":true}', status, owner))
+                            before = db.execute('SELECT * FROM cn_outbox').fetchall()
+                            with self.assertRaisesRegex(ValueError, 'compatible forward recovery'):
+                                r.guard_outbox_runtime(db, old)
+                            self.assertEqual(db.execute('SELECT * FROM cn_outbox').fetchall(), before)
+
+    def test_ordinary_rows_and_historical_schemas_allow_old_runtime(self):
+        old = self.runtime(self.root / 'old', r.LEGACY_RUNTIME)
+        with sqlite3.connect(':memory:') as db:
+            r.guard_outbox_runtime(db, old)
+            db.execute('CREATE TABLE cn_outbox (event_type TEXT)')
+            db.execute("INSERT INTO cn_outbox VALUES ('meeting.confirmed')")
+            r.guard_outbox_runtime(db, old)
+            db.execute('ALTER TABLE cn_outbox ADD COLUMN payload_json TEXT')
+            for payload in (None, '{}', '{"application_id":"application"}'):
+                db.execute('UPDATE cn_outbox SET payload_json=?', (payload,))
+                r.guard_outbox_runtime(db, old)
+            db.execute("UPDATE cn_outbox SET event_type='meeting.completed'")
+            with self.assertRaisesRegex(ValueError, 'Lifecycle outbox'):
+                r.guard_outbox_runtime(db, old)
+
+    def test_malformed_outbox_fails_closed_for_old_runtime(self):
+        old = self.runtime(self.root / 'old', r.PRE_MEETING_NOTICES_RUNTIME)
+        with sqlite3.connect(self.outbox()) as db:
+            for payload in ('{', '', 'null', '[]', 'true', '42'):
+                with self.subTest(payload=payload):
+                    db.execute('DELETE FROM cn_outbox')
+                    db.execute('INSERT INTO cn_outbox VALUES (?,?,?,?)', ('meeting.confirmed', payload, 'pending', 'candidate'))
+                    with self.assertRaises(ValueError):
+                        r.guard_outbox_runtime(db, old)
+            db.execute('DROP TABLE cn_outbox')
+            db.execute('CREATE VIEW cn_outbox AS SELECT 1')
+            with self.assertRaisesRegex(ValueError, 'schema'):
+                r.guard_outbox_runtime(db, old)
+            db.execute('DROP VIEW cn_outbox')
+            db.execute('CREATE TABLE cn_outbox (wrong TEXT)')
+            with self.assertRaisesRegex(ValueError, 'event types'):
+                r.guard_outbox_runtime(db, old)
+
+    def test_explicit_legacy_activation_is_blocked_and_current_compatible_api_restored(self):
+        with self.service_activation(incoming=r.PRE_MEETING_NOTICES_RUNTIME, installed=r.RUNTIME) as (stage, m, base, api, db, stop, restart, health):
+            def stopped():
+                if stop.call_count == 1:
+                    self.insert_notice(db)
+            stop.side_effect = stopped
+            started = []
+            restart.side_effect = lambda: started.append(r.pointer(api))
+            with self.assertRaisesRegex(ValueError, 'Lifecycle outbox'):
+                r.activate(stage, m)
+            self.assertEqual(started, ['releases/old-api'])
+            self.assertEqual(stop.call_count, 2)
+            health.assert_not_called()
+            self.assertEqual(r.pointer(base), 'releases/old-ui')
+            self.assertEqual(r.pointer(api), 'releases/old-api')
+
+    def test_explicit_legacy_activation_with_ordinary_rows_still_works(self):
+        with self.service_activation(incoming=r.PRE_MEETING_NOTICES_RUNTIME, installed=r.RUNTIME) as (stage, m, base, api, db, stop, restart, health):
+            self.insert_notice(db, event='meeting.confirmed', payload='{}')
+            r.activate(stage, m)
+            self.assertEqual(r.pointer(api), 'releases/' + m['release'])
+            stop.assert_called_once(); restart.assert_called_once()
+
+    def test_failed_health_refuses_old_fallback_after_last_new_writer_commit(self):
+        with self.service_activation() as (stage, m, base, api, db, stop, restart, health):
+            started = []
+            restart.side_effect = lambda: started.append(r.pointer(api))
+            health.side_effect = RuntimeError('unhealthy')
+            # Simulate the last lifecycle transaction committing while stop waits
+            # for the new unit to exit, after the health check already failed.
+            def stopped():
+                if stop.call_count == 2:
+                    self.insert_notice(db)
+            stop.side_effect = stopped
+            with self.assertRaisesRegex(RuntimeError, 'rollback refused.*Lifecycle outbox'):
+                r.activate(stage, m)
+            self.assertEqual(started, ['releases/' + m['release']])
+            self.assertEqual(r.pointer(api), 'releases/' + m['release'])
+            self.assertEqual(r.pointer(base), 'releases/' + m['release'])
+            with sqlite3.connect(db) as connection:
+                self.assertEqual(connection.execute('SELECT * FROM cn_outbox').fetchall(),
+                                 [('meeting.completed', '{"lifecycle": true}', 'pending', 'candidate')])
+
+    def test_failed_health_can_restore_compatible_target_with_lifecycle_rows(self):
+        with self.service_activation(installed=r.RUNTIME) as (stage, m, base, api, db, stop, restart, health):
+            self.insert_notice(db, owner='employer:account')
+            health.side_effect = RuntimeError('unhealthy')
+            with self.assertRaisesRegex(RuntimeError, 'unhealthy'):
+                r.activate(stage, m)
+            self.assertEqual(stop.call_count, 2); self.assertEqual(restart.call_count, 2)
+            self.assertEqual(r.pointer(api), 'releases/old-api')
+            self.assertEqual(r.pointer(base), 'releases/old-ui')
+
+    def test_failed_health_refuses_old_fallback_for_reused_employer_event(self):
+        with self.service_activation() as (stage, m, base, api, db, stop, restart, health):
+            def failed_health(*args):
+                self.insert_notice(db, event='meeting.confirmed', owner='employer:account')
+                raise RuntimeError('unhealthy')
+            health.side_effect = failed_health
+            with self.assertRaisesRegex(RuntimeError, 'rollback refused.*Lifecycle outbox'):
+                r.activate(stage, m)
+            restart.assert_called_once()
+            self.assertEqual(r.pointer(api), 'releases/' + m['release'])
+
+    def test_restart_failure_also_rechecks_fallback_data(self):
+        with self.service_activation() as (stage, m, base, api, db, stop, restart, health):
+            def failed_start():
+                self.insert_notice(db)
+                raise subprocess.CalledProcessError(1, 'systemctl restart')
+            restart.side_effect = failed_start
+            with self.assertRaisesRegex(RuntimeError, 'rollback refused.*Lifecycle outbox'):
+                r.activate(stage, m)
+            restart.assert_called_once(); health.assert_not_called()
+            self.assertEqual(r.pointer(api), 'releases/' + m['release'])
+            self.assertEqual(r.pointer(base), 'releases/old-ui')
+
+    def test_absent_or_incomplete_recovery_target_never_starts(self):
+        with self.service_activation() as (stage, m, base, api, db, stop, restart, health):
+            with self.assertRaisesRegex(ValueError, 'No previous API'):
+                r.activate_api(None)
+            with self.assertRaisesRegex(ValueError, 'Incomplete recovery API'):
+                r.activate_api('releases/missing')
+            (api / 'releases/old-api/app.py').unlink()
+            with self.assertRaisesRegex(ValueError, 'Incomplete recovery API'):
+                r.activate_api('releases/old-api')
+            restart.assert_not_called()
+            self.assertEqual(r.pointer(api), 'releases/old-api')
+
+    def test_database_failure_during_fallback_never_starts_old_code(self):
+        with self.service_activation() as (stage, m, base, api, db, stop, restart, health):
+            def failed_health(*args):
+                db.unlink()
+                raise RuntimeError('unhealthy')
+            health.side_effect = failed_health
+            with self.assertRaisesRegex(RuntimeError, 'rollback refused.*unable to open database'):
+                r.activate(stage, m)
+            restart.assert_called_once()
+            self.assertEqual(r.pointer(api), 'releases/' + m['release'])
+            self.assertFalse(db.exists())
+
+    def test_stop_and_database_failures_never_switch_or_start(self):
+        with self.service_activation() as (stage, m, base, api, database, stop, restart, health):
+            stop.side_effect = subprocess.TimeoutExpired('systemctl stop', 45)
+            with self.assertRaises(subprocess.TimeoutExpired):
+                r.activate_api('releases/old-api')
+            stop.side_effect = None
+            database.unlink()
+            with self.assertRaises(sqlite3.OperationalError):
+                r.activate_api('releases/old-api')
+            self.assertFalse(database.exists())
+            database.write_bytes(b'corrupt database')
+            with self.assertRaises(sqlite3.DatabaseError):
+                r.activate_api('releases/old-api')
+            restart.assert_not_called()
+            self.assertEqual(r.pointer(api), 'releases/old-api')
+
+    def test_write_reservation_spans_guard_and_switch_and_releases_before_start(self):
+        with self.service_activation() as (stage, m, base, api, database, stop, restart, health):
+            actual_switch = r.switch
+            def reserved_switch(*args):
+                with sqlite3.connect(database, timeout=0) as writer:
+                    with self.assertRaisesRegex(sqlite3.OperationalError, 'locked'):
+                        writer.execute('BEGIN IMMEDIATE')
+                actual_switch(*args)
+            def can_start():
+                with sqlite3.connect(database, timeout=0) as writer:
+                    writer.execute('BEGIN IMMEDIATE')
+            restart.side_effect = can_start
+            with patch.object(r, 'switch', side_effect=reserved_switch):
+                r.activate_api('releases/old-api')
+            restart.assert_called_once()
+
+    def test_busy_database_fails_closed(self):
+        with self.service_activation() as (stage, m, base, api, database, stop, restart, health):
+            connect = sqlite3.connect
+            with connect(database) as writer:
+                writer.execute('BEGIN IMMEDIATE')
+                with patch.object(r.sqlite3, 'connect', side_effect=lambda *a, **kw: connect(*a, timeout=0, **kw)):
+                    with self.assertRaisesRegex(sqlite3.OperationalError, 'locked'):
+                        r.activate_api('releases/old-api')
+            restart.assert_not_called()
+            self.assertEqual(r.pointer(api), 'releases/old-api')
+
+    def test_stop_uses_checked_synchronous_unit_stop(self):
+        with patch.object(r.subprocess, 'run') as run:
+            r.stop_api()
+            run.assert_called_once_with(['systemctl', 'stop', 'hr-vision-api'], check=True, timeout=45)
 
     def test_live_call_guard_checks_candidate_portal_interviews_and_meetings(self):
         with sqlite3.connect(':memory:') as db:

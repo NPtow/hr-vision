@@ -1,6 +1,9 @@
 """Prospective lifecycle hooks + shared dispatcher with controlled providers."""
 import json
+import importlib.util
+from pathlib import Path
 import sqlite3
+import tempfile
 import unittest
 from dataclasses import replace
 from unittest.mock import patch
@@ -61,6 +64,34 @@ class LifecycleTest(unittest.TestCase):
         self.assertEqual(len(self.transport.sent),4)
         self.assertTrue(any('хотите ли вы продолжить' in m[2] for m in self.transport.sent))
         self.assertTrue(any('связь по встрече' in m[2] for m in self.transport.sent))
+
+    def test_receiver_blocks_old_dispatcher_for_real_completion_retry_rows(self):
+        spec = importlib.util.spec_from_file_location('lifecycle_receiver', Path(__file__).resolve().parents[1] / 'deploy/ci/receiver.py')
+        receiver = importlib.util.module_from_spec(spec); spec.loader.exec_module(receiver)
+        self.change("UPDATE cp_meetings SET status='completed'")
+        self.queue('meeting.completed')
+        self.transport.fail_email = delivery.DeliveryFailure('temporary', retryable=True)
+        self.process(self.start + 1900)
+        before = self.rows()
+        retries = [row for row in before if row['status'] == 'pending']
+        self.assertEqual({row['candidate_id'] for row in retries}, {'candidate', 'employer:employer'})
+        self.assertTrue(all(row['event_type'] == 'meeting.completed' and row['attempts'] == 1 for row in retries))
+        with tempfile.TemporaryDirectory() as folder:
+            runtime = Path(folder)
+            for name in receiver.PRE_MEETING_NOTICES_RUNTIME:
+                path = runtime / name; path.parent.mkdir(parents=True, exist_ok=True); path.touch()
+            # Each actual pending retry independently blocks legacy activation;
+            # neither recipient namespace nor provider backoff bypasses the gate.
+            with self.connect() as db:
+                for row in retries:
+                    db.execute('SAVEPOINT isolate_notice')
+                    db.execute('DELETE FROM cn_outbox WHERE id!=?', (row['id'],))
+                    with self.assertRaisesRegex(ValueError, 'Lifecycle outbox'):
+                        receiver.guard_outbox_runtime(db, runtime)
+                    db.execute('ROLLBACK TO isolate_notice'); db.execute('RELEASE isolate_notice')
+                (runtime / 'meeting_notifications.py').touch()
+                receiver.guard_outbox_runtime(db, runtime)
+        self.assertEqual(self.rows(), before)
     def test_wrong_candidate_and_namespace(self):
         self.assertEqual(self.queue(cid='other'),[]); self.queue(); self.change("UPDATE cn_outbox SET candidate_id='other:' || candidate_id"); self.process()
         self.assertEqual(self.transport.sent,[])

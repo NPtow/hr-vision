@@ -58,6 +58,19 @@ retry; неопределённый исход — quarantine. Ручной retr
 полный layout с `meeting_reminders.py`; все более старые layouts также сохранены.
 Новых таблиц, env, worker, cron, provider-клиентов или миграции данных не требуется.
 
+Принятый архив не означает безопасный откат данных. Перед каждым переключением
+API receiver останавливает unit с HTTP и worker, затем под SQLite write lock
+проверяет совместимость outbox и меняет указатель. Любая lifecycle-строка
+(включая terminal) или `meeting.completed` запрещает запуск прежнего runtime
+без `meeting_notifications.py`. Это защищает и повторно используемые события
+от потери snapshot-проверок, и completion retry от `KeyError` старого dispatcher.
+Проверка повторяется при автоматическом fallback после неуспешного health check.
+При отказе fallback API остаётся остановленным после успешного stop; данные
+сохраняются без удаления, replay или изменения получателя. Требуется совместимое
+forward recovery. Обычные прежние строки допускают прежний layout; совместимый
+runtime допускает lifecycle-строки. Недоступная/занятая база или некорректные
+данные не разрешают старый runtime. [Подробный порядок восстановления](../interface-lab/deploy/ci/README.md#откат-после-выпуска-lifecycle-уведомлений).
+
 Изолированные проверки: `test_meeting_notifications`, прежние candidate/recruiter/
 employer notification и reminder suites, canonical portal/employer HTTP suites,
 booking-only/bot suites; `scripts/candidate-navigation.test.ts`; receiver tests.

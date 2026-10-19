@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Root-owned, fixed-purpose SSH receiver. Never executes uploaded build scripts."""
 import fcntl
+from contextlib import closing
 import hashlib
 import json
 import os
@@ -28,8 +29,8 @@ PRE_IMPORT_RUNTIME = {
     'employer_access.py', 'employer_store.py', 'employer_workflow.py', 'employer_routes.py',
     'employer_projection.py', 'employer_intake.py', 'daily_media.py', 'domain.py', 'dsa_panel.py', 'feedback.py',
 }
-# Keep complete previous releases available for deployment and rollback. Each
-# feature's modules form one indivisible set; partial layouts are forbidden.
+# Keep complete previous archives accepted. Activation also checks durable data
+# compatibility; an accepted layout is not by itself a safe rollback target.
 PRE_OUTREACH_RUNTIME = PRE_IMPORT_RUNTIME | {'vacancy_import.py', 'vacancy_sources.py'}
 OUTREACH_RUNTIME = {
     'candidate_booking.py', 'hh_outreach.py', 'hh_outreach_routes.py', 'hh_outreach_worker.py',
@@ -192,6 +193,49 @@ def restart_api():
     subprocess.run(['systemctl', 'restart', 'hr-vision-api'], check=True, timeout=45)
 
 
+def stop_api():
+    # The HTTP producers and shared dispatcher run in this unit's control group.
+    # Wait for them to exit before inspecting data; the deploy flock alone does
+    # not exclude a meeting transition or a worker commit.
+    subprocess.run(['systemctl', 'stop', 'hr-vision-api'], check=True, timeout=45)
+
+
+def guard_outbox_runtime(db, source):
+    runtime = frozenset(path.relative_to(source).as_posix() for path in source.rglob('*') if path.is_file())
+    require(runtime in RUNTIME_LAYOUTS, 'Incomplete recovery API')
+    if runtime == frozenset(RUNTIME):
+        return
+    schema = db.execute("SELECT type FROM sqlite_master WHERE name='cn_outbox'").fetchall()
+    if not schema:
+        return  # A historical database before the shared outbox existed.
+    require(schema == [('table',)], 'Cannot verify shared outbox schema')
+    columns = {row[1] for row in db.execute('PRAGMA table_info(cn_outbox)')}
+    require('event_type' in columns, 'Cannot verify shared outbox event types')
+    payload = 'payload_json' if 'payload_json' in columns else 'NULL'
+    for event, raw in db.execute(f'SELECT event_type,{payload} FROM cn_outbox'):
+        require(event != 'meeting.completed', 'Lifecycle outbox requires meeting_notifications.py; use a compatible forward recovery')
+        saved = json.loads(raw) if raw is not None else {}
+        require(isinstance(saved, dict), 'Cannot verify shared outbox payload')
+        # Include terminal rows: older retry routes may revive them. Never
+        # delete, quarantine or rewrite recipient snapshots to permit rollback.
+        require(not saved.get('lifecycle'), 'Lifecycle outbox requires meeting_notifications.py; use a compatible forward recovery')
+
+
+def activate_api(value):
+    """Only start code after checking the stopped writer's durable state."""
+    stop_api()
+    require(value is not None, 'No previous API; use a compatible forward recovery')
+    # mode=rw must not silently create an empty DB on a bad/missing path. The
+    # write reservation waits for an in-flight commit and spans check + switch.
+    # Release it before starting the unit so initialization can write normally.
+    with closing(sqlite3.connect(f'file:{DATABASE}?mode=rw', uri=True)) as db:
+        with db:
+            db.execute('BEGIN IMMEDIATE')
+            guard_outbox_runtime(db, API / value)
+            switch(API, 'current', value)
+    restart_api()
+
+
 def check_origin(target, sha):
     host = 'hr-vision.158-160-179-53.sslip.io' if target == 'service' else 'hr-vision-lab.158-160-179-53.sslip.io'
     last = None
@@ -235,23 +279,27 @@ def activate(stage, manifest):
         api_release = API / 'releases' / release
         require(not api_release.exists(), 'API release already exists')
         shutil.copytree(stage / 'api', api_release)
-    switched_api = False
+    attempted_api = False
     try:
         if change_api:
-            switch(API, 'current', 'releases/' + release)
-            switched_api = True
-            restart_api()
+            attempted_api = True
+            activate_api('releases/' + release)
         switch(base, 'current', 'releases/' + release)
         check_origin(target, manifest['sha'])
     except Exception:
+        if attempted_api:
+            try:
+                # The new runtime may have committed lifecycle rows during its
+                # health check. Recheck after stopping it, never reuse preflight.
+                activate_api(previous_api)
+            except Exception as recovery:
+                raise RuntimeError('API rollback refused or failed; receiver will not restart an unsafe runtime. '
+                                   'Verify unit state and deploy a compatible forward recovery. ' + str(recovery)) from recovery
         switch(base, 'current', previous_ui)
-        if switched_api:
-            switch(API, 'current', previous_api)
-            restart_api()
         raise
     if previous_ui:
         switch(base, 'previous', previous_ui)
-    if switched_api and previous_api:
+    if attempted_api and previous_api:
         switch(API, 'previous', previous_api)
     print(json.dumps({'published': target, 'sha': manifest['sha'], 'release': release, 'apiRestarted': change_api}), flush=True)
 
