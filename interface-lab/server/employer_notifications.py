@@ -57,7 +57,7 @@ def status(db, principal, config=None):
     linked = db.execute('SELECT 1 FROM en_bindings WHERE account_id=?', (principal['accountId'],)).fetchone()
     return {'linked': bool(linked), 'available': config.telegram_binding_available,
             'status': 'connected' if linked else 'not_connected',
-            'reminderChannels': {'email': 'ready' if config.email_configured else 'disabled',
+            'reminderChannels': {'email': 'ready' if config.email_configured_for('employer') else 'disabled',
                                  'telegram': 'ready' if linked and config.telegram_configured else
                                      'unbound' if config.telegram_configured else 'disabled'}}
 

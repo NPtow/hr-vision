@@ -92,7 +92,7 @@ def _readiness(recipient, channel, config):
     # operational mail to that assigned account, not an opt-in candidate channel.
     # Keep actual email_verified evidence unchanged; never auto-replay old rows.
     if channel == 'email':
-        return 'pending' if config.email_configured else 'disabled'
+        return 'pending' if config.email_configured_for('recruiter') else 'disabled'
     return delivery._readiness(recipient, channel, config)
 
 
@@ -100,7 +100,7 @@ def public_status(db, recruiter_id, settings=None):
     recipient, config = _recipient(db, recruiter_id), _config(settings)
     address = recipient['email'].split('@')
     result = {
-        'email': {'configured': config.email_configured, 'verified': bool(recipient['email_verified']),
+        'email': {'configured': config.email_configured_for('recruiter'), 'verified': bool(recipient['email_verified']),
                   'address': address[0][:1] + '***@' + address[1], 'lastDelivery': None},
         'telegram': {'configured': config.telegram_configured, 'linked': bool(recipient['telegram_chat_id']),
                      'canLink': bool(config.telegram_binding_available), 'lastDelivery': None},
@@ -305,7 +305,7 @@ def retry(db, recruiter_id, notification_id, settings=None, now=None):
 def process_pending(connect, settings=None, limit=10, now=None, transport=None):
     import meeting_reminders
     config, tick = _config(settings), delivery._now(now)
-    sender = transport if transport is not None else delivery.Transport(config)
+    sender = transport if transport is not None else delivery.Transport(config, email_role='recruiter')
     counts = {key: 0 for key in ('delivered', 'pending', 'error', 'disabled', 'unverified', 'unbound', 'cancelled')}
     for _ in range(delivery._number(limit, 10, 0, 100)):
         tick = delivery._now(now)

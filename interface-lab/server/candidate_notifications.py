@@ -11,6 +11,9 @@ Environment (all off until HR_NOTIFICATIONS_ENABLED=1):
   HR_CANDIDATE_PUBLIC_URL: candidate portal URL, otherwise HR_ORIGIN + candidate story.
   HR_SMTP_HOST, HR_SMTP_PORT (587), HR_SMTP_FROM, HR_SMTP_USER, HR_SMTP_PASSWORD,
   HR_SMTP_SECURITY=starttls|ssl. TLS and certificate validation cannot be disabled.
+  HR_SMTP_ROLE_ROUTING=1: require distinct CANDIDATE/RECRUITER/HIRINGMANAGER
+  identities: HR_SMTP_<ROLE>_FROM, _USER, _PASSWORD and optional _NAME.
+  In this mode the legacy credentials are never used as a fallback.
   HR_TELEGRAM_BOT_TOKEN, HR_TELEGRAM_BOT_USERNAME.
   HR_TELEGRAM_PROXY_URL: optional loopback socks5h URL, for example
   socks5h://127.0.0.1:10808. Uses /usr/bin/curl only for Telegram requests.
@@ -50,7 +53,8 @@ with no person/profile/vacancy data. Tokens are generated at dispatch, SHA256-on
 at rest, single-use, and redeemable only by the same authenticated candidate.
 """
 import argparse
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from email.utils import formataddr
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from email.message import EmailMessage
@@ -127,6 +131,14 @@ def _url(value, *, allow_fragment=False):
 
 
 @dataclass(frozen=True)
+class SMTPIdentity:
+    address: str = ''
+    name: str = ''
+    user: str = field(default='', repr=False)
+    password: str = field(default='', repr=False)
+
+
+@dataclass(frozen=True)
 class Settings:
     enabled: bool = False
     product_origin: str = 'https://hr-vision.158-160-179-53.sslip.io'
@@ -137,6 +149,8 @@ class Settings:
     smtp_user: str = field(default='', repr=False)
     smtp_password: str = field(default='', repr=False)
     smtp_security: str = 'starttls'
+    smtp_name: str = ''
+    smtp_identities: tuple = field(default=(), repr=False)
     telegram_token: str = field(default='', repr=False)
     telegram_proxy_url: str = field(default='', repr=False)
     telegram_username: str = ''
@@ -146,6 +160,8 @@ class Settings:
 
     @property
     def email_configured(self):
+        if self.smtp_identities:
+            return self.for_email_role('candidate').email_configured
         try:
             _email(self.smtp_from)
         except Problem:
@@ -153,6 +169,25 @@ class Settings:
         return bool(self.enabled and _url(self.public_url) and self.smtp_host
                     and self.smtp_security in ('starttls', 'ssl')
                     and (not self.smtp_user or self.smtp_password))
+
+    def for_email_role(self, role):
+        role = {'booking': 'candidate', 'hiringmanager': 'employer'}.get(role, role)
+        if role not in ('candidate', 'recruiter', 'employer'):
+            raise ValueError('Unknown email recipient role')
+        if not self.smtp_identities:
+            return self  # Existing installations until the explicit SMTP migration.
+        identities = dict(self.smtp_identities)
+        identity = identities.get(role, SMTPIdentity())
+        # A missing or duplicated account must never fall back to another role.
+        address = identity.address.strip().lower()
+        unique = address and sum(value.address.strip().lower() == address for value in identities.values()) == 1
+        usable = unique and identity.user.strip().lower() == address and bool(identity.password)
+        return replace(self, smtp_identities=(), smtp_from=identity.address if usable else '',
+                       smtp_name=identity.name, smtp_user=identity.user if usable else '',
+                       smtp_password=identity.password if usable else '')
+
+    def email_configured_for(self, role):
+        return self.for_email_role(role).email_configured
 
     @property
     def telegram_configured(self):
@@ -170,7 +205,7 @@ def settings(env=None):
     default_url = env.get('HR_ORIGIN', 'https://hr-vision.158-160-179-53.sslip.io').rstrip('/') + \
         '/iframe.html?id=hr-vision-product--candidate&viewMode=story'
     security = env.get('HR_SMTP_SECURITY', 'starttls')
-    return Settings(
+    config = Settings(
         enabled=env.get('HR_NOTIFICATIONS_ENABLED') == '1',
         product_origin=env.get('HR_ORIGIN', 'https://hr-vision.158-160-179-53.sslip.io').rstrip('/'),
         product_aliases=tuple(value.strip() for value in env.get('HR_ADDITIONAL_ORIGINS', '').split(',') if value.strip()),
@@ -179,12 +214,23 @@ def settings(env=None):
         smtp_port=_number(env.get('HR_SMTP_PORT'), 465 if security == 'ssl' else 587, 1, 65535),
         smtp_from=env.get('HR_SMTP_FROM', ''), smtp_user=env.get('HR_SMTP_USER', ''),
         smtp_password=env.get('HR_SMTP_PASSWORD', ''), smtp_security=security,
+        smtp_name=env.get('HR_SMTP_NAME', ''),
         telegram_token=env.get('HR_TELEGRAM_BOT_TOKEN', ''),
         telegram_proxy_url=env.get('HR_TELEGRAM_PROXY_URL', ''),
         telegram_username=env.get('HR_TELEGRAM_BOT_USERNAME', '').lstrip('@'),
         telegram_webhook_secret=env.get('HR_TELEGRAM_WEBHOOK_SECRET', ''),
         telegram_polling=env.get('HR_TELEGRAM_POLLING') == '1',
     )
+    if env.get('HR_SMTP_ROLE_ROUTING') == '1':
+        names = {'candidate': 'Маша · МашаДаша', 'recruiter': 'Rec · МашаДаша', 'employer': 'Даша · МашаДаша'}
+        identities = []
+        for role in names:
+            prefix = 'HR_SMTP_' + ('HIRINGMANAGER' if role == 'employer' else role.upper()) + '_'
+            identities.append((role, SMTPIdentity(
+                address=env.get(prefix + 'FROM', ''), name=env.get(prefix + 'NAME', names[role]),
+                user=env.get(prefix + 'USER', ''), password=env.get(prefix + 'PASSWORD', ''))))
+        config = replace(config, smtp_identities=tuple(identities))
+    return config
 
 
 def _config(value):
@@ -825,13 +871,17 @@ class DeliveryFailure(Exception):
 
 
 class Transport:
-    def __init__(self, config):
-        self.config = config
+    def __init__(self, config, email_role='candidate'):
+        self.config = config.for_email_role(email_role)
 
     def send_email(self, recipient, subject, content, message_id):
         config = self.config
+        if not config.email_configured:
+            raise DeliveryFailure('smtp_not_configured')
         message = EmailMessage()
-        message['From'], message['To'], message['Subject'] = config.smtp_from, recipient, subject
+        message['From'] = formataddr((config.smtp_name, config.smtp_from)) if config.smtp_name else config.smtp_from
+        message['To'], message['Subject'] = recipient, subject
+        message['Reply-To'] = config.smtp_from
         message['Message-ID'] = '<' + message_id + '@hr-vision.notifications>'
         message.set_content(content)
         context = ssl.create_default_context()
@@ -970,6 +1020,21 @@ def _verification_message(db, row, config, timestamp):
             + link + '\n\nСсылка действует 30 минут. Она не выполняет вход в аккаунт. Если вы не запрашивали письмо, ничего делать не нужно.')
 
 
+def _outbox_email_role(row):
+    """Use canonical event ownership, never the recipient address or subject."""
+    payload = json.loads(row.get('payload_json') or '{}')
+    if row['event_type'] == 'meeting.reminder' or payload.get('lifecycle') is True:
+        role, person = payload.get('role'), payload.get('person')
+        if role == 'employer' and row['candidate_id'] == 'employer:' + str(person):
+            return 'employer'
+        if role in ('candidate', 'booking') and row['candidate_id'] == person:
+            return 'candidate'
+        raise DeliveryFailure('email_role_mismatch')
+    if row['candidate_id'].startswith('employer:'):
+        raise DeliveryFailure('email_role_mismatch')
+    return 'candidate'
+
+
 def process_pending(connect, settings=None, limit=10, now=None, transport=None, telegram_renderer=None):
     config, timestamp = _config(settings), _now(now)
     sender = transport if transport is not None else Transport(config)
@@ -1061,7 +1126,9 @@ def process_pending(connect, settings=None, limit=10, now=None, transport=None, 
                 provider_ref = sender.answer_callback_query(bot_payload['callback_query_id'], content,
                                                              bot_payload.get('show_alert', False))
             elif row['channel'] == 'email':
-                provider_ref = sender.send_email(row['recipient'], subject, content, row['id'])
+                email_role = _outbox_email_role(row)
+                mail_sender = transport if transport is not None else Transport(config, email_role=email_role)
+                provider_ref = mail_sender.send_email(row['recipient'], subject, content, row['id'])
             elif reply_markup is not None:
                 provider_ref = sender.send_telegram(row['recipient'], content, reply_markup=reply_markup)
             else:

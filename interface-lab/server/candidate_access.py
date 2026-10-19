@@ -300,7 +300,7 @@ class CandidateAccess:
         content += '\n\nНе пересылайте это письмо другим людям.'
         outcome, error = 'sent', None
         try:
-            provider = (self._transport or delivery.Transport(config)).send_email(
+            provider = (self._transport or delivery.Transport(config, email_role='candidate')).send_email(
                 row['recipient'], 'Доступ к кабинету HR Vision', content, row['id'])
             if provider != 'smtp_accepted':
                 outcome, error = 'unknown', 'smtp_delivery_uncertain'

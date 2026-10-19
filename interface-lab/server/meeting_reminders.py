@@ -101,9 +101,9 @@ def participants(db, record, tick, config):
 
 def destination(db, record, role, person, channel, tick, config):
     """Return readiness, destination and binding version without changing identity."""
-    ready = 'pending' if (config.email_configured if channel == 'email' else config.telegram_configured) else 'disabled'
     if (role, person) not in participants(db, record, tick, config):
         return 'error', None, None
+    ready = 'pending' if (config.email_configured_for(role) if channel == 'email' else config.telegram_configured) else 'disabled'
     if role == 'booking':
         booking = _booking(db, record, tick, config)
         if not booking:
