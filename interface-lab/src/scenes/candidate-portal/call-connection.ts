@@ -13,6 +13,15 @@ export function waitForCall<T>(operation: Promise<T>, signal: AbortSignal): Prom
 
 export class PreviewTimeoutError extends CallConnectionError {}
 
+export function deviceAccessMessage(cause: unknown): string {
+  const name = cause && typeof cause === 'object' && 'name' in cause ? cause.name : '';
+  if (cause instanceof PreviewTimeoutError) return 'Браузер не ответил на запрос. Разрешите доступ в настройках сайта или войдите без устройств.';
+  if (name === 'NotAllowedError' || name === 'SecurityError') return 'Доступ запрещён. В настройках сайта разрешите камеру и микрофон, затем повторите проверку.';
+  if (name === 'NotFoundError' || name === 'OverconstrainedError') return 'Камера или микрофон не найдены. Проверьте подключение или войдите без устройств.';
+  if (name === 'NotReadableError' || name === 'AbortError') return 'Камера или микрофон заняты. Закройте другой звонок и повторите проверку.';
+  return 'Не удалось включить устройства. Проверьте доступ в браузере и системных настройках.';
+}
+
 /** Same private room and scoped participant token, only without our iframe. */
 export function directCallUrl(credentials: { url: string; token: string }): string {
   const url = new URL(credentials.url);
