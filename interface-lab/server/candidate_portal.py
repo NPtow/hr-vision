@@ -17,10 +17,12 @@ import threading
 import time
 import urllib.parse
 import uuid
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from domain import Problem, require, text, timestamp, iso, now
 from candidate_resume import parse_upload, salary_value, start_date_value
 import candidate_resume_model
+import candidate_availability
 import candidate_invites as invites
 import recruiter_availability as availability
 import interview_scheduler
@@ -34,7 +36,7 @@ SESSION_SECONDS = 30 * 86400
 MEDIA_WAIT_SECONDS = 30 * 60
 PROFILE_FIELDS = {'name', 'city', 'desiredRole', 'about', 'telegram', 'geographies',
                   'availability', 'consentReuse', 'autoApprove', 'desiredSalary', 'workMode',
-                  'salaryMin', 'salaryMax', 'latestStartDate', 'residence', 'employmentType', 'resumeReviewed'}
+                  'salaryMin', 'salaryMax', 'latestStartDate', 'residence', 'employmentType', 'resumeReviewed', 'timezone', 'availabilitySchedule'}
 
 
 class ClosingConnection(sqlite3.Connection):
@@ -204,6 +206,12 @@ def profile_value(body, previous=None):
                                   ('telegram', 100, False), ('desiredSalary', 120, False), ('residence', 200, False)]:
         result[key] = text(body.get(key, old.get(key, '')), limit, required=mandatory)
     result['workMode'] = body.get('workMode', old.get('workMode', 'any'))
+    result['timezone'] = text(body.get('timezone', old.get('timezone', '')), 100, required=False)
+    if result['timezone']:
+        try:
+            ZoneInfo(result['timezone'])
+        except (ZoneInfoNotFoundError, ValueError):
+            raise Problem('Выберите существующий часовой пояс.', 400)
     require(result['workMode'] in ('office', 'hybrid', 'remote', 'any'), 'Выберите формат работы.', 400)
     result['employmentType'] = body.get('employmentType', old.get('employmentType', ''))
     require(result['employmentType'] in ('', 'full-time', 'part-time', 'project', 'internship'),
@@ -214,7 +222,7 @@ def profile_value(body, previous=None):
     require(isinstance(geography, list) and len(geography) <= 20,
             'Проверьте список городов.', 400)
     result['geographies'] = list(dict.fromkeys(text(city, 120) for city in geography))
-    availability = body.get('availability', old.get('availability', []))
+    availability = body.get('availability', old.get('availabilityManual', old.get('availability', [])))
     require(isinstance(availability, list) and len(availability) <= 40,
             'Укажите не больше 40 удобных интервалов.', 400)
     result['availability'] = []
@@ -224,6 +232,10 @@ def profile_value(body, previous=None):
         if normalized not in result['availability']:
             result['availability'].append(normalized)
     result['availability'].sort(key=lambda item: item['start'])
+    if 'availabilitySchedule' in body:
+        result['availabilitySchedule'] = candidate_availability.validate(body['availabilitySchedule'])
+    elif 'availabilitySchedule' in old:
+        result['availabilitySchedule'] = old['availabilitySchedule']
     for key in ('consentReuse', 'autoApprove'):
         result[key] = body.get(key, old.get(key, False))
         require(isinstance(result[key], bool), 'Подтвердите выбранный режим.', 400)
@@ -488,8 +500,8 @@ class CandidatePortal:
     def person(self, db, cid):
         row = db.execute('SELECT id,email,profile,created_at,searching FROM cp_candidates WHERE id=?', (cid,)).fetchone()
         require(row is not None, 'Кандидат не найден.', 404)
-        return {'id': row[0], 'email': row[1], 'accountActive': row[1] is not None,
-                **json.loads(row[2]), 'createdAt': row[3], 'searching': bool(row[4])}
+        return candidate_availability.project({'id': row[0], 'email': row[1], 'accountActive': row[1] is not None,
+                **json.loads(row[2]), 'createdAt': row[3], 'searching': bool(row[4])})
 
     def interview(self, db, cid):
         row = db.execute('''SELECT i.id,i.status,i.room,s.start,s.end,s.recruiter_name,i.completed_at

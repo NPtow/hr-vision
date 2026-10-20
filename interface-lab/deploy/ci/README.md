@@ -131,3 +131,16 @@ Before deploying instrumentation, install the reviewed receiver from this commit
 preserves the previous full layout for guarded rollback. Set `HR_OTEL_ENDPOINT`
 only after the loopback collector is healthy; the default is disabled. See
 `../observability/README.md` for the outreach stack, privacy and capacity limits.
+
+## Календарь кандидата
+
+Перед первым выпуском установить обновлённый `receiver.py`: пакет включает
+`candidate_availability.py`. Недельные правила и исключения по датам хранятся
+в JSON профиля; доступные UTC-интервалы вычисляются на ближайшие 28 дней при чтении.
+Существующие интервалы сохраняются отдельно от вычисленного расписания.
+Часовой пояс календаря влияет на отображение, а каждое правило хранит свой пояс.
+Назначенные встречи не меняются при редактировании доступности.
+
+`PRE_CANDIDATE_CALENDAR_RUNTIME` сохраняет предыдущий полный состав. После сохранения
+правил, исключений или часового пояса откат на API без этого модуля запрещён:
+старый обработчик профиля потерял бы эти поля при очередном редактировании.
