@@ -33,10 +33,12 @@
 .ecp-review-footer { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:16px; }
 .ecp-profile-overlay .iv-workspace { width:100%; margin-top:0; margin-bottom:0; }
 .ecp-video-identity { display:flex; align-items:center; justify-content:space-between; gap:20px; min-width:0; color:#fff; }
-.ecp-profile .ecp-video-identity h2 { font-size:clamp(18px,2vw,26px); font-weight:550; line-height:1.25; overflow-wrap:anywhere; margin:0; }
-.ecp-resume-link { display:inline-flex; align-items:center; justify-content:center; gap:8px; flex-shrink:0; min-height:44px; padding:8px 13px; border:0; border-radius:12px; color:inherit; font:inherit; font-size:14px; cursor:pointer; }
-.iv-root .ecp-resume-link { padding:8px 13px; background:#ffffff20; color:white; }
-.iv-root .ecp-resume-link:hover { background:#ffffff30; }
+.ecp-profile .ecp-video-identity h2 { font-size:23px; font-weight:560; line-height:1.2; letter-spacing:-.55px; overflow-wrap:anywhere; margin:0; }
+.ecp-resume-link { display:inline-flex; align-items:center; justify-content:center; gap:8px; flex-shrink:0; min-height:40px; padding:10px 13px; border:0; border-radius:12px; color:inherit; font:inherit; font-size:12px; cursor:pointer; }
+.ecp-resume-link svg { stroke-width:1.65; }
+.iv-root .ecp-resume-link { padding:10px 13px; font-size:12px; background:#ffffff15; backdrop-filter:blur(12px); color:white; }
+.iv-root .ecp-resume-link:hover { background:#ffffff25; }
+.ecp-resume-link:hover span { text-decoration:underline; text-underline-offset:4px; }
 .iv-root .ecp-resume-link:focus-visible { outline-color:white; }
 .ecp-resume-scrim { position:fixed; inset:0; z-index:10000; background:#16141d65; animation:ecp-fade-in .16s ease-out; }
 .ecp-resume-dialog { position:fixed; z-index:10001; inset:50% auto auto 50%; transform:translate(-50%,-50%); display:flex; flex-direction:column; width:min(900px,calc(100vw - 48px)); height:min(900px,calc(100dvh - 56px)); color:#232128; background:#fff; border-radius:24px; box-shadow:0 24px 90px #0003; overflow:hidden; font-family:'Inter Variable',Inter,-apple-system,sans-serif; animation:ecp-fade-in .16s ease-out; }
@@ -55,7 +57,7 @@
 @media(max-width:700px) {
   .ecp-video-identity { gap:10px; }
   .ecp-profile .ecp-video-identity h2 { font-size:17px; }
-  .iv-root .ecp-resume-link { gap:6px; padding:8px; font-size:12px; }
+  .iv-root .ecp-resume-link { gap:8px; padding:10px 13px; font-size:12px; }
   .ecp-resume-dialog { width:calc(100vw - 16px); height:calc(100dvh - 24px); border-radius:18px; }
   .ecp-resume-toolbar { padding:10px 12px; }
 }
