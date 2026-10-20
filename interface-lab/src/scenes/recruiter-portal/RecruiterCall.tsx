@@ -3,7 +3,6 @@ import type { DailyCall } from '@daily-co/daily-js';
 import { Maximize2, Minimize2, PanelRightOpen, PhoneOff, X } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { recruiterRequest, RecruiterRequestError, type RecruiterCandidate, type Room } from './api';
-import { CallDeviceAccess, useCallDeviceAccess } from '../../components/call-device-access';
 import { CallConnectionError, directCallUrl, releaseCall, waitForCall } from '../candidate-portal/call-connection';
 import type { InterviewRecording } from '../candidate-portal/api';
 import { useInterviewCoach, type LiveInterviewTurn } from './interview-coach';
@@ -40,13 +39,11 @@ export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }:
   const [fullscreen, setFullscreen] = useState(false);
   const [turns, setTurns] = useState<LiveInterviewTurn[]>([]);
   const [currentId, setCurrentId] = useState('');
-  const [connectionPhase, setConnectionPhase] = useState<'devices' | 'loading' | 'ready' | 'joined' | 'failed'>('devices');
+  const [connectionPhase, setConnectionPhase] = useState<'loading' | 'ready' | 'joined' | 'failed'>('loading');
   const [connectionHint, setConnectionHint] = useState('');
   const [directUrl, setDirectUrl] = useState('');
   const [reloadRequired, setReloadRequired] = useState(false);
   const [joinAttempt, setJoinAttempt] = useState(0);
-  const devices = useCallDeviceAccess();
-  const selectedDevices = useRef({ camera: true, microphone: true });
   const connection = useRef<AbortController | null>(null);
   const cleanup = useRef<Promise<void> | null>(null);
   const root = useRef<HTMLDivElement>(null);
@@ -65,7 +62,7 @@ export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }:
   }, []);
   async function close() {
     if (!await coachRef.current.flush()) { setPanel(true); return; }
-    devices.stop(); connection.current?.abort(); ending.current = true;
+    connection.current?.abort(); ending.current = true;
     if (call.current) await retire(call.current);
     callbacks.current.onClose();
   }
@@ -77,18 +74,6 @@ export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }:
     cleanup.current = pending;
     await pending;
     if (cleanup.current === pending) cleanup.current = null;
-  }
-  async function enableDevices(camera = true) {
-    if (await devices.request({ audio: true, video: camera })) {
-      devices.stop();
-      selectedDevices.current = { camera, microphone: true };
-      setJoinAttempt(value => value + 1);
-    }
-  }
-  function joinWithoutDevices() {
-    devices.stop();
-    selectedDevices.current = { camera: false, microphone: false };
-    setJoinAttempt(value => value + 1);
   }
   async function retry() {
     connection.current?.abort(); ending.current = true;
@@ -138,6 +123,7 @@ export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }:
         }
         const frame = DailyIframe.createFrame(mount.current, {
           iframeStyle: { width: '100%', height: '100%', border: '0' },
+          lang: 'ru',
           showLeaveButton: false, showFullscreenButton: !hasCoach, showUserNameChangeUI: false,
         });
         ownedFrame = frame;
@@ -151,7 +137,7 @@ export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }:
           // network timeout and must stay usable while a permission prompt is open.
           clearTimeout(timeout);
           setConnectionPhase('ready');
-          setConnectionHint('В окне видеосвязи разрешите устройства и нажмите «Присоединиться». Если запроса нет, проверьте настройки сайта рядом с адресом.');
+          setConnectionHint('Проверьте камеру и микрофон перед входом. Собеседник пока вас не видит и не слышит.');
         });
         frame.on('load-attempt-failed', () => {
           if (current()) setConnectionHint('Видеосервис загружается дольше обычного. Можно повторить подключение или открыть комнату отдельно.');
@@ -202,8 +188,10 @@ export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }:
           setJoined(false); setConnectionPhase('failed'); setError('Вы вышли из видеокомнаты. Можно подключиться снова.');
           controller.abort(); void retire(frame);
         } });
-        await waitForCall(frame.join({ url: room.url, token: room.token,
-          startVideoOff: !selectedDevices.current.camera, startAudioOff: !selectedDevices.current.microphone }), controller.signal);
+        // Prebuilt owns both preparation and the call. Keep this exact frame
+        // mounted through joined-meeting: a separate getUserMedia preview would
+        // stop its tracks and make Daily request the devices a second time.
+        await waitForCall(frame.join({ url: room.url, token: room.token }), controller.signal);
       } catch (e) {
         if (alive) {
           setJoined(false); setConnectionPhase('failed');
@@ -212,7 +200,7 @@ export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }:
         }
       } finally { clearTimeout(timeout); }
     }
-    if (joinAttempt) void open();
+    void open();
     return () => {
       alive = false; ending.current = true;
       controller.abort(); clearTimeout(timeout);
@@ -287,21 +275,18 @@ export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }:
     coach.change(next);
   }
   const captureStatus = recording === 'active' ? transcribing === 'active' ? 'Запись и расшифровка идут' : 'Запись идёт · ждём расшифровку' : recording === 'stopped' ? 'Запись остановлена' : recording === 'error' ? 'Ошибка записи' : startRequested ? 'Проверяем статус записи' : 'Запись не начата';
-  const connectionStatus = connectionPhase === 'devices' ? 'Подготовка к звонку' : connectionPhase === 'failed' ? 'Не подключены'
-    : connectionPhase === 'ready' ? 'Завершите вход в видеокомнату' : connectionPhase === 'loading' ? 'Загружаем видеокомнату…'
+  const connectionStatus = connectionPhase === 'failed' ? 'Не подключены'
+    : connectionPhase === 'ready' ? 'Проверка камеры и микрофона' : connectionPhase === 'loading' ? 'Загружаем видеокомнату…'
       : present ? 'Собеседник подключён' : 'Ждём собеседника';
-  const accessCard = connectionPhase === 'devices'
-    ? <CallDeviceAccess checking={devices.checking} error={devices.error} onRequest={() => void enableDevices()} onAudioOnly={() => void enableDevices(false)} onSkip={joinWithoutDevices}/>
-    : connectionPhase === 'failed' ? <div className="ric-approved-prejoin" role="alert">
+  const accessCard = connectionPhase === 'failed' ? <div className="ric-approved-prejoin" role="alert">
       <h2>Не удалось подключиться</h2><p>{error}</p>
       {reloadRequired ? <button className="ric-approved-join" onClick={() => window.location.reload()}>Обновить страницу</button>
         : <button className="ric-approved-join" onClick={() => void retry()}>Повторить подключение</button>}
       {directUrl && <a href={directUrl} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">Открыть комнату отдельно</a>}
     </div> : null;
-  const connectionTools = !joined && connectionPhase !== 'devices' && connectionPhase !== 'failed' ? <div className="ric-connection-tools" role="status">
+  const connectionTools = !joined && connectionPhase !== 'failed' ? <div className="ric-connection-tools" role="status">
     <span>{connectionHint}</span>
     <button onClick={() => void retry()}>Повторить подключение</button>
-    {connectionPhase === 'ready' && <button onClick={() => { selectedDevices.current = { camera: false, microphone: false }; void retry(); }}>Войти без устройств</button>}
     {directUrl && <a href={directUrl} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">Открыть комнату отдельно</a>}
   </div> : joined && connectionHint ? <div className="ric-connection-tools" role="status">{connectionHint}</div> : null;
 

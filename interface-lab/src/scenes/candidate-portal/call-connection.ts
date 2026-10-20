@@ -55,9 +55,17 @@ export async function waitForPreview<T extends { getTracks: () => { stop: () => 
   }
 }
 
-export async function releaseCall(call: { destroy: () => Promise<void> }, timeoutMs = 3000): Promise<void> {
+export async function releaseCall(call: { destroy: () => Promise<void>; iframe?: () => { remove: () => void } | null }, timeoutMs = 3000): Promise<void> {
   const controller = new AbortController();
+  const iframe = call.iframe?.();
   const timeout = setTimeout(() => controller.abort(new CallConnectionError('Не удалось закрыть видеокомнату. Обновите страницу.')), timeoutMs);
   try { await waitForCall(call.destroy(), controller.signal); }
+  catch (cause) {
+    // A blocked Prebuilt bundle cannot acknowledge destroy. Detach its browsing
+    // context so it cannot finish loading and acquire devices behind the error UI.
+    // Keep the rejection: callers require a reload before creating another call.
+    iframe?.remove();
+    throw cause;
+  }
   finally { clearTimeout(timeout); }
 }

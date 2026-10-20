@@ -35,7 +35,12 @@ test('already cancelled attempts consume late provider rejection', async () => {
 });
 
 test('an unresponsive iframe cannot block closing indefinitely', async () => {
-  await assert.rejects(releaseCall({ destroy: () => new Promise<void>(() => {}) }, 5), CallConnectionError);
+  let detached = false;
+  await assert.rejects(releaseCall({
+    destroy: () => new Promise<void>(() => {}),
+    iframe: () => ({ remove: () => { detached = true; } }),
+  }, 5), CallConnectionError);
+  assert.equal(detached, true, 'a late CDN recovery must not start devices behind the error screen');
 });
 
 test('normal frame cleanup and rejected cleanup both settle', async () => {

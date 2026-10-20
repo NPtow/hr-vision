@@ -1074,8 +1074,9 @@ class CandidatePortal:
             'permissions': {'canAdmin': bool(owner and can_record)},
             'enable_recording_ui': bool(owner and can_record),
             'enable_live_captions_ui': bool(owner and can_record),
-            # Candidates and guests use our device preview; owners keep the room setting.
-            **({'enable_prejoin_ui': False} if not owner else {}),
+            # One provider-owned device check retains the selected devices and
+            # the same iframe into the call for candidates, guests and owners.
+            'enable_prejoin_ui': True,
             'exp': token_expires, 'eject_at_token_exp': True,
             'start_cloud_recording': False, 'auto_start_transcription': False}})
         require(isinstance(token.get('token'), str) and token['token'], 'Видеосервис не выдал доступ.', 502)
