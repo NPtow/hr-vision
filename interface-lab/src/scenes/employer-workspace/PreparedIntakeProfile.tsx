@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Button } from '../../components/ui/button';
 import { request } from '../connected-journey/api';
 import { parseMeetingTranscript } from '../connected-journey/transcript';
@@ -17,9 +17,9 @@ function webUrl(value: string) {
 }
 
 type CommentValues = { recordingIndex: number; seconds: number; chapterTitle: string; text: string; expectedRevision: number; requestId: string };
-function PreparedInterview({ person, profile, index, token, vacancyId, busy, onComment }: {
+function PreparedInterview({ person, profile, index, token, vacancyId, busy, onComment, header }: {
   person: IntakePerson; profile: PreparedProfile; index: number; token: string; vacancyId?: string; busy: boolean;
-  onComment: (values: CommentValues) => Promise<boolean>;
+  onComment: (values: CommentValues) => Promise<boolean>; header?: ReactNode;
 }) {
   const source = profile.recordings[index];
   const [media, setMedia] = useState<{ url: string; mime: string } | null>(null);
@@ -58,7 +58,7 @@ function PreparedInterview({ person, profile, index, token, vacancyId, busy, onC
   return <>
     {error && <div className="ew-inline-error" role="alert"><p>{error}</p><Button type="button" variant="ghost" onClick={() => setAttempt(value => value + 1)}>Повторить загрузку</Button></div>}
     <SourceScreeningReview appearance="candidate" sourceId={`${person.id}:prepared:${index}:${source?.publicUrl || 'none'}`}
-      name={person.name} chapters={chapters} fullChapters={chapters} transcriptText={transcript}
+      name={person.name} header={header} chapters={chapters} fullChapters={chapters} transcriptText={transcript}
       media={media ? { src: media.url, label: source?.name } : undefined}
       renderChapterComment={chapter => chapter.seconds === null ? null : comment(chapter.seconds, chapter.title)}
       renderTimeComment={(seconds, onClose) => comment(seconds, '', onClose)}
@@ -127,9 +127,9 @@ export function PreparedIntakeProfile({ person, token, vacancyId, onUpdated, onR
         if (!response.ok) throw new Error('Не удалось загрузить резюме.');
         return response.blob();
       }, onDownload: () => { window.open(resumeUrl, '_blank', 'noopener,noreferrer'); } } : undefined}
-    interview={<>
+    interview={header => <>
       {current.files.slice(1).map(file => <button key={file.id} type="button" className="ew-file-row" onClick={() => download(file)}>{file.name}</button>)}
-      <PreparedInterview key={`${current.id}:${token}`} person={current} profile={profile} index={0} token={token} vacancyId={vacancyId} busy={busy} onComment={values => mutate('comment', values)}/>
+      <PreparedInterview key={`${current.id}:${token}`} person={current} profile={profile} index={0} token={token} vacancyId={vacancyId} busy={busy} header={header} onComment={values => mutate('comment', values)}/>
     </>}
     onRespond={vacancyId && !current.archived ? respond : undefined}
     meetingOptions={{ mode: 'proposal' }}

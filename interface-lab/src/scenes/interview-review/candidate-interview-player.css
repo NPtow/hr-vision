@@ -395,6 +395,11 @@ to{opacity:1;margin-bottom:0}
 .iv-root .iv-panel-restore{position:absolute;right:18px;top:18px;z-index:6;background:#ffffffef;color:#222;box-shadow:0 2px 12px #0002}
 
 .iv-video-title{position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,#0002,transparent 28%,#0008);opacity:0;transition:opacity .22s;z-index:1;display:flex;align-items:flex-end;padding:0 5.5% 92px;color:#fff}
+.iv-identity-header{position:absolute;inset:0 0 auto;z-index:3;padding:22px 24px 45px;background:linear-gradient(#0009,#0004 60%,transparent);opacity:0;transition:opacity .2s;pointer-events:none}
+.iv-identity-header>*{pointer-events:auto}
+.iv-controls-visible .iv-identity-header,.iv-player:focus-within .iv-identity-header{opacity:1}
+@media(max-width:700px){.iv-identity-header{padding:12px 14px 30px}}
+@media(prefers-reduced-motion:reduce){.iv-identity-header{transition:none}}
 
 .iv-video-title .iv-video-name{display:block;font-size:clamp(22px,3.3cqw,42px);font-weight:600;line-height:1.15;max-width:80%;text-shadow:0 1px 6px #0005;margin:0;color:#fff}
 

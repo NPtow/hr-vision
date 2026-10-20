@@ -35,6 +35,8 @@ export type RecordingReviewProps = {
   sourceId: string;
   appearance?: 'panel' | 'candidate';
   recruiterContent?: ReactNode;
+  /** Optional identity and document actions, composed by the authorised candidate view. */
+  header?: ReactNode;
   name: string;
   chapters: RecordingChapter[];
   kind: 'screening' | 'meeting';

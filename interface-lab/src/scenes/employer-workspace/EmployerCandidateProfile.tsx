@@ -2,16 +2,14 @@ import { useId, useRef, useState, type ReactNode } from 'react';
 import { ArrowUp, Check, MessageCircle, X } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { Textarea } from '../../components/ui/textarea';
-import { EmployerResumePreview } from './EmployerResumePreview';
+import { EmployerResumeDialog } from './EmployerResumeDialog';
 import { EmployerCandidateResponse } from './EmployerCandidateResponse';
 import type { EmployerCandidateDecision, EmployerCandidateMeetingOptions, EmployerCandidateProfileSource, EmployerCandidateResponseValues, EmployerCandidateResume, ScreeningComment } from './employer-candidate-profile-types';
-import fileIcon from './assets/candidate-profile/file.svg';
-import downloadIcon from './assets/candidate-profile/download.svg';
 import './employer-candidate-profile.css';
 
 export type EmployerCandidateProfileProps = {
   person: { id: string; name: string; role?: string; photo?: string | null };
-  source: EmployerCandidateProfileSource; interview: ReactNode; resume?: EmployerCandidateResume;
+  source: EmployerCandidateProfileSource; interview: ReactNode | ((header: ReactNode) => ReactNode); resume?: EmployerCandidateResume;
   onRespond?: (values: EmployerCandidateResponseValues) => Promise<boolean>;
   decision?: EmployerCandidateDecision | null;
   meetingOptions?: EmployerCandidateMeetingOptions;
@@ -29,31 +27,24 @@ export function EmployerCandidateProfile(props: EmployerCandidateProfileProps) {
 function CandidateProfile({ person, source, interview, resume, onRespond, decision, meetingOptions, responseIdentity,
   workflowRevision, busy, error, rejectQuestions }: EmployerCandidateProfileProps) {
   const headingId = useId();
-  const profileId = useId();
-  const [profileOpen, setProfileOpen] = useState(false);
   const hasResume = !!resume || !!source.cv;
   const contacts = source.contacts?.map(contact => contact.value).filter(Boolean).join(' · ') || source.contact;
   const score = typeof source.score === 'number' && Number.isFinite(source.score) ? source.score : null;
-  return <article className="ecp-profile" aria-labelledby={headingId} data-candidate-id={person.id}>
-    <header className="ecp-heading">
-      <h2 id={headingId}>{person.name}{score !== null && <span className="ecp-score"> · {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(score)}</span>}</h2>
+  const inPlayer = typeof interview === 'function';
+  const identity = <div className="ecp-video-identity"><h2>{person.name}</h2>
+    {hasResume && <EmployerResumeDialog resume={resume} text={source.cv} busy={busy} error={error}/>}
+  </div>;
+  return <article className={`ecp-profile${inPlayer ? ' ecp-profile-overlay' : ''}`} aria-label={person.name} data-candidate-id={person.id}>
+    {!inPlayer && <header className="ecp-heading"><h2 id={headingId}>{person.name}</h2>
+      {hasResume && <EmployerResumeDialog resume={resume} text={source.cv} busy={busy} error={error}/>}
+    </header>}
+    <div className="ecp-interview">{inPlayer ? interview(identity) : interview}</div>
+    <div className="ecp-review-footer">
+      <div className="ecp-meta">{contacts && <p>{contacts}</p>}{score !== null && <p>Оценка рекрутера · {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(score)} / 5</p>}</div>
       <EmployerCandidateResponse key={responseIdentity || person.id} onRespond={onRespond} decision={decision}
         workflowRevision={workflowRevision} busy={busy} rejectQuestions={rejectQuestions} meetingOptions={meetingOptions}/>
-    </header>
-    {contacts && <div className="ecp-meta"><p>{contacts}</p></div>}
-    {hasResume && <div className="ecp-resume">
-      <span className="ecp-file-icon"><img src={fileIcon} alt=""/></span>
-      <div className="ecp-file-copy"><strong>{resume?.name || 'Резюме'}</strong>{resume?.sizeLabel && <span>{resume.sizeLabel}</span>}</div>
-      <div className="ecp-file-actions">
-        {resume?.onDownload && <Button variant="ghost" size="icon" aria-label="Скачать резюме" onClick={resume.onDownload}><img src={downloadIcon} alt=""/></Button>}
-        <Button variant="secondary" aria-expanded={profileOpen} aria-controls={profileId} onClick={() => setProfileOpen(value => !value)}>{profileOpen ? 'Свернуть' : 'Открыть'}</Button>
-      </div>
-    </div>}
-    {profileOpen && <section className="ecp-resume-preview" id={profileId} aria-label="Резюме">
-      <EmployerResumePreview key={resume?.id || 'source-text'} resume={resume} text={source.cv}/>
-    </section>}
+    </div>
     {error && <p className="ecp-error" role="alert">{error}</p>}
-    <div className="ecp-interview">{interview}</div>
   </article>;
 }
 
