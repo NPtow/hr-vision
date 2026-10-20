@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import type { DailyCall } from '@daily-co/daily-js';
-import { Maximize2, Minimize2, PanelRightOpen, PhoneOff, X } from 'lucide-react';
+import type { DailyCall, DailyParticipant } from '@daily-co/daily-js';
+import { Camera, CameraOff, Maximize2, Mic, MicOff, Minimize2, MonitorUp, PanelRightOpen, PhoneOff, X } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { recruiterRequest, RecruiterRequestError, type RecruiterCandidate, type Room } from './api';
 import { CallConnectionError, directCallUrl, releaseCall, waitForCall } from '../candidate-portal/call-connection';
+import { CallDeviceAccess, useCallDeviceAccess } from '../../components/call-device-access';
+import { callInputTracks, canSendTrack } from '../candidate-portal/call-media';
+import { CallMediaStage } from '../candidate-portal/CallMediaStage';
 import type { InterviewRecording } from '../candidate-portal/api';
 import { useInterviewCoach, type LiveInterviewTurn } from './interview-coach';
 import { InterviewCoachPanel } from './InterviewCoachPanel';
@@ -20,11 +23,18 @@ type CaptureStatus = 'unknown' | 'active' | 'stopped' | 'error';
 export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }: {
   active: ActiveCall; token: string; onClose: () => void; onJoined: () => void; onCompleted: () => void;
 }) {
-  const mount = useRef<HTMLDivElement>(null);
+  const preview = useRef<HTMLVideoElement>(null);
+  const devices = useCallDeviceAccess();
+  const prepared = useRef<(ReturnType<typeof callInputTracks> & { camera: boolean; microphone: boolean }) | null>(null);
+  const inputTracks = useRef<MediaStreamTrack[]>([]);
+  const [participants, setParticipants] = useState<DailyParticipant[]>([]);
+  const [camera, setCamera] = useState(true);
+  const [microphone, setMicrophone] = useState(true);
   const call = useRef<DailyCall | null>(null);
   const ending = useRef(false);
   const [joined, setJoined] = useState(false);
   const [present, setPresent] = useState(false);
+  const [screenAllowed, setScreenAllowed] = useState(false);
   const [recording, setRecording] = useState<CaptureStatus>('unknown');
   const [transcribing, setTranscribing] = useState<CaptureStatus>('unknown');
   const [finishing, setFinishing] = useState(false);
@@ -39,10 +49,12 @@ export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }:
   const [fullscreen, setFullscreen] = useState(false);
   const [turns, setTurns] = useState<LiveInterviewTurn[]>([]);
   const [currentId, setCurrentId] = useState('');
-  const [connectionPhase, setConnectionPhase] = useState<'loading' | 'ready' | 'joined' | 'failed'>('loading');
+  const [connectionPhase, setConnectionPhase] = useState<'loading' | 'ready' | 'joined' | 'failed'>('ready');
   const [connectionHint, setConnectionHint] = useState('');
   const [directUrl, setDirectUrl] = useState('');
   const [reloadRequired, setReloadRequired] = useState(false);
+  const mustReload = useRef(false);
+  function requireReload() { mustReload.current = true; setReloadRequired(true); }
   const [joinAttempt, setJoinAttempt] = useState(0);
   const connection = useRef<AbortController | null>(null);
   const cleanup = useRef<Promise<void> | null>(null);
@@ -60,9 +72,65 @@ export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }:
     document.addEventListener('fullscreenchange', update);
     return () => document.removeEventListener('fullscreenchange', update);
   }, []);
+  useEffect(() => {
+    const element = preview.current;
+    if (!element) return;
+    element.srcObject = devices.stream;
+    if (devices.stream) void element.play().catch(() => undefined);
+    return () => { element.srcObject = null; };
+  }, [devices.stream]);
+  useEffect(() => {
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = overflow; };
+  }, []);
+  function releaseInputs() {
+    inputTracks.current.forEach(track => track.stop());
+    inputTracks.current = [];
+  }
+  function prepare(audio = true, video = true) {
+    setMicrophone(audio); setCamera(video);
+    void devices.request({ audio, video });
+  }
+  function togglePreview(kind: 'audio' | 'video') {
+    const enabled = kind === 'audio' ? !microphone : !camera;
+    const source = devices.stream?.getTracks().find(track => track.kind === kind && track.readyState === 'live');
+    if (source) {
+      source.enabled = enabled;
+      if (kind === 'audio') setMicrophone(enabled); else setCamera(enabled);
+    } else prepare(kind === 'audio' ? enabled : microphone, kind === 'video' ? enabled : camera);
+  }
+  function enter(selected = { camera, microphone }) {
+    if (connectionPhase !== 'ready' || (devices.checking && (selected.camera || selected.microphone)) || mustReload.current || cleanup.current) return;
+    try {
+      const inputs = callInputTracks(devices.stream, selected);
+      prepared.current = { ...inputs, ...selected };
+      inputTracks.current = inputs.owned;
+      devices.stop();
+      setConnectionPhase('loading');
+      setJoinAttempt(value => value + 1);
+    } catch (cause) { setError((cause as Error).message); }
+  }
+  function control(kind: 'microphone' | 'camera' | 'screen') {
+    const media = call.current;
+    if (!media || !joined || finishing || media.isDestroyed()) return;
+    const local = media.participants().local;
+    if (kind === 'screen' && !screenAllowed) return;
+    if (!canSendTrack(local, kind === 'microphone' ? 'audio' : kind === 'camera' ? 'video' : 'screenVideo')) return;
+    setError('');
+    try {
+      const enabling = kind === 'microphone' && !media.localAudio() || kind === 'camera' && !media.localVideo();
+      if (enabling && document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+      if (kind === 'microphone') media.setLocalAudio(!media.localAudio());
+      else if (kind === 'camera') media.setLocalVideo(!media.localVideo());
+      else if (local?.screen) media.stopScreenShare();
+      else media.startScreenShare();
+    } catch { setError('Не удалось включить устройство. Проверьте доступ в браузере.'); }
+  }
   async function close() {
     if (!await coachRef.current.flush()) { setPanel(true); return; }
     connection.current?.abort(); ending.current = true;
+    devices.stop(); releaseInputs();
     if (call.current) await retire(call.current);
     callbacks.current.onClose();
   }
@@ -70,7 +138,8 @@ export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }:
   async function retire(frame: DailyCall) {
     if (call.current !== frame) return cleanup.current;
     call.current = null;
-    const pending = releaseCall(frame).catch(() => setReloadRequired(true));
+    releaseInputs();
+    const pending = releaseCall(frame).catch(() => requireReload());
     cleanup.current = pending;
     await pending;
     if (cleanup.current === pending) cleanup.current = null;
@@ -79,26 +148,29 @@ export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }:
     connection.current?.abort(); ending.current = true;
     if (call.current) await retire(call.current);
     if (cleanup.current) await cleanup.current;
-    setJoinAttempt(value => value + 1);
+    releaseInputs(); devices.stop(); prepared.current = null;
+    if (mustReload.current) { setConnectionPhase('failed'); setError('Предыдущее подключение не закрылось. Обновите страницу.'); return; }
+    setError(''); setConnectionHint(''); setParticipants([]); setJoined(false);
+    setConnectionPhase('ready'); setJoinAttempt(0);
   }
 
   useEffect(() => {
+    if (!joinAttempt || !prepared.current) return;
+    const inputs = prepared.current;
     let alive = true;
     let ownedFrame: DailyCall | null = null;
     let timeout: ReturnType<typeof setTimeout> | undefined;
     const controller = new AbortController();
     connection.current = controller;
-    const deadline = (message: string) => {
+    const deadline = (message: string, milliseconds = 30000) => {
       clearTimeout(timeout);
-      timeout = setTimeout(() => controller.abort(new CallConnectionError(message)), 30000);
+      timeout = setTimeout(() => controller.abort(new CallConnectionError(message)), milliseconds);
     };
     ending.current = false;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
     async function open() {
       setRecording('unknown'); setTranscribing('unknown');
       setConnectionPhase('loading'); setConnectionHint('Получаем доступ к встрече…');
-      setError(''); setDirectUrl(''); setJoined(false); setPresent(false);
+      setError(''); setDirectUrl(''); setJoined(false); setPresent(false); setScreenAllowed(false);
       deadline('Не удалось получить доступ к встрече. Попробуйте подключиться ещё раз.');
       try {
         if (cleanup.current) await cleanup.current;
@@ -107,7 +179,8 @@ export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }:
           if (alive && !controller.signal.aborted) {
             setDirectUrl(directCallUrl(room));
             setConnectionHint('Загружаем видеокомнату…');
-            deadline('Видеокомната не загрузилась. Проверьте соединение или откройте её отдельно.');
+            // Allow the SDK's own CDN fallback attempts to complete.
+            deadline('Не удалось загрузить видеосервис. Проверьте соединение или откройте комнату отдельно.', 90000);
           }
           return room;
         });
@@ -116,28 +189,28 @@ export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }:
         const [room, module] = await waitForCall(Promise.all([access, sdk]), controller.signal);
         if (!module) throw new CallConnectionError('Не удалось загрузить видеосервис. Откройте комнату отдельно.');
         const { default: DailyIframe } = module;
-        if (!alive || controller.signal.aborted || !mount.current) return;
+        if (!alive || controller.signal.aborted) return;
         if (DailyIframe.getCallInstance() && !DailyIframe.getCallInstance()!.isDestroyed()) {
-          setReloadRequired(true);
+          requireReload();
           throw new CallConnectionError('Предыдущее подключение не закрылось. Обновите страницу.');
         }
-        const frame = DailyIframe.createFrame(mount.current, {
-          iframeStyle: { width: '100%', height: '100%', border: '0' },
-          lang: 'ru',
-          showLeaveButton: false, showFullscreenButton: !hasCoach, showUserNameChangeUI: false,
+        const frame = DailyIframe.createCallObject({
+          ...(inputs.audioSource ? { audioSource: inputs.audioSource } : {}),
+          ...(inputs.videoSource ? { videoSource: inputs.videoSource } : {}),
+          startVideoOff: !inputs.camera, startAudioOff: !inputs.microphone,
         });
         ownedFrame = frame;
         call.current = frame;
-        frame.iframe()?.setAttribute('title', `Интервью · ${active.title}`);
         const current = () => alive && !controller.signal.aborted && call.current === frame;
-        const presence = () => { if (current()) setPresent(Object.values(frame.participants()).some(person => !person.local)); };
+        const presence = () => {
+          if (!current()) return;
+          const people = Object.values(frame.participants());
+          setParticipants(people); setPresent(people.some(person => !person.local));
+        };
         frame.on('loaded', () => {
           if (!current()) return;
-          // The prejoin screen may wait for a human indefinitely. It is not a
-          // network timeout and must stay usable while a permission prompt is open.
-          clearTimeout(timeout);
-          setConnectionPhase('ready');
-          setConnectionHint('Проверьте камеру и микрофон перед входом. Собеседник пока вас не видит и не слышит.');
+          setConnectionHint('Подключаемся к встрече…');
+          deadline('Не удалось соединиться с видеосервисом. Проверьте сеть или откройте комнату отдельно.');
         });
         frame.on('load-attempt-failed', () => {
           if (current()) setConnectionHint('Видеосервис загружается дольше обычного. Можно повторить подключение или открыть комнату отдельно.');
@@ -150,10 +223,17 @@ export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }:
         });
         frame.on('participant-joined', presence);
         frame.on('participant-left', presence);
+        frame.on('participant-updated', presence);
+        frame.on('track-started', presence);
+        frame.on('track-stopped', presence);
         frame.on('joined-meeting', () => {
           if (!current()) return;
           clearTimeout(timeout); setConnectionPhase('joined'); setConnectionHint('');
           setJoined(true); presence(); callbacks.current.onJoined();
+          // Room-level restrictions also apply when participant canSend is true.
+          void frame.room({ includeRoomConfigDefaults: true }).then(info => {
+            if (current()) setScreenAllowed(!!info && 'config' in info && info.config.enable_screenshare === true);
+          }).catch(() => undefined);
           void coachRef.current.refresh();
         });
         const seenTurns = new Set<string>();
@@ -174,7 +254,14 @@ export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }:
         frame.on('recording-error', () => { if (current()) { setRecording('error'); setRetryRecording(true); setError('Ошибка записи. Можно повторить запуск.'); } });
         frame.on('transcription-error', () => { if (current()) { setTranscribing('error'); setRetryTranscription(true); setError('Ошибка расшифровки. Можно повторить запуск.'); } });
         const resetCapture = () => { if (current()) { setRecording('unknown'); setTranscribing('unknown'); setRetryRecording(false); setRetryTranscription(false); } };
-        frame.on('network-connection', event => { if (event?.event === 'interrupted') resetCapture(); });
+        frame.on('network-connection', event => {
+          if (!current()) return;
+          if (event?.event === 'interrupted') { resetCapture(); setConnectionHint('Восстанавливаем соединение…'); }
+          if (event?.event === 'connected') { setConnectionHint(''); presence(); }
+        });
+        frame.on('nonfatal-error', event => {
+          if (current() && event?.type === 'screen-share-error') setError('Не удалось показать экран. Повторите выбор окна.');
+        });
         frame.on('error', event => { if (current()) {
           resetCapture();
           const failure = new CallConnectionError(event?.error?.type === 'connection-error' && event.error.details?.on === 'load'
@@ -188,15 +275,16 @@ export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }:
           setJoined(false); setConnectionPhase('failed'); setError('Вы вышли из видеокомнаты. Можно подключиться снова.');
           controller.abort(); void retire(frame);
         } });
-        // Prebuilt owns both preparation and the call. Keep this exact frame
-        // mounted through joined-meeting: a separate getUserMedia preview would
-        // stop its tracks and make Daily request the devices a second time.
-        await waitForCall(frame.join({ url: room.url, token: room.token }), controller.signal);
+        // Same captured source as the candidate: no embedded prejoin, no second
+        // getUserMedia request, and no dependency on Daily's call-ui bundles.
+        await waitForCall(frame.join({ url: room.url, token: room.token,
+          startVideoOff: !inputs.camera, startAudioOff: !inputs.microphone }), controller.signal);
       } catch (e) {
         if (alive) {
           setJoined(false); setConnectionPhase('failed');
           setError(e instanceof CallConnectionError || e instanceof RecruiterRequestError ? e.message : 'Не удалось загрузить видеокомнату. Попробуйте ещё раз.');
           if (ownedFrame) await retire(ownedFrame);
+          else releaseInputs();
         }
       } finally { clearTimeout(timeout); }
     }
@@ -204,7 +292,7 @@ export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }:
     return () => {
       alive = false; ending.current = true;
       controller.abort(); clearTimeout(timeout);
-      document.body.style.overflow = previousOverflow;
+      inputs.owned.forEach(track => track.stop());
       if (ownedFrame) void retire(ownedFrame);
     };
   }, [active.kind, active.candidateId, active.interviewId, active.applicationId, active.meetingId, token, joinAttempt]);
@@ -245,8 +333,10 @@ export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }:
           if (recording === 'active') call.current?.stopRecording();
           if (transcribing === 'active') call.current?.stopTranscription();
         }
-        await call.current?.destroy();
+        connection.current?.abort();
+        if (call.current) await retire(call.current);
       } catch { /* The provider closes the room as part of completion. */ }
+      connection.current?.abort(); releaseInputs(); devices.stop();
       call.current = null;
       callbacks.current.onCompleted();
     } catch (e) { ending.current = false; setError((e as Error).message); setFinishing(false); }
@@ -284,17 +374,37 @@ export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }:
         : <button className="ric-approved-join" onClick={() => void retry()}>Повторить подключение</button>}
       {directUrl && <a href={directUrl} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">Открыть комнату отдельно</a>}
     </div> : null;
-  const connectionTools = !joined && connectionPhase !== 'failed' ? <div className="ric-connection-tools" role="status">
-    <span>{connectionHint}</span>
-    <button onClick={() => void retry()}>Повторить подключение</button>
-    {directUrl && <a href={directUrl} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">Открыть комнату отдельно</a>}
-  </div> : joined && connectionHint ? <div className="ric-connection-tools" role="status">{connectionHint}</div> : null;
+  const connectionTools = connectionHint && connectionPhase !== 'failed' ? <div className="ric-connection-tools" role="status"><span>{connectionHint}</span></div> : null;
+  const local = participants.find(person => person.local);
+  const mediaControls = joined ? {
+    micOn: !!local?.audio, cameraOn: !!local?.video, screenOn: !!local?.screen,
+    busy: finishing, canMic: canSendTrack(local, 'audio'), canCamera: canSendTrack(local, 'video'),
+    canShare: screenAllowed && typeof navigator.mediaDevices?.getDisplayMedia === 'function' && canSendTrack(local, 'screenVideo'),
+    toggleMic: () => control('microphone'), toggleCamera: () => control('camera'), toggleScreen: () => control('screen'),
+  } : undefined;
+  const mediaSlot = <div className="ric-approved-connection">
+    {connectionPhase === 'ready' ? <div className="ric-device-preparation">
+      {devices.stream ? <div className="ric-device-preview">
+        <video ref={preview} autoPlay muted playsInline className="rcc-mirror" aria-label="Предпросмотр камеры" hidden={!camera}/>
+        {!camera && <CameraOff size={32}/>}
+        <p>Проверьте камеру и микрофон. Собеседник пока вас не видит и не слышит.</p>
+        <div className="rcc-device-controls">
+          <button className="rcc-tool" aria-label={microphone ? 'Выключить микрофон' : 'Включить микрофон'} onClick={() => togglePreview('audio')}>{microphone ? <Mic/> : <MicOff/>}</button>
+          <button className="rcc-tool" aria-label={camera ? 'Выключить камеру' : 'Включить камеру'} onClick={() => togglePreview('video')}>{camera ? <Camera/> : <CameraOff/>}</button>
+        </div>
+        <button className="ric-approved-join" onClick={() => enter()}>{active.kind === 'interview' ? 'Подключиться к интервью' : 'Подключиться к встрече'}</button>
+      </div> : <CallDeviceAccess checking={devices.checking} error={devices.error}
+        onRequest={() => prepare()} onAudioOnly={() => prepare(true, false)}
+        onSkip={() => { devices.stop(); enter({ camera: false, microphone: false }); }}/>}
+    </div> : accessCard ? <div className="ric-connection-card">{accessCard}</div>
+      : <CallMediaStage participants={participants} joined={joined} status={connectionHint || connectionStatus}/>}
+  </div>;
 
   if (hasCoach) return <div className="ric-approved-shell" role="dialog" aria-modal="true" aria-label={`Интервью · ${active.title}`}>
     <RecruiterInterviewShell
       person={person} draft={draft} onChange={changeDraft}
       phase={finishing ? 'finishing' : 'live'} writable={canWrite}
-      mediaSlot={<div className="ric-approved-connection"><div className="ric-approved-daily" ref={mount} inert={!!accessCard}/>{accessCard && <div className="ric-connection-card">{accessCard}</div>}</div>}
+      mediaSlot={mediaSlot} mediaControls={mediaControls}
       onClose={() => { if (!finishing) void close(); }} onFinish={() => { if (joined && !starting) void finish(); }}
       finishDisabled={!joined || starting || finishing} closeDisabled={finishing}
       recording={recording === 'active'} transcript={transcript}
@@ -327,7 +437,12 @@ export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }:
     </div>}
     {error && !accessCard && <div className="rp-error" role="alert">{error}</div>}
     {connectionTools}
-    <div className="rp-call-frame ric-approved-connection"><div className="ric-approved-daily" ref={mount} inert={!!accessCard}/>{accessCard && <div className="ric-connection-card">{accessCard}</div>}</div>
+    <div className="rp-call-frame ric-approved-connection">{mediaSlot}</div>
+    {mediaControls && <div className="rcc-device-controls ric-meeting-devices">
+      <button className="rcc-tool" disabled={finishing || !mediaControls.canMic} aria-label={mediaControls.micOn ? 'Выключить микрофон' : 'Включить микрофон'} onClick={mediaControls.toggleMic}>{mediaControls.micOn ? <Mic/> : <MicOff/>}</button>
+      <button className="rcc-tool" disabled={finishing || !mediaControls.canCamera} aria-label={mediaControls.cameraOn ? 'Выключить камеру' : 'Включить камеру'} onClick={mediaControls.toggleCamera}>{mediaControls.cameraOn ? <Camera/> : <CameraOff/>}</button>
+      {mediaControls.canShare && <button className="rcc-tool" disabled={finishing} aria-label={mediaControls.screenOn ? 'Остановить показ экрана' : 'Показать экран'} onClick={mediaControls.toggleScreen}><MonitorUp/></button>}
+    </div>}
     </div>
     {hasCoach && panel && <InterviewCoachPanel coach={coach} name={active.title} joined={joined} turns={turns} onCollapse={() => setPanel(false)}/>}
 
