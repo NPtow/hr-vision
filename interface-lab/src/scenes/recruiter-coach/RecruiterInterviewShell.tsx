@@ -13,7 +13,7 @@ import './recruiter-coach.css';
 import './recruiter-resume.css';
 
 type MediaControls = {
-  micOn: boolean; cameraOn: boolean; screenOn: boolean; busy?: boolean;
+  micOn: boolean; cameraOn: boolean; screenOn: boolean; busy?: boolean; canMic?: boolean; canCamera?: boolean; canShare?: boolean;
   toggleMic: () => void; toggleCamera: () => void; toggleScreen: () => void;
 };
 export type RecruiterInterviewShellProps = {
@@ -87,9 +87,9 @@ export function RecruiterInterviewShell({
       <footer className="rcc-call-controls" aria-label="Управление встречей">
         <div className="rcc-device-controls">
           {mediaControls && !completed && <>
-            <button className="rcc-tool" aria-label={mediaControls.micOn ? 'Выключить микрофон' : 'Включить микрофон'} title={mediaControls.micOn ? 'Выключить микрофон' : 'Включить микрофон'} aria-pressed={mediaControls.micOn} disabled={mediaControls.busy || finishing} onClick={mediaControls.toggleMic}>{mediaControls.micOn ? <Mic/> : <MicOff/>}</button>
-            <button className="rcc-tool" aria-label={mediaControls.cameraOn ? 'Выключить камеру' : 'Включить камеру'} title={mediaControls.cameraOn ? 'Выключить камеру' : 'Включить камеру'} aria-pressed={mediaControls.cameraOn} disabled={mediaControls.busy || finishing} onClick={mediaControls.toggleCamera}>{mediaControls.cameraOn ? <Video/> : <VideoOff/>}</button>
-            <button className={`rcc-tool ${mediaControls.screenOn ? 'rcc-tool-active' : ''}`} aria-label={mediaControls.screenOn ? 'Остановить показ экрана' : 'Показать экран'} title={mediaControls.screenOn ? 'Остановить показ экрана' : 'Показать экран'} aria-pressed={mediaControls.screenOn} disabled={mediaControls.busy || finishing} onClick={mediaControls.toggleScreen}><MonitorUp/></button>
+            <button className="rcc-tool" aria-label={mediaControls.micOn ? 'Выключить микрофон' : 'Включить микрофон'} title={mediaControls.micOn ? 'Выключить микрофон' : 'Включить микрофон'} aria-pressed={mediaControls.micOn} disabled={mediaControls.busy || finishing || mediaControls.canMic === false} onClick={mediaControls.toggleMic}>{mediaControls.micOn ? <Mic/> : <MicOff/>}</button>
+            <button className="rcc-tool" aria-label={mediaControls.cameraOn ? 'Выключить камеру' : 'Включить камеру'} title={mediaControls.cameraOn ? 'Выключить камеру' : 'Включить камеру'} aria-pressed={mediaControls.cameraOn} disabled={mediaControls.busy || finishing || mediaControls.canCamera === false} onClick={mediaControls.toggleCamera}>{mediaControls.cameraOn ? <Video/> : <VideoOff/>}</button>
+            {mediaControls.canShare !== false && <button className={`rcc-tool ${mediaControls.screenOn ? 'rcc-tool-active' : ''}`} aria-label={mediaControls.screenOn ? 'Остановить показ экрана' : 'Показать экран'} title={mediaControls.screenOn ? 'Остановить показ экрана' : 'Показать экран'} aria-pressed={mediaControls.screenOn} disabled={mediaControls.busy || finishing} onClick={mediaControls.toggleScreen}><MonitorUp/></button>}
           </>}
           {durationLabel && <span className="rcc-duration">{durationLabel}</span>}
         </div>

@@ -22,3 +22,11 @@
 .ric-approved-materials { padding: 0 6px 16px; color: #e7e7ee; }
 .ric-approved-materials .rp-materials { background: #25262b; }
 @media (max-width: 700px) { .ric-approved-capture { gap: 8px; padding-bottom: 10px; } .ric-approved-capture .ric-approved-status { flex-basis: 100%; } .ric-approved-prejoin { gap: 14px; padding: 20px; } }
+
+.ric-device-preparation { height: 100%; overflow: auto; display: flex; align-items: center; justify-content: center; color: #e8e8ed; }
+.ric-device-preview { width: min(600px, 100%); padding: 24px; display: flex; flex-direction: column; align-items: center; gap: 16px; text-align: center; }
+.ric-device-preview video { width: 100%; max-height: 40vh; object-fit: contain; border-radius: 16px; background: #111; }
+.ric-device-preview p { font-size: 14px; color: #bcbcc5; line-height: 1.5; }
+.ric-approved-connection .cc-video-stage { height: 100%; }
+.ric-meeting-devices { padding: 16px; color: #fff; }
+.ric-meeting-devices button { background: transparent; border: 0; color: inherit; padding: 12px; }
