@@ -4,13 +4,9 @@ http://:8412 {
     handle @trustedPanel {
         header X-Robots-Tag "noindex, nofollow"
         respond /api/register/password "Registration is closed" 403
-        handle_path /api/* {
-            reverse_proxy 127.0.0.1:8411 {
-                header_up X-Forwarded-Proto https
-            }
-        }
-        handle {
-            reverse_proxy 127.0.0.1:8410
+        # Next serves /api/config itself and proxies the remaining API routes.
+        reverse_proxy 127.0.0.1:8410 {
+            header_up X-Forwarded-Proto https
         }
     }
     handle {
