@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { DailyParticipant, DailyTrackState } from '@daily-co/daily-js';
 import {
-  AlignLeft, ArrowDown, ArrowLeft, ArrowUp, Check, ChevronDown, Copy, History,
+  AlignLeft, ArrowDown, ArrowLeft, ArrowUp, Check, ChevronDown, History,
   LoaderCircle, Maximize2, MessageSquare, Mic, MicOff, Minimize2, MonitorUp,
   PanelRightClose, PanelRightOpen, Pause, Phone, PhoneOff, Play, Plus,
   Redo2, RefreshCw, SquarePen, Undo2, Video, VideoOff, Volume2, VolumeX, X,
@@ -46,13 +46,11 @@ function Track({ track, audio = false, muted = false, mirror = false }: {
 
 function Participant({ participant, screen = false }: { participant: DailyParticipant; screen?: boolean }) {
   const track = screen ? participant.tracks.screenVideo : participant.tracks.video;
-  return <div className={`mnd-participant ${screen ? 'mnd-screen-tile' : ''}`}>
+  return <div className={`mnd-participant ${screen ? 'mnd-screen-tile' : ''}`} role="group" aria-label={participant.user_name || 'Участник'}>
     {track.state === 'playable' ? <Track track={track} muted mirror={participant.local && !screen} />
       : <div className="mnd-avatar" aria-label={`${participant.user_name || 'Участник'}: камера выключена`}>
         {(participant.user_name || 'У').split(' ').slice(0, 2).map(word => word[0]).join('')}
       </div>}
-    <span className="mnd-participant-label">{participant.user_name || 'Участник'}{participant.local && ' · вы'}
-      {participant.tracks.audio.state !== 'playable' && <MicOff size={13} />}</span>
   </div>;
 }
 
@@ -298,7 +296,7 @@ export function MeetingNotesDemo({ token, onExit, displayName = 'Никита', 
 
   const begin = async () => {
     if (busy || !consent) return;
-    setBusy(true); setError('');
+    setBusy(true); setError(''); setHistoryOpen(false);
     try {
       const target = session || (await api.create(createRequestId.current, title.trim() || 'Новая встреча')).session;
       acceptSession(target); updateUrl(target.id);
@@ -321,12 +319,6 @@ export function MeetingNotesDemo({ token, onExit, displayName = 'Никита', 
   const selectHistory = async (id: string) => {
     if (!await saveNote()) { setTab('note'); setPanelOpen(true); return; }
     await openSession(id);
-  };
-  const copyInvite = async () => {
-    if (!session) return;
-    const url = new URL(window.location.href); url.searchParams.set('meetingSession', session.id);
-    try { await navigator.clipboard.writeText(url.href); notify('Ссылка скопирована'); }
-    catch { setError('Браузер не разрешил скопировать ссылку. Скопируйте адрес страницы.'); }
   };
   const toggleFull = async () => {
     try {
@@ -379,8 +371,8 @@ export function MeetingNotesDemo({ token, onExit, displayName = 'Никита', 
     <section className="mnd-stage" aria-label="Встреча" onPointerMove={showControls} onPointerDown={showControls}>
       <header className="mnd-topbar">
         {onExit && <IconButton label={connected ? 'Выйти из встречи' : 'Вернуться в кабинет'} onClick={() => void leaveWorkspace()}><ArrowLeft /></IconButton>}
-        <div className="mnd-history-anchor">
-          <button className="mnd-history-trigger" onClick={() => setHistoryOpen(!historyOpen)} disabled={connected || daily.phase === 'joining'} aria-expanded={historyOpen}>
+        {!connected && daily.phase !== 'joining' && <div className="mnd-history-anchor">
+          <button className="mnd-history-trigger" onClick={() => setHistoryOpen(!historyOpen)} aria-expanded={historyOpen}>
             <History size={17} /><span>{session ? sessionLabel(session) : 'Встречи'}</span><ChevronDown size={13} />
           </button>
           {historyOpen && <div className="mnd-history-menu">
@@ -391,7 +383,7 @@ export function MeetingNotesDemo({ token, onExit, displayName = 'Никита', 
             </button>)}
             {!sessions.length && <p>Здесь будут ваши встречи.</p>}
           </div>}
-        </div>
+        </div>}
         <div className="mnd-top-spacer" />
         {connected && <span className={`mnd-capture-state ${daily.capture.recording.status === 'started' ? 'mnd-recording' : ''}`}>
           <i />{daily.capture.recording.status === 'started' ? 'Запись' : daily.capture.recording.status === 'error' ? 'Без записи' : 'Подключаем запись'}
@@ -429,7 +421,6 @@ export function MeetingNotesDemo({ token, onExit, displayName = 'Никита', 
           </>}
         </div>}
 
-      {activeMedia && <div className="mnd-title-overlay" aria-hidden="true"><span>{session?.title}</span></div>}
       {(error || daily.error || daily.saveError || videoError) && <div className="mnd-error" role="alert">
         <span>{error || daily.error || daily.saveError || videoError}</span>
         {daily.saveError && <button onClick={() => void daily.flush().catch(() => undefined)}>Повторить</button>}
@@ -451,7 +442,6 @@ export function MeetingNotesDemo({ token, onExit, displayName = 'Никита', 
             <IconButton label={local?.screen ? 'Остановить показ экрана' : 'Показать экран'} onClick={daily.toggleScreen} pressed={local?.screen}><MonitorUp /></IconButton>
             <span className="mnd-clock">{clock(elapsed)}</span>
             <div className="mnd-control-spacer" />
-            <IconButton label="Скопировать ссылку для коллеги" onClick={() => void copyInvite()}><Copy /></IconButton>
             <button className="mnd-finish" onClick={() => void finish()} disabled={daily.phase === 'finishing'}>
               {daily.phase === 'finishing' ? <LoaderCircle className="mnd-spinner" size={17} /> : <PhoneOff size={17} />}<span>{daily.phase === 'finishing' ? 'Сохраняем' : 'Завершить'}</span>
             </button>
