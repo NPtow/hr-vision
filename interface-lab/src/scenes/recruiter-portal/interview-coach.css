@@ -132,3 +132,75 @@ button.ric-primary {
   .ric-dialog-content { padding: 0 24px 28px; }
   .ric-dialog-actions { bottom: -28px; }
 }
+
+/* Cabinet: one compact entry into the interview workspace. */
+.ric-candidate-card { min-width: 0; padding: 10px 0; font: 14px/1.6 'Inter Variable', Inter, sans-serif; }
+.ric-candidate-heading { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 14px 24px; }
+.rp-root .ric-candidate-heading h3 { margin: 0; font-size: 17px; line-height: 1.5; font-weight: 550; }
+.rp-root .ric-candidate-heading p { margin: 7px 0 0; color: #88858f; font-size: 12px; }
+.ric-candidate-heading .ric-actions { gap: 18px; color: #77747d; }
+.ric-candidate-heading .ric-link { overflow-wrap: anywhere; min-width: 0; }
+.ric-candidate-heading .ric-link svg { flex-shrink: 0; }
+.ric-candidate-card .ric-preparation { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 24px 0 0; border: 0; margin: 0; }
+.ric-script-status { font-size: 12px; color: #929098; }
+.ric-preparation .ric-error { flex-basis: 100%; }
+.rp-completed-list > li > .ric-candidate-card { padding: 24px; }
+
+/* The same script can be read before joining, without starting a call. */
+.ric-workspace { position: fixed; inset: 0; z-index: 1000; display: grid; grid-template-columns: minmax(0, 1fr) minmax(360px, 34%); height: 100dvh; background: #0b0b0c; color: #f3f3f3; font: 14px/1.6 'Inter Variable', Inter, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+.ric-workspace * { box-sizing: border-box; }
+.ric-workspace :is(h2,p) { margin: 0; }
+.ric-workspace button { font: inherit; cursor: pointer; }
+.ric-workspace button:disabled { cursor: default; opacity: .35; }
+.ric-workspace :is(button,a,summary):focus-visible { outline: 2px solid #9e82dd; outline-offset: 4px; }
+.ric-workspace-wide { grid-template-columns: 1fr; }
+.ric-workspace-stage { display: flex; min-width: 0; min-height: 0; flex-direction: column; }
+.ric-workspace-header { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 28px 32px; }
+.ric-workspace-header h2 { font-size: 18px; font-weight: 500; }
+.ric-workspace-header p { color: #888; font-size: 11px; margin-top: 6px; }
+.ric-workspace-header .ric-actions { color: #aaa; gap: 16px; }
+.ric-workspace-header .ric-link { font-size: 12px; overflow-wrap: anywhere; }
+.ric-workspace-question { overflow: auto; flex: 1; padding: clamp(24px, 6vw, 90px); display: flex; flex-direction: column; justify-content: safe center; align-items: flex-start; }
+.ric-workspace-topic { color: #929292; font-size: 12px; }
+.ric-workspace-topic span { margin-left: 20px; color: #666; }
+.ric-workspace-question h2 { font-size: clamp(26px, 2.8vw, 45px); font-weight: 450; line-height: 1.4; letter-spacing: -1px; margin: 26px 0; }
+.ric-workspace-why { font-size: 15px; line-height: 1.8; color: #888; max-width: 780px; }
+.ric-workspace-question .ric-followups { font-size: 14px; color: #aaa; }
+.ric-workspace-answer { white-space: pre-wrap; margin-top: 24px!important; color: #aaa; }
+.ric-workspace-footer { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px; padding: 24px 32px; }
+.ric-workspace-join { display: inline-flex; align-items: center; gap: 9px; border: 0; border-radius: 24px; color: #222; background: #f5f5f5; padding: 12px 20px; }
+.ric-plan { list-style: none; margin: 24px 0 0; padding: 0; }
+.ric-plan li { margin-bottom: 10px; }
+.ric-plan button { display: flex; align-items: flex-start; gap: 17px; width: 100%; padding: 18px; text-align: left; color: #999; border-radius: 16px; line-height: 1.7; }
+.ric-plan button[aria-current=step] { background: #f5f4f6; color: #222; }
+.ric-plan button > span, .ric-plan small { color: #aaa; font-size: 10px; }
+.ric-plan button > span { padding-top: 2px; }
+.ric-plan button p { margin-top: 5px; }
+.ric-saved-note { white-space: pre-wrap; }
+.ric-workspace-materials { margin-top: 32px; }
+.ric-workspace .ric-panel-body h2 { font-size: 19px; margin: 0 0 24px; }
+.ric-workspace:fullscreen { width: 100vw; height: 100dvh; }
+@media (max-width: 900px) {
+  .ric-workspace { grid-template-columns: minmax(0, 1fr) 320px; }
+  .ric-workspace-wide { grid-template-columns: 1fr; }
+  .ric-workspace-header { padding: 22px; }
+  .ric-workspace-question { padding: 32px; }
+  .ric-workspace-footer { padding: 20px; }
+}
+@media (max-width: 640px) {
+  .ric-candidate-heading .ric-actions { gap: 10px 18px; }
+  .ric-candidate-card .ric-preparation { align-items: flex-start; gap: 16px; }
+  .ric-workspace { display: flex; flex-direction: column; overflow: auto; }
+  .ric-workspace-stage { flex: 1 0 auto; min-height: 60dvh; }
+  .ric-workspace-question { padding: 28px 24px; overflow: visible; }
+  .ric-workspace-question h2 { font-size: 28px; letter-spacing: -.5px; }
+  .ric-workspace-header { padding: 20px 24px; }
+  .ric-workspace-footer { padding: 18px 24px; }
+  .ric-workspace > .ric-panel { min-height: 40dvh; flex: 1 0 auto; }
+  .ric-workspace .ric-panel-body { overflow: visible; mask-image: none; }
+  .ric-workspace-wide .ric-workspace-stage { min-height: 100dvh; }
+}
+.ric-call .rp-call-header .rp-actions { flex-wrap: wrap; min-width: 0; max-width: 100%; }
+.ric-call .rp-call-header .ric-link { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.ric-call .rp-call-header .ric-link svg { flex-shrink: 0; }
+.ric-candidate-heading h3 { overflow-wrap: anywhere; }
