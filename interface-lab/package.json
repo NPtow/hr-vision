@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "storybook": "storybook dev -p 6007 --host 127.0.0.1 --no-open --disable-telemetry",
-    "build": "storybook build --disable-telemetry",
+    "build": "storybook build --disable-telemetry && vite build --config vite.observability.config.ts",
     "typecheck": "tsc --noEmit",
     "deploy:yc": "bash scripts/deploy-yc.sh"
   },
@@ -13,6 +13,10 @@
     "@daily-co/daily-js": "0.93.0",
     "@daypicker/react": "10.0.2",
     "@fontsource-variable/inter": "^5.3.0",
+    "@hyperdx/otel-web": "0.20.0",
+    "@hyperdx/otel-web-session-recorder": "4.0.0",
+    "@opentelemetry/exporter-trace-otlp-http": "0.219.0",
+    "@opentelemetry/sdk-trace-base": "2.12.0",
     "@tiptap/core": "3.32.0",
     "@tiptap/extension-placeholder": "3.32.0",
     "@tiptap/pm": "3.32.0",
@@ -43,5 +47,9 @@
   "description": "HR Vision: 19 agency screen prototypes, five current CJM maps and historical versions.",
   "engines": {
     "node": ">=22.12.0"
+  },
+  "overrides": {
+    "fflate": "0.8.3",
+    "source-map-js": "1.2.2"
   }
 }

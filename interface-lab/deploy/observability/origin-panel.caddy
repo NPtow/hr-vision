@@ -1,0 +1,15 @@
+http://:8412 {
+    bind 10.130.0.18 127.0.0.1
+    @trustedPanel remote_ip 10.130.0.28 127.0.0.1
+    handle @trustedPanel {
+        header X-Robots-Tag "noindex, nofollow"
+        respond /api/register/password "Registration is closed" 403
+        # Next serves /api/config itself and proxies the remaining API routes.
+        reverse_proxy 127.0.0.1:8410 {
+            header_up X-Forwarded-Proto https
+        }
+    }
+    handle {
+        respond "Forbidden" 403
+    }
+}

@@ -3,6 +3,7 @@
 Mount before CandidatePortal's broad recruiter prefix. Construction never makes
 network calls. start_worker is opt-in and runs independently of notifications.
 """
+import observability
 import datetime as dt
 import hashlib
 import hmac
@@ -396,7 +397,8 @@ class HHRecruiterRoutes:
                     try:
                         self.process_pending()
                         self.last_worker_error = None
-                    except Exception:
+                    except Exception as telemetry_error:
+                        observability.capture_exception(telemetry_error, "worker.hh_routes")
                         # No exception body, token, URL or personal data in logs.
                         self.last_worker_error = 'worker_failed'
                     self._stop.wait(max(10, interval))

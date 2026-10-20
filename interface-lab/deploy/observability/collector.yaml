@@ -1,0 +1,91 @@
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+        max_request_body_size: 2097152
+  hostmetrics:
+    collection_interval: 60s
+    root_path: /hostfs
+    scrapers:
+      cpu: {}
+      memory: {}
+      load: {}
+      filesystem:
+        exclude_fs_types:
+          fs_types: [autofs, binfmt_misc, bpf, cgroup, cgroup2, configfs, debugfs, devpts, devtmpfs, fusectl, hugetlbfs, mqueue, proc, pstore, securityfs, sysfs, tracefs, tmpfs, overlay, squashfs]
+          match_type: strict
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 110
+    spike_limit_mib: 20
+  batch:
+    send_batch_size: 256
+    send_batch_max_size: 512
+    timeout: 10s
+  resource/host:
+    attributes:
+      - {key: service.name, value: mashadasha-outreach-host, action: upsert}
+      - {key: deployment.environment, value: production, action: upsert}
+connectors:
+  routing/logs:
+    default_pipelines: [logs/default]
+    error_mode: ignore
+    table:
+      - context: log
+        statement: route() where IsMatch(attributes["rr-web.event"], ".*")
+        pipelines: [logs/replay]
+exporters:
+  clickhouse:
+    endpoint: tcp://clickhouse:9000
+    database: default
+    username: default
+    ttl: 24h
+    create_schema: true
+    timeout: 10s
+    sending_queue: {enabled: true, num_consumers: 1, queue_size: 8}
+    retry_on_failure: {enabled: true, max_elapsed_time: 60s}
+  clickhouse/replay:
+    endpoint: tcp://clickhouse:9000
+    database: default
+    username: default
+    logs_table_name: hyperdx_sessions
+    ttl: 24h
+    create_schema: true
+    timeout: 10s
+    sending_queue: {enabled: true, num_consumers: 1, queue_size: 8}
+    retry_on_failure: {enabled: true, max_elapsed_time: 60s}
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+service:
+  extensions: [health_check]
+  telemetry:
+    logs: {level: warn}
+    metrics: {level: none}
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [clickhouse]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [clickhouse]
+    metrics/host:
+      receivers: [hostmetrics]
+      processors: [memory_limiter, resource/host, batch]
+      exporters: [clickhouse]
+    logs/in:
+      receivers: [otlp]
+      processors: [memory_limiter]
+      exporters: [routing/logs]
+    logs/default:
+      receivers: [routing/logs]
+      processors: [batch]
+      exporters: [clickhouse]
+    logs/replay:
+      receivers: [routing/logs]
+      processors: [batch]
+      exporters: [clickhouse/replay]

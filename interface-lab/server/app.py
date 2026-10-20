@@ -34,6 +34,7 @@ from hh_outreach_worker import OutreachBrowserService
 from employer_routes import EmployerRoutes
 from meeting_lab import MeetingLab
 import employer_access
+import observability
 
 ROOT = Path(os.environ.get('HR_DATA_DIR', '/var/lib/hr-vision-api'))
 ROOT.mkdir(parents=True, exist_ok=True)
@@ -228,6 +229,10 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *_):
         pass  # No request URLs, bearer tokens or transcripts in journal.
 
+    def send_response(self, code, message=None):
+        observability.response_status(code)
+        return super().send_response(code, message)
+
     def answer(self, code, data, headers=None):
         content = data if isinstance(data, bytes) else json.dumps(data, ensure_ascii=False).encode()
         forwarded = {name: value for name, value in (headers or {}).items()
@@ -421,6 +426,7 @@ class Handler(BaseHTTPRequestHandler):
             write(db, state)
         return self.answer(200, result)
 
+    @observability.http_request
     def do_GET(self):
         try:
             if MEETING_LAB.handles(self.path):
@@ -486,10 +492,14 @@ class Handler(BaseHTTPRequestHandler):
                 result['videoConfigured'] = bool(DAILY and VIDEO_ENABLED)
             self.answer(200, result)
         except Problem as error:
+            if error.status >= 500:
+                observability.capture_exception(error)
             self.answer(error.status, {'error': error.message})
-        except Exception:
+        except Exception as error:
+            observability.capture_exception(error)
             self.answer(500, {'error': 'Не удалось прочитать состояние. Попробуйте ещё раз.'})
 
+    @observability.http_request
     def do_POST(self):
         try:
             # Session bearer auth is tab-scoped; explicit JSON + origin blocks browser CSRF.
@@ -625,14 +635,18 @@ class Handler(BaseHTTPRequestHandler):
                         raise Problem('Не найдено.', 404)
             self.answer(200, response, response_headers)
         except Problem as error:
+            if error.status >= 500:
+                observability.capture_exception(error)
             self.answer(error.status, {'error': error.message})
         except (ValueError, json.JSONDecodeError, TypeError):
             self.answer(400, {'error': 'Некорректный запрос.'})
-        except Exception:
+        except Exception as error:
+            observability.capture_exception(error)
             self.answer(500, {'error': 'Не удалось сохранить действие. Попробуйте ещё раз.'})
 
 
 if __name__ == '__main__':
+    observability.install_thread_hook()
     import call_cleanup
     call_cleanup.start_worker(CANDIDATE_PORTAL)
     candidate_notifications.start_worker(connect, update_handler=CANDIDATE_BOT.handle_update,

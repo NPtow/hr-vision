@@ -13,6 +13,7 @@ memory for hashing/delivery. Repeated clicks and known-failure retries preserve
 the same credentials. Before SMTP we durably mark the operation as sending; a
 crash, timeout or ambiguous provider outcome becomes unknown, never auto-retry.
 """
+import observability
 import base64
 import hashlib
 import hmac
@@ -310,7 +311,8 @@ class CandidateAccess:
                 outcome, error = 'failed', failure.code
             else:
                 outcome, error = 'unknown', 'smtp_delivery_uncertain'
-        except Exception:
+        except Exception as telemetry_error:
+            observability.capture_exception(telemetry_error, "worker.candidate_access")
             outcome, error = 'unknown', 'smtp_delivery_uncertain'
         with self.lock, self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
@@ -338,7 +340,8 @@ class CandidateAccess:
                         return
                     try:
                         self.dispatch_once()
-                    except Exception:
+                    except Exception as telemetry_error:
+                        observability.capture_exception(telemetry_error, "worker.candidate_access")
                         # Exceptions can contain addresses or credentials. HTTP
                         # status and durable outbox expose outcomes without logs.
                         pass

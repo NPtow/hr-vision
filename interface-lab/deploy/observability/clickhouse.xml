@@ -1,0 +1,26 @@
+<clickhouse>
+  <logger><level>warning</level><console>true</console><log remove="1"/><errorlog remove="1"/></logger>
+  <max_server_memory_usage>600000000</max_server_memory_usage>
+  <max_thread_pool_size>512</max_thread_pool_size>
+  <background_buffer_flush_schedule_pool_size>2</background_buffer_flush_schedule_pool_size>
+  <background_fetches_pool_size>2</background_fetches_pool_size>
+  <background_move_pool_size>2</background_move_pool_size>
+  <listen_host replace="1">0.0.0.0</listen_host>
+  <background_pool_size>2</background_pool_size>
+  <background_schedule_pool_size>4</background_schedule_pool_size>
+  <background_message_broker_schedule_pool_size>2</background_message_broker_schedule_pool_size>
+  <background_distributed_schedule_pool_size>2</background_distributed_schedule_pool_size>
+  <mark_cache_size>33554432</mark_cache_size>
+  <uncompressed_cache_size>8388608</uncompressed_cache_size>
+  <merge_tree>
+    <number_of_free_entries_in_pool_to_lower_max_size_of_merge>0</number_of_free_entries_in_pool_to_lower_max_size_of_merge>
+    <number_of_free_entries_in_pool_to_execute_mutation>0</number_of_free_entries_in_pool_to_execute_mutation>
+    <number_of_free_entries_in_pool_to_execute_optimize_entire_partition>0</number_of_free_entries_in_pool_to_execute_optimize_entire_partition>
+    <max_bytes_to_merge_at_max_space_in_pool>134217728</max_bytes_to_merge_at_max_space_in_pool>
+    <merge_with_ttl_timeout>1800</merge_with_ttl_timeout>
+  </merge_tree>
+  <storage_configuration><disks><default><keep_free_space_bytes>1610612736</keep_free_space_bytes></default></disks></storage_configuration>
+  <query_log remove="1"/><query_thread_log remove="1"/><trace_log remove="1"/>
+  <metric_log remove="1"/><asynchronous_metric_log remove="1"/><processors_profile_log remove="1"/>
+  <part_log remove="1"/><text_log remove="1"/><error_log remove="1"/>
+</clickhouse>

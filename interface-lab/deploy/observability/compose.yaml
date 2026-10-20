@@ -1,0 +1,85 @@
+name: mashadasha-observability
+x-runtime: &runtime
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options: {max-size: 10m, max-file: '2'}
+  networks: [observability]
+services:
+  clickhouse:
+    <<: *runtime
+    image: clickhouse/clickhouse-server:26.8-alpine@sha256:3e65ca7a356f76994c539b25584b25531826f39575d231411be989506d193dff
+    mem_limit: 768m
+    memswap_limit: 1g
+    cpus: 1.5
+    environment:
+      CLICKHOUSE_SKIP_USER_SETUP: '1'
+    volumes:
+      - /var/lib/mashadasha-observability/clickhouse:/var/lib/clickhouse
+      - ./clickhouse.xml:/etc/clickhouse-server/config.d/observability.xml:ro
+      - ./users.xml:/etc/clickhouse-server/users.d/observability.xml:ro
+    healthcheck:
+      test: ['CMD', 'clickhouse-client', '--query', 'SELECT 1']
+      interval: 15s
+      timeout: 5s
+      retries: 10
+  mongo:
+    <<: *runtime
+    image: mongo:7.0.25-jammy@sha256:314a1242a514ccfc6fedd97d8426cdd57555d3e9aa03cc6764edab99d4eec3aa
+    command: ['mongod', '--wiredTigerCacheSizeGB', '0.25', '--bind_ip_all', '--quiet']
+    mem_limit: 384m
+    memswap_limit: 512m
+    cpus: 0.5
+    volumes:
+      - /var/lib/mashadasha-observability/mongo:/data/db
+  app:
+    <<: *runtime
+    image: docker.hyperdx.io/hyperdx/hyperdx:2.19.0@sha256:e576cd37c0306f02ed85ea229f547abf9cdaae876c186b1209242f6e8249ecbc
+    mem_limit: 640m
+    memswap_limit: 768m
+    cpus: 1
+    networks: [observability, ingress]
+    env_file: /etc/mashadasha-observability/app.env
+    environment:
+      MONGO_URI: mongodb://mongo:27017/hyperdx
+      HYPERDX_APP_URL: https://observe.158-160-179-53.sslip.io
+      FRONTEND_URL: https://observe.158-160-179-53.sslip.io
+      HYPERDX_API_PORT: '8000'
+      HYPERDX_APP_PORT: '8080'
+      SERVER_URL: http://127.0.0.1:8000
+      HYPERDX_LOG_LEVEL: warn
+      NODE_OPTIONS: --max-old-space-size=192
+      USAGE_STATS_ENABLED: 'false'
+      NEXT_TELEMETRY_DISABLED: '1'
+      OTEL_SDK_DISABLED: 'true'
+      DEFAULT_CONNECTIONS: '[{"name":"MashaDasha","host":"http://clickhouse:8123","username":"default","password":""}]'
+    ports:
+      - 127.0.0.1:8410:8080
+      - 127.0.0.1:8411:8000
+    depends_on:
+      clickhouse: {condition: service_healthy}
+      mongo: {condition: service_started}
+  collector:
+    <<: *runtime
+    image: docker.clickhouse.com/clickhouse/clickstack-otel-collector:2.19.0@sha256:38de0808c2e6f8fab9d1cd130142d5f70a508213a4965d18e19cfd1d19de39d2
+    networks: [observability, ingress]
+    entrypoint: ['/otelcontribcol']
+    command: ['--config=/etc/otelcol/config.yaml']
+    mem_limit: 160m
+    memswap_limit: 192m
+    cpus: 0.5
+    environment:
+      GOMEMLIMIT: 110MiB
+    ports:
+      - 127.0.0.1:8418:4318
+    volumes:
+      - ./collector.yaml:/etc/otelcol/config.yaml:ro
+      - /proc:/hostfs/proc:ro
+      - /sys:/hostfs/sys:ro
+      - /:/hostfs:ro,rslave
+    depends_on:
+      clickhouse: {condition: service_healthy}
+networks:
+  observability:
+    internal: true
+  ingress: {}

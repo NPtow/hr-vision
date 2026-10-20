@@ -1,0 +1,16 @@
+# Include inside the trusted production host handler in /etc/hr-vision/Caddyfile.
+@observabilityIngest {
+    path /telemetry/v1/traces /telemetry/v1/logs
+    method POST
+    header_regexp Origin ^https://(mashadasha[.]tech|hr-vision[.]158-160-179-53[.]sslip[.]io)$
+}
+handle @observabilityIngest {
+    request_body {
+        max_size 2MB
+    }
+    uri strip_prefix /telemetry
+    reverse_proxy 127.0.0.1:8418
+}
+handle /telemetry/* {
+    respond "Forbidden" 403
+}
