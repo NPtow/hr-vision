@@ -266,7 +266,8 @@ class CandidatePortal:
             item = self._media_locks.setdefault(meeting_id, [threading.Lock(), 0])
             item[1] += 1
         try:
-            with item[0]:
+            from media_runtime import operation_lock
+            with operation_lock(item[0]):
                 yield
         finally:
             with self._media_guard:
@@ -334,6 +335,8 @@ class CandidatePortal:
         db.execute('CREATE UNIQUE INDEX IF NOT EXISTS cp_meeting_revision ON cp_meetings(application_id,revision)')
         db.execute('CREATE INDEX IF NOT EXISTS cp_meeting_calendar ON cp_meetings(manager_id,status,start,end)')
         employer_workflow.init(db)
+        import call_cleanup
+        call_cleanup.init(db)
         db.execute('''CREATE TABLE IF NOT EXISTS cp_workflow_events (
           event_key TEXT PRIMARY KEY, candidate_id TEXT NOT NULL REFERENCES cp_candidates(id),
           application_id TEXT NOT NULL REFERENCES cp_applications(id),

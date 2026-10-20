@@ -46,6 +46,30 @@ class FeedbackHTTPTest(unittest.TestCase):
             r=self.post('feedback/questions',self.identity,self.manager)[1];self.assertEqual(r['status'],'processing');self.assertIsNone(r['questionnaire'])
         with patch.object(app,'load_transcripts',side_effect=RuntimeError('private')):
             r=self.post('feedback/questions',self.identity,self.manager)[1];self.assertEqual(r['status'],'unavailable');self.assertNotIn('private',str(r))
+
+    def test_revoked_session_during_transcript_fetch_neither_returns_nor_saves_questions(self):
+        def revoke(_room):
+            with app.connect() as db:
+                db.execute("UPDATE sessions SET expires=0 WHERE actor='manager'")
+            return [{'id': 'vtt', 'text': VTT}]
+        with patch.object(app, 'load_transcripts', side_effect=revoke):
+            code, response = self.post('feedback/questions', self.identity, self.manager)
+        self.assertEqual(code, 401)
+        self.assertNotIn('questionnaire', response)
+        with app.connect() as db:
+            self.assertFalse(app.read(db)['candidates']['anna']['meeting'].get('questionnaire'))
+
+    def test_changed_room_during_transcript_fetch_cannot_save_old_questions(self):
+        def replace(_room):
+            with app.LOCK, app.connect() as db:
+                state = app.read(db)
+                state['candidates']['anna']['meeting']['room'] = {'id': 'replacement', 'name': 'replacement'}
+                app.write(db, state)
+            return [{'id': 'vtt', 'text': VTT}]
+        with patch.object(app, 'load_transcripts', side_effect=replace):
+            code, response = self.post('feedback/questions', self.identity, self.manager)
+        self.assertEqual(code, 409)
+        self.assertNotIn('questionnaire', response)
     def test_draft_survives_http_round_trip(self):
         self.post('action',{**self.identity,'action':'feedback.questions','questions':'Как вы вернули клиента?'},self.manager)
         q=self.post('feedback/questions',self.identity,self.manager)[1]['questionnaire']

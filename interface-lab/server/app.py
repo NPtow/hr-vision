@@ -18,6 +18,7 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from domain import NAMES, Problem, accounts, actor_name, fresh, public_state, require, transition, text, iso, now, timestamp
 from daily_media import DailyMedia
+from media_runtime import provider_budget, provider_timeout
 from feedback import questionnaire, vtt_turns
 import browser_access
 from dsa_panel import DsaPanel
@@ -214,7 +215,7 @@ def load_transcripts(room):
         link = provider('/transcript/' + urllib.parse.quote(transcript['transcriptId'], safe='') + '/access-link')
         url = link.get('download_link') or link.get('link')
         require(isinstance(url, str) and url.startswith('https://'), 'Провайдер не вернул файл транскрипта.', 502)
-        with urllib.request.urlopen(url, timeout=18) as file:
+        with urllib.request.urlopen(url, timeout=provider_timeout()) as file:
             content = file.read(1024 * 1024 + 1)
         require(len(content) <= 1024 * 1024, 'Транскрипт слишком большой для теста.', 502)
         result.append({'id': transcript['transcriptId'], 'text': content.decode('utf-8')})
@@ -274,21 +275,28 @@ class Handler(BaseHTTPRequestHandler):
                 return self.answer(200, {'status': 'ready', 'questionnaire': m['questionnaire'], 'draft': m.get('feedbackDraft', {})})
             room = m.get('room')
             mid = m['id']
+            scope = self.scope
         result = None
         status = 'missing'
         if room:
             try:
-                transcripts = load_transcripts(room)
+                with provider_budget():
+                    transcripts = load_transcripts(room)
                 turns = [turn for item in transcripts for turn in vtt_turns(item['text'], NAMES['manager'])]
                 result = questionnaire(turns, mid)
                 status = 'ready' if result else 'missing' if transcripts else 'processing'
             except Exception:
                 status = 'unavailable'
-        if result:
-            with LOCK, connect() as db:
+        # Provider work can outlive logout, scope changes or room replacement.
+        # Validate again before returning or persisting private interview data.
+        with LOCK, connect() as db:
+            require(self.actor(db) == actor and self.scope == scope, 'Войдите снова.', 401)
+            state = read(db, self.scope)
+            _, current = get_meeting(state, actor, body)
+            require(current['status'] == 'completed' and current.get('room') == room,
+                    'Встреча изменилась. Обновите страницу.', 409)
+            if result:
                 db.execute('BEGIN IMMEDIATE')
-                state = read(db, self.scope)
-                _, current = get_meeting(state, actor, body)
                 # Freeze one version. A second device cannot change an open form.
                 current.setdefault('questionnaire', result)
                 if not current['questionnaire']:
@@ -296,6 +304,7 @@ class Handler(BaseHTTPRequestHandler):
                 result = current['questionnaire']
                 draft = current.get('feedbackDraft', {})
                 write(db, state)
+        if result:
             return self.answer(200, {'status': 'ready', 'questionnaire': result, 'draft': draft})
         return self.answer(200, {'status': status, 'questionnaire': None})
 
@@ -619,6 +628,8 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == '__main__':
+    import call_cleanup
+    call_cleanup.start_worker(CANDIDATE_PORTAL)
     candidate_notifications.start_worker(connect, update_handler=CANDIDATE_BOT.handle_update,
         telegram_renderer=CANDIDATE_BOT.render_notification)
     HH_ROUTES.start_worker()

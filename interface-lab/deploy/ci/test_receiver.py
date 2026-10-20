@@ -134,9 +134,10 @@ class ReceiverTest(unittest.TestCase):
         self.assertEqual(r.PRE_MEETING_NOTICES_RUNTIME - r.PRE_REMINDERS_RUNTIME, {'meeting_reminders.py'})
         self.assertEqual(r.PRE_MEETING_LAB_RUNTIME - r.PRE_MEETING_NOTICES_RUNTIME, {'meeting_notifications.py'})
         self.assertEqual(r.PRE_RECRUITER_COACH_RUNTIME - r.PRE_MEETING_LAB_RUNTIME, {'meeting_lab.py'})
-        self.assertEqual(r.RUNTIME - r.PRE_RECRUITER_COACH_RUNTIME, {'recruiter_coach.py'})
+        self.assertEqual(r.PRE_CALL_CLEANUP_RUNTIME - r.PRE_RECRUITER_COACH_RUNTIME, {'recruiter_coach.py'})
+        self.assertEqual(r.RUNTIME - r.PRE_CALL_CLEANUP_RUNTIME, {'call_cleanup.py', 'media_runtime.py'})
         for runtime in (r.LEGACY_RUNTIME, r.BOT_RUNTIME, r.PRE_IMPORT_RUNTIME, r.PRE_OUTREACH_RUNTIME,
-                        r.PRE_ACCESS_RUNTIME, r.PRE_CV_RUNTIME, r.PRE_POOLED_RUNTIME, r.PRE_EMPLOYER_TELEGRAM_RUNTIME, r.PRE_REMINDERS_RUNTIME, r.PRE_MEETING_NOTICES_RUNTIME, r.PRE_MEETING_LAB_RUNTIME, r.PRE_RECRUITER_COACH_RUNTIME, r.RUNTIME):
+                        r.PRE_ACCESS_RUNTIME, r.PRE_CV_RUNTIME, r.PRE_POOLED_RUNTIME, r.PRE_EMPLOYER_TELEGRAM_RUNTIME, r.PRE_REMINDERS_RUNTIME, r.PRE_MEETING_NOTICES_RUNTIME, r.PRE_MEETING_LAB_RUNTIME, r.PRE_RECRUITER_COACH_RUNTIME, r.PRE_CALL_CLEANUP_RUNTIME, r.RUNTIME):
             with self.subTest(count=len(runtime)):
                 a, s, m = self.bundle('service', runtime=runtime)
                 self.assertEqual(r.unpack(a, s, 'service'), m)
@@ -462,6 +463,20 @@ class ReceiverTest(unittest.TestCase):
             db.execute("INSERT INTO cn_outbox VALUES ('meeting.completed', ?, 'pending', 'candidate')",
                        ('{"lifecycle":true}',))
             r.guard_outbox_runtime(db, prior)
+
+    def test_call_cleanup_schema_requires_worker_even_when_queue_is_empty(self):
+        prior = self.runtime(self.root / 'before-cleanup', r.PRE_CALL_CLEANUP_RUNTIME)
+        current = self.runtime(self.root / 'with-cleanup', r.RUNTIME)
+        with sqlite3.connect(':memory:') as db:
+            r.guard_outbox_runtime(db, prior)
+            db.execute('CREATE TABLE cp_call_cleanup (closed_at REAL)')
+            for state in ('empty', 'pending', 'closed'):
+                db.execute('DELETE FROM cp_call_cleanup')
+                if state != 'empty':
+                    db.execute('INSERT INTO cp_call_cleanup VALUES (?)', (None if state == 'pending' else 123,))
+                with self.subTest(state=state), self.assertRaisesRegex(ValueError, 'Call cleanup schema'):
+                    r.guard_outbox_runtime(db, prior)
+                r.guard_outbox_runtime(db, current)
 
     def test_malformed_outbox_fails_closed_for_old_runtime(self):
         old = self.runtime(self.root / 'old', r.PRE_MEETING_NOTICES_RUNTIME)

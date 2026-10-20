@@ -133,6 +133,40 @@ class MeetingLabTest(unittest.TestCase):
         with patch.object(self.media, 'request', side_effect=revoke):
             self.assertProblem(401, lambda: self.lab.join(self.headers, sid, {'consent': True}))
 
+    def test_rejoin_preserves_recording_identity_for_finish(self):
+        sid = self.live()['id']
+        self.lab.capture(self.headers, sid, {'kind': 'recording', 'status': 'started',
+                                           'instanceId': 'active-recording-instance'})
+        self.lab.join(self.headers, sid, {'consent': True})
+        def stop(room):
+            if room.get('recordingInstanceId') != 'active-recording-instance':
+                raise Problem('provider recording not found', 502)
+        with patch.object(self.media, 'finish', side_effect=stop) as finish:
+            self.lab.finish(self.headers, sid, {})
+        self.assertEqual(self.get(sid)['status'], 'completed')
+        self.assertEqual(finish.call_count, 1)
+
+    def test_rejoin_preserves_capture_event_arriving_during_token_request(self):
+        sid = self.live()['id']
+        request = self.media.request
+        def capture(*args, **kwargs):
+            self.lab.capture(self.headers, sid, {'kind': 'recording', 'status': 'started',
+                                               'instanceId': 'late-recording-instance'})
+            return request(*args, **kwargs)
+        with patch.object(self.media, 'request', side_effect=capture):
+            self.lab.join(self.headers, sid, {'consent': True})
+        self.lab.finish(self.headers, sid, {})
+        self.assertEqual(self.media.finished[-1]['recordingInstanceId'], 'late-recording-instance')
+
+    def test_recreated_room_does_not_inherit_old_capture_identity(self):
+        sid = self.live()['id']
+        self.lab.capture(self.headers, sid, {'kind': 'recording', 'status': 'started', 'instanceId': 'old'})
+        recreated = {**self.media.room(sid, screenshare=True), 'id': 'replacement-room'}
+        with patch.object(self.media, 'room', return_value=recreated):
+            self.lab.join(self.headers, sid, {'consent': True})
+        self.lab.finish(self.headers, sid, {})
+        self.assertNotIn('recordingInstanceId', self.media.finished[-1])
+
     def test_notes_cas_retry_and_durable_restart(self):
         sid = self.create()['id']
         saved = self.lab.notes(self.headers, sid, {'revision': 0, 'text': '  Моя заметка\n'})

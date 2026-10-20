@@ -44,12 +44,13 @@ PRE_REMINDERS_RUNTIME = PRE_EMPLOYER_TELEGRAM_RUNTIME | {'employer_notifications
 PRE_MEETING_NOTICES_RUNTIME = PRE_REMINDERS_RUNTIME | {'meeting_reminders.py'}
 PRE_MEETING_LAB_RUNTIME = PRE_MEETING_NOTICES_RUNTIME | {'meeting_notifications.py'}
 PRE_RECRUITER_COACH_RUNTIME = PRE_MEETING_LAB_RUNTIME | {'meeting_lab.py'}
-RUNTIME = PRE_RECRUITER_COACH_RUNTIME | {'recruiter_coach.py'}
+PRE_CALL_CLEANUP_RUNTIME = PRE_RECRUITER_COACH_RUNTIME | {'recruiter_coach.py'}
+RUNTIME = PRE_CALL_CLEANUP_RUNTIME | {'call_cleanup.py', 'media_runtime.py'}
 BOT_RUNTIME = PRE_IMPORT_RUNTIME - {'recruiter_access.py', 'recruiter_sources.py', 'recruiter_notifications.py'}
 LEGACY_RUNTIME = BOT_RUNTIME - {'candidate_bot.py'}
 RUNTIME_LAYOUTS = {frozenset(LEGACY_RUNTIME), frozenset(BOT_RUNTIME), frozenset(PRE_IMPORT_RUNTIME),
                    frozenset(PRE_OUTREACH_RUNTIME), frozenset(PRE_ACCESS_RUNTIME), frozenset(PRE_CV_RUNTIME),
-                   frozenset(PRE_POOLED_RUNTIME), frozenset(PRE_EMPLOYER_TELEGRAM_RUNTIME), frozenset(PRE_REMINDERS_RUNTIME), frozenset(PRE_MEETING_NOTICES_RUNTIME), frozenset(PRE_MEETING_LAB_RUNTIME), frozenset(PRE_RECRUITER_COACH_RUNTIME), frozenset(RUNTIME)}
+                   frozenset(PRE_POOLED_RUNTIME), frozenset(PRE_EMPLOYER_TELEGRAM_RUNTIME), frozenset(PRE_REMINDERS_RUNTIME), frozenset(PRE_MEETING_NOTICES_RUNTIME), frozenset(PRE_MEETING_LAB_RUNTIME), frozenset(PRE_RECRUITER_COACH_RUNTIME), frozenset(PRE_CALL_CLEANUP_RUNTIME), frozenset(RUNTIME)}
 MAX_ARCHIVE = 50 * 1024 * 1024
 MAX_CONTENT = 120 * 1024 * 1024
 
@@ -205,6 +206,11 @@ def stop_api():
 def guard_outbox_runtime(db, source):
     runtime = frozenset(path.relative_to(source).as_posix() for path in source.rglob('*') if path.is_file())
     require(runtime in RUNTIME_LAYOUTS, 'Incomplete recovery API')
+    if 'call_cleanup.py' not in runtime:
+        schema = db.execute("SELECT type FROM sqlite_master WHERE name='cp_call_cleanup'").fetchall()
+        # Even an empty queue is not enough: the durable cancellation trigger
+        # would keep creating jobs under old code with no worker to consume them.
+        require(not schema, 'Call cleanup schema requires call_cleanup.py; use a compatible forward recovery')
     if 'meeting_notifications.py' in runtime:
         return
     schema = db.execute("SELECT type FROM sqlite_master WHERE name='cn_outbox'").fetchall()

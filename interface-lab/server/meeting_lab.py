@@ -242,7 +242,8 @@ class MeetingLab:
             entry = self.operations.setdefault(sid, [threading.Lock(), 0])
             entry[1] += 1
         try:
-            with entry[0]:
+            from media_runtime import operation_lock
+            with operation_lock(entry[0]):
                 yield
         finally:
             with self.operations_lock:
@@ -355,6 +356,12 @@ class MeetingLab:
                 db.execute('BEGIN IMMEDIATE')
                 _, current = self.identity(db, headers, sid, principal)
                 require(current['status'] != 'completed', 'Эта встреча завершена.', 409)
+                previous_room = current.get('room') or {}
+                # A reload/second participant renews the same room. Preserve
+                # capture identity even when its event arrived during provider I/O.
+                if (previous_room.get('id') == room['id'] and previous_room.get('name') == room['name']
+                        and previous_room.get('recordingInstanceId')):
+                    room = {**room, 'recordingInstanceId': previous_room['recordingInstanceId']}
                 current['room'] = room
                 self.write(db, current)
             return {'session': self.public(current), 'room': {'url': room['url'], 'token': token['token']}}
