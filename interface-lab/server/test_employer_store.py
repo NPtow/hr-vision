@@ -100,6 +100,20 @@ class EmployerStoreTest(unittest.TestCase):
             fn(*args, **kwargs)
         self.assertEqual(caught.exception.status, status, caught.exception.message)
 
+    def test_application_exposes_current_weekly_availability_without_private_rule_payload(self):
+        cid = self.person()
+        aid = self.accepted([cid])[0]
+        with self.connect() as db:
+            self.portal.profile(db, cid, {'availability': [], 'availabilitySchedule': {'weekly': [{
+                'id': 'daily', 'startDate': now().date().isoformat(), 'weekdays': list(range(7)),
+                'startTime': '09:00', 'endTime': '18:00', 'timezone': 'Europe/Moscow'}], 'dates': []}})
+            candidate = self.portal.person(db, cid)
+            employer = store.application(db, 'a', aid)
+            self.assertGreater(len(employer['profile']['availability']), 20)
+            self.assertEqual(employer['profile']['availability'], candidate['availability'])
+            self.assertNotIn('availabilitySchedule', employer['profile'])
+            self.assertNotIn('availabilityManual', employer['profile'])
+
     def test_create_uses_canonical_vacancy_and_request_id_survives_restart(self):
         body = {'role': 'Инженер', 'problem': 'Развитие', 'salary': '100–150 тыс.', 'format': 'Москва'}
         with self.connect() as db:

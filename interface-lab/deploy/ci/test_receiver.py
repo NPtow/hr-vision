@@ -136,9 +136,10 @@ class ReceiverTest(unittest.TestCase):
         self.assertEqual(r.PRE_RECRUITER_COACH_RUNTIME - r.PRE_MEETING_LAB_RUNTIME, {'meeting_lab.py'})
         self.assertEqual(r.PRE_CALL_CLEANUP_RUNTIME - r.PRE_RECRUITER_COACH_RUNTIME, {'recruiter_coach.py'})
         self.assertEqual(r.PRE_OBSERVABILITY_RUNTIME - r.PRE_CALL_CLEANUP_RUNTIME, {'call_cleanup.py', 'media_runtime.py'})
-        self.assertEqual(r.RUNTIME - r.PRE_OBSERVABILITY_RUNTIME, {'observability.py'})
+        self.assertEqual(r.PRE_CANDIDATE_CALENDAR_RUNTIME - r.PRE_OBSERVABILITY_RUNTIME, {'observability.py'})
+        self.assertEqual(r.RUNTIME - r.PRE_CANDIDATE_CALENDAR_RUNTIME, {'candidate_availability.py'})
         for runtime in (r.LEGACY_RUNTIME, r.BOT_RUNTIME, r.PRE_IMPORT_RUNTIME, r.PRE_OUTREACH_RUNTIME,
-                        r.PRE_ACCESS_RUNTIME, r.PRE_CV_RUNTIME, r.PRE_POOLED_RUNTIME, r.PRE_EMPLOYER_TELEGRAM_RUNTIME, r.PRE_REMINDERS_RUNTIME, r.PRE_MEETING_NOTICES_RUNTIME, r.PRE_MEETING_LAB_RUNTIME, r.PRE_RECRUITER_COACH_RUNTIME, r.PRE_CALL_CLEANUP_RUNTIME, r.PRE_OBSERVABILITY_RUNTIME, r.RUNTIME):
+                        r.PRE_ACCESS_RUNTIME, r.PRE_CV_RUNTIME, r.PRE_POOLED_RUNTIME, r.PRE_EMPLOYER_TELEGRAM_RUNTIME, r.PRE_REMINDERS_RUNTIME, r.PRE_MEETING_NOTICES_RUNTIME, r.PRE_MEETING_LAB_RUNTIME, r.PRE_RECRUITER_COACH_RUNTIME, r.PRE_CALL_CLEANUP_RUNTIME, r.PRE_OBSERVABILITY_RUNTIME, r.PRE_CANDIDATE_CALENDAR_RUNTIME, r.RUNTIME):
             with self.subTest(count=len(runtime)):
                 a, s, m = self.bundle('service', runtime=runtime)
                 self.assertEqual(r.unpack(a, s, 'service'), m)
@@ -427,6 +428,20 @@ class ReceiverTest(unittest.TestCase):
             restart = stack.enter_context(patch.object(r, 'restart_api'))
             health = stack.enter_context(patch.object(r, 'check_origin'))
             yield stage, manifest, base, api, database, stop, restart, health
+
+    def test_old_calendar_runtime_cannot_erase_saved_rules_or_timezone(self):
+        old = self.runtime(self.root / 'old-calendar', r.PRE_CANDIDATE_CALENDAR_RUNTIME)
+        current = self.runtime(self.root / 'with-calendar', r.RUNTIME)
+        with sqlite3.connect(self.outbox()) as db:
+            db.execute('CREATE TABLE cp_candidates (profile TEXT)')
+            db.execute('INSERT INTO cp_candidates VALUES (?)', (json.dumps({'availability': []}),))
+            r.guard_outbox_runtime(db, old)
+            for profile in ({'timezone': 'Europe/Moscow'}, {'availabilitySchedule': {'weekly': [{'id': 'x'}], 'dates': []}},
+                            {'availabilitySchedule': {'weekly': [], 'dates': [{'date': '2026-10-21'}]}}):
+                db.execute('UPDATE cp_candidates SET profile=?', (json.dumps(profile),))
+                with self.assertRaisesRegex(ValueError, 'Candidate calendar preferences'):
+                    r.guard_outbox_runtime(db, old)
+                r.guard_outbox_runtime(db, current)
 
     def test_legacy_target_refuses_lifecycle_for_both_roles_and_all_states(self):
         old = self.runtime(self.root / 'old', r.PRE_MEETING_NOTICES_RUNTIME)

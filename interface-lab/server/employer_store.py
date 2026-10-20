@@ -424,8 +424,9 @@ def _application_row(db, workspace_id, application_id):
 
 
 def application(db, workspace_id, application_id, include_rejected=False, include_unapproved=False):
+    from candidate_availability import project
     row = _application_row(db, workspace_id, application_id)
-    profile = json.loads(row[15])
+    profile = project(json.loads(row[15]))
     require(include_rejected or row[5] != 'rejected', 'Кандидат не найден.', 404)
     require(include_unapproved or (row[3] == 'accepted' and profile.get('consentReuse') is True),
             'Кандидат не найден.', 404)

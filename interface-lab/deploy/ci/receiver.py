@@ -46,12 +46,13 @@ PRE_MEETING_LAB_RUNTIME = PRE_MEETING_NOTICES_RUNTIME | {'meeting_notifications.
 PRE_RECRUITER_COACH_RUNTIME = PRE_MEETING_LAB_RUNTIME | {'meeting_lab.py'}
 PRE_CALL_CLEANUP_RUNTIME = PRE_RECRUITER_COACH_RUNTIME | {'recruiter_coach.py'}
 PRE_OBSERVABILITY_RUNTIME = PRE_CALL_CLEANUP_RUNTIME | {'call_cleanup.py', 'media_runtime.py'}
-RUNTIME = PRE_OBSERVABILITY_RUNTIME | {'observability.py'}
+PRE_CANDIDATE_CALENDAR_RUNTIME = PRE_OBSERVABILITY_RUNTIME | {'observability.py'}
+RUNTIME = PRE_CANDIDATE_CALENDAR_RUNTIME | {'candidate_availability.py'}
 BOT_RUNTIME = PRE_IMPORT_RUNTIME - {'recruiter_access.py', 'recruiter_sources.py', 'recruiter_notifications.py'}
 LEGACY_RUNTIME = BOT_RUNTIME - {'candidate_bot.py'}
 RUNTIME_LAYOUTS = {frozenset(LEGACY_RUNTIME), frozenset(BOT_RUNTIME), frozenset(PRE_IMPORT_RUNTIME),
                    frozenset(PRE_OUTREACH_RUNTIME), frozenset(PRE_ACCESS_RUNTIME), frozenset(PRE_CV_RUNTIME),
-                   frozenset(PRE_POOLED_RUNTIME), frozenset(PRE_EMPLOYER_TELEGRAM_RUNTIME), frozenset(PRE_REMINDERS_RUNTIME), frozenset(PRE_MEETING_NOTICES_RUNTIME), frozenset(PRE_MEETING_LAB_RUNTIME), frozenset(PRE_RECRUITER_COACH_RUNTIME), frozenset(PRE_CALL_CLEANUP_RUNTIME), frozenset(PRE_OBSERVABILITY_RUNTIME), frozenset(RUNTIME)}
+                   frozenset(PRE_POOLED_RUNTIME), frozenset(PRE_EMPLOYER_TELEGRAM_RUNTIME), frozenset(PRE_REMINDERS_RUNTIME), frozenset(PRE_MEETING_NOTICES_RUNTIME), frozenset(PRE_MEETING_LAB_RUNTIME), frozenset(PRE_RECRUITER_COACH_RUNTIME), frozenset(PRE_CALL_CLEANUP_RUNTIME), frozenset(PRE_OBSERVABILITY_RUNTIME), frozenset(PRE_CANDIDATE_CALENDAR_RUNTIME), frozenset(RUNTIME)}
 MAX_ARCHIVE = 50 * 1024 * 1024
 MAX_CONTENT = 120 * 1024 * 1024
 
@@ -207,6 +208,16 @@ def stop_api():
 def guard_outbox_runtime(db, source):
     runtime = frozenset(path.relative_to(source).as_posix() for path in source.rglob('*') if path.is_file())
     require(runtime in RUNTIME_LAYOUTS, 'Incomplete recovery API')
+    if 'candidate_availability.py' not in runtime:
+        schema = db.execute("SELECT type FROM sqlite_master WHERE name='cp_candidates'").fetchall()
+        if schema:
+            require(schema == [('table',)], 'Cannot verify candidate calendar schema')
+            for raw, in db.execute('SELECT profile FROM cp_candidates'):
+                profile = json.loads(raw)
+                require(isinstance(profile, dict), 'Cannot verify candidate calendar profile')
+                schedule = profile.get('availabilitySchedule') or {}
+                require(not schedule.get('weekly') and not schedule.get('dates') and not profile.get('timezone'),
+                        'Candidate calendar preferences require candidate_availability.py; use a compatible forward recovery')
     if 'call_cleanup.py' not in runtime:
         schema = db.execute("SELECT type FROM sqlite_master WHERE name='cp_call_cleanup'").fetchall()
         # Even an empty queue is not enough: the durable cancellation trigger

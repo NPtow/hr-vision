@@ -1,5 +1,11 @@
 export type Availability = { start: string; end: string };
+export type DayAvailability = { startTime: string; endTime: string };
+export type WeeklyAvailability = DayAvailability & { id: string; startDate: string; weekdays: number[]; timezone: string };
+export type AvailabilitySchedule = { weekly: WeeklyAvailability[]; dates: { date: string; timezone: string; intervals: DayAvailability[] }[] };
 export type CandidateProfile = {
+  timezone?: string;
+  availabilitySchedule?: AvailabilitySchedule;
+  availabilityManual?: Availability[];
   name: string;
   city: string;
   desiredRole: string;
