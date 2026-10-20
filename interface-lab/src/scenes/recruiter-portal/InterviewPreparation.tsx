@@ -1,42 +1,73 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Dialog } from 'radix-ui';
 import { ArrowDownToLine, ArrowUpRight, FileText, Mail, MessageCircle, X } from 'lucide-react';
-import type { RecruiterCandidate } from './api';
-import { contactLinks, downloadText, type CoachContext, type InterviewCoachController } from './interview-coach';
+import { RecruiterRequestError, type RecruiterCandidate } from './api';
+import { EmployerResumePreview } from '../employer-workspace/EmployerResumePreview';
+import { contactLinks, type InterviewCoachController } from './interview-coach';
+import '../employer-workspace/employer-candidate-profile.css';
 import './interview-coach.css';
-
-export function CoachDialog({ open, onOpenChange, title, children, container }: {
-  open: boolean; onOpenChange: (open: boolean) => void; title: string; children: ReactNode; container?: HTMLElement | null;
-}) {
-  return <Dialog.Root open={open} onOpenChange={onOpenChange}>
-    <Dialog.Portal container={container}>
-      <Dialog.Overlay className="ric-overlay"/>
-      <Dialog.Content className="ric-dialog" aria-describedby={undefined}>
-        <header><Dialog.Title>{title}</Dialog.Title><Dialog.Close aria-label="Закрыть" className="ric-icon"><X size={20}/></Dialog.Close></header>
-        <div className="ric-dialog-content">{children}</div>
-      </Dialog.Content>
-    </Dialog.Portal>
-  </Dialog.Root>;
-}
 
 export function ResumeAction({ coach, name, container }: { coach: InterviewCoachController; name: string; container?: HTMLElement | null }) {
   const [open, setOpen] = useState(false);
-  const [context, setContext] = useState<CoachContext | null>(null);
+  const [file, setFile] = useState<{ name: string; blob: Blob } | null>(null);
+  const [fallback, setFallback] = useState('');
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const sequence = useRef(0);
+  useEffect(() => () => { sequence.current++; }, []);
   async function load() {
-    setOpen(true); setError('');
-    try { setContext(await coach.context()); } catch (cause) { setError((cause as Error).message); }
+    const current = ++sequence.current;
+    setLoading(true); setError(''); setFile(null); setFallback('');
+    try {
+      // The original-file endpoint accepts PDF/images. Other stored formats
+      // retain their readable source text through the same authorized context.
+      const original = await coach.originalResume().catch(cause => {
+        if (cause instanceof RecruiterRequestError && cause.status === 409) return null;
+        throw cause;
+      });
+      const resume = original?.resume;
+      if (current !== sequence.current) return;
+      if (resume) {
+        const bytes = Uint8Array.from(atob(resume.contentBase64), character => character.charCodeAt(0));
+        setFile({ name: resume.filename, blob: new Blob([bytes], { type: resume.mimeType }) });
+      } else {
+        const context = await coach.context();
+        if (current === sequence.current) setFallback(context.resume?.text || String(context.profile.about || 'Резюме пока не загружено.'));
+      }
+    } catch (cause) {
+      if (current === sequence.current) setError(cause instanceof Error ? cause.message : 'Не удалось открыть резюме.');
+    } finally { if (current === sequence.current) setLoading(false); }
   }
-  return <>
-    <button className="ric-link" onClick={() => void load()}><FileText size={15}/>Резюме</button>
-    <CoachDialog open={open} onOpenChange={setOpen} title={name} container={container}>
-      {error ? <p role="alert">{error}</p> : !context ? <p>Загружаем резюме…</p> : <>
-        <p className="ric-muted">{context.resume?.filename || 'Общие сведения о кандидате'}</p>
-        <div className="ric-resume-text">{context.resume?.text || String(context.profile.about || 'Резюме пока не загружено.')}</div>
-        {context.resume && <button className="ric-link" onClick={() => downloadText(`${name} — резюме.txt`, context.resume!.text)}><ArrowDownToLine size={16}/>Скачать текст</button>}
-      </>}
-    </CoachDialog>
-  </>;
+  function changeOpen(next: boolean) {
+    setOpen(next);
+    if (next) void load();
+    else { sequence.current++; setFile(null); setFallback(''); }
+  }
+  function download() {
+    if (!file) return;
+    const url = URL.createObjectURL(file.blob);
+    const link = document.createElement('a'); link.href = url; link.download = file.name;
+    document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
+  return <Dialog.Root open={open} onOpenChange={changeOpen}>
+    <Dialog.Trigger asChild><button className="ric-link"><FileText size={15}/>Резюме</button></Dialog.Trigger>
+    <Dialog.Portal container={container}>
+      <Dialog.Overlay className="ric-overlay"/>
+      <Dialog.Content className="ric-dialog ric-resume-dialog" aria-describedby={undefined}>
+        <header>
+          <div className="ric-resume-heading"><Dialog.Title>{name}</Dialog.Title><p>{file?.name || 'Резюме'}</p></div>
+          <div className="ric-resume-actions">
+            {file && <button className="ric-icon" aria-label="Скачать резюме" title="Скачать резюме" onClick={download}><ArrowDownToLine size={19}/></button>}
+            <Dialog.Close aria-label="Закрыть резюме" className="ric-icon"><X size={21}/></Dialog.Close>
+          </div>
+        </header>
+        <div className="ric-resume-content">
+          {error ? <div className="ecp-resume-status" role="alert"><p>{error}</p><button className="ric-link" onClick={() => void load()}>Повторить</button></div> : loading ? <p className="ecp-resume-status" role="status">Открываем резюме…</p> : <EmployerResumePreview resume={file ? { id: file.name, name: file.name, load: async () => file.blob, onDownload: download } : undefined} text={fallback}/>}
+        </div>
+      </Dialog.Content>
+    </Dialog.Portal>
+  </Dialog.Root>;
 }
 
 /** Direct candidate contacts. Opening a composer never sends a message. */
