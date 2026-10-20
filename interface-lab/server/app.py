@@ -31,6 +31,7 @@ from hh_outreach import HHOutreach
 from hh_outreach_routes import HHOutreachRoutes
 from hh_outreach_worker import OutreachBrowserService
 from employer_routes import EmployerRoutes
+from meeting_lab import MeetingLab
 import employer_access
 
 ROOT = Path(os.environ.get('HR_DATA_DIR', '/var/lib/hr-vision-api'))
@@ -99,6 +100,7 @@ BOOKING.event_sink = OUTREACH.event_sink
 OUTREACH_ROUTES = HHOutreachRoutes(OUTREACH, worker_secret=os.environ.get('HR_HH_OUTREACH_WORKER_SECRET', ''))
 OUTREACH_BROWSER = OutreachBrowserService.from_env(OUTREACH, CANDIDATE_PORTAL)
 EMPLOYER_ROUTES = EmployerRoutes(connect, LOCK, CANDIDATE_PORTAL, MEDIA, ORIGIN)
+MEETING_LAB = MeetingLab(connect, LOCK, MEDIA)
 
 
 def read(db, scope='sfera'):
@@ -412,6 +414,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         try:
+            if MEETING_LAB.handles(self.path):
+                result, headers = MEETING_LAB.handle('GET', self.path, self.headers)
+                return self.answer(200, result, headers)
             if OUTREACH_BROWSER.handles(self.path):
                 result, headers = OUTREACH_BROWSER.handle('GET', self.path, self.headers, None, self.actor)
                 return self.answer(200, result, headers)
@@ -483,14 +488,14 @@ class Handler(BaseHTTPRequestHandler):
                     'Другой источник запроса.', 403)
             require(self.headers.get('Content-Type', '').startswith('application/json'), 'Нужен JSON.', 415)
             path = urllib.parse.urlsplit(self.path).path
-            if EMPLOYER_ROUTES.handles(path):
+            if EMPLOYER_ROUTES.handles(path) or MEETING_LAB.handles(path):
                 require(self.headers.get('Sec-Fetch-Site') not in ('cross-site', 'none') or
                         self.headers.get('Sec-Fetch-Site') == 'none' and self.headers.get('Origin') in ORIGINS,
                         'Другой источник запроса.', 403)
             if path == '/api/hr/employer/telegram/session':
                 require(self.headers.get('Origin') in ORIGINS, 'Другой источник запроса.', 403)
             size = int(self.headers.get('Content-Length', '0'))
-            if path in ('/api/hr/employer/intake', '/api/hr/employer/vacancies/import'):
+            if path in ('/api/hr/employer/intake', '/api/hr/employer/vacancies/import') or MEETING_LAB.handles(path):
                 with connect() as db:
                     employer_access.authenticate(db, self.headers)
             if path == '/api/hr/recruiter/candidates':
@@ -509,10 +514,13 @@ class Handler(BaseHTTPRequestHandler):
             limit = (12 * 1024 * 1024 if path in ('/api/hr/intake', '/api/hr/employer/intake') else
                      7 * 1024 * 1024 if path in ('/api/hr/candidate/resume', '/api/hr/recruiter/candidates', '/api/hr/employer/vacancies/import') else
                      256 * 1024 if outreach_discovery else
-                     128 * 1024 if path in ('/api/hr/employer/vacancies', '/api/hr/employer/vacancies/update') else 32768)
+                     128 * 1024 if path in ('/api/hr/employer/vacancies', '/api/hr/employer/vacancies/update') or MEETING_LAB.handles(path) else 32768)
             require(0 < size <= limit, 'Слишком большой запрос.', 413)
             body = json.loads(self.rfile.read(size))
             require(isinstance(body, dict), 'Некорректный запрос.', 400)
+            if MEETING_LAB.handles(self.path):
+                result, headers = MEETING_LAB.handle('POST', self.path, self.headers, body)
+                return self.answer(200, result, headers)
             if OUTREACH_BROWSER.handles(self.path):
                 result, headers = OUTREACH_BROWSER.handle('POST', self.path, self.headers, body, self.actor)
                 return self.answer(200, result, headers)

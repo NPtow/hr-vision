@@ -132,9 +132,10 @@ class ReceiverTest(unittest.TestCase):
         self.assertEqual(r.PRE_EMPLOYER_TELEGRAM_RUNTIME - r.PRE_POOLED_RUNTIME, {'interview_scheduler.py'})
         self.assertEqual(r.PRE_REMINDERS_RUNTIME - r.PRE_EMPLOYER_TELEGRAM_RUNTIME, {'employer_notifications.py', 'telegram_miniapp.py'})
         self.assertEqual(r.PRE_MEETING_NOTICES_RUNTIME - r.PRE_REMINDERS_RUNTIME, {'meeting_reminders.py'})
-        self.assertEqual(r.RUNTIME - r.PRE_MEETING_NOTICES_RUNTIME, {'meeting_notifications.py'})
+        self.assertEqual(r.PRE_MEETING_LAB_RUNTIME - r.PRE_MEETING_NOTICES_RUNTIME, {'meeting_notifications.py'})
+        self.assertEqual(r.RUNTIME - r.PRE_MEETING_LAB_RUNTIME, {'meeting_lab.py'})
         for runtime in (r.LEGACY_RUNTIME, r.BOT_RUNTIME, r.PRE_IMPORT_RUNTIME, r.PRE_OUTREACH_RUNTIME,
-                        r.PRE_ACCESS_RUNTIME, r.PRE_CV_RUNTIME, r.PRE_POOLED_RUNTIME, r.PRE_EMPLOYER_TELEGRAM_RUNTIME, r.PRE_REMINDERS_RUNTIME, r.PRE_MEETING_NOTICES_RUNTIME, r.RUNTIME):
+                        r.PRE_ACCESS_RUNTIME, r.PRE_CV_RUNTIME, r.PRE_POOLED_RUNTIME, r.PRE_EMPLOYER_TELEGRAM_RUNTIME, r.PRE_REMINDERS_RUNTIME, r.PRE_MEETING_NOTICES_RUNTIME, r.PRE_MEETING_LAB_RUNTIME, r.RUNTIME):
             with self.subTest(count=len(runtime)):
                 a, s, m = self.bundle('service', runtime=runtime)
                 self.assertEqual(r.unpack(a, s, 'service'), m)
@@ -454,6 +455,13 @@ class ReceiverTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'Lifecycle outbox'):
                 r.guard_outbox_runtime(db, old)
 
+    def test_pre_lab_runtime_still_handles_lifecycle_rows(self):
+        prior = self.runtime(self.root / 'prior', r.PRE_MEETING_LAB_RUNTIME)
+        with sqlite3.connect(self.outbox()) as db:
+            db.execute("INSERT INTO cn_outbox VALUES ('meeting.completed', ?, 'pending', 'candidate')",
+                       ('{"lifecycle":true}',))
+            r.guard_outbox_runtime(db, prior)
+
     def test_malformed_outbox_fails_closed_for_old_runtime(self):
         old = self.runtime(self.root / 'old', r.PRE_MEETING_NOTICES_RUNTIME)
         with sqlite3.connect(self.outbox()) as db:
@@ -624,7 +632,7 @@ class ReceiverTest(unittest.TestCase):
         with sqlite3.connect(':memory:') as db:
             db.execute('CREATE TABLE scenario (id INTEGER PRIMARY KEY, body TEXT)')
             db.execute('INSERT INTO scenario VALUES (1, ?)', (json.dumps({'candidates': {}}),))
-            for table in ('cp_interviews', 'cp_meetings'):
+            for table in ('cp_interviews', 'cp_meetings', 'ml_sessions'):
                 db.execute(f'CREATE TABLE {table} (status TEXT)')
                 db.execute(f'INSERT INTO {table} VALUES (?)', ('booked',))
                 r.guard_live_interviews(db)

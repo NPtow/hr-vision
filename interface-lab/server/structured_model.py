@@ -22,7 +22,8 @@ INJECTION = re.compile(r'ignore\s+(?:all\s+)?(?:previous|above|system)|(?:system
     r'you\s+are\s+(?:now|chatgpt)|выполни\s+(?:команд|код)|<script\b', re.I)
 MAX_INPUT = 65000  # UTF-8 bytes conservatively bound input tokens, including schema.
 MAX_OUTPUT = 3000
-ROLES = {'cv-extractor', 'cv-writer', 'cv-judge'}
+ROLES = {'cv-extractor', 'cv-writer', 'cv-judge',
+         'meeting-lab-extractor', 'meeting-lab-writer', 'meeting-lab-judge'}
 
 
 def dump(value):

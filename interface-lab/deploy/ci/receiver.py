@@ -42,12 +42,13 @@ PRE_POOLED_RUNTIME = PRE_CV_RUNTIME | {'structured_model.py', 'candidate_resume_
 PRE_EMPLOYER_TELEGRAM_RUNTIME = PRE_POOLED_RUNTIME | {'interview_scheduler.py'}
 PRE_REMINDERS_RUNTIME = PRE_EMPLOYER_TELEGRAM_RUNTIME | {'employer_notifications.py', 'telegram_miniapp.py'}
 PRE_MEETING_NOTICES_RUNTIME = PRE_REMINDERS_RUNTIME | {'meeting_reminders.py'}
-RUNTIME = PRE_MEETING_NOTICES_RUNTIME | {'meeting_notifications.py'}
+PRE_MEETING_LAB_RUNTIME = PRE_MEETING_NOTICES_RUNTIME | {'meeting_notifications.py'}
+RUNTIME = PRE_MEETING_LAB_RUNTIME | {'meeting_lab.py'}
 BOT_RUNTIME = PRE_IMPORT_RUNTIME - {'recruiter_access.py', 'recruiter_sources.py', 'recruiter_notifications.py'}
 LEGACY_RUNTIME = BOT_RUNTIME - {'candidate_bot.py'}
 RUNTIME_LAYOUTS = {frozenset(LEGACY_RUNTIME), frozenset(BOT_RUNTIME), frozenset(PRE_IMPORT_RUNTIME),
                    frozenset(PRE_OUTREACH_RUNTIME), frozenset(PRE_ACCESS_RUNTIME), frozenset(PRE_CV_RUNTIME),
-                   frozenset(PRE_POOLED_RUNTIME), frozenset(PRE_EMPLOYER_TELEGRAM_RUNTIME), frozenset(PRE_REMINDERS_RUNTIME), frozenset(PRE_MEETING_NOTICES_RUNTIME), frozenset(RUNTIME)}
+                   frozenset(PRE_POOLED_RUNTIME), frozenset(PRE_EMPLOYER_TELEGRAM_RUNTIME), frozenset(PRE_REMINDERS_RUNTIME), frozenset(PRE_MEETING_NOTICES_RUNTIME), frozenset(PRE_MEETING_LAB_RUNTIME), frozenset(RUNTIME)}
 MAX_ARCHIVE = 50 * 1024 * 1024
 MAX_CONTENT = 120 * 1024 * 1024
 
@@ -172,7 +173,7 @@ def guard_live_interviews(db):
     for row in states:
         state = json.loads(row[0])
         require(not any(c.get('meeting') and c['meeting']['status'] == 'live' for c in state['candidates'].values()), 'An interview is live. Retry after it finishes; current release is unchanged.')
-    for table in ('cp_interviews', 'cp_meetings'):
+    for table in ('cp_interviews', 'cp_meetings', 'ml_sessions'):
         if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone():
             require(not db.execute(f"SELECT 1 FROM {table} WHERE status='live' LIMIT 1").fetchone(),
                     'An interview is live. Retry after it finishes; current release is unchanged.')
@@ -203,7 +204,7 @@ def stop_api():
 def guard_outbox_runtime(db, source):
     runtime = frozenset(path.relative_to(source).as_posix() for path in source.rglob('*') if path.is_file())
     require(runtime in RUNTIME_LAYOUTS, 'Incomplete recovery API')
-    if runtime == frozenset(RUNTIME):
+    if 'meeting_notifications.py' in runtime:
         return
     schema = db.execute("SELECT type FROM sqlite_master WHERE name='cn_outbox'").fetchall()
     if not schema:

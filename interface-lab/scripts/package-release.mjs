@@ -56,7 +56,7 @@ if (target === 'service') for (const name of [
   'employer_notifications.py', 'telegram_miniapp.py', 'meeting_reminders.py', 'meeting_notifications.py',
   'employer_access.py', 'employer_store.py', 'employer_workflow.py', 'employer_routes.py',
   'employer_projection.py', 'employer_intake.py', 'vacancy_import.py', 'vacancy_sources.py',
-  'daily_media.py', 'domain.py', 'dsa_panel.py', 'feedback.py',
+  'daily_media.py', 'domain.py', 'dsa_panel.py', 'feedback.py', 'meeting_lab.py',
 ]) add(`server/${name}`, `api/${name}`);
 writeFileSync(`${stage}/release.json`, JSON.stringify(manifest) + '\n');
 execFileSync('tar', ['-czf', 'release.tgz', '-C', stage, 'release.json', 'ui', ...(target === 'service' ? ['api'] : [])], {

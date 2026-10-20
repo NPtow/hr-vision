@@ -38,12 +38,12 @@ class DailyMedia:
         except (urllib.error.URLError, TimeoutError):
             raise Problem('Видеосервис не отвечает. Попробуйте ещё раз.', 502) from None
 
-    def room(self, meeting_id, *, recordable=True):
+    def room(self, meeting_id, *, recordable=True, screenshare=False):
         name = 'hrv-' + meeting_id
         path = '/rooms/' + urllib.parse.quote(name, safe='')
         properties = {
             'exp': int(time.time()) + 3600, 'eject_at_room_exp': True, 'max_participants': 2,
-            'enable_prejoin_ui': True, 'enable_screenshare': False, 'enable_chat': False,
+            'enable_prejoin_ui': True, 'enable_screenshare': bool(screenshare), 'enable_chat': False,
             'enable_knocking': False, 'enforce_unique_user_ids': True,
             'enable_transcription_storage': bool(recordable),
             'enable_live_captions_ui': bool(recordable),
@@ -132,7 +132,7 @@ class DailyMedia:
                 'Не удалось определить участников звонка.', 502)
         return participants
 
-    def materials(self, room, known=None):
+    def materials(self, room, known=None, *, include_metadata=False):
         """Read the two provider channels independently, without storing media URLs.
 
         `known` must be trusted metadata already bound to this exact room. It is
@@ -142,14 +142,14 @@ class DailyMedia:
         require(isinstance(room, dict) and room.get('name') and room.get('id'), 'Комната не найдена.', 409)
         known = known or {}
         with ThreadPoolExecutor(max_workers=2) as pool:
-            video = pool.submit(self._material_channel, room, 'video', known.get('recordings', []))
-            transcript = pool.submit(self._material_channel, room, 'transcription', known.get('transcripts', []))
+            video = pool.submit(self._material_channel, room, 'video', known.get('recordings', []), include_metadata)
+            transcript = pool.submit(self._material_channel, room, 'transcription', known.get('transcripts', []), include_metadata)
             recordings, video_state = video.result()
             transcripts, transcript_state = transcript.result()
         return {'recordings': recordings, 'transcripts': transcripts,
                 'video': video_state, 'transcription': transcript_state, 'checkedAt': iso(now())}
 
-    def _material_channel(self, room, kind, known):
+    def _material_channel(self, room, kind, known, include_metadata=False):
         video = kind == 'video'
         label = 'видео' if video else 'расшифровку'
         identifier, room_key = ('id', 'room_name') if video else ('transcriptId', 'roomId')
@@ -159,7 +159,8 @@ class DailyMedia:
         errors, candidates, pending = [], {}, False
         for item in known[:20]:
             if isinstance(item, dict) and isinstance(item.get('id'), str) and 0 < len(item['id']) <= 200:
-                candidates[item['id']] = {'id': item['id'], 'duration': item.get('duration')}
+                candidates[item['id']] = {'id': item['id'], 'duration': item.get('duration'),
+                                          'providerMetadata': item.get('providerMetadata', {})}
         try:
             result = self.request(path)
             require(isinstance(result, dict) and isinstance(result.get('data'), list), 'Неверный ответ видеосервиса.', 502)
@@ -171,7 +172,15 @@ class DailyMedia:
                 rid = row.get(identifier)
                 if status in ('finished', 't_finished'):
                     require(isinstance(rid, str) and 0 < len(rid) <= 200, 'Не удалось определить файл.', 502)
-                    candidates[rid] = {'id': rid, 'duration': row.get('duration')}
+                    metadata = {}
+                    if isinstance(row.get('mtgSessionId'), str) and len(row['mtgSessionId']) <= 200:
+                        metadata['meetingSessionId'] = row['mtgSessionId']
+                    if video and type(row.get('start_ts')) in (int, float) and 0 < row['start_ts'] < 4102444800:
+                        metadata['startTs'] = row['start_ts']
+                    for field in ('created_at', 'updated_at') if not video else ():
+                        if isinstance(row.get(field), str) and len(row[field]) <= 80:
+                            metadata[field] = row[field]
+                    candidates[rid] = {'id': rid, 'duration': row.get('duration'), 'providerMetadata': metadata}
                 elif status in ('failed', 'error', 't_failed', 't_error', 'canceled', 'cancelled'):
                     errors.append('Видеосервис сообщил об ошибке обработки.')
                 else:
@@ -196,8 +205,12 @@ class DailyMedia:
                         content = response.read(1024 * 1024 + 1)
                     require(len(content) <= 1024 * 1024, 'Расшифровка слишком большая.', 502)
                     files.append({'id': rid, 'text': content.decode('utf-8')})
+                if include_metadata:
+                    files[-1]['providerMetadata'] = item.get('providerMetadata', {})
             except (Problem, OSError, TimeoutError, ValueError, TypeError):
                 errors.append(f'Не удалось получить {label}. Попробуйте ещё раз.')
         state = 'ready' if files else 'error' if errors else 'processing' if pending else 'absent'
         return files, {'status': state, 'ids': list(candidates)[:20],
+                       **({'complete': bool(files and not errors and not pending and len(files) == len(candidates))}
+                          if include_metadata else {}),
                        **({'error': ' '.join(dict.fromkeys(errors))} if errors else {})}
