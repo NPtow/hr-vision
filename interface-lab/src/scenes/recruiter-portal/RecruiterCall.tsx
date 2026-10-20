@@ -7,7 +7,11 @@ import type { InterviewRecording } from '../candidate-portal/api';
 import { useInterviewCoach, type LiveInterviewTurn } from './interview-coach';
 import { InterviewCoachPanel } from './InterviewCoachPanel';
 import { InterviewContacts, ResumeAction } from './InterviewPreparation';
+import { RecruiterInterviewShell } from '../recruiter-coach/RecruiterInterviewShell';
+import type { CoachDraft, CoachPerson, CoachTranscriptTurn } from '../recruiter-coach/coach-types';
+import { RecruiterCoachNotesAdapter, RecruiterOriginalResume } from './RecruiterCoachNotesAdapter';
 import './interview-coach.css';
+import './recruiter-coach-live.css';
 
 export type ActiveCall = { kind: 'interview' | 'meeting'; preview?: boolean; candidateId: string; interviewId?: string; candidate?: RecruiterCandidate; applicationId?: string; meetingId?: string; title: string; accountActive?: boolean; recording?: InterviewRecording };
 type CaptureStatus = 'unknown' | 'active' | 'stopped' | 'error';
@@ -33,6 +37,7 @@ export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }:
   const [panel, setPanel] = useState(true);
   const [fullscreen, setFullscreen] = useState(false);
   const [turns, setTurns] = useState<LiveInterviewTurn[]>([]);
+  const [currentId, setCurrentId] = useState('');
   const root = useRef<HTMLDivElement>(null);
   const coach = useInterviewCoach({ candidateId: active.candidateId, interviewId: active.interviewId || '', token });
   const coachRef = useRef(coach);
@@ -65,7 +70,7 @@ export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }:
         if (!alive || !mount.current) return;
         const frame = DailyIframe.createFrame(mount.current, {
           iframeStyle: { width: '100%', height: '100%', border: '0' },
-          showLeaveButton: false, showFullscreenButton: true, showUserNameChangeUI: false,
+          showLeaveButton: false, showFullscreenButton: !hasCoach, showUserNameChangeUI: false,
         });
         call.current = frame;
         frame.iframe()?.setAttribute('title', `Интервью · ${active.title}`);
@@ -108,7 +113,7 @@ export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }:
       const frame = call.current; call.current = null;
       void frame?.destroy();
     };
-  }, [active.kind, active.candidateId, active.applicationId, active.meetingId, token]);
+  }, [active.kind, active.candidateId, active.interviewId, active.applicationId, active.meetingId, token]);
 
   async function startInterview() {
     if (starting || !joined || !oralConsent) return;
@@ -124,6 +129,7 @@ export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }:
       // Requests are not evidence of actual media capture. Provider events above
       // independently control the "Запись идёт" / transcription indicators.
       setStartRequested(true); callbacks.current.onJoined();
+      void coachRef.current.refresh();
     } catch (cause) {
       setStartFailed(true); setRetryRecording(current => current || retryRecording); setRetryTranscription(current => current || retryTranscription);
       setError((cause as Error).message);
@@ -140,14 +146,61 @@ export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }:
       // Completion is already persisted. A frame that was ejected by the
       // provider must not turn successful completion into a client error.
       try {
-        if (recording === 'active') call.current?.stopRecording();
-        if (transcribing === 'active') call.current?.stopTranscription();
+        // The interview backend owns provider stop and recording persistence.
+        if (active.kind !== 'interview') {
+          if (recording === 'active') call.current?.stopRecording();
+          if (transcribing === 'active') call.current?.stopTranscription();
+        }
         await call.current?.destroy();
       } catch { /* The provider closes the room as part of completion. */ }
       call.current = null;
       callbacks.current.onCompleted();
     } catch (e) { ending.current = false; setError((e as Error).message); setFinishing(false); }
   }
+
+  const questions = coach.data?.active?.questions || [];
+  const current = Math.max(0, questions.findIndex(question => question.id === (currentId || coach.progress.currentId)));
+  const canWrite = joined && !finishing && coach.data?.interviewStatus === 'live';
+  const person: CoachPerson = { id: active.candidateId, name: active.title, sourceSummary: '', promptSource: '', questions };
+  const draft: CoachDraft = {
+    current, status: {}, general: coach.progress.general || '', noteDocument: coach.progress.noteDocument,
+    notes: Object.fromEntries(Object.entries(coach.progress.answers || {}).map(([id, answer]) => [id, answer.note])),
+  };
+  const transcript: CoachTranscriptTurn[] = turns.map(turn => ({
+    id: turn.id, text: turn.text, speaker: turn.speaker,
+    time: new Date(turn.at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
+  }));
+  function changeDraft(patch: Partial<CoachDraft>) {
+    if (patch.current !== undefined && questions[patch.current]) setCurrentId(questions[patch.current].id);
+    if (!canWrite) return;
+    const next = { ...coach.progress, ...(questions[current] ? { currentId: questions[current].id } : {}) };
+    if (patch.current !== undefined && questions[patch.current]) next.currentId = questions[patch.current].id;
+    if (patch.general !== undefined) next.general = patch.general;
+    if (patch.noteDocument !== undefined) next.noteDocument = patch.noteDocument;
+    if (patch.notes) next.answers = Object.fromEntries(Object.entries(patch.notes).map(([id, note]) => [id, { ...coach.progress.answers?.[id], status: coach.progress.answers?.[id]?.status || '' as const, note }]));
+    coach.change(next);
+  }
+  const captureStatus = recording === 'active' ? transcribing === 'active' ? 'Запись и расшифровка идут' : 'Запись идёт · ждём расшифровку' : recording === 'stopped' ? 'Запись остановлена' : recording === 'error' ? 'Ошибка записи' : startRequested ? 'Проверяем статус записи' : 'Запись не начата';
+
+  if (hasCoach) return <div className="ric-approved-shell" role="dialog" aria-modal="true" aria-label={`Интервью · ${active.title}`}>
+    <RecruiterInterviewShell
+      person={person} draft={draft} onChange={changeDraft}
+      phase={finishing ? 'finishing' : 'live'} writable={canWrite}
+      mediaSlot={<div className="ric-approved-daily" ref={mount}/>}
+      onClose={() => { if (!finishing) void close(); }} onFinish={() => { if (joined && !starting) void finish(); }}
+      finishDisabled={!joined || starting || finishing} closeDisabled={finishing}
+      recording={recording === 'active'} transcript={transcript}
+      durationLabel={!joined ? 'Подключаемся…' : present ? 'Собеседник подключён' : 'Ждём собеседника'}
+      notice={error || coach.error ? <span role="alert">{error || coach.error}{coach.error && <button onClick={() => void (coach.dirty ? coach.flush() : coach.refresh())}>Повторить сохранение</button>}</span> : undefined}
+      saveError={coach.error}
+      resumeContent={<RecruiterOriginalResume token={token} candidateId={active.candidateId} interviewId={active.interviewId!}/>}
+      stageToolbar={joined ? <div className="ric-approved-capture">
+        {(recording !== 'active' || transcribing !== 'active') && <><label><input type="checkbox" checked={oralConsent} disabled={starting || finishing} onChange={event => setOralConsent(event.target.checked)}/><span>Согласие на запись получено</span></label><button disabled={!oralConsent || starting || finishing || (startRequested && !retryRecording && !retryTranscription && !startFailed)} onClick={() => void startInterview()}>{starting ? 'Запускаем…' : retryRecording || retryTranscription || startFailed ? 'Повторить запуск записи' : startRequested ? 'Ожидаем подтверждения…' : 'Начать запись'}</button></>}
+        <span className="ric-approved-status" role="status">{captureStatus}</span>
+      </div> : undefined}
+      notesContent={onSelectQuestion => <RecruiterCoachNotesAdapter coach={coach} token={token} candidateId={active.candidateId} interviewId={active.interviewId!} questions={questions} writable={canWrite} onSelectQuestion={onSelectQuestion} transcript={transcript}/>}
+    />
+  </div>;
 
   return <div ref={root} className={`rp-call-layer ${hasCoach ? `ric-call ${panel ? '' : 'ric-call-wide'}` : ''}`} role="dialog" aria-modal="true" aria-labelledby="rp-call-title">
     <div className="ric-call-stage">
