@@ -85,6 +85,7 @@ export function InterviewList({ candidates, busy, videoConfigured, onDetails, on
             {available && <div className="rp-interview-row-actions">
                 <Button type="button" disabled={busy || !videoConfigured} onClick={() => onCall({
                   kind: 'interview', candidateId: candidate.id, title: name,
+                  interviewId: interview.id, candidate,
                   accountActive: candidate.accountActive, recording: interview.recording,
                 })}><Video size={16} aria-hidden="true"/>{interview.status === 'live' ? 'Продолжить' : 'Подключиться'}</Button>
             </div>}

@@ -1,12 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import type { DailyCall } from '@daily-co/daily-js';
-import { PhoneOff, X } from 'lucide-react';
+import { Maximize2, MessageCircle, Minimize2, PanelRightOpen, PhoneOff, X } from 'lucide-react';
 import { Button } from '../../components/ui/button';
-import { recruiterRequest, type Room } from './api';
+import { recruiterRequest, type RecruiterCandidate, type Room } from './api';
 import type { InterviewRecording } from '../candidate-portal/api';
 import { CandidateAccessControls } from './CandidateAccessControls';
+import { useInterviewCoach, type LiveInterviewTurn } from './interview-coach';
+import { InterviewCoachPanel } from './InterviewCoachPanel';
+import { CoachDialog, InterviewContacts, ResumeAction } from './InterviewPreparation';
+import './interview-coach.css';
 
-export type ActiveCall = { kind: 'interview' | 'meeting'; candidateId: string; applicationId?: string; meetingId?: string; title: string; accountActive?: boolean; recording?: InterviewRecording };
+export type ActiveCall = { kind: 'interview' | 'meeting'; candidateId: string; interviewId?: string; candidate?: RecruiterCandidate; applicationId?: string; meetingId?: string; title: string; accountActive?: boolean; recording?: InterviewRecording };
 type CaptureStatus = 'unknown' | 'active' | 'stopped' | 'error';
 
 export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }: {
@@ -28,9 +32,28 @@ export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }:
   const [startFailed, setStartFailed] = useState(false);
   const [showClaim, setShowClaim] = useState(false);
   const [error, setError] = useState('');
+  const [panel, setPanel] = useState(true);
+  const [contactsOpen, setContactsOpen] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
+  const [turns, setTurns] = useState<LiveInterviewTurn[]>([]);
+  const root = useRef<HTMLDivElement>(null);
+  const coach = useInterviewCoach({ candidateId: active.candidateId, interviewId: active.interviewId || '', token });
+  const coachRef = useRef(coach);
+  coachRef.current = coach;
+  const hasCoach = active.kind === 'interview' && !!active.interviewId;
   const callbacks = useRef({ onClose, onJoined, onCompleted });
   callbacks.current = { onClose, onJoined, onCompleted };
   const identity = active.kind === 'interview' ? { candidateId: active.candidateId } : { candidateId: active.candidateId, applicationId: active.applicationId, meetingId: active.meetingId };
+
+  useEffect(() => {
+    const update = () => setFullscreen(document.fullscreenElement === root.current);
+    document.addEventListener('fullscreenchange', update);
+    return () => document.removeEventListener('fullscreenchange', update);
+  }, []);
+  async function close() {
+    if (!await coachRef.current.flush()) { setPanel(true); return; }
+    callbacks.current.onClose();
+  }
 
   useEffect(() => {
     let alive = true;
@@ -55,6 +78,18 @@ export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }:
         frame.on('joined-meeting', () => {
           if (!alive) return;
           setJoined(true); presence(); callbacks.current.onJoined();
+          void coachRef.current.refresh();
+        });
+        const seenTurns = new Set<string>();
+        frame.on('transcription-message', event => {
+          if (!alive || !event?.text?.trim() || event.rawResponse?.is_final !== true) return;
+          const timestamp = new Date(event.timestamp).getTime();
+          if (!Number.isFinite(timestamp)) return;
+          const id = `${event.instanceId || 'live'}:${event.participantId}:${timestamp}`;
+          if (seenTurns.has(id)) return;
+          seenTurns.add(id);
+          const speaker = Object.values(frame.participants()).find(person => person.session_id === event.participantId)?.user_name || 'Участник';
+          setTurns(previous => [...previous, { id, text: event.text.trim(), speaker, at: new Date(timestamp).toISOString() }]);
         });
         frame.on('recording-started', () => { if (alive) { setRecording('active'); setStartRequested(true); setRetryRecording(false); } });
         frame.on('recording-stopped', () => { if (alive) { setRecording('stopped'); setRetryRecording(true); } });
@@ -65,7 +100,7 @@ export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }:
         const resetCapture = () => { if (alive) { setRecording('unknown'); setTranscribing('unknown'); setRetryRecording(false); setRetryTranscription(false); } };
         frame.on('network-connection', event => { if (event?.event === 'interrupted') resetCapture(); });
         frame.on('error', () => { if (alive) { resetCapture(); setError('Не удалось подключиться. Проверьте сеть и разрешения камеры и микрофона.'); } });
-        frame.on('left-meeting', () => { if (alive && !ending.current) callbacks.current.onClose(); });
+        frame.on('left-meeting', () => { if (alive && !ending.current) { setJoined(false); void close(); } });
         await frame.join({ url: room.url, token: room.token });
       } catch (e) { if (alive) setError((e as Error).message); }
     }
@@ -103,6 +138,7 @@ export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }:
     if (finishing || starting) return;
     setFinishing(true); setError(''); ending.current = true;
     try {
+      if (!await coachRef.current.flush()) { ending.current = false; setFinishing(false); setPanel(true); return; }
       await recruiterRequest(`${active.kind}/complete`, token, identity);
       // Completion is already persisted. A frame that was ejected by the
       // provider must not turn successful completion into a client error.
@@ -116,10 +152,14 @@ export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }:
     } catch (e) { ending.current = false; setError((e as Error).message); setFinishing(false); }
   }
 
-  return <div className="rp-call-layer" role="dialog" aria-modal="true" aria-labelledby="rp-call-title">
+  return <div ref={root} className={`rp-call-layer ${hasCoach ? `ric-call ${panel ? '' : 'ric-call-wide'}` : ''}`} role="dialog" aria-modal="true" aria-labelledby="rp-call-title">
+    <div className="ric-call-stage">
     <header className="rp-call-header">
       <div><strong id="rp-call-title">{active.title}</strong><p role="status">{!joined ? 'Подключение…' : present ? 'Собеседник подключён' : 'Ждём собеседника'}{joined && ` · ${recording === 'active' ? 'Запись идёт' : recording === 'stopped' ? 'Запись остановлена' : recording === 'error' ? 'Ошибка записи' : 'Статус записи уточняется'}`}{joined && ` · ${transcribing === 'active' ? 'Расшифровка включена' : transcribing === 'stopped' ? 'Расшифровка остановлена' : transcribing === 'error' ? 'Ошибка расшифровки' : 'Статус расшифровки уточняется'}`}</p></div>
-      <div className="rp-actions"><Button variant="secondary" autoFocus disabled={finishing} onClick={onClose}><X size={16}/>Выйти</Button>{joined && <Button disabled={finishing || starting} onClick={finish}><PhoneOff size={16}/>{finishing ? 'Завершаем…' : active.kind === 'interview' ? 'Завершить интервью' : 'Завершить встречу'}</Button>}</div>
+      <div className="rp-actions">
+        {hasCoach && <><ResumeAction coach={coach} name={active.title} container={root.current}/><button className="ric-link" onClick={() => setContactsOpen(true)}><MessageCircle size={16}/>Связаться</button>{!panel && <button className="ric-icon" aria-label="Показать помощника" onClick={() => setPanel(true)}><PanelRightOpen size={19}/></button>}
+          <button className="ric-icon" aria-label={fullscreen ? 'Выйти из полноэкранного режима' : 'На весь экран'} onClick={() => { if (fullscreen) void document.exitFullscreen(); else void root.current?.requestFullscreen().catch(() => setError('Полноэкранный режим недоступен в этом браузере.')); }}>{fullscreen ? <Minimize2 size={18}/> : <Maximize2 size={18}/>}</button></>}
+        <Button variant="secondary" autoFocus disabled={finishing} onClick={() => void close()}><X size={16}/>Выйти</Button>{joined && <Button disabled={finishing || starting} onClick={finish}><PhoneOff size={16}/>{finishing ? 'Завершаем…' : active.kind === 'interview' ? 'Завершить интервью' : 'Завершить встречу'}</Button>}</div>
     </header>
     {joined && <div className="rp-call-controls">
       <div className="rp-recording-controls">
@@ -130,5 +170,10 @@ export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }:
     </div>}
     {error && <div className="rp-error" role="alert">{error}</div>}
     <div className="rp-call-frame" ref={mount}/>
+    </div>
+    {hasCoach && panel && <InterviewCoachPanel coach={coach} name={active.title} joined={joined} turns={turns} onCollapse={() => setPanel(false)}/>}
+    {hasCoach && <CoachDialog open={contactsOpen} onOpenChange={setContactsOpen} title="Связь с кандидатом" container={root.current}>
+      <InterviewContacts candidate={active.candidate || { name: active.title, email: null, telegram: '' }} coach={coach}/>
+    </CoachDialog>}
   </div>;
 }

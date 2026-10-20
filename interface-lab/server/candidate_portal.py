@@ -27,6 +27,7 @@ import interview_scheduler
 import employer_workflow
 import recruiter_access
 import recruiter_notifications
+import recruiter_coach
 
 COOKIE = '__Host-hr_candidate'
 SESSION_SECONDS = 30 * 86400
@@ -327,6 +328,7 @@ class CandidatePortal:
         availability.init(db)
         recruiter_access.init(db)
         recruiter_notifications.init(db)
+        recruiter_coach.init(db)
         db.execute('''CREATE UNIQUE INDEX IF NOT EXISTS cp_meeting_one_active
           ON cp_meetings(application_id) WHERE status IN ('pending','confirmed','live')''')
         db.execute('CREATE UNIQUE INDEX IF NOT EXISTS cp_meeting_revision ON cp_meetings(application_id,revision)')
@@ -1092,6 +1094,8 @@ class CandidatePortal:
             # Candidate prejoin alone cannot mark a human interview as live.
             db.execute(f'UPDATE {table} SET room=?,status=? WHERE id=?',
                        (dump(room), 'live' if owner else current[0], mid))
+            if not application_id and owner:
+                recruiter_coach.pin(db, cid, mid)
             if not application_id:
                 # A new explicitly controlled interview is distinguishable from
                 # legacy calls whose capture request state was not persisted.
@@ -1280,7 +1284,7 @@ class CandidatePortal:
         path = urllib.parse.urlsplit(raw_path).path
         require(self.handles(path), 'Не найдено.', 404)
         require(method in ('GET', 'POST'), 'Метод не поддерживается.', 405)
-        if path in ('/api/hr/recruiter/candidate-access/state', '/api/hr/recruiter/candidate-access/send'):
+        if path in recruiter_coach.PATHS or path in ('/api/hr/recruiter/candidate-access/state', '/api/hr/recruiter/candidate-access/send'):
             require(method == 'POST', 'Нужен POST-запрос.', 405)
         if method == 'POST':
             require((headers.get('Origin') is None or headers.get('Origin') in self.origins) and
@@ -1307,7 +1311,7 @@ class CandidatePortal:
                     '/api/hr/recruiter/interview/materials', '/api/hr/recruiter/notifications',
                     '/api/hr/recruiter/notifications/email/request', '/api/hr/recruiter/notifications/email/verify',
                     '/api/hr/recruiter/notifications/telegram/link', '/api/hr/recruiter/notifications/telegram/disconnect',
-                    '/api/hr/recruiter/candidate-access/state', '/api/hr/recruiter/candidate-access/send'},
+                    '/api/hr/recruiter/candidate-access/state', '/api/hr/recruiter/candidate-access/send'} | recruiter_coach.PATHS,
                     'Доступно только команде HR Vision.', 403)
         capability_paths = ('/api/hr/candidate/guest/state', '/api/hr/candidate/guest/join',
                             '/api/hr/candidate/claim/state', '/api/hr/candidate/claim/resume', '/api/hr/candidate/claim')
@@ -1361,7 +1365,7 @@ class CandidatePortal:
                     '/api/hr/recruiter/invitations/revoke', '/api/hr/recruiter/profile',
                     '/api/hr/recruiter/interview/join', '/api/hr/recruiter/interview/start',
                     '/api/hr/recruiter/interview/complete', '/api/hr/recruiter/interview/materials',
-                    '/api/hr/recruiter/candidate-access/state', '/api/hr/recruiter/candidate-access/send'}:
+                    '/api/hr/recruiter/candidate-access/state', '/api/hr/recruiter/candidate-access/send'} | recruiter_coach.PATHS:
                     self.recruiter_candidate(db, principal, cid,
                         allow_prepared=path in ('/api/hr/recruiter/interview/book', '/api/hr/recruiter/invitations',
                                                 '/api/hr/recruiter/invitations/revoke', '/api/hr/recruiter/profile'))
@@ -1389,6 +1393,10 @@ class CandidatePortal:
 
             if parsed_resume and parsed_resume.get('runId'):
                 self.resume_model.assert_current(db, rate_identity, parsed_resume['runId'])
+
+            if path in recruiter_coach.PATHS:
+                return recruiter_coach.handle(db, cid, body.get('interviewId'), path.rsplit('/', 1)[-1],
+                                              body, principal['id']), {'Cache-Control': 'no-store'}
 
             if path in ('/api/hr/recruiter/candidate-access/state', '/api/hr/recruiter/candidate-access/send'):
                 require(self.candidate_access is not None, 'Выдача доступа временно недоступна.', 503)

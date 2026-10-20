@@ -33,6 +33,7 @@ function add(source, name) {
 function visit(dir = '') {
   for (const name of readdirSync(`${build}/${dir}`)) {
     const rel = dir + name, file = `${build}/${rel}`, info = lstatSync(file);
+    if (rel.split('/').includes('__local_prototypes__')) throw Error('Local prototype data must not be published');
     if (info.isSymbolicLink()) throw Error(`Symlink in build: ${rel}`);
     if (info.isDirectory()) { visit(`${rel}/`); continue; }
     if (!( /\.(js|css|svg|woff2?|ttf|png|jpe?g|webp|ico|gif)$/.test(rel)
@@ -52,7 +53,7 @@ if (target === 'service') for (const name of [
   'candidate_invites.py', 'recruiter_availability.py', 'interview_scheduler.py', 'hh_recruiting.py', 'hh_routes.py',
   'candidate_booking.py', 'candidate_access.py', 'hh_outreach.py', 'hh_outreach_routes.py', 'hh_outreach_worker.py',
   'hh_browser/__init__.py', 'hh_browser/adapter.py', 'hh_browser/store.py', 'hh_browser/bridge.py',
-  'recruiter_access.py', 'recruiter_sources.py', 'recruiter_notifications.py',
+  'recruiter_access.py', 'recruiter_sources.py', 'recruiter_notifications.py', 'recruiter_coach.py',
   'employer_notifications.py', 'telegram_miniapp.py', 'meeting_reminders.py', 'meeting_notifications.py',
   'employer_access.py', 'employer_store.py', 'employer_workflow.py', 'employer_routes.py',
   'employer_projection.py', 'employer_intake.py', 'vacancy_import.py', 'vacancy_sources.py',
