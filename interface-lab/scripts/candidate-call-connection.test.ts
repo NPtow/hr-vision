@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { CallConnectionError, PreviewTimeoutError, directCallUrl, releaseCall, waitForCall, waitForPreview } from '../src/scenes/candidate-portal/call-connection.ts';
+import { CallConnectionError, PreviewTimeoutError, deviceAccessMessage, directCallUrl, releaseCall, waitForCall, waitForPreview } from '../src/scenes/candidate-portal/call-connection.ts';
 
 test('a call that never resolves can be cancelled without waiting for the provider', async () => {
   const controller = new AbortController();
@@ -91,4 +91,12 @@ test('fallback cannot send a participant token to another origin', () => {
   for (const url of ['https://evil.test/room', 'https://daily.co.evil.test/room', 'http://team.daily.co/room', 'https://user@team.daily.co/room']) {
     assert.throws(() => directCallUrl({ url, token: 'test-only' }), CallConnectionError);
   }
+});
+
+test('device denial, missing hardware, busy hardware and unanswered prompts give distinct recovery steps', () => {
+  assert.match(deviceAccessMessage(new DOMException('', 'NotAllowedError')), /настройках сайта/);
+  assert.match(deviceAccessMessage(new DOMException('', 'NotFoundError')), /не найдены/);
+  assert.match(deviceAccessMessage(new DOMException('', 'NotReadableError')), /другой звонок/);
+  assert.match(deviceAccessMessage(new PreviewTimeoutError()), /не ответил/);
+  assert.doesNotMatch(deviceAccessMessage(new Error('secret provider detail')), /secret provider detail/);
 });
