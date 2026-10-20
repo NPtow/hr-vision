@@ -133,7 +133,12 @@ export function InterviewRoom({ title, start, completed, configured, application
         // Also clean up terminal failures after join() has already resolved.
         if (callJoined) void close();
       } });
-      call.on('left-meeting', () => { if (active()) { void close(); void onRefresh(); } });
+      call.on('left-meeting', () => { if (active()) {
+        // Explicit exit aborts this attempt before destroying the frame. An
+        // active callback here is an unexpected disconnect, not a user exit.
+        setError('Подключение к встрече завершилось. Попробуйте подключиться ещё раз.');
+        void close(); void onRefresh();
+      } });
       await waitForCall(call.join({ url: credentials.url, token: credentials.token, startVideoOff: !devices.camera, startAudioOff: !devices.microphone }), controller.signal);
     } catch (cause) {
       if (alive.current && attempt.current === currentAttempt) {
@@ -164,6 +169,7 @@ export function InterviewRoom({ title, start, completed, configured, application
         {guestToken ? <p className="cp-muted">Запись начнётся после вашего согласия рекрутеру.</p> : <label className="cp-check"><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)}/><span>Согласен на запись и расшифровку встречи.</span></label>}
         {!previewReady && (camera || microphone) && configured && !joining && !closing && !reloadRequired && <CallDeviceAccess
           checking={checking} error={devices.error} onRequest={() => void devices.request({ audio: microphone, video: camera })}
+          onAudioOnly={() => { setCamera(false); setMicrophone(true); void devices.request({ audio: true, video: false }); }}
           skipDisabled={!guestToken && !consent}
           onSkip={() => { setCamera(false); setMicrophone(false); void join({ camera: false, microphone: false }); }}/>}
         {error && <p className="cp-error" role="alert">{error}</p>}

@@ -57,8 +57,8 @@ export function useCallDeviceAccess() {
   return { stream, checking, error, request, stop };
 }
 
-export function CallDeviceAccess({ checking, error, onRequest, onSkip, disabled = false, skipDisabled = false }: {
-  checking: boolean; error: string; onRequest: () => void; onSkip: () => void; disabled?: boolean; skipDisabled?: boolean;
+export function CallDeviceAccess({ checking, error, onRequest, onAudioOnly, onSkip, disabled = false, skipDisabled = false }: {
+  checking: boolean; error: string; onRequest: () => void; onAudioOnly?: () => void; onSkip: () => void; disabled?: boolean; skipDisabled?: boolean;
 }) {
   return <div className="call-device-access">
     <Camera size={28} aria-hidden="true"/>
@@ -69,6 +69,7 @@ export function CallDeviceAccess({ checking, error, onRequest, onSkip, disabled 
       {checking && <LoaderCircle size={17} className="call-device-access-spinner"/>}
       {checking ? 'Ждём разрешения…' : error ? 'Проверить доступ ещё раз' : 'Разрешить камеру и микрофон'}
     </button>
+    {error && onAudioOnly && <button className="call-device-access-skip" disabled={disabled || checking} onClick={onAudioOnly}>Продолжить только с микрофоном</button>}
     <p className="call-device-access-help">Нет запроса? Откройте настройки сайта рядом с адресом, разрешите камеру и микрофон. В Telegram откройте ссылку во внешнем браузере.</p>
     <button className="call-device-access-skip" disabled={disabled || skipDisabled} onClick={onSkip}>Войти без камеры и микрофона</button>
   </div>;

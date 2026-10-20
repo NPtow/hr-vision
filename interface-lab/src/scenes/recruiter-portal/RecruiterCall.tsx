@@ -78,10 +78,10 @@ export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }:
     await pending;
     if (cleanup.current === pending) cleanup.current = null;
   }
-  async function enableDevices() {
-    if (await devices.request({ audio: true, video: true })) {
+  async function enableDevices(camera = true) {
+    if (await devices.request({ audio: true, video: camera })) {
       devices.stop();
-      selectedDevices.current = { camera: true, microphone: true };
+      selectedDevices.current = { camera, microphone: true };
       setJoinAttempt(value => value + 1);
     }
   }
@@ -291,7 +291,7 @@ export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }:
     : connectionPhase === 'ready' ? 'Завершите вход в видеокомнату' : connectionPhase === 'loading' ? 'Загружаем видеокомнату…'
       : present ? 'Собеседник подключён' : 'Ждём собеседника';
   const accessCard = connectionPhase === 'devices'
-    ? <CallDeviceAccess checking={devices.checking} error={devices.error} onRequest={() => void enableDevices()} onSkip={joinWithoutDevices}/>
+    ? <CallDeviceAccess checking={devices.checking} error={devices.error} onRequest={() => void enableDevices()} onAudioOnly={() => void enableDevices(false)} onSkip={joinWithoutDevices}/>
     : connectionPhase === 'failed' ? <div className="ric-approved-prejoin" role="alert">
       <h2>Не удалось подключиться</h2><p>{error}</p>
       {reloadRequired ? <button className="ric-approved-join" onClick={() => window.location.reload()}>Обновить страницу</button>

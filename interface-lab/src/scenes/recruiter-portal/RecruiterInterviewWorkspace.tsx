@@ -52,7 +52,7 @@ export function RecruiterInterviewWorkspace({ candidate, token, videoConfigured,
       mediaSlot={<div className="ric-approved-prejoin">
         <Video size={30} aria-hidden="true"/>
         <p>{completed ? 'Интервью завершено' : formatDate(interview.start)}</p>
-        {!completed && <><button className="ric-approved-join" disabled={!available || joining} onClick={() => void join()}>{joining ? 'Подключаемся…' : interview.status === 'live' ? 'Вернуться в звонок' : 'Подключиться к звонку'}</button>{!available && <span>{availabilityMessage}</span>}</>}
+        {!completed && <><button className="ric-approved-join" disabled={!available || joining} onClick={() => void join()}>{joining ? 'Подключаемся…' : 'Подключиться к звонку'}</button>{!available && <span>{availabilityMessage}</span>}</>}
       </div>}
       notice={coach.error ? <span role="alert">{coach.error}<button onClick={() => void (coach.dirty ? coach.flush() : coach.refresh())}>Повторить</button></span> : undefined}
       saveError={coach.error}
