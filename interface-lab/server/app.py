@@ -504,10 +504,14 @@ class Handler(BaseHTTPRequestHandler):
             if path == '/api/hr/employer/telegram/session':
                 require(self.headers.get('Origin') in ORIGINS, 'Другой источник запроса.', 403)
             size = int(self.headers.get('Content-Length', '0'))
+            coach_notes = path in (
+                '/api/hr/recruiter/interview/coach/progress',
+                '/api/hr/recruiter/interview/coach/restore',
+            )
             if path in ('/api/hr/employer/intake', '/api/hr/employer/vacancies/import') or MEETING_LAB.handles(path):
                 with connect() as db:
                     employer_access.authenticate(db, self.headers)
-            if path == '/api/hr/recruiter/candidates':
+            if path == '/api/hr/recruiter/candidates' or coach_notes:
                 with connect() as db:
                     CANDIDATE_PORTAL.recruiter_principal(db, self.headers, self.actor)
             if path == '/api/hr/intake':
@@ -522,6 +526,7 @@ class Handler(BaseHTTPRequestHandler):
                 OUTREACH_ROUTES.authorize(self.actor)
             limit = (12 * 1024 * 1024 if path in ('/api/hr/intake', '/api/hr/employer/intake') else
                      7 * 1024 * 1024 if path in ('/api/hr/candidate/resume', '/api/hr/recruiter/candidates', '/api/hr/employer/vacancies/import') else
+                     256 * 1024 if coach_notes else
                      256 * 1024 if outreach_discovery else
                      128 * 1024 if path in ('/api/hr/employer/vacancies', '/api/hr/employer/vacancies/update') or MEETING_LAB.handles(path) else 32768)
             require(0 < size <= limit, 'Слишком большой запрос.', 413)

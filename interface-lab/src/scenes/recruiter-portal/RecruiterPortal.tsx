@@ -149,7 +149,7 @@ function RecruiterWorkspace() {
       key={`${identity.generation}-${activeCall.interviewId}`} candidate={state?.candidates.find(person => person.id === activeCall.candidateId) || activeCall.candidate}
       token={token} videoConfigured={state?.videoConfigured || false} onClose={() => setActiveCall(null)} onUpdated={refresh}
       onJoin={() => setActiveCall({ ...activeCall, preview: false })}/>
-      : activeCall && <RecruiterCall key={`${identity.generation}-${activeCall.kind}-${activeCall.applicationId || activeCall.candidateId}`} active={{ ...activeCall, accountActive: state?.candidates.find(person => person.id === activeCall.candidateId)?.accountActive ?? activeCall.accountActive }} token={token} onClose={() => { setActiveCall(null); void refresh(); }} onJoined={() => void refresh()} onCompleted={() => {
+      : activeCall && <RecruiterCall key={`${identity.generation}-${activeCall.kind}-${activeCall.interviewId || activeCall.meetingId || activeCall.applicationId || activeCall.candidateId}`} active={{ ...activeCall, accountActive: state?.candidates.find(person => person.id === activeCall.candidateId)?.accountActive ?? activeCall.accountActive }} token={token} onClose={() => { setActiveCall(null); void refresh(); }} onJoined={() => void refresh()} onCompleted={() => {
       if (!isCurrent(identity)) return;
       setActiveCall(null); setPage('interviews'); setCompletedOpen(true); setCompletedFocusId(activeCall.candidateId);
       setNotice('Интервью завершено.'); void refresh();

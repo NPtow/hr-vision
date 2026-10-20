@@ -239,6 +239,36 @@ class CandidateHTTPTest(unittest.TestCase):
             finally:
                 connection.close()
 
+    def test_coach_notes_body_limit_requires_auth_before_reading_and_is_scoped(self):
+        # No body is sent. Unauthorized/oversized requests must be rejected before read().
+        for path, token, length, expected in (
+            ('recruiter/interview/coach/progress', '', 100000, 401),
+            ('recruiter/interview/coach/restore', '', 100000, 401),
+            ('recruiter/interview/coach/progress?test=1', '', 100000, 401),
+            ('recruiter/interview/coach/progress', self.manager, 256 * 1024 + 1, 413),
+            ('recruiter/interview/coach/restore', self.manager, 256 * 1024 + 1, 413),
+            ('recruiter/interview/coach/state', self.manager, 32769, 413),
+        ):
+            connection = http.client.HTTPConnection('127.0.0.1', self.server.server_port, timeout=3)
+            try:
+                connection.putrequest('POST', '/api/hr/' + path)
+                connection.putheader('Content-Type', 'application/json')
+                if token:
+                    connection.putheader('Authorization', 'Bearer ' + token)
+                connection.putheader('Content-Length', str(length))
+                connection.endheaders()
+                self.assertEqual(connection.getresponse().status, expected, path)
+            finally:
+                connection.close()
+        # A normal Cyrillic note exceeds the former 32KiB transport ceiling but
+        # must reach the coach's ownership/domain validation rather than get 413.
+        payload = {'candidateId': self.person['id'], 'interviewId': 'not-an-interview',
+                   'expectedRevision': 0, 'scriptRevision': None,
+                   'progress': {'general': 'Подтверждён опыт работы с клиентами. ' * 250}}
+        self.assertGreater(len(json.dumps(payload).encode()), 32768)
+        self.assertEqual(self.request('recruiter/interview/coach/progress', payload,
+                                     token=self.manager)[0], 404)
+
     def test_sparse_registration_cv_review_and_owner_download_survive_reload(self):
         status, person, headers = self.request('candidate/register', {
             'email': str(uuid.uuid4()) + '@example.test', 'password': 'correct-passphrase-123',
