@@ -20,6 +20,7 @@ export function useDailyMeeting(api: MeetingLabApi, onSession: (session: LabSess
   const queue = useRef<LabTranscriptTurn[]>([]);
   const seen = useRef(new Set<string>());
   const flushing = useRef<Promise<void> | null>(null);
+  const finishing = useRef(false);
   const callback = useRef(onSession);
   callback.current = onSession;
   const captureRef = useRef(capture);
@@ -97,8 +98,10 @@ export function useDailyMeeting(api: MeetingLabApi, onSession: (session: LabSess
       call.on('participant-joined', syncParticipants).on('participant-updated', syncParticipants)
         .on('participant-left', syncParticipants).on('track-started', syncParticipants).on('track-stopped', syncParticipants);
       call.on('joined-meeting', () => { if (alive.current) { setPhase('joined'); syncParticipants(); } });
-      call.on('left-meeting', () => { if (alive.current) { setParticipants([]); setPhase('idle'); } });
-      call.on('error', event => { if (alive.current) setError(event?.errorMsg || 'Соединение прервалось.'); });
+      call.on('left-meeting', () => { if (alive.current) { setParticipants([]); if (!finishing.current) setPhase('idle'); } });
+      call.on('error', event => {
+        if (alive.current && !(finishing.current && event?.error?.type === 'ejected')) setError(event?.errorMsg || 'Соединение прервалось.');
+      });
       call.on('camera-error', () => { if (alive.current) setError('Не удалось включить камеру или микрофон. Проверьте разрешения браузера.'); });
       call.on('recording-started', event => reportCapture('recording', 'started', event?.instanceId));
       call.on('recording-error', event => reportCapture('recording', 'error', event?.instanceId, event?.errorMsg || 'Запись не началась.'));
@@ -137,34 +140,61 @@ export function useDailyMeeting(api: MeetingLabApi, onSession: (session: LabSess
 
   const finish = useCallback(async () => {
     const id = idRef.current;
-    if (!id || phase === 'finishing') return;
+    if (!id || finishing.current) return;
+    finishing.current = true;
     setPhase('finishing'); setError('');
+    const call = callRef.current;
+    let cancelDrain = () => {};
+    let waitForDrain = () => Promise.resolve();
+    if (call && !call.isDestroyed()) {
+      let recordingStopped = false;
+      let transcriptionStopped = false;
+      let resolveStopped: () => void;
+      const stopped = new Promise<void>(resolve => { resolveStopped = resolve; });
+      const onRecordingStopped = () => { recordingStopped = true; if (transcriptionStopped) resolveStopped(); };
+      const onTranscriptionStopped = () => { transcriptionStopped = true; if (recordingStopped) resolveStopped(); };
+      const onLeft = () => resolveStopped();
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      // Subscribe before the request: only the backend owns provider stop commands.
+      call.on('recording-stopped', onRecordingStopped);
+      call.on('transcription-stopped', onTranscriptionStopped);
+      call.on('left-meeting', onLeft);
+      waitForDrain = async () => {
+        // Start the fallback after the response, not before a potentially slow request.
+        await Promise.race([stopped, new Promise<void>(resolve => { timer = setTimeout(resolve, 4000); })]);
+        clearTimeout(timer);
+      };
+      cancelDrain = () => {
+        clearTimeout(timer);
+        call.off('recording-stopped', onRecordingStopped);
+        call.off('transcription-stopped', onTranscriptionStopped);
+        call.off('left-meeting', onLeft);
+      };
+    }
     try {
-      const call = callRef.current;
-      if (call && !call.isDestroyed()) {
-        const stop = (kind: 'recording' | 'transcription') => new Promise<void>(resolve => {
-          const eventName = kind === 'recording' ? 'recording-stopped' : 'transcription-stopped';
-          let timer: ReturnType<typeof setTimeout>;
-          const done = () => { clearTimeout(timer); call.off(eventName, done); resolve(); };
-          call.on(eventName, done);
-          // The server also finalizes provider capture if the browser loses acknowledgement.
-          timer = setTimeout(done, 4000);
-          try { const result = kind === 'recording' ? call.stopRecording() : call.stopTranscription(); void Promise.resolve(result).catch(done); }
-          catch { done(); }
-        });
-        await Promise.all([stop('transcription'), stop('recording')]);
-      }
       await flush();
       const result = await api.finish(id);
+      await waitForDrain();
       // The API accepts late final utterances for a bounded grace period.
-      await flush();
+      // A late upload failure remains queued; the successful server response is
+      // still authoritative about completion, and saveError stays visible.
+      await flush().catch(() => undefined);
       callback.current(result.session);
       callRef.current = null;
       if (call && !call.isDestroyed()) { await call.leave().catch(() => undefined); await call.destroy().catch(() => undefined); }
-      await flush();
+      await flush().catch(() => undefined);
       if (alive.current) { setPhase('idle'); setParticipants([]); }
-    } catch (failure) { if (alive.current) { setError(readableError(failure)); setPhase(callRef.current ? 'joined' : 'idle'); } }
-  }, [api, flush, phase]);
+    } catch (failure) {
+      await waitForDrain();
+      await flush().catch(() => undefined);
+      const stillJoined = Boolean(call && !call.isDestroyed() && call.meetingState() === 'joined-meeting');
+      if (!stillJoined) {
+        callRef.current = null;
+        if (call && !call.isDestroyed()) await call.destroy().catch(() => undefined);
+      }
+      if (alive.current) { setError(readableError(failure)); setPhase(stillJoined ? 'joined' : 'idle'); if (!stillJoined) setParticipants([]); }
+    } finally { cancelDrain(); finishing.current = false; }
+  }, [api, flush]);
 
   const leave = useCallback(async () => {
     await flush();

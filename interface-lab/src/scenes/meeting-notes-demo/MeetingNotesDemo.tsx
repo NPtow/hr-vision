@@ -353,7 +353,12 @@ export function MeetingNotesDemo({ token, onExit, displayName = 'Никита', 
       const result = await api.chat(id, chatRequest.current.id, text);
       if (sessionRef.current?.id !== id) return;
       acceptSession(result.session); setChatDraft(''); chatRequest.current = null;
-    } catch (failure) { setChatError(readableError(failure)); }
+    } catch (failure) {
+      // A grounded refusal is final for this snapshot. A new submission can use
+      // speech added afterwards; network retries still keep their original ID.
+      if (failure instanceof MeetingLabError && failure.status === 422) chatRequest.current = null;
+      setChatError(readableError(failure));
+    }
     finally { setChatBusy(false); }
   };
   const viewEvidence = (id: string) => {
