@@ -115,6 +115,9 @@ export function MeetingNotesDemo({ token, onExit, displayName = 'Никита', 
 
   const acceptSession = useCallback((next: LabSession) => {
     const previous = sessionRef.current;
+    // A poll started before a successful note save may arrive afterwards.
+    // Its older revision must never replace the newly saved shared text.
+    if (previous?.id === next.id && next.notes.revision < savedNotesRef.current.revision) next = { ...next, notes: savedNotesRef.current };
     if (!previous || previous.id !== next.id) {
       noteConflict.current = false;
       savedNotesRef.current = next.notes;
@@ -228,8 +231,13 @@ export function MeetingNotesDemo({ token, onExit, displayName = 'Никита', 
     document.addEventListener('fullscreenchange', fullscreen);
     const previous = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      if (draftRef.current !== savedNotesRef.current.text) { event.preventDefault(); event.returnValue = ''; }
+    };
+    window.addEventListener('beforeunload', beforeUnload);
     return () => {
       clearInterval(timer); document.removeEventListener('fullscreenchange', fullscreen);
+      window.removeEventListener('beforeunload', beforeUnload);
       document.body.style.overflow = previous;
       if (controlsTimer.current) clearTimeout(controlsTimer.current);
       if (toastTimer.current) clearTimeout(toastTimer.current);
