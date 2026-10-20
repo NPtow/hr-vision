@@ -4,7 +4,7 @@ import { ArrowLeft, Camera, CameraOff, LoaderCircle, Mic, MicOff, PhoneOff } fro
 import type { DailyCall } from '@daily-co/daily-js';
 import { Button } from '../../components/ui/button';
 import { CandidateApiError, candidateRequest, dateTimeLabel, type CallMaterials, type RoomCredentials } from './api';
-import { CallConnectionError, releaseCall, waitForCall } from './call-connection';
+import { CallConnectionError, PreviewTimeoutError, directCallUrl, releaseCall, waitForCall, waitForPreview } from './call-connection';
 import { MediaPanel } from './MediaPanel';
 
 export function InterviewRoom({ title, start, completed, configured, applicationId, meetingId, guestToken, onRefresh, onBack }: {
@@ -19,6 +19,7 @@ export function InterviewRoom({ title, start, completed, configured, application
   const attempt = useRef(0);
   const connection = useRef<AbortController | null>(null);
   const cleanup = useRef<Promise<void> | null>(null);
+  const [directUrl, setDirectUrl] = useState('');
   const [camera, setCamera] = useState(true);
   const [microphone, setMicrophone] = useState(true);
   const [deviceAttempt, setDeviceAttempt] = useState(0);
@@ -65,6 +66,7 @@ export function InterviewRoom({ title, start, completed, configured, application
   }, [opened]);
   useEffect(() => {
     let cancelled = false;
+    const previewController = new AbortController();
     stopPreview(); setPreviewReady(false); setDeviceError('');
     if (completed || !configured || opened || joining || (!camera && !microphone)) {
       setChecking(false);
@@ -74,32 +76,51 @@ export function InterviewRoom({ title, start, completed, configured, application
     void (async () => {
       try {
         if (!navigator.mediaDevices?.getUserMedia) throw new Error('Устройства недоступны.');
-        const media = await navigator.mediaDevices.getUserMedia({ audio: microphone, video: camera });
+        const media = await waitForPreview(navigator.mediaDevices.getUserMedia({ audio: microphone, video: camera }), previewController.signal);
         if (cancelled || !alive.current) { media.getTracks().forEach(track => track.stop()); return; }
         stream.current = media;
-        if (preview.current) { preview.current.srcObject = media; await preview.current.play().catch(() => undefined); }
+        if (preview.current) { preview.current.srcObject = media; void preview.current.play().catch(() => undefined); }
         if (!cancelled && alive.current) setPreviewReady(true);
       } catch (cause) {
-        if (!cancelled && alive.current) setDeviceError(cause instanceof Error && cause.name === 'NotAllowedError'
+        if (!cancelled && alive.current) setDeviceError(cause instanceof PreviewTimeoutError ? cause.message : cause instanceof Error && cause.name === 'NotAllowedError'
           ? 'Разрешите доступ к камере и микрофону в браузере.'
           : cause instanceof Error && cause.name === 'NotFoundError'
             ? 'Устройство не найдено. Проверьте подключение или выключите его ниже.'
             : 'Не удалось включить устройства. Попробуйте ещё раз.');
       } finally { if (!cancelled && alive.current) setChecking(false); }
     })();
-    return () => { cancelled = true; stopPreview(); };
+    return () => { cancelled = true; previewController.abort(); stopPreview(); };
   }, [camera, microphone, deviceAttempt, completed, configured, opened, joining]);
-  async function join() {
+  async function join(devices = { camera, microphone }) {
     if (joining || closing || reloadRequired || cleanup.current) return;
     const currentAttempt = ++attempt.current;
     const controller = new AbortController(); connection.current = controller;
-    const timeout = setTimeout(() => controller.abort(new CallConnectionError('Не удалось подключиться за 30 секунд. Попробуйте ещё раз.')), 30000);
-    setError(''); setJoining(true); setJoined(false); setLoaded(false); setOtherPresent(false); setRecording('unknown'); stopPreview(); setPreviewReady(false);
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    let callJoined = false;
+    const deadline = (message: string) => {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => controller.abort(new CallConnectionError(message)), 30000);
+    };
+    deadline('Сервер не выдал доступ к встрече. Попробуйте ещё раз.');
+    setError(''); setDirectUrl(''); setJoining(true); setJoined(false); setLoaded(false); setOtherPresent(false); setRecording('unknown'); stopPreview(); setPreviewReady(false);
     try {
       const credentialsRequest = guestToken
         ? candidateRequest<RoomCredentials>('guest/join', { token: guestToken })
         : candidateRequest<RoomCredentials>(applicationId ? 'meeting/join' : 'interview/join', { ...(applicationId ? { applicationId, meetingId } : {}), consent });
-      const [credentials, { default: DailyIframe }] = await waitForCall(Promise.all([credentialsRequest, import('@daily-co/daily-js')]), controller.signal);
+      // Preserve a fallback as soon as credentials arrive, even if the SDK chunk fails.
+      const access = credentialsRequest.then(credentials => {
+        if (alive.current && attempt.current === currentAttempt && !controller.signal.aborted) {
+          setDirectUrl(directCallUrl(credentials));
+          deadline('Не удалось загрузить видеосервис. Попробуйте открыть комнату отдельно.');
+        }
+        return credentials;
+      });
+      // Do not cancel the access request when a cached/chunk load error arrives
+      // first: its successful response is needed for the separate-room fallback.
+      const sdk = import('@daily-co/daily-js').catch(() => null);
+      const [credentials, sdkModule] = await waitForCall(Promise.all([access, sdk]), controller.signal);
+      if (!sdkModule) throw new CallConnectionError('Не удалось загрузить видеосервис. Попробуйте открыть комнату отдельно.');
+      const { default: DailyIframe } = sdkModule;
       if (!alive.current || attempt.current !== currentAttempt || controller.signal.aborted) return;
       const previousCall = DailyIframe.getCallInstance();
       if (previousCall && !previousCall.isDestroyed()) {
@@ -112,11 +133,12 @@ export function InterviewRoom({ title, start, completed, configured, application
       if (!mount.current) throw new CallConnectionError('Не удалось открыть видеокомнату. Попробуйте ещё раз.');
       const call = DailyIframe.createFrame(mount.current, { iframeStyle: { width: '100%', height: '100%', border: '0' }, showLeaveButton: false, showFullscreenButton: false, showUserNameChangeUI: false });
       frame.current = call;
+      deadline('Видеокомната не загрузилась. Попробуйте открыть её отдельно.');
       call.iframe()?.setAttribute('title', title);
       const active = () => alive.current && attempt.current === currentAttempt && !controller.signal.aborted && frame.current === call;
       const presence = () => { if (active()) setOtherPresent(Object.values(call.participants()).some(person => !person.local)); };
-      call.on('loaded', () => { if (active()) setLoaded(true); });
-      call.on('joined-meeting', () => { if (active()) { clearTimeout(timeout); setLoaded(true); setJoined(true); setJoining(false); presence(); void onRefresh(); } });
+      call.on('loaded', () => { if (active()) { setLoaded(true); if (!callJoined) deadline('Не удалось соединиться с видеосервисом. Проверьте сеть или откройте комнату отдельно.'); } });
+      call.on('joined-meeting', () => { if (active()) { callJoined = true; clearTimeout(timeout); setLoaded(true); setJoined(true); setJoining(false); presence(); void onRefresh(); } });
       call.on('participant-joined', presence);
       call.on('participant-left', presence);
       call.on('recording-started', () => { if (active()) setRecording('recording'); });
@@ -124,9 +146,16 @@ export function InterviewRoom({ title, start, completed, configured, application
       call.on('recording-error', () => { if (active()) setRecording('error'); });
       call.on('network-connection', event => { if (active() && event?.event === 'interrupted') setRecording('unknown'); });
       call.on('camera-error', () => { if (active()) setError('Не удалось включить камеру или микрофон. Проверьте доступ к устройствам.'); });
-      call.on('error', () => { if (active()) { setRecording('unknown'); setError('Соединение прервалось. Проверьте сеть; после выхода можно подключиться снова.'); } });
+      call.on('error', () => { if (active()) {
+        setRecording('unknown');
+        const failure = new CallConnectionError('Соединение с видеосервисом прервалось. Попробуйте ещё раз или откройте комнату отдельно.');
+        setError(failure.message);
+        controller.abort(failure);
+        // Also clean up terminal failures after join() has already resolved.
+        if (callJoined) void close();
+      } });
       call.on('left-meeting', () => { if (active()) { void close(); void onRefresh(); } });
-      await waitForCall(call.join({ url: credentials.url, token: credentials.token, startVideoOff: !camera, startAudioOff: !microphone }), controller.signal);
+      await waitForCall(call.join({ url: credentials.url, token: credentials.token, startVideoOff: !devices.camera, startAudioOff: !devices.microphone }), controller.signal);
     } catch (cause) {
       if (alive.current && attempt.current === currentAttempt) {
         setError(cause instanceof CandidateApiError || cause instanceof CallConnectionError ? cause.message : 'Не удалось подключиться. Попробуйте ещё раз.');
@@ -154,11 +183,12 @@ export function InterviewRoom({ title, start, completed, configured, application
       <div className="cp-call-settings">
         <div className="cp-page-heading"><h1>{title}</h1><p>{dateTimeLabel(start)}</p></div>
         {guestToken ? <p className="cp-muted">Запись начнётся после вашего согласия рекрутеру.</p> : <label className="cp-check"><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)}/><span>Согласен на запись и расшифровку встречи.</span></label>}
-        {deviceError && <div className="cp-device-error"><p className="cp-error" role="alert">{deviceError}</p><Button variant="ghost" disabled={checking || joining} onClick={() => setDeviceAttempt(value => value + 1)}>Повторить</Button></div>}
+        {deviceError && <div className="cp-device-error"><p className="cp-error" role="alert">{deviceError}</p><Button variant="ghost" disabled={checking || joining} onClick={() => setDeviceAttempt(value => value + 1)}>Повторить</Button><Button variant="ghost" disabled={(!guestToken && !consent) || !configured || joining || closing || reloadRequired} onClick={() => { setCamera(false); setMicrophone(false); void join({ camera: false, microphone: false }); }}>Войти без камеры и микрофона</Button></div>}
         {error && <p className="cp-error" role="alert">{error}</p>}
         {!configured && <p className="cp-notice">Видеовстреча пока недоступна. Свяжитесь с рекрутером; выбранное время сохранено.</p>}
         {reloadRequired ? <><p className="cp-error" role="alert">Видеокомната не отвечает. Обновите страницу, чтобы подключиться заново.</p><Button onClick={() => window.location.reload()}>Обновить страницу</Button></>
-          : <Button className="cp-join-button" disabled={(!guestToken && !consent) || !configured || joining || checking || closing} onClick={join}>{joining ? 'Подключаем…' : closing ? 'Закрываем…' : error ? 'Попробовать ещё раз' : 'Присоединиться'}</Button>}
+          : <Button className="cp-join-button" disabled={(!guestToken && !consent) || !configured || joining || checking || closing} onClick={() => void join()}>{joining ? 'Подключаем…' : closing ? 'Закрываем…' : error ? 'Попробовать ещё раз' : 'Присоединиться'}</Button>}
+        {(error || reloadRequired) && directUrl && !joining && !closing && <p><a href={directUrl} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">Открыть комнату отдельно</a></p>}
       </div>
     </div>
     {opened && createPortal(<div className="agency-product-theme cp-root cp-call-overlay" role="dialog" aria-modal="true" aria-label={title}>

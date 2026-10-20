@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import Daily, { type DailyCall, type DailyParticipant } from '@daily-co/daily-js';
+import type { DailyCall, DailyParticipant } from '@daily-co/daily-js';
 import { readableError, type LabCapture, type LabSession, type LabTranscriptTurn, type MeetingLabApi } from './meeting-notes-api';
 
 type Phase = 'idle' | 'joining' | 'joined' | 'finishing';
@@ -86,6 +86,10 @@ export function useDailyMeeting(api: MeetingLabApi, onSession: (session: LabSess
     queue.current = []; seen.current = new Set(session.transcript.map(turn => turn.id));
     idRef.current = session.id;
     try {
+      // This demo shares the product entry bundle. Loading its SDK eagerly
+      // made even the candidate invitation depend on the video chunk.
+      const { default: Daily } = await import('@daily-co/daily-js');
+      if (!alive.current || generation.current !== run) return;
       const result = await api.join(session.id);
       if (!alive.current || generation.current !== run) return;
       callback.current(result.session);
