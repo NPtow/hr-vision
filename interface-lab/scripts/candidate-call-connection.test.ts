@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { CallConnectionError, PreviewTimeoutError, deviceAccessMessage, directCallUrl, releaseCall, waitForCall, waitForPreview } from '../src/scenes/candidate-portal/call-connection.ts';
+import type { DailyParticipant, DailyTrackState } from '@daily-co/daily-js';
+import { callInputTracks, callLayout, canSendTrack, mediaTrack } from '../src/scenes/candidate-portal/call-media.ts';
 
 test('a call that never resolves can be cancelled without waiting for the provider', async () => {
   const controller = new AbortController();
@@ -104,4 +106,83 @@ test('device denial, missing hardware, busy hardware and unanswered prompts give
   assert.match(deviceAccessMessage(new DOMException('', 'NotReadableError')), /другой звонок/);
   assert.match(deviceAccessMessage(new PreviewTimeoutError()), /не ответил/);
   assert.doesNotMatch(deviceAccessMessage(new Error('secret provider detail')), /secret provider detail/);
+});
+
+function person(id: string, local = false, sharing = false): DailyParticipant {
+  const off: DailyTrackState = { state: 'off', subscribed: true };
+  return { session_id: id, user_name: id, local, tracks: { audio: off, video: off, screenAudio: off,
+    screenVideo: { ...off, state: sharing ? 'playable' : 'off' } }, permissions: { canSend: true } } as DailyParticipant;
+}
+
+test('candidate call keeps self out of remote audio and preserves every remote participant', () => {
+  const me = person('candidate', true), recruiter = person('recruiter'), guest = person('guest');
+  const layout = callLayout([recruiter, me, guest]);
+  assert.equal(layout.local, me);
+  assert.deepEqual(layout.remote, [recruiter, guest]);
+  assert.equal(layout.sharing, undefined);
+  assert.deepEqual(callLayout([]), { local: undefined, remote: [], sharing: undefined });
+});
+
+test('remote shared screen takes priority and falls back when sharing stops', () => {
+  const me = person('candidate', true, true), recruiter = person('recruiter', false, true);
+  assert.equal(callLayout([me, recruiter]).sharing, recruiter);
+  recruiter.tracks.screenVideo.state = 'off';
+  assert.equal(callLayout([me, recruiter]).sharing, me);
+  me.tracks.screenVideo.state = 'off';
+  assert.equal(callLayout([me, recruiter]).sharing, undefined);
+});
+
+test('candidate controls follow token permissions instead of granting publication privileges', () => {
+  const me = person('candidate', true);
+  assert.equal(canSendTrack(undefined, 'audio'), false);
+  assert.equal(canSendTrack(me, 'audio'), true);
+  me.permissions.canSend = new Set(['audio', 'video']);
+  assert.equal(canSendTrack(me, 'audio'), true);
+  assert.equal(canSendTrack(me, 'screenVideo'), false);
+  me.permissions.canSend = false;
+  assert.equal(canSendTrack(me, 'video'), false);
+});
+
+test('persistent track survives mute/unmute without being stopped by presentation', () => {
+  let stopped = false;
+  const persistent = { stop: () => { stopped = true; } } as MediaStreamTrack;
+  const transient = {} as MediaStreamTrack;
+  const track: DailyTrackState = { state: 'playable', subscribed: true, persistentTrack: persistent, track: transient };
+  assert.equal(mediaTrack(track), persistent);
+  track.state = 'off';
+  assert.equal(mediaTrack(track), persistent);
+  delete track.persistentTrack;
+  assert.equal(mediaTrack(track), transient);
+  assert.equal(mediaTrack(undefined), undefined);
+  assert.equal(stopped, false);
+});
+
+test('call takes the granted preview source without recapturing devices', () => {
+  const stopped: string[] = [];
+  const track = (kind: string) => ({ kind, readyState: 'live', stop: () => stopped.push(`preview:${kind}`),
+    clone: () => ({ kind, stop: () => stopped.push(`call:${kind}`) }) }) as MediaStreamTrack;
+  const video = track('video'), audio = track('audio');
+  const source = { getTracks: () => [video, audio] } as MediaStream;
+  const inputs = callInputTracks(source, { camera: true, microphone: true });
+  assert.notEqual(inputs.videoSource, video);
+  assert.notEqual(inputs.audioSource, audio);
+  assert.equal(inputs.owned.length, 2);
+  inputs.owned.forEach(value => value.stop());
+  assert.deepEqual(stopped, ['call:video', 'call:audio']);
+});
+
+test('audio-only and device-free entry never acquire an unrequested camera', () => {
+  const audio = { kind: 'audio', readyState: 'live', clone: () => ({ kind: 'audio' }) } as MediaStreamTrack;
+  const inputs = callInputTracks({ getTracks: () => [audio] } as MediaStream, { camera: false, microphone: true });
+  assert.equal(inputs.videoSource, false);
+  assert.equal(inputs.owned.length, 1);
+  assert.deepEqual(callInputTracks(null, { camera: false, microphone: false }), { audioSource: false, videoSource: false, owned: [] });
+});
+
+test('lost preview access fails visibly and releases a partial handoff', () => {
+  let stopped = false;
+  const video = { kind: 'video', readyState: 'live', clone: () => ({ stop: () => { stopped = true; } }) } as unknown as MediaStreamTrack;
+  assert.throws(() => callInputTracks({ getTracks: () => [video] } as MediaStream, { camera: true, microphone: true }), CallConnectionError);
+  assert.equal(stopped, true);
+  assert.throws(() => callInputTracks(null, { camera: false, microphone: true }), CallConnectionError);
 });
