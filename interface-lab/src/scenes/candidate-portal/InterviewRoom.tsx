@@ -114,9 +114,9 @@ export function InterviewRoom({ title, start, completed, configured, application
       call.iframe()?.setAttribute('title', title);
       const active = () => alive.current && attempt.current === currentAttempt && !controller.signal.aborted && frame.current === call;
       const presence = () => { if (active()) setOtherPresent(Object.values(call.participants()).some(person => !person.local)); };
-      // Loaded Daily may be waiting at prejoin for a human/permission prompt.
-      // That wait is not a network failure; keep its controls and an exit visible.
-      call.on('loaded', () => { if (active()) { setLoaded(true); clearTimeout(timeout); } });
+      // Candidate tokens disable Daily prejoin: our explicit device step is
+      // already complete, so still bound the subsequent network connection.
+      call.on('loaded', () => { if (active()) { setLoaded(true); if (!callJoined) deadline('Не удалось соединиться с видеосервисом. Проверьте сеть или откройте комнату отдельно.'); } });
       call.on('joined-meeting', () => { if (active()) { callJoined = true; clearTimeout(timeout); setLoaded(true); setJoined(true); setJoining(false); presence(); void onRefresh(); } });
       call.on('participant-joined', presence);
       call.on('participant-left', presence);
@@ -176,7 +176,7 @@ export function InterviewRoom({ title, start, completed, configured, application
     {opened && createPortal(<div className="agency-product-theme cp-root cp-call-overlay" role="dialog" aria-modal="true" aria-label={title}>
       <div className="cp-call-bar"><div><strong>{title}</strong><span role="status">{closing ? 'Закрываем…' : !loaded ? 'Загружаем комнату…' : !joined ? 'Подключение…' : otherPresent ? 'Вы в эфире' : 'Ждём собеседника'}{joined && (recording === 'recording' ? ' · Запись идёт' : recording === 'stopped' ? ' · Запись остановлена' : recording === 'error' ? ' · Запись недоступна' : ' · Статус записи уточняется')}</span></div><Button autoFocus variant="secondary" disabled={closing} onClick={async () => { await close(); await onRefresh(); }}><PhoneOff size={17}/>Выйти</Button></div>
       {error && <p role="alert" className="cp-call-error">{error}</p>}
-      {loaded && !joined && !closing && <p role="status" className="cp-call-error">В окне видеосвязи разрешите устройства и нажмите «Присоединиться». Если запроса нет, проверьте доступ к камере и микрофону в настройках сайта. {directUrl && <a href={directUrl} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">Открыть комнату отдельно</a>}</p>}
+      {loaded && !joined && !closing && <p role="status" className="cp-call-error">Подключаемся к видеовстрече. Если браузер запросит камеру и микрофон, нажмите «Разрешить». {directUrl && <a href={directUrl} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">Открыть комнату отдельно</a>}</p>}
       <div className="cp-call-stage"><div ref={mount} className="cp-daily-mount"/>{!loaded && <div className="cp-call-loading" aria-hidden="true"><LoaderCircle size={28} className="cp-device-loading"/></div>}</div>
     </div>, document.body)}
   </section>;
