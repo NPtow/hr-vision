@@ -123,3 +123,11 @@ SQLite ради обхода проверки: это потеряет новы�
 в `PRE_MEETING_LAB_RUNTIME`. Он поддерживает lifecycle-очередь, поэтому новый модуль
 не запрещает откат к предыдущему совместимому runtime. Lab-данные при этом сохраняются.
 Проверка активных звонков учитывает также `ml_sessions.status='live'`.
+
+## ClickStack observability
+
+Before deploying instrumentation, install the reviewed receiver from this commit:
+`observability.py` is a new required runtime member. `PRE_OBSERVABILITY_RUNTIME`
+preserves the previous full layout for guarded rollback. Set `HR_OTEL_ENDPOINT`
+only after the loopback collector is healthy; the default is disabled. See
+`../observability/README.md` for the outreach stack, privacy and capacity limits.

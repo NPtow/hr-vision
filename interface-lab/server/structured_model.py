@@ -1,4 +1,5 @@
 """Bounded Structured Output boundary. No tools, redirects or payload logging."""
+import observability
 from dataclasses import dataclass, field
 import hashlib
 import json
@@ -111,6 +112,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
+@observability.operation("llm.structured_completion")
 def provider(config, payload, key, timeout):
     request = urllib.request.Request(config.base_url + '/chat/completions', data=dump(payload).encode(),
         headers={'Authorization': 'Bearer ' + config.api_key, 'Content-Type': 'application/json',

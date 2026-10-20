@@ -52,6 +52,7 @@ Verification is a generic ownership check,
 with no person/profile/vacancy data. Tokens are generated at dispatch, SHA256-only
 at rest, single-use, and redeemable only by the same authenticated candidate.
 """
+import observability
 import argparse
 from dataclasses import dataclass, field, replace
 from email.utils import formataddr
@@ -1116,7 +1117,8 @@ def process_pending(connect, settings=None, limit=10, now=None, transport=None, 
                         rendered = _telegram_message(rendered.get('text'), rendered.get('reply_markup'))
                         content, reply_markup = rendered['text'], rendered.get('reply_markup')
             db.commit()
-        except Exception:
+        except Exception as telemetry_error:
+            observability.capture_exception(telemetry_error, "worker.candidate_notifications")
             db.rollback()
             raise
         finally:
@@ -1137,7 +1139,8 @@ def process_pending(connect, settings=None, limit=10, now=None, transport=None, 
         except DeliveryFailure as failure:
             state = 'pending' if failure.retryable and row['attempts'] + 1 < MAX_ATTEMPTS else 'error'
             error, delay, provider_ref = failure.code, max(failure.retry_after, 30 * 2 ** row['attempts']), None
-        except Exception:
+        except Exception as telemetry_error:
+            observability.capture_exception(telemetry_error, "worker.candidate_notifications")
             state, error, delay, provider_ref = 'error', 'delivery_uncertain', 0, None
         db = connect()
         try:
@@ -1223,7 +1226,8 @@ def start_worker(connect, interval=5, stop_event=None, update_handler=None, tele
                     if any(counts.values()) or any(recruiter_counts.values()) or polled.get('processed'):
                         print(json.dumps({'worker': 'candidate_notifications', 'outbox': counts,
                                           'recruiterOutbox': recruiter_counts, 'telegram': polled}), flush=True)
-                except Exception:
+                except Exception as telemetry_error:
+                    observability.capture_exception(telemetry_error, "worker.candidate_notifications")
                     # Provider/SQLite exception reprs may contain contacts, auth, URLs.
                     # Keep the worker alive and emit at most one generic error/minute.
                     if time.monotonic() - last_error_at >= 60:

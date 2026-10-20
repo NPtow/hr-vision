@@ -3,6 +3,7 @@
 The status change and cleanup intent commit together. The provider is contacted
 outside SQLite and under the same per-meeting lock as join/finish.
 """
+import observability
 import json
 import logging
 import threading
@@ -58,6 +59,7 @@ def process_pending(portal, *, limit=5):
                     db.execute('''UPDATE cp_call_cleanup SET closed_at=?
                       WHERE meeting_id=? AND room=? AND closed_at IS NULL''', (time.time(), mid, row[0]))
         except Exception as error:
+            observability.capture_exception(error, "worker.call_cleanup")
             with portal.connect() as db:
                 db.execute('''UPDATE cp_call_cleanup SET attempts=attempts+1,
                   next_attempt=?+MIN(300,2 << MIN(attempts,7))
@@ -72,6 +74,7 @@ def start_worker(portal):
             try:
                 process_pending(portal)
             except Exception as error:
+                observability.capture_exception(error, "worker.call_cleanup")
                 log.error('call_cleanup_worker_error error=%s', type(error).__name__)
             time.sleep(2)
     thread = threading.Thread(target=run, name='call-cleanup', daemon=True)
