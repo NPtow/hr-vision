@@ -5,6 +5,7 @@ import type { CandidateProfile } from '../candidate-portal/api';
 import type { RecruiterCandidate } from './api';
 import { CandidateAccessControls } from './CandidateAccessControls';
 import { RecruiterMediaActions } from './RecruiterMediaActions';
+import { InterviewPreparation } from './InterviewPreparation';
 import './candidate-details.css';
 
 type CandidateDetailsData = RecruiterCandidate & Partial<Pick<CandidateProfile,
@@ -86,6 +87,7 @@ export function RecruiterCandidateDetails({ candidate, busy, run, onNotice, toke
   }
 
   return <div className="rp-candidate-details">
+    {!readOnly && candidate.interview && <InterviewPreparation key={candidate.interview.id} candidate={candidate} token={token}/>}
     {!readOnly && candidate.interview?.status === 'completed' && <section className="rcd-results" aria-label="Результаты интервью">
       <RecruiterMediaActions kind="interview" candidateId={candidate.id} status={candidate.interview.status} token={token} onUpdated={onUpdated}/>
     </section>}

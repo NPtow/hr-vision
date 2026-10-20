@@ -43,12 +43,13 @@ PRE_EMPLOYER_TELEGRAM_RUNTIME = PRE_POOLED_RUNTIME | {'interview_scheduler.py'}
 PRE_REMINDERS_RUNTIME = PRE_EMPLOYER_TELEGRAM_RUNTIME | {'employer_notifications.py', 'telegram_miniapp.py'}
 PRE_MEETING_NOTICES_RUNTIME = PRE_REMINDERS_RUNTIME | {'meeting_reminders.py'}
 PRE_MEETING_LAB_RUNTIME = PRE_MEETING_NOTICES_RUNTIME | {'meeting_notifications.py'}
-RUNTIME = PRE_MEETING_LAB_RUNTIME | {'meeting_lab.py'}
+PRE_RECRUITER_COACH_RUNTIME = PRE_MEETING_LAB_RUNTIME | {'meeting_lab.py'}
+RUNTIME = PRE_RECRUITER_COACH_RUNTIME | {'recruiter_coach.py'}
 BOT_RUNTIME = PRE_IMPORT_RUNTIME - {'recruiter_access.py', 'recruiter_sources.py', 'recruiter_notifications.py'}
 LEGACY_RUNTIME = BOT_RUNTIME - {'candidate_bot.py'}
 RUNTIME_LAYOUTS = {frozenset(LEGACY_RUNTIME), frozenset(BOT_RUNTIME), frozenset(PRE_IMPORT_RUNTIME),
                    frozenset(PRE_OUTREACH_RUNTIME), frozenset(PRE_ACCESS_RUNTIME), frozenset(PRE_CV_RUNTIME),
-                   frozenset(PRE_POOLED_RUNTIME), frozenset(PRE_EMPLOYER_TELEGRAM_RUNTIME), frozenset(PRE_REMINDERS_RUNTIME), frozenset(PRE_MEETING_NOTICES_RUNTIME), frozenset(PRE_MEETING_LAB_RUNTIME), frozenset(RUNTIME)}
+                   frozenset(PRE_POOLED_RUNTIME), frozenset(PRE_EMPLOYER_TELEGRAM_RUNTIME), frozenset(PRE_REMINDERS_RUNTIME), frozenset(PRE_MEETING_NOTICES_RUNTIME), frozenset(PRE_MEETING_LAB_RUNTIME), frozenset(PRE_RECRUITER_COACH_RUNTIME), frozenset(RUNTIME)}
 MAX_ARCHIVE = 50 * 1024 * 1024
 MAX_CONTENT = 120 * 1024 * 1024
 

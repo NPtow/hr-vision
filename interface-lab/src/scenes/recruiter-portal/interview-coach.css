@@ -1,0 +1,134 @@
+:where(.ric-preparation, .ric-panel, .ric-dialog) {
+  font: 14px/1.6 'Inter Variable', Inter, -apple-system, BlinkMacSystemFont, sans-serif;
+  color: #232323;
+  -webkit-font-smoothing: antialiased;
+}
+:where(.ric-preparation, .ric-panel, .ric-dialog, .ric-call) * { box-sizing: border-box; }
+:where(.ric-preparation, .ric-panel, .ric-dialog) :is(h2,h3,p) { margin: 0; }
+:where(.ric-preparation, .ric-panel, .ric-dialog) button {
+  font: inherit; color: inherit; background: none; border: 0; cursor: pointer;
+}
+:where(.ric-preparation, .ric-panel, .ric-dialog) button:disabled { opacity: .4; cursor: default; }
+:where(.ric-preparation, .ric-panel, .ric-dialog, .ric-call) :is(button,a,textarea,input,summary):focus-visible {
+  outline: 2px solid #9e82dd; outline-offset: 4px;
+}
+.ric-muted { color: #8d8d94; font-size: 12px; }
+.ric-error { color: #b43748; font-size: 13px; white-space: pre-line; }
+.ric-error button { text-decoration: underline; margin-left: 8px; }
+.ric-link, .ric-actions a {
+  display: inline-flex; align-items: center; gap: 7px; font-size: 13px; text-decoration: none;
+  color: inherit; background: none; border: 0; padding: 6px 0; cursor: pointer;
+}
+.ric-link:hover, .ric-actions a:hover { opacity: .7; }
+.ric-actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+button.ric-primary {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  background: #222; color: white; border: 0; padding: 10px 17px; border-radius: 24px; font-size: 13px;
+}
+.ric-icon { width: 34px; height: 34px; display: grid; place-items: center; border: 0; background: none; color: inherit; cursor: pointer; flex-shrink: 0; border-radius: 9px; }
+.ric-icon:hover { background: #8881; }
+.ric-preparation { margin: 0 0 30px; padding: 0 0 24px; border-bottom: 1px solid #eee; }
+.ric-preparation-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+.ric-preparation h3, .ric-contacts h3 { font-size: 15px; font-weight: 550; }
+.ric-agent-actions { margin: 16px 0; font-size: 12px; color: #888; }
+.ric-agent-actions summary { cursor: pointer; width: fit-content; }
+.ric-agent-actions p { margin: 12px 0; max-width: 600px; }
+.ric-contacts { padding: 20px 0 0; }
+.ric-contacts h3 { margin-bottom: 12px; }
+.ric-dialog .ric-contacts h3 { display: none; }
+.ric-contacts > .ric-actions { color: #555; }
+.ric-backup { display: flex; flex-wrap: wrap; gap: 18px; margin: 16px 0 12px; }
+.ric-backup form { width: 100%; }
+.ric-backup label { display: grid; gap: 6px; color: #777; font-size: 12px; margin-bottom: 12px; }
+.ric-backup input { width: 100%; font: inherit; border: 0; background: #f3f3f5; border-radius: 10px; padding: 13px 15px; color: #222; }
+.ric-message summary { font-size: 12px; color: #888; cursor: pointer; }
+.ric-message p { padding: 14px 0; max-width: 660px; white-space: pre-wrap; }
+.ric-overlay { position: fixed; inset: 0; background: #0008; z-index: 1100; }
+.ric-dialog { position: fixed; inset: 0 0 0 auto; width: min(820px, 90vw); background: #fff; z-index: 1101; display: flex; flex-direction: column; box-shadow: -16px 0 80px #0002; }
+.ric-dialog > header { display: flex; align-items: center; justify-content: space-between; padding: 30px 38px 20px; gap: 20px; flex-shrink: 0; }
+.ric-dialog > header h2 { font-size: 25px; letter-spacing: -.6px; font-weight: 500; }
+.ric-dialog-content { padding: 0 38px 36px; overflow: auto; min-height: 0; scrollbar-width: thin; }
+.ric-resume-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15px; line-height: 1.85; margin: 24px 0; }
+.ric-review-questions { padding-left: 24px; margin: 26px 0; }
+.ric-review-questions > li { padding: 0 0 28px 8px; }
+.ric-review-questions > li::marker { color: #aaa; font-size: 12px; }
+.ric-review-questions > li > span { color: #999; font-size: 12px; }
+.ric-review-questions > li > p { margin: 8px 0; font-size: 17px; line-height: 1.6; }
+.ric-review-questions small { display: block; color: #888; margin-top: 10px; }
+.ric-review-questions details { font-size: 13px; color: #777; margin-top: 12px; }
+.ric-review-questions summary { cursor: pointer; }
+.ric-review-questions textarea { width: 100%; min-height: 110px; resize: vertical; padding: 12px; border: 0; background: #f5f5f6; color: #222; font: inherit; border-radius: 9px; }
+.ric-source { color: #888; font-size: 12px; margin: 20px 0; }
+.ric-source p { margin-top: 12px; white-space: pre-wrap; }
+.ric-dialog-actions { position: sticky; bottom: -36px; padding: 20px 0; background: #fff; display: flex; align-items: center; gap: 18px; flex-wrap: wrap; box-shadow: 0 -10px 24px #fff; }
+.rp-call-layer.ric-call { display: grid; grid-template-columns: minmax(0, 1fr) minmax(360px, 30%); background: #0b0b0c; color: #f3f3f3; height: 100dvh; }
+.rp-call-layer.ric-call-wide { grid-template-columns: 1fr; }
+.ric-call-stage { display: flex; flex-direction: column; min-height: 0; min-width: 0; flex: 1; }
+.ric-call .rp-call-header { gap: 16px; padding: 20px 24px; flex-wrap: wrap; }
+.ric-call .rp-call-header > div:first-child { min-width: 180px; flex: 1; }
+.ric-call .rp-call-header strong { font-weight: 500; }
+.ric-call .rp-call-header p { color: #999; font-size: 11px; line-height: 1.7; }
+.ric-call .rp-call-header .rp-actions { gap: 13px; }
+.ric-call .rp-call-header button[data-slot=button] { font-size: 11px; padding: 8px 12px; }
+.ric-call .rp-call-header .ric-link { font-size: 12px; color: #ccc; }
+.ric-call .rp-call-controls { padding: 12px 24px; background: #171719; border: 0; color: #ccc; }
+.ric-call .rp-check { color: #ccc; font-size: 12px; }
+.ric-call .rp-help { font-size: 11px; color: #888; }
+.ric-call .rp-recording-controls { gap: 12px; }
+.ric-call .rp-call-frame { min-height: 180px; }
+.ric-call .rp-error { margin: 10px 24px; }
+.ric-call:fullscreen { width: 100vw; height: 100dvh; }
+.ric-panel { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: #fff; padding: 26px 28px 0; }
+.ric-panel-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-shrink: 0; padding-bottom: 28px; }
+.ric-tabs { display: flex; padding: 4px; border-radius: 32px; background: #f2f2f3; }
+.ric-tabs button { width: 47px; height: 40px; display: grid; place-items: center; color: #999; border-radius: 28px; }
+.ric-tabs button[aria-selected=true] { background: #fff; color: #222; box-shadow: 0 1px 4px #0002; }
+.ric-tabs svg { stroke-width: 1.6; }
+.ric-panel-body { overflow: auto; flex: 1; min-height: 0; padding-bottom: 28px; scrollbar-width: none; mask-image: linear-gradient(#000 calc(100% - 15px), transparent); }
+.ric-panel-body h2 { font-size: 23px; font-weight: 500; line-height: 1.45; letter-spacing: -.5px; margin-bottom: 18px; }
+.ric-question-counter { display: flex; justify-content: space-between; gap: 12px; font-size: 11px; color: #999; margin-bottom: 18px; }
+.ric-question-why { font-size: 13px; line-height: 1.7; color: #8d8d94; }
+.ric-followups { margin: 22px 0; color: #777; font-size: 13px; }
+.ric-followups summary { display: flex; align-items: center; gap: 8px; cursor: pointer; list-style: none; }
+.ric-followups li { margin-bottom: 9px; }
+.ric-answer, .ric-general { width: 100%; min-height: 100px; resize: vertical; border: 0; border-bottom: 1px solid #eee; background: transparent; padding: 14px 0; font: inherit; color: #222; line-height: 1.8; margin: 18px 0; }
+.ric-answer::placeholder, .ric-general::placeholder { color: #aaa; }
+.ric-general { min-height: 160px; }
+.ric-panel .ric-actions { gap: 16px; }
+.ric-question-nav { display: flex; align-items: center; justify-content: space-between; margin: 20px 0; color: #999; }
+.ric-question-nav span { font-size: 11px; }
+.ric-question-nav button { padding: 8px; display: grid; place-items: center; }
+.ric-all-questions { color: #888; font-size: 12px; margin-top: 24px; }
+.ric-all-questions summary { cursor: pointer; }
+.ric-all-questions ol { padding-left: 23px; }
+.ric-all-questions li { margin: 18px 0; }
+.ric-all-questions button { text-align: left; padding: 0 0 0 6px; line-height: 1.6; }
+.ric-all-questions button[aria-current=step] { color: #111; }
+.ric-all-questions svg { margin-left: 8px; color: #669577; }
+.ric-panel-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 16px 0 22px; font-size: 10px; color: #999; flex-shrink: 0; }
+.ric-panel-footer > button { display: grid; place-items: center; padding: 7px; }
+.ric-panel-footer .ric-error { font-size: 11px; }
+.ric-note, .ric-turn { margin-top: 28px; }
+.ric-note small, .ric-turn small { font-size: 11px; color: #999; }
+.ric-note p, .ric-turn p { white-space: pre-wrap; margin-top: 9px; line-height: 1.75; font-size: 14px; }
+.ric-empty { color: #999; padding-top: 12px; }
+.ric-empty h2 { color: #333; }
+.ric-empty p { font-size: 14px; }
+@media (min-width: 1700px) { .ric-panel { padding: 34px 38px 0; } .ric-panel-body h2 { font-size: 25px; } }
+@media (max-width: 1050px) { .ric-call .rp-call-header { padding: 16px; } .rp-call-layer.ric-call { grid-template-columns: minmax(0, 1fr) 350px; } .rp-call-layer.ric-call-wide { grid-template-columns: 1fr; } .ric-panel { padding: 22px 22px 0; } .ric-panel-body h2 { font-size: 21px; } }
+@media (max-width: 720px) {
+  .rp-call-layer.ric-call { grid-template-columns: 1fr; grid-template-rows: minmax(300px, 55dvh) minmax(0, 1fr); }
+  .rp-call-layer.ric-call-wide { grid-template-rows: 1fr; }
+  .ric-call .rp-call-header { padding: 12px 16px; gap: 9px; }
+  .ric-call .rp-call-header .rp-actions { justify-content: flex-start; gap: 10px; }
+  .ric-call .rp-call-controls { padding: 8px 16px; max-height: 120px; overflow: auto; flex-shrink: 0; }
+  .ric-call .rp-call-frame { min-height: 140px; }
+  .ric-panel { padding: 14px 22px 0; }
+  .ric-panel-header { padding-bottom: 20px; }
+  .ric-panel-footer { padding: 10px 0; }
+  .ric-panel-body h2 { font-size: 22px; }
+  .ric-dialog { width: 100%; }
+  .ric-dialog > header { padding: 24px; }
+  .ric-dialog-content { padding: 0 24px 28px; }
+  .ric-dialog-actions { bottom: -28px; }
+}

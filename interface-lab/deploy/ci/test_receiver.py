@@ -133,9 +133,10 @@ class ReceiverTest(unittest.TestCase):
         self.assertEqual(r.PRE_REMINDERS_RUNTIME - r.PRE_EMPLOYER_TELEGRAM_RUNTIME, {'employer_notifications.py', 'telegram_miniapp.py'})
         self.assertEqual(r.PRE_MEETING_NOTICES_RUNTIME - r.PRE_REMINDERS_RUNTIME, {'meeting_reminders.py'})
         self.assertEqual(r.PRE_MEETING_LAB_RUNTIME - r.PRE_MEETING_NOTICES_RUNTIME, {'meeting_notifications.py'})
-        self.assertEqual(r.RUNTIME - r.PRE_MEETING_LAB_RUNTIME, {'meeting_lab.py'})
+        self.assertEqual(r.PRE_RECRUITER_COACH_RUNTIME - r.PRE_MEETING_LAB_RUNTIME, {'meeting_lab.py'})
+        self.assertEqual(r.RUNTIME - r.PRE_RECRUITER_COACH_RUNTIME, {'recruiter_coach.py'})
         for runtime in (r.LEGACY_RUNTIME, r.BOT_RUNTIME, r.PRE_IMPORT_RUNTIME, r.PRE_OUTREACH_RUNTIME,
-                        r.PRE_ACCESS_RUNTIME, r.PRE_CV_RUNTIME, r.PRE_POOLED_RUNTIME, r.PRE_EMPLOYER_TELEGRAM_RUNTIME, r.PRE_REMINDERS_RUNTIME, r.PRE_MEETING_NOTICES_RUNTIME, r.PRE_MEETING_LAB_RUNTIME, r.RUNTIME):
+                        r.PRE_ACCESS_RUNTIME, r.PRE_CV_RUNTIME, r.PRE_POOLED_RUNTIME, r.PRE_EMPLOYER_TELEGRAM_RUNTIME, r.PRE_REMINDERS_RUNTIME, r.PRE_MEETING_NOTICES_RUNTIME, r.PRE_MEETING_LAB_RUNTIME, r.PRE_RECRUITER_COACH_RUNTIME, r.RUNTIME):
             with self.subTest(count=len(runtime)):
                 a, s, m = self.bundle('service', runtime=runtime)
                 self.assertEqual(r.unpack(a, s, 'service'), m)
