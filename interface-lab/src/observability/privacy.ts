@@ -24,7 +24,8 @@ export function safeAttributes(input: Record<string, unknown>, origin: string): 
   const result: Record<string, string | number | boolean> = {};
   for (const [key, value] of Object.entries(input)) {
     if (/^(?:http\.url|url\.full|location\.href|document\.url)$/.test(key) && typeof value === 'string') result[key] = safeUrl(value, origin);
-    else if (key === 'exception.stacktrace') result[key] = safeStack(value, origin);
+    else if (key === 'exception.stacktrace' || key === 'error.stack') result[key] = safeStack(value, origin);
+    else if (key === 'error.message') result[key] = typeof value === 'string' && /^(?:Type|Reference|Syntax|Range|URI|Eval)?Error$/.test(value) ? value : 'Error (message redacted)';
     else if (attrKeys.has(key) && ['string','number','boolean'].includes(typeof value)) result[key] = typeof value === 'string' ? value.slice(0, 160) : value as number | boolean;
     else if (/^(?:web_vital|webvitals|browser\.web_vital)\./.test(key) && typeof value === 'number') result[key] = value;
   }
@@ -47,6 +48,8 @@ export function sanitizeReplay<T>(event: T, origin: string): T {
         for (const [attr, content] of Object.entries(item)) {
           if (content === null) { attrs[attr] = null; continue; }
           if (attr === 'href' && source.tagName === 'link' && String(content).split('?')[0].endsWith('.css')) attrs[attr] = safeUrl(String(content), origin);
+          else if (attr === 'id' && ['root','storybook-root','storybook-docs'].includes(String(content))) attrs[attr] = content;
+          else if (/^rr_(width|height|scrollLeft|scrollTop)$/.test(attr) && /^[0-9.]+(?:px)?$/.test(String(content))) attrs[attr] = content;
           else if (structural.has(attr)) attrs[attr] = ['style','_cssText'].includes(attr) ? safeCss(String(content)) : String(content).slice(0, 2000);
         }
         result[key] = attrs;
