@@ -176,7 +176,7 @@ export function InterviewRoom({ title, start, completed, configured, application
     {opened && createPortal(<div className="agency-product-theme cp-root cp-call-overlay" role="dialog" aria-modal="true" aria-label={title}>
       <div className="cp-call-bar"><div><strong>{title}</strong><span role="status">{closing ? 'Закрываем…' : !loaded ? 'Загружаем комнату…' : !joined ? 'Подключение…' : otherPresent ? 'Вы в эфире' : 'Ждём собеседника'}{joined && (recording === 'recording' ? ' · Запись идёт' : recording === 'stopped' ? ' · Запись остановлена' : recording === 'error' ? ' · Запись недоступна' : ' · Статус записи уточняется')}</span></div><Button autoFocus variant="secondary" disabled={closing} onClick={async () => { await close(); await onRefresh(); }}><PhoneOff size={17}/>Выйти</Button></div>
       {error && <p role="alert" className="cp-call-error">{error}</p>}
-      {loaded && !joined && !closing && <p role="status" className="cp-call-error">Подключаемся к видеовстрече. Если браузер запросит камеру и микрофон, нажмите «Разрешить». {directUrl && <a href={directUrl} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">Открыть комнату отдельно</a>}</p>}
+      {loaded && !joined && !closing && <p role="status" className="cp-call-hint">Подключаемся к видеовстрече. Если браузер запросит камеру и микрофон, нажмите «Разрешить». {directUrl && <a href={directUrl} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">Открыть комнату отдельно</a>}</p>}
       <div className="cp-call-stage"><div ref={mount} className="cp-daily-mount"/>{!loaded && <div className="cp-call-loading" aria-hidden="true"><LoaderCircle size={28} className="cp-device-loading"/></div>}</div>
     </div>, document.body)}
   </section>;
