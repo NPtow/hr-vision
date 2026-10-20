@@ -1,4 +1,7 @@
 # Include inside the trusted production host handler in /etc/hr-vision/Caddyfile.
+# Public static fonts are also used by the authenticated cross-origin replay.
+@observabilityFonts path_regexp obsFonts ^/(assets|site-assets)/[^/]+[.](woff2?|ttf)$
+header @observabilityFonts Access-Control-Allow-Origin https://observe.158-160-179-53.sslip.io
 @observabilityIngest {
     path /telemetry/v1/traces /telemetry/v1/logs
     method POST

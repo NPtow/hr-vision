@@ -57,7 +57,7 @@ function start() {
     const safe = new Error('Browser error (message redacted)');
     safe.name = error instanceof Error && /^[A-Za-z]+Error$/.test(error.name) ? error.name : 'Error';
     safe.stack = error instanceof Error ? safeStack(error.stack, location.origin) : '';
-    Rum.recordException(safe);
+    Rum.recordException(safe, {component: 'error', 'error.message': safe.name, 'error.stack': safe.stack ?? ''});
   };
   window.addEventListener('error', event => report(event.error));
   window.addEventListener('unhandledrejection', event => report(event.reason));

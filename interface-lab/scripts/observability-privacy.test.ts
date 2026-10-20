@@ -15,3 +15,10 @@ test('both full and incremental rrweb payloads redact text and DOM attributes', 
   assert.ok(!JSON.stringify(safe).includes('SECRET'));
   assert.equal(safe.data.adds[0].node.attributes.class,'field');
 });
+
+test('native session timeline gets an error marker without raw error text', () => {
+  const attrs = safeAttributes({component:'error','error.message':'PRIVATE CV','error.stack':'TypeError: PRIVATE CV\n    at f (https://mashadasha.tech/assets/app.js?secret=PRIVATE:1:2)'},origin);
+  assert.equal(attrs.component,'error');
+  assert.ok(!JSON.stringify(attrs).includes('PRIVATE'));
+  assert.equal(safeAttributes({'error.message':'TypeError'},origin)['error.message'],'TypeError');
+});
