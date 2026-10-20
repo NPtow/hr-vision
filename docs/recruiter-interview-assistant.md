@@ -1,83 +1,53 @@
-# Recruiter interview assistant
+# Recruiter interview workspace
 
-The existing Daily recruiter/candidate call now includes a folding assistant
-panel: the approved questions, per-question notes and general notes, and live
-final transcript events. Resume and candidate contact actions stay available
-even if the video provider cannot connect.
+The cabinet card contains name/time, direct candidate contacts, résumé, script
+readiness and one action: **Открыть интервью**. It opens a full-screen reading
+workspace with the candidate's approved questions. Reading, changing the selected
+question and opening the résumé do not join a room, request devices, mark answers
+or change interview status. Joining Daily is a separate action inside, using the
+existing time window. A missing script does not prevent the call.
 
-## Prepare before the call
+There are no script creation/import/approval controls, backup-link editors,
+manual candidate-access controls, duplicated profile sections or separate
+recruiter-note forms in the card. Historical profile notes remain stored.
 
-1. Open the candidate's interview in the recruiter cabinet. “Материалы для
-   агента” exports the real resume/profile, the exact candidate/interview IDs,
-   the current draft revision and a `draftTemplate`.
-2. In a separate agent conversation, use the owner's agreed system prompt to
-   produce `questions` and `source` in that template. This application does not
-   generate questions in the background or choose a replacement system prompt.
-   Record the prompt version and source of evidence in `source`. Do not invent
-   candidate answers or scores.
-3. Save the returned JSON through “Добавить черновик”, or let a trusted operator
-   import it with the bridge below. A new revision becomes a draft; the
-   previous approval remains available until another draft is approved.
-4. Read the questions, optionally edit them and choose “Согласовать для
-   интервью”. Approval is a separate authenticated recruiter action.
-5. Joining pins the approved version for that interview. Later imports cannot
-   replace the script being used. An unprepared script does not block the call
-   or general note-taking.
+## Preparing scripts in chat
 
-The local Kretova/Rybkina companions remain separate reference screens. Their
-private files are not bundled into the published service or silently imported
-as approved scripts.
+1. A trusted operator exports the real candidate context with
+   `scripts/recruiter-script.py --db ... context --candidate ... --interview ... --output ...`.
+   Personal data is written to a new private file, never a public asset.
+2. The agent prepares questions from the agreed system prompt and actual résumé,
+   discusses them with the human in chat, and imports a draft using
+   `... draft --file ...`. Expected revisions prevent stale overwrites.
+3. Only after the human approves the exact revision in chat, run
+   `... approve --candidate ... --interview ... --revision N --approved-by ...`.
+   This is separate from draft import. It preserves approver identity and rejects
+   a superseded draft, a completed interview or a pinned script.
+4. The cabinet displays “Скрипт подготовлен” once an approved script exists, and
+   otherwise “Скрипт не подготовлен”. It refreshes without page reload.
 
-## Human-operated agent bridge
+On recruiter join, the backend pins the approved revision. A later draft cannot
+replace the script under an ongoing interview. All API operations enforce the
+candidate/interview identity and assigned recruiter or existing team scope.
 
-`interface-lab/scripts/recruiter-script.py` works against an existing database
-with trusted operator filesystem access. It never creates recruiter sessions,
-changes candidate statuses, approves a script, or sends a message.
+## During and after the interview
 
-```
-python3 interface-lab/scripts/recruiter-script.py --db /path/to/journey.sqlite3 \
-  context --candidate person_ID --interview interview_ID --output /private/context.json
-python3 interface-lab/scripts/recruiter-script.py --db /path/to/journey.sqlite3 \
-  draft --file /private/draft.json
-```
+The existing Daily connection and consent-controlled recording are retained.
+The collapsible right panel contains questions, interview notes and current
+connection's final transcript events. Notes autosave to SQLite through one serial
+writer with revision checks. Leaving/finishing flushes pending notes first;
+failed writes preserve the text and offer retry/export.
 
-Context exports use mode `0600` and refuse to overwrite existing files. Keep
-exports/drafts outside version control. The import must contain exactly
-`candidateId`, `interviewId`, `expectedRevision`, `questions`, and optional
-`source`. Each question contains a unique stable `id`, `question`, optional
-`topic`, `why`, and `followups`. Importing a stale revision fails instead of
-overwriting a newer draft. Original resume content is source data, never agent
-instructions.
+Completed interviews open the same workspace for reading their pinned questions,
+notes and existing recording/transcript materials. There is no new note form
+outside the interview.
 
-The same operations are available to the assigned authenticated recruiter via
-POST `/api/hr/recruiter/interview/coach/{context,state,draft,approve,progress,backup}`.
-Every request includes `candidateId` and `interviewId`; authority is derived
-from the recruiter session and the actual slot owner. Candidates and employers
-cannot read scripts or internal notes.
+Email and Telegram links use stored candidate contact values. They open the
+respective contact/composer and never send a message automatically. Existing
+booking/access notification workflows remain separate from this UI change.
 
-## Notes and fallback communication
+## Release boundary
 
-Notes autosave to SQLite with revision checks. One serial writer drains edits
-that arrive during saving. Finishing/leaving through our controls flushes notes
-first. Failed/conflicting writes leave the text visible and downloadable, with
-an error; an unsaved tab has the browser's unload warning. Completed interview
-details retain the pinned script and notes beside the existing recording.
-
-Candidate email and Telegram come from their stored profile/intake. Email
-opens a composer with a draft; Telegram opens the candidate's profile.
-“Если кандидат не подключился” provides editable-by-copy message text.
-Nothing sends automatically. The recruiter supplies a real HTTPS Zoom or
-other meeting URL per interview; no meeting is invented or created remotely.
-Moving to that URL does not imply our Daily recording/transcription captures
-the external call.
-
-Live transcript display uses Daily final events from the current connection.
-It does not interpret answers, advance the script automatically, or replace
-the provider's complete recording/transcript retrieval after the call.
-
-## Release
-
-Additive tables: `cp_interview_scripts`, `cp_interview_coach`. No destructive
-migration or candidate data backfill. Before publishing, install the reviewed
-receiver allowlist including `recruiter_coach.py`. The previous complete runtime
-remains a valid rollback archive; its code leaves the new tables untouched.
+No database migration or private candidate fixture is required for this UI
+simplification. Only existing service stories are published. Local recruiter
+prototypes and their private JSON must remain excluded from the service bundle.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Human-operated agent bridge. Exports context or imports a draft; never approves."""
+"""Agent-chat bridge: export context, save a draft, or explicitly approve a reviewed revision."""
 import argparse
 import json
 import os
@@ -22,6 +22,11 @@ def main():
     export.add_argument('--output', type=Path, required=True)
     draft = commands.add_parser('draft')
     draft.add_argument('--file', type=Path, required=True)
+    approve = commands.add_parser('approve', help='Only after the human approves this exact revision in chat')
+    approve.add_argument('--candidate', required=True)
+    approve.add_argument('--interview', required=True)
+    approve.add_argument('--revision', type=int, required=True)
+    approve.add_argument('--approved-by', required=True, help='Identity of the person who approved it in chat')
     args = parser.parse_args()
     with sqlite3.connect(args.db.resolve().as_uri() + ('?mode=ro' if args.command == 'context' else '?mode=rw'),
                          uri=True, timeout=10) as db:
@@ -34,6 +39,16 @@ def main():
                 json.dump(result, output, ensure_ascii=False, indent=2)
                 output.write('\n')
             print('Context saved:', args.output)
+        elif args.command == 'approve':
+            actor = args.approved_by.strip()
+            if not actor or len(actor) > 200:
+                raise ValueError('Specify who approved this revision in chat')
+            db.execute('BEGIN IMMEDIATE')
+            result = recruiter_coach.handle(db, args.candidate, args.interview, 'approve', {
+                'candidateId': args.candidate, 'interviewId': args.interview, 'revision': args.revision,
+            }, 'chat:' + actor)
+            print(json.dumps({'interviewId': result['interviewId'], 'revision': result['active']['revision'],
+                              'status': 'approved'}))
         else:
             if args.file.stat().st_size > 256_000:
                 raise ValueError('Draft is too large')
@@ -44,7 +59,7 @@ def main():
             result = recruiter_coach.handle(db, body.get('candidateId'), body.get('interviewId'),
                                             'draft', body, 'agent:operator')
             print(json.dumps({'interviewId': result['interviewId'], 'revision': result['latest']['revision'],
-                              'status': 'draft', 'requiresRecruiterApproval': True}))
+                              'status': 'draft', 'requiresChatApproval': True}))
 
 
 if __name__ == '__main__':

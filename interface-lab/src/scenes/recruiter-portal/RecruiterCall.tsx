@@ -1,16 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import type { DailyCall } from '@daily-co/daily-js';
-import { Maximize2, MessageCircle, Minimize2, PanelRightOpen, PhoneOff, X } from 'lucide-react';
+import { Maximize2, Minimize2, PanelRightOpen, PhoneOff, X } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { recruiterRequest, type RecruiterCandidate, type Room } from './api';
 import type { InterviewRecording } from '../candidate-portal/api';
-import { CandidateAccessControls } from './CandidateAccessControls';
 import { useInterviewCoach, type LiveInterviewTurn } from './interview-coach';
 import { InterviewCoachPanel } from './InterviewCoachPanel';
-import { CoachDialog, InterviewContacts, ResumeAction } from './InterviewPreparation';
+import { InterviewContacts, ResumeAction } from './InterviewPreparation';
 import './interview-coach.css';
 
-export type ActiveCall = { kind: 'interview' | 'meeting'; candidateId: string; interviewId?: string; candidate?: RecruiterCandidate; applicationId?: string; meetingId?: string; title: string; accountActive?: boolean; recording?: InterviewRecording };
+export type ActiveCall = { kind: 'interview' | 'meeting'; preview?: boolean; candidateId: string; interviewId?: string; candidate?: RecruiterCandidate; applicationId?: string; meetingId?: string; title: string; accountActive?: boolean; recording?: InterviewRecording };
 type CaptureStatus = 'unknown' | 'active' | 'stopped' | 'error';
 
 export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }: {
@@ -30,10 +29,8 @@ export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }:
   const [retryRecording, setRetryRecording] = useState(false);
   const [retryTranscription, setRetryTranscription] = useState(false);
   const [startFailed, setStartFailed] = useState(false);
-  const [showClaim, setShowClaim] = useState(false);
   const [error, setError] = useState('');
   const [panel, setPanel] = useState(true);
-  const [contactsOpen, setContactsOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [turns, setTurns] = useState<LiveInterviewTurn[]>([]);
   const root = useRef<HTMLDivElement>(null);
@@ -157,7 +154,7 @@ export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }:
     <header className="rp-call-header">
       <div><strong id="rp-call-title">{active.title}</strong><p role="status">{!joined ? 'Подключение…' : present ? 'Собеседник подключён' : 'Ждём собеседника'}{joined && ` · ${recording === 'active' ? 'Запись идёт' : recording === 'stopped' ? 'Запись остановлена' : recording === 'error' ? 'Ошибка записи' : 'Статус записи уточняется'}`}{joined && ` · ${transcribing === 'active' ? 'Расшифровка включена' : transcribing === 'stopped' ? 'Расшифровка остановлена' : transcribing === 'error' ? 'Ошибка расшифровки' : 'Статус расшифровки уточняется'}`}</p></div>
       <div className="rp-actions">
-        {hasCoach && <><ResumeAction coach={coach} name={active.title} container={root.current}/><button className="ric-link" onClick={() => setContactsOpen(true)}><MessageCircle size={16}/>Связаться</button>{!panel && <button className="ric-icon" aria-label="Показать помощника" onClick={() => setPanel(true)}><PanelRightOpen size={19}/></button>}
+        {hasCoach && <><ResumeAction coach={coach} name={active.title} container={root.current}/><InterviewContacts candidate={active.candidate || { email: null, telegram: '' }}/>{!panel && <button className="ric-icon" aria-label="Показать помощника" onClick={() => setPanel(true)}><PanelRightOpen size={19}/></button>}
           <button className="ric-icon" aria-label={fullscreen ? 'Выйти из полноэкранного режима' : 'На весь экран'} onClick={() => { if (fullscreen) void document.exitFullscreen(); else void root.current?.requestFullscreen().catch(() => setError('Полноэкранный режим недоступен в этом браузере.')); }}>{fullscreen ? <Minimize2 size={18}/> : <Maximize2 size={18}/>}</button></>}
         <Button variant="secondary" autoFocus disabled={finishing} onClick={() => void close()}><X size={16}/>Выйти</Button>{joined && <Button disabled={finishing || starting} onClick={finish}><PhoneOff size={16}/>{finishing ? 'Завершаем…' : active.kind === 'interview' ? 'Завершить интервью' : 'Завершить встречу'}</Button>}</div>
     </header>
@@ -166,14 +163,11 @@ export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }:
         {(recording !== 'active' || transcribing !== 'active') && <><label className="rp-check"><input type="checkbox" checked={oralConsent} disabled={starting} onChange={event => setOralConsent(event.target.checked)}/><span>Согласие получено</span></label><Button disabled={!oralConsent || starting || finishing || (startRequested && !retryRecording && !retryTranscription && !startFailed)} onClick={startInterview}>{starting ? 'Запускаем…' : retryRecording || retryTranscription || startFailed ? 'Повторить запуск записи' : startRequested ? 'Ожидаем подтверждения…' : 'Начать интервью и запись'}</Button></>}
         <span className="rp-muted rp-help" role="status">{recording === 'active' ? transcribing === 'active' ? 'Запись и расшифровка идут' : 'Запись идёт · статус расшифровки уточняется' : recording === 'stopped' ? 'Запись остановлена' : recording === 'error' ? 'Ошибка записи' : 'Статус записи уточняется'}</span>
       </div>
-      {active.kind === 'interview' && <div className="rp-call-claim"><Button variant="secondary" onClick={() => setShowClaim(current => !current)} aria-expanded={showClaim}>Доступ кандидату</Button>{showClaim && <CandidateAccessControls candidateId={active.candidateId} token={token} allowClaimFallback={active.accountActive === false && startRequested}/>}</div>}
     </div>}
     {error && <div className="rp-error" role="alert">{error}</div>}
     <div className="rp-call-frame" ref={mount}/>
     </div>
     {hasCoach && panel && <InterviewCoachPanel coach={coach} name={active.title} joined={joined} turns={turns} onCollapse={() => setPanel(false)}/>}
-    {hasCoach && <CoachDialog open={contactsOpen} onOpenChange={setContactsOpen} title="Связь с кандидатом" container={root.current}>
-      <InterviewContacts candidate={active.candidate || { name: active.title, email: null, telegram: '' }} coach={coach}/>
-    </CoachDialog>}
+
   </div>;
 }
