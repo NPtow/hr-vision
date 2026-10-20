@@ -18,7 +18,7 @@ function IconButton({ label, children, onClick, className = '', pressed, expande
 }
 
 /** Candidate materials are supplied by the authorised caller. No fixtures or local comment store. */
-export function CandidateInterviewPlayer({ sourceId, name, media, chapters, fullChapters, transcriptText = '', emptyMessage,
+export function CandidateInterviewPlayer({ sourceId, name, header, media, chapters, fullChapters, transcriptText = '', emptyMessage,
   initialEvidenceIndex, renderTimeComment, comments = [], canComment = false, transcriptSeekable = true }: RecordingReviewProps) {
   const id = useId();
   const root = useRef<HTMLDivElement>(null);
@@ -143,6 +143,7 @@ export function CandidateInterviewPlayer({ sourceId, name, media, chapters, full
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement;
+      if (event.defaultPrevented || target.closest('[role="dialog"]')) return;
       if (!root.current?.contains(target) && !full) return;
       if (event.key === 'Escape') {
         if (menu) setMenu(null); else if (searchOpen) setSearchOpen(false); else if (full) exitFull();
@@ -204,7 +205,8 @@ export function CandidateInterviewPlayer({ sourceId, name, media, chapters, full
           onPlay={() => { setPlaying(true); revealControls(); window.dispatchEvent(new CustomEvent('hr-vision-interview-play', { detail: video.current })); }}
           onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} onError={() => setError('Не удалось открыть запись')}/>
           : <div className="iv-media-empty">{emptyMessage || 'Записи пока нет'}</div>}
-        <div className={`iv-video-title${captions ? ' iv-title-hidden' : ''}`} aria-hidden="true"><span className="iv-video-name">{name}</span></div>
+        {header ? <div className="iv-identity-header">{header}</div>
+          : <div className={`iv-video-title${captions ? ' iv-title-hidden' : ''}`} aria-hidden="true"><span className="iv-video-name">{name}</span></div>}
         {error && <button type="button" className="iv-media-error" onClick={() => { setError(''); video.current?.load(); }}>{error}<span>Попробовать ещё раз</span></button>}
         {media && !playing && !error && <button type="button" className="iv-big-play" aria-label="Воспроизвести интервью" onClick={togglePlay}><Play fill="currentColor" strokeWidth={0}/></button>}
         {captions && active && current <= active.end && <div className="iv-captions"><span>{active.text}</span></div>}

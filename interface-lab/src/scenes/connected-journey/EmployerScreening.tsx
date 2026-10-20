@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import type { CallMaterials } from '../candidate-portal/api';
 import { SourceScreeningReview } from '../interview-review/InterviewReview';
 import { EmployerTimecodeComment } from '../employer-workspace/EmployerCandidateProfile';
@@ -6,12 +6,12 @@ import { parseMeetingTranscript } from './transcript';
 import { request, type Journey, type Person, type SourceProfile } from './api';
 
 /** Bind the existing interview view to this application's authorised source media. */
-type ScreeningProps = { journey: Journey; person: Person; source: SourceProfile; appearance?: 'panel' | 'candidate'; enableComments?: boolean };
+type ScreeningProps = { journey: Journey; person: Person; source: SourceProfile; appearance?: 'panel' | 'candidate'; header?: ReactNode; enableComments?: boolean };
 export function EmployerScreening(props: ScreeningProps) {
   return <Screening key={`${props.person.vacancyId}:${props.person.id}:${props.source.interviewId || props.source.id}`} {...props}/>;
 }
 
-function Screening({ journey, person, source, appearance = 'panel', enableComments = false }: ScreeningProps) {
+function Screening({ journey, person, source, appearance = 'panel', header, enableComments = false }: ScreeningProps) {
   const [materials, setMaterials] = useState<CallMaterials | null>(null);
   const [error, setError] = useState('');
   const vacancyId = person.vacancyId || journey.state!.vacancy.id;
@@ -60,7 +60,7 @@ function Screening({ journey, person, source, appearance = 'panel', enableCommen
   }
   return <>{(recordings.length ? recordings : [null]).map((recording, index) => <SourceScreeningReview
     key={recording?.id || 'pending'} appearance={appearance} sourceId={`${source.id}:${recording?.id || 'pending'}`}
-    name={person.name} chapters={recordings.length <= 1 ? chapters : []} fullChapters={recordings.length <= 1 ? fullChapters : []}
+    name={person.name} header={header} chapters={recordings.length <= 1 ? chapters : []} fullChapters={recordings.length <= 1 ? fullChapters : []}
     shortPlaylist={source.shortChapters.length > 0} media={recording ? { src: recording.url } : undefined}
     transcriptText={index === 0 ? transcript : undefined} transcriptSeekable={recordings.length <= 1} summary={index === 0 ? source.shortSummary : undefined}
     renderChapterComment={showComments ? chapter => chapter.seconds === null ? null : comment(chapter.seconds, recording?.id || null, chapter.title) : undefined}
