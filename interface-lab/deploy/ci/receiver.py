@@ -279,6 +279,30 @@ def check_origin(target, sha):
     raise RuntimeError('Origin verification failed') from last
 
 
+def retain_replay_assets(previous, destination):
+    """Keep missing public replay assets for 25h without duplicating their bytes."""
+    if previous is None or not previous.is_dir():
+        return
+    now = time.time()
+    ledger = previous / '.replay-assets.json'
+    expiries = json.loads(ledger.read_text()) if ledger.exists() else {}
+    retained = {}
+    for source in (previous / 'assets').rglob('*'):
+        name = source.relative_to(previous).as_posix()
+        if source.is_symlink() or not source.is_file() or source.suffix.lower() not in {
+            '.css', '.woff', '.woff2', '.ttf', '.otf', '.svg', '.png', '.webp', '.ico',
+        }:
+            continue
+        output = destination / name
+        expires = expiries.get(name, now + 25 * 3600)
+        if output.exists() or expires <= now:
+            continue
+        output.parent.mkdir(parents=True, exist_ok=True)
+        os.link(source, output)
+        retained[name] = expires
+    (destination / '.replay-assets.json').write_text(json.dumps(retained))
+
+
 def activate(stage, manifest):
     target, release = manifest['target'], manifest['release']
     base = BASES[target]
@@ -295,6 +319,8 @@ def activate(stage, manifest):
     require(not ui_release.exists(), 'Workflow attempt was already installed; rerun it for a new attempt')
     ui_release.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(stage / 'ui', ui_release)
+    if target == 'service':
+        retain_replay_assets(base / previous_ui if previous_ui else None, ui_release)
     if change_api:
         api_release = API / 'releases' / release
         require(not api_release.exists(), 'API release already exists')

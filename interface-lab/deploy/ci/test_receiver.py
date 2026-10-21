@@ -332,6 +332,25 @@ class ReceiverTest(unittest.TestCase):
         a, s, _ = self.bundle(mutate=mutate)
         with self.assertRaisesRegex(ValueError, 'public'): r.unpack(a, s, 'mockups')
 
+    def test_replay_assets_survive_releases_without_scripts_overwrites_or_extended_ttl(self):
+        old, new, later = [self.root / name for name in ('old', 'new', 'later')]
+        for directory in (old, new, later):
+            (directory / 'assets').mkdir(parents=True)
+        for name in ('old.css', 'font.woff2', 'shared.css', 'old.js'):
+            (old / 'assets' / name).write_text('old')
+        (new / 'assets/shared.css').write_text('new')
+        with patch.object(r.time, 'time', return_value=1000):
+            r.retain_replay_assets(old, new)
+        self.assertEqual((new / 'assets/old.css').stat().st_ino, (old / 'assets/old.css').stat().st_ino)
+        self.assertEqual((new / 'assets/shared.css').read_text(), 'new')
+        self.assertTrue((new / 'assets/font.woff2').exists())
+        self.assertFalse((new / 'assets/old.js').exists())
+        with patch.object(r.time, 'time', return_value=1000 + 26 * 3600):
+            r.retain_replay_assets(new, later)
+        self.assertFalse((later / 'assets/old.css').exists())
+        self.assertTrue((later / 'assets/shared.css').exists())
+        self.assertTrue((old / 'assets/old.css').exists())
+
     def test_refuses_old_commit_without_changing_current(self):
         a, s, m = self.bundle(); r.unpack(a, s, 'mockups')
         base = self.root / 'site'; base.mkdir(); (base / 'current').symlink_to('releases/old')
