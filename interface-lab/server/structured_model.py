@@ -24,6 +24,7 @@ INJECTION = re.compile(r'ignore\s+(?:all\s+)?(?:previous|above|system)|(?:system
 MAX_INPUT = 65000  # UTF-8 bytes conservatively bound input tokens, including schema.
 MAX_OUTPUT = 3000
 ROLES = {'cv-extractor', 'cv-writer', 'cv-judge',
+         'interview-extractor', 'interview-writer', 'interview-judge',
          'meeting-lab-extractor', 'meeting-lab-writer', 'meeting-lab-judge'}
 
 

@@ -4,6 +4,7 @@ import { SourceScreeningReview } from '../interview-review/InterviewReview';
 import { EmployerTimecodeComment } from '../employer-workspace/EmployerCandidateProfile';
 import { parseMeetingTranscript } from './transcript';
 import { request, type Journey, type Person, type SourceProfile } from './api';
+import { interviewAssistant } from '../interview-review/interview-assistant-api';
 
 /** Bind the existing interview view to this application's authorised source media. */
 type ScreeningProps = { journey: Journey; person: Person; source: SourceProfile; appearance?: 'panel' | 'candidate'; header?: ReactNode; enableComments?: boolean };
@@ -46,10 +47,10 @@ function Screening({ journey, person, source, appearance = 'panel', header, enab
     }
     return [...counts].sort(([a], [b]) => a - b).map(([seconds, count]) => ({ seconds, count }));
   }
-  function comment(seconds: number, recordingId: string | null, chapterTitle = '', onClose?: () => void) {
+  function comment(seconds: number, recordingId: string | null, chapterTitle = '', onClose?: () => void, openRequest?: number) {
     if (!showComments) return null;
     return <EmployerTimecodeComment key={`${source.interviewId}:${recordingId}:${seconds}`} seconds={seconds}
-      appearance={appearance === 'candidate' ? 'player' : undefined}
+      appearance={appearance === 'candidate' ? 'player' : undefined} openRequest={openRequest}
       comments={(person.screeningComments || []).filter(item => item.interviewId === source.interviewId
         && (item.recordingId === recordingId || (recordings.length <= 1 && item.recordingId === null))
         && Math.abs(item.seconds - seconds) < 0.001)}
@@ -63,8 +64,12 @@ function Screening({ journey, person, source, appearance = 'panel', header, enab
     name={person.name} header={header} chapters={recordings.length <= 1 ? chapters : []} fullChapters={recordings.length <= 1 ? fullChapters : []}
     shortPlaylist={source.shortChapters.length > 0} media={recording ? { src: recording.url } : undefined}
     transcriptText={index === 0 ? transcript : undefined} transcriptSeekable={recordings.length <= 1} summary={index === 0 ? source.shortSummary : undefined}
+    assistant={recording && recordings.length === 1 && transcript ? interviewAssistant(journey.token, {
+      source: 'screening', candidate: person.id, applicationId: person.applicationId || person.id,
+      vacancyId, generation, recordingId: recording.id,
+    }) : undefined}
     renderChapterComment={showComments ? chapter => chapter.seconds === null ? null : comment(chapter.seconds, recording?.id || null, chapter.title) : undefined}
-    renderTimeComment={showComments ? (seconds, onClose) => comment(seconds, recording?.id || null, '', onClose) : undefined}
+    renderTimeComment={showComments ? (seconds, onClose, openRequest) => comment(seconds, recording?.id || null, '', onClose, openRequest) : undefined}
     commentTimestamps={enableComments ? commentTimestamps(recording?.id || null) : undefined}
     canComment={canComment} comments={showComments ? (person.screeningComments || []).filter(item => item.interviewId === source.interviewId
       && (item.recordingId === (recording?.id || null) || (recordings.length <= 1 && item.recordingId === null))) : []}

@@ -3,6 +3,7 @@ import { Button } from '../../components/ui/button';
 import { MeetingRecordingReview } from '../interview-review/InterviewReview';
 import { request, type Journey, type Person } from './api';
 import { parseMeetingTranscript } from './transcript';
+import { interviewAssistant } from '../interview-review/interview-assistant-api';
 
 type MaterialData = {
   recordings: { id: string; url: string; expires?: number }[];
@@ -63,6 +64,11 @@ function MeetingMaterials({ person, journey, appearance }: MaterialsProps) {
     {(recordings.length ? recordings : [null]).map((recording, index) => <MeetingRecordingReview
       key={recording?.id || 'pending'} sourceId={`${meeting.id}:${recording?.id || 'pending'}`} appearance={appearance}
       name={person.name} chapters={canSeekTranscript ? chapters : []} emptyMessage={emptyMessage}
+      assistant={recording && recordings.length === 1 && transcript ? interviewAssistant(journey.token, {
+        source: 'meeting', candidate: person.id, applicationId: person.applicationId || person.id,
+        vacancyId: person.vacancyId || journey.state!.vacancy.id, generation: journey.state!.generation,
+        meetingId: meeting.id, recordingId: recording.id,
+      }) : undefined}
       media={recording ? { src: recording.url, label: recordings.length > 1 ? `Запись встречи · часть ${index + 1}` : 'Запись этой встречи' } : undefined}
       transcriptText={index === 0 ? transcript : undefined} transcriptSeekable={canSeekTranscript}/>) }
     {!canSeekTranscript && <p className="cj-info">Встреча записана несколькими файлами. Расшифровка доступна целиком; привязка таймкодов к частям ещё не определена.</p>}

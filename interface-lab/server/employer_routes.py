@@ -16,6 +16,7 @@ import employer_store as store
 import employer_notifications as notifications
 import employer_workflow as workflow
 import vacancy_import
+from interview_assistant import InterviewAssistant
 
 
 PREFIX = '/api/hr/employer'
@@ -30,6 +31,7 @@ class EmployerRoutes:
         self.connect, self.lock, self.portal, self.media, self.origin = connect, lock, portal, media, origin
         import employer_intake as intake
         self.intake = intake
+        self.assistant = InterviewAssistant(connect, lock)
         with self.lock, self.connect() as db:
             # Startup only; workflow's schema migration owns its boot-time DDL.
             workflow.init(db)
@@ -191,6 +193,8 @@ class EmployerRoutes:
             return self._materials(headers, body), {}
         if route == '/screening/materials' and method == 'POST':
             return self._materials(headers, body, screening=True), {}
+        if route == '/interview-assistant' and method == 'POST':
+            return self._interview_assistant(headers, body), {}
         if route == '/feedback/questions' and method == 'POST':
             return self._questions(headers, body), {}
         if route == '/action' and method == 'POST' and body.get('action') == 'meeting.finish':
@@ -259,6 +263,53 @@ class EmployerRoutes:
             if route == '/action' and method == 'POST':
                 return self._action(db, headers, body), {}
             raise Problem('Действие не найдено.', 404)
+
+    def _interview_assistant(self, headers, body):
+        allowed = {'source', 'action', 'query', 'requestId', 'candidate', 'applicationId',
+                   'vacancyId', 'generation', 'meetingId', 'recordingId', 'id', 'index'}
+        require(set(body) <= allowed and body.get('source') in ('screening', 'meeting', 'intake'),
+                'Проверьте источник интервью.', 400)
+        if body['source'] == 'intake':
+            scope = {key: body[key] for key in ('id', 'index', 'vacancyId') if key in body}
+            require(bool(scope.get('vacancyId')), 'Выберите вакансию.', 400)
+            with self.lock, self.connect() as db:
+                principal = access.authenticate(db, headers)
+                self.intake.recording_source(db, principal['workspaceId'], scope)
+                person, _ = self.intake._review_person(db, principal['workspaceId'], scope['vacancyId'], scope)
+                profile = person.get('preparedProfile') or {}
+                require(len(profile.get('recordings', [])) == 1 and scope['index'] == 0,
+                        'Расшифровка пока не сопоставлена с этой частью записи.', 422)
+                transcript = profile.get('transcriptText', '')
+                fingerprint = hashlib.sha256(_dump(profile).encode()).hexdigest()
+            def authorize(db):
+                latest = access.authenticate(db, headers)
+                require(latest['accountId'] == principal['accountId'] and latest['workspaceId'] == principal['workspaceId'], 'Нет доступа.', 403)
+                self.intake.recording_source(db, latest['workspaceId'], scope)
+                current, _ = self.intake._review_person(db, latest['workspaceId'], scope['vacancyId'], scope)
+                require(hashlib.sha256(_dump(current.get('preparedProfile') or {}).encode()).hexdigest() == fingerprint,
+                        'Материалы интервью изменились. Обновите страницу.', 409)
+            source_id = _dump(['intake', scope['vacancyId'], scope['id'], scope['index']])
+        else:
+            scope = {key: body[key] for key in ('candidate', 'applicationId', 'vacancyId', 'generation', 'meetingId') if key in body}
+            screening = body['source'] == 'screening'
+            with self.lock, self.connect() as db:
+                principal, app, _ = self._identity(db, headers, scope, allow_archived=True)
+                meeting = self.portal.interview(db, app['candidateId']) if screening else self._meeting(db, app, scope)
+                require(meeting and meeting['status'] == 'completed', 'Материалы доступны после встречи.', 409)
+                meeting_id, room = meeting['id'], meeting['room']
+            materials = self._materials(headers, scope, screening=screening)
+            recordings = materials.get('recordings', [])
+            require(len(recordings) == 1 and recordings[0]['id'] == body.get('recordingId'),
+                    'Расшифровка пока не сопоставлена с этой частью записи.', 422)
+            transcript = '\n\n'.join(item.get('text', '') for item in materials.get('transcripts', []))
+            def authorize(db):
+                latest, current, _ = self._identity(db, headers, scope, allow_archived=True)
+                self._same(latest, current, principal, app)
+                checked = self.portal.interview(db, current['candidateId']) if screening else self._meeting(db, current, scope)
+                require(checked and checked['id'] == meeting_id and checked['status'] == 'completed' and checked['room'] == room,
+                        'Встреча изменилась. Обновите страницу.', 409)
+            source_id = _dump([body['source'], app['applicationId'], meeting_id, body['recordingId']])
+        return self.assistant.run(principal, source_id, transcript, body, authorize)
 
     def _intake_recording(self, headers, body):
         with self.lock, self.connect() as db:
