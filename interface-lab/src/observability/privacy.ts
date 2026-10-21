@@ -31,36 +31,85 @@ export function safeAttributes(input: Record<string, unknown>, origin: string): 
   }
   return result;
 }
-const structural = new Set(['_cssText','class','style','width','height','viewBox','d','fill','stroke','stroke-width','role','type','disabled','checked','selected','multiple','rel','xmlns']);
-function safeCss(value: string): string {
-  return value.replace(/url\([^)]*\)/gi, 'none').replace(/content\s*:[^;}]+/gi, 'content:""');
+const structural = new Set(['class','width','height','viewBox','viewbox','d','fill','stroke','stroke-width','stroke-linecap','stroke-linejoin','cx','cy','r','x','y','x1','x2','y1','y2','points','transform','role','type','disabled','checked','selected','multiple','rel','xmlns','open','hidden','dir','lang','colspan','rowspan','tabindex','aria-expanded','aria-selected','aria-checked','aria-hidden','data-state','data-side','data-align','data-orientation','data-disabled','data-placeholder']);
+const mask = (text: string) => text.replace(/\S/g, '*');
+export function createTextMask(copy: readonly string[]) {
+  const readable = new Set(copy.map(text => text.replace(/\s+/g, ' ').trim()));
+  return (text: string): string => !/[\p{L}\p{N}]/u.test(text) || readable.has(text.replace(/\s+/g, ' ').trim()) ? text : mask(text);
 }
-// rrweb calls eventProcessor before serializing both snapshots and mutations.
-export function sanitizeReplay<T>(event: T, origin: string): T {
-  const visit = (value: unknown, parent = ''): unknown => {
-    if (Array.isArray(value)) return value.map(item => visit(item, parent));
+export function safeAssetUrl(value: string, origin: string): string | undefined {
+  try {
+    const url = new URL(value, origin);
+    if (url.origin === origin && /^\/(?:assets|site-assets|brand)\/[a-zA-Z0-9_./-]+\.(?:css|woff2?|ttf|otf|svg|png|webp|ico)$/.test(url.pathname)) return origin + url.pathname;
+  } catch { /* untrusted URLs are omitted */ }
+}
+export function safeCss(value: string, origin: string): string {
+  return value.replace(/url\(\s*(['"]?)(.*?)\1\s*\)/gi, (_match, _quote, url) => {
+    const safe = safeAssetUrl(url, origin);
+    return safe ? `url("${safe}")` : 'none';
+  }).replace(/(^|[;{])(\s*)content\s*:[^;}]+/gi, '$1$2content:""');
+}
+type ReplayNode = {tag?: string; parent?: number; style: boolean};
+// rrweb 2.1 does not set isStyle on text nodes. Remember their parent, including
+// across incremental mutations; otherwise a stylesheet is mistaken for private text.
+export function createReplaySanitizer(origin: string, readableText = createTextMask([])) {
+  const nodes = new Map<number, ReplayNode>();
+  const register = (value: unknown, parent?: number): void => {
+    if (!value || typeof value !== 'object') return;
+    const node = value as Record<string, unknown>;
+    if (typeof node.id !== 'number') return;
+    const tag = typeof node.tagName === 'string' ? node.tagName : undefined;
+    const style = tag === 'style' || (tag === undefined && Boolean(parent && nodes.get(parent)?.style));
+    nodes.set(node.id, {tag, parent, style});
+    if (Array.isArray(node.childNodes)) node.childNodes.forEach(child => register(child, node.id as number));
+  };
+  const visit = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(item => visit(item));
     if (!value || typeof value !== 'object') return value;
     const source = value as Record<string, unknown>;
     const result: Record<string, unknown> = {};
+    const info = typeof source.id === 'number' ? nodes.get(source.id) : undefined;
+    const tag = source.tagName ?? info?.tag;
     for (const [key, item] of Object.entries(source)) {
       if (key === 'attributes' && item && !Array.isArray(item) && typeof item === 'object') {
         const attrs: Record<string, unknown> = {};
         for (const [attr, content] of Object.entries(item)) {
           if (content === null) { attrs[attr] = null; continue; }
-          if (attr === 'href' && source.tagName === 'link' && String(content).split('?')[0].endsWith('.css')) attrs[attr] = safeUrl(String(content), origin);
+          if ((attr === 'href' && tag === 'link') || (attr === 'src' && tag === 'img')) {
+            const asset = safeAssetUrl(String(content), origin);
+            if (asset) attrs[attr] = asset;
+          }
           else if (attr === 'id' && ['root','storybook-root','storybook-docs'].includes(String(content))) attrs[attr] = content;
           else if (/^rr_(width|height|scrollLeft|scrollTop)$/.test(attr) && /^[0-9.]+(?:px)?$/.test(String(content))) attrs[attr] = content;
-          else if (structural.has(attr)) attrs[attr] = ['style','_cssText'].includes(attr) ? safeCss(String(content)) : String(content).slice(0, 2000);
+          else if (attr === '_cssText' && ['style','link'].includes(String(tag))) attrs[attr] = safeCss(String(content), origin);
+          else if (attr === 'style') {
+            attrs[attr] = typeof content === 'string' ? safeCss(content, origin) : Object.fromEntries(Object.entries(content as Record<string, unknown>).map(([property, value]) => [property,
+              property === 'content' ? false : Array.isArray(value) ? [safeCss(String(value[0]), origin), value[1]] : value === false ? false : safeCss(String(value), origin)]));
+          }
+          else if (['value','placeholder','title','alt','aria-label'].includes(attr)) attrs[attr] = attr === 'value' ? mask(String(content)) : readableText(String(content));
+          else if (structural.has(attr)) attrs[attr] = String(content).slice(0, 2000);
         }
         result[key] = attrs;
       } else if (key === 'href' || key === 'url') result[key] = safeUrl(String(item), origin);
       else if (typeof item === 'string' && ['textContent','text','value'].includes(key)) {
-        result[key] = source.isStyle ? safeCss(item) : '*'.repeat(Math.min(item.length, 2000));
-      } else if (typeof item === 'string' && ['rule','cssText'].includes(key)) result[key] = safeCss(item);
+        result[key] = source.isStyle || info?.style ? safeCss(item, origin) : key === 'text' ? mask(item) : readableText(item);
+      } else if (typeof item === 'string' && ['rule','cssText'].includes(key)) result[key] = safeCss(item, origin);
       else if (key === 'payload') result[key] = {};
-      else result[key] = visit(item, key);
+      else result[key] = visit(item);
     }
     return result;
   };
-  return visit(event) as T;
+  return <T>(event: T): T => {
+    const e = event as {type?: number; data?: {node?: unknown; adds?: {node: unknown; parentId: number}[]; removes?: {id: number}[]}};
+    if (e.type === 2) { nodes.clear(); register(e.data?.node); }
+    for (const addition of e.data?.adds ?? []) register(addition.node, addition.parentId);
+    const result = visit(event) as T;
+    if (e.data?.removes?.length) {
+      const removed = new Set(e.data.removes.map(node => node.id));
+      for (const [id, info] of nodes) if (removed.has(id) || (info.parent !== undefined && removed.has(info.parent))) { removed.add(id); nodes.delete(id); }
+    }
+    return result;
+  };
 }
+// Stateless entry point for callers sanitizing a single self-contained event.
+export function sanitizeReplay<T>(event: T, origin: string): T { return createReplaySanitizer(origin)(event); }

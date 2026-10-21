@@ -2,9 +2,10 @@ import Rum, { INSTRUMENTATIONS_ALL_DISABLED } from '@hyperdx/otel-web';
 import Recorder from '@hyperdx/otel-web-session-recorder';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-base';
-import { safeAttributes, safeStack, sanitizeReplay } from './privacy';
+import { safeAttributes, safeStack, createTextMask, createReplaySanitizer } from './privacy';
 
 declare const __HR_RELEASE__: string;
+declare const __HR_REPLAY_STATIC_TEXT__: string[];
 const hosts = new Set(['mashadasha.tech', 'hr-vision.158-160-179-53.sslip.io']);
 
 // The exporter wrapper is deliberate: otel-web 0.20.0 documents an attribute
@@ -61,13 +62,20 @@ function start() {
   };
   window.addEventListener('error', event => report(event.error));
   window.addEventListener('unhandledrejection', event => report(event.reason));
+  const readableText = createTextMask(__HR_REPLAY_STATIC_TEXT__);
+  const sanitizeReplay = createReplaySanitizer(location.origin, readableText);
+  const publicImages = ['/assets/', '/brand/', '/site-assets/'].flatMap(path => [path, location.origin + path]);
+  const privateImages = 'img' + publicImages.map(prefix => `:not([src^="${prefix}"])`).join('');
   Recorder.init({
     url: location.origin + '/telemetry/v1/logs', maskAllInputs: true, maskTextSelector: '*',
-    blockSelector: 'video,audio,iframe,canvas,img,object,embed,[contenteditable],.ph-no-capture,[data-private],[data-observability-block]',
-    recordCanvas: false, recordCrossOriginIframes: false, inlineImages: false, collectFonts: false,
+    maskTextFn: (text, element) => element?.closest('.rr-mask,[data-private],[data-observability-mask]') ? text.replace(/\S/g, '*') : readableText(text),
+    blockSelector: `video,audio,iframe,canvas,${privateImages},object,embed,[contenteditable],.ph-no-capture,[data-private],[data-observability-block]`,
+    // ClickStack 2.19's player predates rrweb 2.1's late link->_cssText mutation.
+    // Keep public, versioned CSS links intact so the native player can load them.
+    recordCanvas: false, recordCrossOriginIframes: false, inlineImages: false, inlineStylesheet: false, collectFonts: false,
     checkoutEveryNms: 120000,
     sampling: {mousemove: 100, scroll: 250, input: 'last'},
-    plugins: [{name: 'mashadasha-privacy', options: {}, eventProcessor: event => sanitizeReplay(event, location.origin)}],
+    plugins: [{name: 'mashadasha-privacy', options: {}, eventProcessor: event => sanitizeReplay(event)}],
   });
   Rum.addAction('browser.navigation', {'app.area': area});
 }
