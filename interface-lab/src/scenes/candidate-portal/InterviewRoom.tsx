@@ -4,7 +4,7 @@ import { ArrowLeft, Camera, CameraOff, LoaderCircle, Mic, MicOff } from 'lucide-
 import type { DailyCall, DailyParticipant } from '@daily-co/daily-js';
 import { Button } from '../../components/ui/button';
 import { CandidateApiError, candidateRequest, dateTimeLabel, type CallMaterials, type RoomCredentials } from './api';
-import { CallConnectionError, directCallUrl, releaseCall, waitForCall } from './call-connection';
+import { CallConnectionError, dailyCallConfig, directCallUrl, releaseCall, waitForCall } from './call-connection';
 import { CallDeviceAccess, useCallDeviceAccess } from '../../components/call-device-access';
 import { MediaPanel } from './MediaPanel';
 import { CandidateCallSurface, type CandidateRecordingState } from './CandidateCallSurface';
@@ -120,6 +120,7 @@ export function InterviewRoom({ title, start, completed, configured, application
       // Native tracks power the same UI as the recruiter call. Candidate tokens
       // and all access checks stay unchanged; no owner/capture commands run here.
       const call = DailyIframe.createCallObject({
+          dailyConfig: dailyCallConfig(),
         ...(inputs.audioSource ? { audioSource: inputs.audioSource } : {}),
         ...(inputs.videoSource ? { videoSource: inputs.videoSource } : {}),
         startVideoOff: !selected.camera, startAudioOff: !selected.microphone,

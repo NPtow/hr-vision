@@ -1,0 +1,8 @@
+{
+  "version": "0.93.0",
+  "source": "https://c.daily.co/call-machine/versioned/{version}/static/{file}",
+  "files": {
+    "call-machine-object-bundle.js": "6613cf576406de7815e961b921c26b86bb7e116f7e8cc2d4f7e082c880e12856",
+    "audio-processor-bundle.js": "a0b6d2ad8b73b2daf6530e4e1ca8e82f720fa5c2f2c13a7b5209010575e45a21"
+  }
+}
