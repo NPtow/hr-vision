@@ -110,6 +110,87 @@ class InterviewAssistantTest(unittest.TestCase):
         self.assertEqual(result['evidence'][0]['startMs'], 1000)
         self.assertNotEqual(self.request('employer/interview-assistant', {**body, 'vacancyId': 'foreign'}, token=self.owner['token'])[0], 200)
 
+    def long_recording(self):
+        person = self.imported(self.owner, self.job)
+        facts = {0: 'Пять лет руководила отделом продаж строительных материалов.',
+                 60: 'Вела переговоры с крупными оптовыми заказчиками.',
+                 119: 'Обучила семь новых менеджеров работе с постоянными клиентами.'}
+        lines = []
+        for index in range(120):
+            start, end = index * 30, index * 30 + 9
+            stamp = lambda seconds: f'{seconds // 60:02}:{seconds % 60:02}'
+            text = facts.get(index, f'Фрагмент {index}. ' + 'Уточняем удобный график, время следующей встречи и дорогу до офиса. ' * 5)
+            lines.append(f'[{stamp(start)}-{stamp(end)}] К: {text}')
+        with self.app.connect() as db:
+            value = json.loads(db.execute('SELECT body FROM em_intake_candidates WHERE id=?', (person['id'],)).fetchone()[0])
+            value['preparedProfile']['transcriptText'] = '\n'.join(lines)
+            db.execute('UPDATE em_intake_candidates SET body=? WHERE id=?', (json.dumps(value), person['id']))
+        return {'source': 'intake', 'action': 'chat', 'id': person['id'], 'index': 0,
+                'vacancyId': self.job['id'], 'query': 'Кратко расскажи об опыте', 'requestId': uuid.uuid4().hex}, facts
+
+    def test_broad_question_extracts_across_recording_before_writing(self):
+        body, facts = self.long_recording()
+        seen, stages = [], []
+        def answer(config, payload, key, timeout):
+            self.assertLessEqual(len(structured_model.dump(payload).encode()), structured_model.MAX_INPUT)
+            name = payload['response_format']['json_schema']['name']; stages.append(name)
+            data = json.loads('\n'.join(payload['messages'][1]['content'].splitlines()[1:-1]))
+            if name.endswith('extract'):
+                seen.extend(row['chunkId'] for row in data['chunks'])
+                evidence = [{'chunkId': row['chunkId'], 'quote': row['text']}
+                            for row in data['chunks'] if row['text'] in facts.values()]
+                result = {'supported': bool(evidence), 'evidence': evidence}
+            elif name.endswith('write'):
+                self.assertEqual(len(seen), 120)
+                self.assertEqual({row['quote'] for row in data['evidence']}, set(facts.values()))
+                result = {'text': ' '.join(row['quote'] for row in data['evidence']),
+                          'evidenceIds': [row['id'] for row in data['evidence']]}
+            else:
+                result = {'grounded': True}
+            return {'choices': [{'finish_reason': 'stop', 'message': {'content': json.dumps(result)}}]}
+        with patch.object(structured_model, 'provider', side_effect=answer):
+            status, result, _ = self.request('employer/interview-assistant', body, token=self.owner['token'])
+        self.assertEqual(status, 200, result)
+        self.assertEqual(len(set(seen)), 120)
+        self.assertGreater(len(stages), 3)
+        self.assertTrue(all(name.endswith('extract') for name in stages[:-2]))
+        self.assertEqual(stages[-2:], ['interview_write', 'interview_judge'])
+        self.assertEqual(result['coverage'], {'selected': 120, 'omitted': 0})
+        self.assertEqual({row['startMs'] for row in result['evidence']}, {index * 30000 for index in facts})
+
+    def test_no_evidence_anywhere_checks_all_batches_and_never_writes(self):
+        body, _ = self.long_recording()
+        self.no_evidence = True
+        status, result, _ = self.request('employer/interview-assistant', body, token=self.owner['token'])
+        self.assertEqual(status, 200, result)
+        self.assertFalse(result['supported'])
+        self.assertGreater(len(self.calls), 1)
+        self.assertTrue(all(name.endswith('extract') for name in self.calls))
+        self.assertEqual(result['coverage']['omitted'], 0)
+
+    def test_failed_later_batch_reuses_completed_extraction_on_retry(self):
+        body, _ = self.long_recording()
+        original = self.answer
+        def unavailable(config, payload, *args):
+            if payload['response_format']['json_schema']['name'] == 'interview_batch_1_extract':
+                raise Problem('Шлюз недоступен.', 503)
+            return original(config, payload, *args)
+        with patch.object(structured_model, 'provider', side_effect=unavailable):
+            status, _, _ = self.request('employer/interview-assistant', body, token=self.owner['token'])
+        self.assertEqual(status, 503)
+        self.assertEqual(self.calls, ['interview_extract'])
+        status, result, _ = self.request('employer/interview-assistant', body, token=self.owner['token'])
+        self.assertEqual(status, 200, result)
+        self.assertEqual(self.calls.count('interview_extract'), 1)
+        self.assertEqual(self.calls.count('interview_batch_1_extract'), 1)
+
+    def test_full_recording_still_obeys_per_run_budget(self):
+        body, _ = self.long_recording()
+        with patch.object(assistant, 'RUN_BUDGET', 1):
+            status, _, _ = self.request('employer/interview-assistant', body, token=self.owner['token'])
+        self.assertEqual(status, 429)
+        self.assertEqual(self.calls, [])
+
 class JevBoundaryTest(unittest.TestCase):
     def test_invalid_probabilities_retry_once(self):
         row = {'id': 'fragment-0', 'text': 'Обсудили цену.', 'startMs': 0, 'endMs': 1000, 'speakerName': 'Кандидат'}

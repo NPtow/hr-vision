@@ -17,9 +17,9 @@ import urllib.request
 
 from domain import Problem, require
 from structured_model import BASE, ModelConfig, NoRedirect, complete, digest, dump, scan, unique_object
-from meeting_lab import EXTRACT, WRITE, JUDGE, obj, string, provider_turns, select_sources, contextual_evidence, model_config
+from meeting_lab import EXTRACT, WRITE, JUDGE, obj, string, provider_turns, contextual_evidence, model_config
 
-VERSION = '2026-10-21.1'
+VERSION = '2026-10-21.2'
 RUN_SECONDS = 135
 DAILY_BUDGET = 1500000
 RUN_BUDGET = 400000
@@ -62,7 +62,7 @@ def transcript_turns(value):
     return sorted(turns, key=lambda turn: turn['startMs'])
 
 
-def search_chunks(turns):
+def search_chunks(turns, *, limit=480):
     """Cover the full transcript, preserving speaker and timestamp boundaries."""
     result = []
     for turn in turns:
@@ -82,8 +82,35 @@ def search_chunks(turns):
             else:
                 result.append({'id': 'fragment-' + str(len(result)), 'text': part,
                     'speakerName': turn['speakerName'], 'startMs': turn['startMs'], 'endMs': turn['endMs']})
-    require(len(result) <= 480, 'Для этой записи поиск пока недоступен: слишком много фрагментов.', 413)
+    require(len(result) <= limit, 'В этой записи слишком много фрагментов для помощника.', 413)
     return result
+
+
+def chat_chunks(turns):
+    """Keep the entire sanitized recording, coalescing adjacent speaker cues.
+
+    A broad question has no reliable lexical query terms. Selecting only the
+    latest matching cues can discard the candidate's experience at the start.
+    Every bounded batch goes through extraction; the writer sees only evidence.
+    """
+    return [{'chunkId': 't_' + digest(row['id'])[:20], 'text': row['text'],
+             'sourceId': row['id'], 'sourceType': 'provider-transcript',
+             'startMs': row['startMs'], 'speakerName': row['speakerName'], 'offset': 0}
+            for row in search_chunks(turns, limit=6000)]
+
+
+def chat_batches(chunks):
+    batch, size = [], 0
+    for chunk in chunks:
+        cost = len(dump(chunk).encode())
+        require(cost <= 24000, 'Слишком большой фрагмент интервью.', 413)
+        if batch and size + cost > 24000:
+            yield batch
+            batch, size = [], 0
+        batch.append(chunk)
+        size += cost
+    if batch:
+        yield batch
 
 
 def jev_config():
@@ -201,8 +228,7 @@ class InterviewAssistant:
                 if action == 'search':
                     chunks, dropped = search_chunks(turns), 0
                 else:
-                    chunks, dropped = select_sources({'storedTurns': turns, 'providerComplete': True,
-                        'liveTurns': [], 'notes': {'text': '', 'revision': 0}}, query)
+                    chunks, dropped = chat_chunks(turns), 0
                 require(chunks, 'В расшифровке пока нет доступных фрагментов.', 422)
                 snapshot = {'query': query, 'chunks': chunks, 'dropped': dropped, 'model': config.model, 'version': VERSION}
             db.execute('''INSERT INTO ia_runs(id,workspace_id,account_id,source_id,input_hash,action,started,status,lease,snapshot)
@@ -261,19 +287,28 @@ class InterviewAssistant:
                     for row in ranked[:30]], 'coverage': 'entire_transcript', 'totalMatches': len(ranked)}
             else:
                 by_id = {chunk['chunkId']: chunk for chunk in chunks}
-                schema = obj({'supported': {'type': 'boolean'}, 'evidence': {'type': 'array', 'maxItems': 10,
-                    'items': obj({'chunkId': {'type': 'string', 'enum': list(by_id)}, 'quote': string(600)})}})
                 def verify(value):
                     if bool(value['evidence']) != value['supported']:
                         raise ValueError('evidence_gate')
                     for fact in value['evidence']:
                         if fact['quote'] not in by_id[fact['chunkId']]['text'] or '[[REDACTED_INJECTION]]' in fact['quote']:
                             raise ValueError('unsupported_quote')
-                extracted = stage('extract', 'interview-extractor', EXTRACT, schema, {'question': query, 'chunks': chunks}, verify)
-                if not extracted['supported']:
+                extracted_batches = []
+                for index, batch in enumerate(chat_batches(chunks)):
+                    schema = obj({'supported': {'type': 'boolean'}, 'evidence': {'type': 'array', 'maxItems': 10,
+                        'items': obj({'chunkId': {'type': 'string', 'enum': [row['chunkId'] for row in batch]}, 'quote': string(600)})}})
+                    name = 'extract' if index == 0 else 'batch_' + str(index) + '_extract'
+                    extracted = stage(name, 'interview-extractor', EXTRACT, schema,
+                        {'question': query, 'chunks': batch}, verify)
+                    extracted_batches.append(extracted['evidence'])
+                # Bound the writer's evidence while representing later batches,
+                # rather than filling its budget with the start of the interview.
+                facts = [batch[index] for index in range(10)
+                         for batch in extracted_batches if len(batch) > index][:10]
+                if not facts:
                     result = {'mode': 'chat', 'text': 'В доступных фрагментах интервью нет ответа на этот вопрос. Это можно уточнить на встрече.', 'evidence': [], 'supported': False}
                 else:
-                    evidence = contextual_evidence(run_id, extracted['evidence'], chunks)
+                    evidence = contextual_evidence(run_id, facts, chunks)
                     allowed = {item['id'] for item in evidence}
                     answer_schema = obj({'text': string(3000), 'evidenceIds': {'type': 'array', 'maxItems': 10, 'items': {'type': 'string', 'enum': sorted(allowed)}}})
                     def grounded(value):
