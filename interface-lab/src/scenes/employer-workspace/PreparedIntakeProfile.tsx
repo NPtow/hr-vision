@@ -3,6 +3,7 @@ import { Button } from '../../components/ui/button';
 import { request } from '../connected-journey/api';
 import { parseMeetingTranscript } from '../connected-journey/transcript';
 import { SourceScreeningReview } from '../interview-review/InterviewReview';
+import { interviewAssistant } from '../interview-review/interview-assistant-api';
 import { downloadResume, loadResumeFile, type IntakePerson, type PreparedProfile } from './intake';
 import { EmployerCandidateProfile, EmployerTimecodeComment } from './EmployerCandidateProfile';
 import { candidateDecision, respondToCandidate } from './candidate-response';
@@ -48,9 +49,9 @@ function PreparedInterview({ person, profile, index, token, vacancyId, busy, onC
   for (const item of person.screeningComments || []) {
     if (item.recordingIndex === index) commentCounts.set(item.seconds, (commentCounts.get(item.seconds) || 0) + 1);
   }
-  function comment(seconds: number, chapterTitle = '', onClose?: () => void) {
+  function comment(seconds: number, chapterTitle = '', onClose?: () => void, openRequest?: number) {
     return <EmployerTimecodeComment key={`${person.id}:${index}:${seconds}`} seconds={seconds}
-      appearance="player"
+      appearance="player" openRequest={openRequest}
       comments={(person.screeningComments || []).filter(item => item.recordingIndex === index && Math.abs(item.seconds - seconds) < 0.001)}
       workflowRevision={person.reviewRevision || 0} busy={busy} initiallyOpen={!!onClose} onClose={onClose}
       onSave={canComment ? (text, expectedRevision, requestId) => onComment({ recordingIndex: index, seconds, chapterTitle, text, expectedRevision, requestId }) : undefined}/>;
@@ -59,9 +60,10 @@ function PreparedInterview({ person, profile, index, token, vacancyId, busy, onC
     {error && <div className="ew-inline-error" role="alert"><p>{error}</p><Button type="button" variant="ghost" onClick={() => setAttempt(value => value + 1)}>Повторить загрузку</Button></div>}
     <SourceScreeningReview appearance="candidate" sourceId={`${person.id}:prepared:${index}:${source?.publicUrl || 'none'}`}
       name={person.name} header={header} chapters={chapters} fullChapters={chapters} transcriptText={transcript}
+      assistant={vacancyId && transcript ? interviewAssistant(token, { source: 'intake', id: person.id, index, vacancyId }) : undefined}
       media={media ? { src: media.url, label: source?.name } : undefined}
       renderChapterComment={chapter => chapter.seconds === null ? null : comment(chapter.seconds, chapter.title)}
-      renderTimeComment={(seconds, onClose) => comment(seconds, '', onClose)}
+      renderTimeComment={(seconds, onClose, openRequest) => comment(seconds, '', onClose, openRequest)}
       commentTimestamps={[...commentCounts].sort(([a], [b]) => a - b).map(([seconds, count]) => ({ seconds, count }))}
       canComment={canComment} comments={(person.screeningComments || []).filter(item => item.recordingIndex === index)}
       emptyMessage={loading ? 'Загружаем запись…' : error || 'Запись интервью не добавлена.'}/>

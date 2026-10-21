@@ -9,6 +9,7 @@ import candidateVolumeAsset from '../employer-workspace/assets/candidate-profile
 import candidateRepeatAsset from '../employer-workspace/assets/candidate-profile/repeat.svg';
 import { groupTranscriptTurns, parseMeetingTranscript, transcriptInRange } from '../connected-journey/transcript';
 import { CandidateInterviewPlayer } from './CandidateInterviewPlayer';
+import type { InterviewAssistantRequest } from './interview-assistant-api';
 
 export type { InterviewMedia } from './InterviewMediaContext';
 export type InterviewReviewProps = {
@@ -52,10 +53,11 @@ export type RecordingReviewProps = {
   fullChapters?: RecordingChapter[];
   shortPlaylist?: boolean;
   renderChapterComment?: (chapter: RecordingChapter, context: RecordingChapterContext) => ReactNode;
-  renderTimeComment?: (seconds: number, onClose: () => void) => ReactNode;
+  renderTimeComment?: (seconds: number, onClose: () => void, openRequest?: number) => ReactNode;
   commentTimestamps?: { seconds: number; count: number }[];
   comments?: { id: string; seconds: number; text: string; createdAt: string }[];
   canComment?: boolean;
+  assistant?: InterviewAssistantRequest;
 };
 
 /** Parse a source's mm:ss or hh:mm:ss. A missing timestamp is never a seekable chapter. */

@@ -144,3 +144,14 @@ only after the loopback collector is healthy; the default is disabled. See
 `PRE_CANDIDATE_CALENDAR_RUNTIME` сохраняет предыдущий полный состав. После сохранения
 правил, исключений или часового пояса откат на API без этого модуля запрещён:
 старый обработчик профиля потерял бы эти поля при очередном редактировании.
+
+## Помощник в записи интервью
+
+Перед выпуском установить reviewed receiver с новым `interview_assistant.py`.
+Предыдущий полный API сохраняется в `PRE_INTERVIEW_ASSISTANT_RUNTIME`; таблицы
+`ia_*` аддитивны и не меняют этапы или события найма. Откат сохраняет эти данные.
+ИИ-ответы используют существующие `HR_LLM_BASE_URL`, `HR_LLM_API_KEY`,
+`HR_MEETING_LAB_MODEL` / `HR_LLM_MODEL` (CLI Proxy). Поиск требует отдельного
+`HR_JEV_API_KEY` / `AI_GATEWAY_API_KEY` и необязательного `HR_JEV_MODEL`.
+403 Vercel показывается как недоступность поиска без подмены модели.
+Ключи только в `/etc/hr-vision/api.env`, никогда не в UI или архиве релиза.

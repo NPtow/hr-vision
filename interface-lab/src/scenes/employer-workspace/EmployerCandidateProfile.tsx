@@ -1,5 +1,5 @@
-import { useId, useRef, useState, type ReactNode } from 'react';
-import { ArrowUp, Check, MessageCircle, X } from 'lucide-react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { ArrowUp, Check, ChevronDown, MessageCircle } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { Textarea } from '../../components/ui/textarea';
 import { EmployerResumeDialog } from './EmployerResumeDialog';
@@ -52,12 +52,12 @@ export type EmployerTimecodeCommentProps = {
   comments: Pick<ScreeningComment, 'id' | 'seconds' | 'text' | 'createdAt'>[];
   onSave?: (text: string, expectedRevision: number, requestId: string) => Promise<boolean>;
   workflowRevision: number; busy?: boolean; initiallyOpen?: boolean; onClose?: () => void;
-  seconds?: number;
+  seconds?: number; openRequest?: number;
   appearance?: 'player';
 };
 
 /** Append-only comments. Capture revision and request identity before typing starts. */
-export function EmployerTimecodeComment({ comments, onSave, workflowRevision, busy, initiallyOpen = false, onClose, seconds, appearance }: EmployerTimecodeCommentProps) {
+export function EmployerTimecodeComment({ comments, onSave, workflowRevision, busy, initiallyOpen = false, onClose, seconds, appearance, openRequest = 0 }: EmployerTimecodeCommentProps) {
   const id = useId();
   const trigger = useRef<HTMLButtonElement>(null);
   const pending = useRef(false);
@@ -65,27 +65,33 @@ export function EmployerTimecodeComment({ comments, onSave, workflowRevision, bu
   const [draft, setDraft] = useState(() => ({ text: '', expectedRevision: workflowRevision, requestId: crypto.randomUUID() }));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  useEffect(() => { if (openRequest) setOpen(true); }, [openRequest]);
   const time = seconds === undefined ? '' : `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
   const label = time ? `Комментарий к ${time}` : 'Комментарий к таймкоду';
-  const close = () => { setOpen(false); onClose?.(); requestAnimationFrame(() => trigger.current?.focus()); };
+  const close = () => { setOpen(false); if (appearance !== 'player') onClose?.(); requestAnimationFrame(() => trigger.current?.focus()); };
   async function save() {
     if (!onSave || pending.current || busy || !draft.text.trim()) return;
     pending.current = true; setSaving(true); setError('');
     try {
       if (await onSave(draft.text.trim(), draft.expectedRevision, draft.requestId)) {
         setDraft({ text: '', expectedRevision: workflowRevision, requestId: crypto.randomUUID() }); close();
+        if (appearance === 'player') onClose?.();
       } else setError('Не удалось сохранить. Комментарий остался в поле.');
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Не удалось сохранить комментарий.'); }
     finally { pending.current = false; setSaving(false); }
   }
   if (!onSave && !comments.length) return null;
   if (appearance === 'player' && open && onSave) return <form className="ecp-player-comment" onSubmit={event => { event.preventDefault(); void save(); }}>
-    <div className="ecp-player-comment-top"><span><Check size={12}/>{time}</span><button type="button" aria-label="Закрыть комментарий" disabled={saving} onClick={close}><X size={17}/></button></div>
+    <div className="ecp-player-comment-top"><span><Check size={12}/>{time}</span><button type="button" aria-label="Свернуть комментарий" disabled={saving} onClick={close}><ChevronDown size={17}/></button></div>
     <textarea autoFocus aria-label={label} required maxLength={4000} placeholder="Написать комментарий…" value={draft.text} disabled={busy || saving}
       onChange={event => setDraft({ ...draft, text: event.target.value })} onKeyDown={event => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') { event.preventDefault(); void save(); } }}/>
     {error && <p className="ecp-error" role="alert">{error}</p>}
     <div className="ecp-player-comment-bottom"><span>{saving ? 'Сохраняем…' : '⌘ ↵'}</span><button type="submit" aria-label="Сохранить комментарий" disabled={busy || saving || !draft.text.trim()}><ArrowUp size={19}/></button></div>
   </form>;
+  if (appearance === 'player' && !open && onSave) return <Button className="ecp-comment-trigger" ref={trigger} type="button" variant="ghost" aria-expanded="false" onClick={() => {
+    if (!draft.text.trim()) setDraft({ text: '', expectedRevision: workflowRevision, requestId: crypto.randomUUID() });
+    setError(''); setOpen(true);
+  }}><MessageCircle size={16}/>{draft.text.trim() ? 'Продолжить комментарий' : 'Написать комментарий'}</Button>;
   if (!open) return <Button className="ecp-comment-trigger" ref={trigger} type="button" variant="ghost" aria-label={`${label}${comments.length ? `, комментариев: ${comments.length}` : ''}`} aria-expanded="false" aria-controls={id} disabled={busy} onClick={() => {
     setDraft({ text: '', expectedRevision: workflowRevision, requestId: crypto.randomUUID() }); setError(''); setOpen(true);
   }}><MessageCircle size={14} aria-hidden="true"/>{comments.length ? `Комментарии · ${comments.length}` : 'Комментарий'}</Button>;
