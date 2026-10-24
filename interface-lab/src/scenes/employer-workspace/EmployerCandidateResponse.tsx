@@ -29,6 +29,7 @@ export function EmployerCandidateResponse({ onRespond, decision, meetingOptions,
   const panelId = useId();
   const reduceMotion = useReducedMotion();
   const trigger = useRef<HTMLButtonElement>(null);
+  const opener = useRef<HTMLButtonElement | null>(null);
   const status = useRef<HTMLSpanElement>(null);
   const invite = useRef<HTMLButtonElement>(null);
   const mounted = useRef(true);
@@ -62,11 +63,12 @@ export function EmployerCandidateResponse({ onRespond, decision, meetingOptions,
   function close() {
     if (pending.current) return;
     setOpen(false); setMode(null); setError('');
-    requestAnimationFrame(() => { if (mounted.current) (trigger.current || status.current)?.focus(); });
+    requestAnimationFrame(() => { if (mounted.current) (opener.current?.isConnected ? opener.current : trigger.current || status.current)?.focus(); });
   }
 
   function toggle() {
     if (open) { close(); return; }
+    opener.current = trigger.current;
     if (editable && onRespond) session.current = {
       submit: onRespond, revision: workflowRevision, requestId: crypto.randomUUID(), attemptedPayload: null,
     };
@@ -74,8 +76,9 @@ export function EmployerCandidateResponse({ onRespond, decision, meetingOptions,
     setError(''); setOpen(true);
   }
 
-  function choose(kind: 'invite' | 'reject') {
+  function choose(kind: 'invite' | 'reject', button: HTMLButtonElement) {
     if (!onRespond || pending.current || busy) return;
+    opener.current = button;
     if (!session.current) session.current = {
       submit: onRespond, revision: workflowRevision, requestId: crypto.randomUUID(), attemptedPayload: null,
     };
@@ -115,8 +118,8 @@ export function EmployerCandidateResponse({ onRespond, decision, meetingOptions,
   if (!onRespond && !saved) return null;
   return <>
     {!saved && onRespond ? <div className="ecp-decision-actions" aria-label="Решение по кандидату">
-      <Button ref={trigger} className="ecp-invite-primary" type="button" aria-expanded={open && mode === 'invite'} aria-controls={panelId} disabled={busy || saving} onClick={() => choose('invite')}>Позвать на встречу<ArrowUpRight size={17}/></Button>
-      <Button type="button" variant="ghost" aria-expanded={open && mode === 'reject'} aria-controls={panelId} disabled={busy || saving} onClick={() => choose('reject')}>Отказать</Button>
+      <Button ref={trigger} className="ecp-invite-primary" type="button" aria-expanded={open && mode === 'invite'} aria-controls={panelId} disabled={busy || saving} onClick={event => choose('invite', event.currentTarget)}>Позвать на встречу<ArrowUpRight size={17}/></Button>
+      <Button type="button" variant="ghost" aria-expanded={open && mode === 'reject'} aria-controls={panelId} disabled={busy || saving} onClick={event => choose('reject', event.currentTarget)}>Отказать</Button>
     </div> : (saved?.decision === 'invite' && !canAddTime) || (saved?.decision === 'reject' && !hasFeedback)
       ? <span ref={status} className="ecp-response-status" role="status" tabIndex={-1}>{saved.meetingStart ? <>
         <time dateTime={saved.meetingStart}>{new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Moscow' }).format(new Date(saved.meetingStart))} МСК</time>

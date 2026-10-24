@@ -3,7 +3,7 @@ import type { DailyCall, DailyParticipant } from '@daily-co/daily-js';
 import { Camera, CameraOff, Maximize2, Mic, MicOff, Minimize2, MonitorUp, PanelRightOpen, PhoneOff, X } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { recruiterRequest, RecruiterRequestError, type RecruiterCandidate, type Room } from './api';
-import { CallConnectionError, directCallUrl, releaseCall, waitForCall } from '../candidate-portal/call-connection';
+import { CallConnectionError, dailyCallConfig, directCallUrl, releaseCall, waitForCall } from '../candidate-portal/call-connection';
 import { CallDeviceAccess, useCallDeviceAccess } from '../../components/call-device-access';
 import { callInputTracks, canSendTrack } from '../candidate-portal/call-media';
 import { CallMediaStage } from '../candidate-portal/CallMediaStage';
@@ -195,6 +195,7 @@ export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }:
           throw new CallConnectionError('Предыдущее подключение не закрылось. Обновите страницу.');
         }
         const frame = DailyIframe.createCallObject({
+          dailyConfig: dailyCallConfig(),
           ...(inputs.audioSource ? { audioSource: inputs.audioSource } : {}),
           ...(inputs.videoSource ? { videoSource: inputs.videoSource } : {}),
           startVideoOff: !inputs.camera, startAudioOff: !inputs.microphone,

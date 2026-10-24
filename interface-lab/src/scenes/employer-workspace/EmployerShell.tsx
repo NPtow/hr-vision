@@ -6,6 +6,7 @@ import logo from './assets/hr-vision-logo.svg';
 import { COMPANY_SITE_URL } from '../../lib/employer-entry';
 import './candidate-surfaces.css';
 import './shell-navigation.css';
+import './candidate-review-viewport.css';
 
 export type EmployerPage = 'dsa' | 'tasks' | 'create-vacancy' | 'shortlist' | 'intake' | 'book' | 'meetings' | 'meeting' | 'review' | 'pool' | 'offer' | 'chat' | 'vacancies' | 'schedule';
 export type Scope = 'sfera' | 'dsa';
