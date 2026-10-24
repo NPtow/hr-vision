@@ -1,0 +1,128 @@
+/* The review queue alone fills the cabinet viewport. Empty/importing cards and
+   vacancy stage history retain their document layout. Dialogs stay portaled. */
+.ew-root .ew-shell:has(.ew-review-queue .ecp-profile-overlay .iv-root) {
+  height:calc(var(--employer-viewport, 100dvh) - var(--employer-safe-top, 0px) - var(--employer-safe-bottom, 0px));
+  min-height:0;
+  display:grid;
+  grid-template-rows:64px minmax(0,1fr);
+
+  & .ew-topbar { height:auto; min-height:0; }
+  & .ew-body { min-height:0; }
+  & .ew-sidebar { min-height:0; height:100%; position:relative; padding-top:16px; }
+  & .ew-workspace { display:grid; grid-template-rows:78px minmax(0,1fr); min-height:0; }
+  & .ew-vacancy-header { min-height:0; padding:0 24px 12px; display:flex; align-items:center; }
+  & .ew-vacancy-title { width:100%; min-height:0; }
+  & .ew-vacancy-title h1 { max-height:100%; overflow:auto; font-size:25px; line-height:1.2; }
+  & .ew-content { min-height:0; display:flex; flex-direction:column; }
+  & .ew-review-queue { flex:1; min-height:0; display:flex; flex-direction:column; padding:0 24px 20px; }
+  & .ew-review-card { position:relative; flex:1; min-height:0; display:flex; flex-direction:column; padding:24px 26px 14px; }
+  & .ew-intake-detail { display:flex; flex:1; flex-direction:column; min-height:0; }
+  & .ecp-profile-overlay { position:relative; flex:1; min-height:0; gap:14px; }
+  & .ecp-profile-overlay > .ecp-interview { flex:1; min-height:0; display:flex; flex-direction:column; }
+  & .ecp-review-footer { flex:none; min-height:48px; }
+  & .ecp-review-footer > .ecp-meta { max-height:64px; overflow:auto; }
+  & .ecp-profile-overlay > .ecp-error,
+  & .ew-review-queue > .ecp-error { flex:none; max-height:60px; overflow:auto; }
+
+  /* Keep the real forms and revision-aware submission logic, above the footer. */
+  & .ecp-review-footer > .ecp-response-panel {
+    position:absolute; z-index:20; right:0; bottom:62px;
+    width:min(510px,100%); max-height:calc(100% - 78px); overflow:auto;
+    overscroll-behavior:contain; padding:24px; border-radius:23px;
+    background:#fff; box-shadow:0 16px 80px #22213b25,0 0 0 1px #ededf2;
+    transform-origin:bottom right;
+  }
+  & .ecp-response-panel .ecp-rejection textarea { background:#f5f4f8; max-height:170px; }
+
+  /* Native/fullscreen keeps the player's existing independent layout. */
+  & .ecp-interview > .iv-root:not(.iv-full) { flex:1; height:100%; min-height:0; }
+  & .iv-root:not(.iv-full) > .iv-workspace {
+    height:100%; width:100%; margin:0;
+    grid-template-columns:minmax(0,1.85fr) minmax(310px,1fr);
+    grid-template-rows:minmax(0,1fr) 40px; gap:12px 28px; align-items:stretch;
+  }
+  & .iv-root:not(.iv-full) .iv-player { width:100%; height:100%; min-height:0; aspect-ratio:auto; }
+  & .iv-root:not(.iv-full) .iv-sidebar { height:100%; min-height:0; align-self:stretch; padding:0; contain:size; }
+  & .iv-root:not(.iv-full) .iv-side-heading { height:52px; }
+  & .iv-root:not(.iv-full) .iv-below-player { height:40px; min-height:0; align-items:center; justify-content:flex-end; }
+  & .iv-root:not(.iv-full) .iv-reactions { margin:0; min-height:34px; padding:1px 5px; box-shadow:none; }
+  & .iv-root:not(.iv-full) .iv-reactions .iv-emoji { width:29px; min-width:29px; height:30px; font-size:22px; }
+  & .iv-root:not(.iv-full) .iv-control-row { flex-wrap:nowrap; }
+  & .iv-root:not(.iv-full) .iv-player-controls { padding-bottom:6px; }
+  & .iv-root:not(.iv-full) .iv-assistant-composer { min-height:50px; }
+  & .iv-root:not(.iv-full) .iv-side-input { padding:10px 0 0; }
+  & .iv-root.iv-theatre:not(.iv-full) > .iv-workspace { grid-template-columns:minmax(0,1fr); }
+  & .iv-root.iv-theatre:not(.iv-full) .iv-player { height:100%; min-height:0; }
+}
+
+@media(max-height:700px) and (min-width:861px) {
+  .ew-root .ew-shell:has(.ew-review-queue .ecp-profile-overlay .iv-root) {
+    grid-template-rows:52px minmax(0,1fr);
+    & .ew-workspace { grid-template-rows:60px minmax(0,1fr); }
+    & .ew-vacancy-title h1 { font-size:22px; }
+    & .ew-review-queue { padding-bottom:14px; }
+    & .ew-review-card { padding:18px 22px 10px; }
+    & .ecp-profile-overlay { gap:9px; }
+    & .iv-root:not(.iv-full) > .iv-workspace { grid-template-rows:minmax(0,1fr) 34px; row-gap:8px; }
+    & .iv-root:not(.iv-full) .iv-below-player { height:34px; }
+    & .iv-root:not(.iv-full) .iv-side-heading { height:44px; }
+  }
+}
+
+@media(max-width:1100px) and (min-width:861px) {
+  .ew-root .ew-shell:has(.ew-review-queue .ecp-profile-overlay .iv-root) {
+    & .ew-sidebar { width:72px; padding-inline:4px; }
+    & .ew-review-queue { padding-inline:16px; }
+    & .ew-review-card { padding:20px; }
+    & .iv-root:not(.iv-full) > .iv-workspace { grid-template-columns:minmax(0,1.55fr) minmax(290px,1fr); column-gap:22px; }
+  }
+}
+
+@media(max-width:860px) {
+  .ew-root .ew-shell:has(.ew-review-queue .ecp-profile-overlay .iv-root) {
+    grid-template-rows:50px minmax(0,1fr);
+    & .ew-topbar { padding-inline:17px; gap:12px; }
+    & .ew-topbar .ew-menu-toggle { display:flex; }
+    & .ew-body { display:flex; position:relative; }
+    & .ew-sidebar { display:none; }
+    & .ew-sidebar[data-open=true] { display:block; position:absolute; inset:0 10px auto; z-index:60; width:auto; height:auto; background:#f4f3f7; border-radius:20px; box-shadow:0 12px 40px #352b5224; }
+    & .ew-sidebar nav { width:auto; display:flex; flex-wrap:wrap; }
+    & .ew-workspace { grid-template-rows:60px minmax(0,1fr); }
+    & .ew-vacancy-header { padding:0 18px 10px; }
+    & .ew-vacancy-title { gap:8px; }
+    & .ew-vacancy-title h1 { font-size:18px; }
+    & .ew-add-candidates { min-width:44px; width:44px; padding:10px; }
+    & .ew-add-candidates-label { display:none; }
+    & .ew-review-queue { padding:0 10px 10px; }
+    & .ew-review-card { padding:12px; border-radius:21px; }
+    & .ecp-profile-overlay { gap:8px; }
+    & .ecp-review-footer { min-height:44px; gap:6px; }
+    & .ecp-meta p { font-size:12px; line-height:16px; }
+    & .ecp-decision-actions { justify-content:flex-end; gap:6px; }
+    & .ecp-decision-actions [data-slot=button].ecp-invite-primary { min-height:40px; padding:10px 12px; font-size:12px; gap:5px; }
+    & .ecp-decision-actions > button:last-child { font-size:12px; padding:8px; }
+    & .ecp-review-footer > .ecp-response-panel { bottom:0; max-height:100%; padding:18px; }
+    & .iv-root:not(.iv-full) > .iv-workspace {
+      grid-template-columns:minmax(0,1fr);
+      grid-template-rows:minmax(130px,.85fr) 31px minmax(130px,1fr); gap:8px;
+    }
+    & .iv-root:not(.iv-full) .iv-player { grid-row:1; }
+    & .iv-root:not(.iv-full) .iv-sidebar { grid-row:3; grid-column:1; padding:0; }
+    & .iv-root:not(.iv-full) .iv-below-player { grid-row:2; height:31px; }
+    & .iv-root:not(.iv-full) .iv-side-heading { height:40px; }
+    & .iv-root:not(.iv-full) .iv-tabs { height:36px; }
+    & .iv-root:not(.iv-full) .iv-tabs > button { height:30px; width:39px; }
+    & .iv-root:not(.iv-full) .iv-assistant-composer { min-height:43px; }
+    & .iv-root:not(.iv-full) .iv-side-input { padding-top:5px; }
+    & .iv-root.iv-theatre:not(.iv-full) > .iv-workspace { grid-template-rows:minmax(0,1fr) 31px; }
+  }
+}
+
+/* At very short heights keep controls reachable by scrolling the workspace,
+   rather than compressing video and editable fields below usable sizes. */
+@media(max-height:560px) {
+  .ew-root .ew-shell:has(.ew-review-queue .ecp-profile-overlay .iv-root) {
+    & .ew-content { overflow:auto; }
+    & .ew-review-queue { flex:none; min-height:500px; }
+  }
+}
