@@ -57,16 +57,19 @@ function GuestInvitation({ token }: { token: string }) {
     const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void refresh(); }, 10000);
     return () => clearInterval(timer);
   }, [refresh]);
+  // A meeting invitation grants call access only. The cabinet keeps its normal
+  // session check and asks for sign-in when this browser has no session.
+  useEffect(() => { if (state?.interview.status === 'completed') openCabinet('home'); }, [state?.interview.status]);
   if (loading) return <div className="cp-loading" role="status">Открываем приглашение…</div>;
   if (!state) return <section className="cp-form-page cp-invitation"><h1>Приглашение недоступно</h1><p className="cp-error" role="alert">{error}</p><p className="cp-muted">Попросите рекрутера проверить или обновить ссылку.</p><Button variant="secondary" onClick={() => void refresh()}><RefreshCw size={16}/>Проверить ещё раз</Button></section>;
-  if (state.interview.status === 'completed') return <section className="cp-form-page cp-invitation"><CheckCircle2 size={32}/><h1>Спасибо за разговор</h1><p className="cp-muted">Рекрутер пришлёт отдельную ссылку на ваш готовый профиль. По ней можно создать кабинет и получать предложения о работе.</p></section>;
-  if (entering) return <><InterviewRoom title={`Интервью · ${state.interview.recruiterName}`} start={state.interview.start} completed={false} configured={state.interview.videoConfigured ?? state.videoConfigured} callProvider={state.interview.callProvider} guestToken={token} onRefresh={refresh} onBack={() => setEntering(false)}/>{error && <p className="cp-error cp-invitation-error" role="alert">{error}</p>}</>;
+  if (state.interview.status === 'completed') return <section className="cp-form-page cp-invitation"><CheckCircle2 size={32}/><h1>Спасибо за разговор</h1><Button onClick={() => openCabinet('home')}>В личный кабинет</Button></section>;
+  if (entering) return <><InterviewRoom title={`Интервью · ${state.interview.recruiterName}`} start={state.interview.start} completed={false} configured={state.interview.videoConfigured ?? state.videoConfigured} callProvider={state.interview.callProvider} guestToken={token} onRefresh={refresh} onBack={() => setEntering(false)} onExit={() => openCabinet('home')}/>{error && <p className="cp-error cp-invitation-error" role="alert">{error}</p>}</>;
   return <section className="cp-form-page cp-invitation">
     <span className="cp-large-icon"><Video size={25}/></span>
     <h1>{state.name ? `${state.name.split(' ')[0]}, до встречи` : 'До встречи на интервью'}</h1>
     <p className="cp-muted">Знакомство с HR Vision и разговор о вашем опыте. Регистрироваться перед встречей не нужно.</p>
     <div className="cp-card cp-invitation-details"><CalendarDays size={21}/><div><strong>{dateTimeLabel(state.interview.start)}</strong><p className="cp-muted">30 минут · {state.interview.recruiterName}</p></div></div>
-    <p className="cp-muted">Начнём без записи. Рекрутер объяснит, как работает сервис, и спросит ваше согласие на запись интервью.</p>
+    {state.interview.callProvider !== 'zoom' && <p className="cp-muted">Начнём без записи. Рекрутер объяснит, как работает сервис, и спросит ваше согласие на запись интервью.</p>}
     {error && <p className="cp-error" role="alert">{error}</p>}
     <Button onClick={() => setEntering(true)}><Video size={17}/>Подготовиться к встрече</Button>
   </section>;

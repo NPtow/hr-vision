@@ -21,6 +21,7 @@ export function RecruiterZoomCall({ active, token, onClose, onJoined, onComplete
   const notes = useRef<NotesAccess | null>(null);
   const cancelReceipt = useRef<(() => void) | null>(null);
   const cancelReconcile = useRef<(() => void) | null>(null);
+  const closed = useRef(false);
   const callbacks = useRef({ onClose, onJoined, onCompleted });
   callbacks.current = { onClose, onJoined, onCompleted };
   const [credentials, setCredentials] = useState<ZoomCredentials | null>(null);
@@ -37,9 +38,10 @@ export function RecruiterZoomCall({ active, token, onClose, onJoined, onComplete
   const identity = active.kind === 'interview' ? { candidateId: active.candidateId, interviewId: active.interviewId } : { candidateId: active.candidateId, applicationId: active.applicationId, meetingId: active.meetingId };
   const person: CoachPerson = { id: active.candidateId, name: active.title, sourceSummary: '', promptSource: '', questions: [] };
   useEffect(() => {
+    closed.current = false;
     const overflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    return () => { cancelReceipt.current?.(); cancelReconcile.current?.(); document.body.style.overflow = overflow; };
+    return () => { closed.current = true; cancelReceipt.current?.(); cancelReconcile.current?.(); document.body.style.overflow = overflow; };
   }, []);
   useEffect(() => {
     if (!entryApproved) return;
@@ -57,6 +59,7 @@ export function RecruiterZoomCall({ active, token, onClose, onJoined, onComplete
   }, [attempt, entryApproved]);
   function flushNotes() { void notes.current?.flush().catch(() => false); }
   function back() {
+    closed.current = true;
     cancelReconcile.current?.(); flushNotes();
     if (completed) callbacks.current.onCompleted(); else callbacks.current.onClose();
   }
@@ -68,7 +71,16 @@ export function RecruiterZoomCall({ active, token, onClose, onJoined, onComplete
     setReconciling(true);
     cancelReconcile.current = startZoomSessionReconcile({
       request: signal => recruiterRequest(`${active.kind}/reconcile`, token, identity, signal),
-      onCompleted: () => { setReconciling(false); setCompleted(true); callbacks.current.onJoined(); },
+      onCompleted: () => {
+        setReconciling(false); setCompleted(true);
+        // Media has already left. Save the final notes before unmounting their
+        // editor; a failed save keeps its recovery/export controls available.
+        const panel = notes.current;
+        if (!panel?.dirty) { callbacks.current.onCompleted(); return; }
+        void panel.flush().catch(() => false).then(saved => {
+          if (saved && !closed.current) callbacks.current.onCompleted();
+        });
+      },
       onExhausted: () => setReconciling(false),
     });
   }
@@ -98,7 +110,7 @@ export function RecruiterZoomCall({ active, token, onClose, onJoined, onComplete
     </div>;
   return <div className="ric-approved-shell" role="dialog" aria-modal="true" aria-label={`Интервью · ${active.title}`}>
     <RecruiterInterviewShell providerOwnsControls person={person} draft={EMPTY_DRAFT} onChange={() => {}}
-      phase={completed ? 'completed' : 'live'} mediaSlot={mediaSlot}
+      phase="live" mediaSlot={mediaSlot}
       onFinish={back} onResume={back}
       notice={error || receiptError || reconciling ? <span role="status">{error || receiptError || 'Проверяем статус встречи…'}{error && !left && credentials && <button onClick={nativeLeft}>Вернуться к подключению</button>}</span> : undefined}
       panelContent={active.kind === 'interview' && active.interviewId ? <ZoomInterviewNotes active={active} token={token} notes={notes} connected={joined} completed={completed}/>

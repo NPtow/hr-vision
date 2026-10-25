@@ -26,12 +26,13 @@ const sdkDocument = `<!doctype html><button id="leave">Leave fixture</button><sc
 
 before(async () => {
   const bundle = await build({
-    stdin: { contents: `import React from 'react';
+    stdin: { contents: `import React, { useState } from 'react';
       import { createRoot } from 'react-dom/client';
       import { InterviewRoom } from './src/scenes/candidate-portal/InterviewRoom';
+      import { InvitationPortal } from './src/scenes/candidate-portal/InvitationPortal';
       import { MeetingPanel } from './src/scenes/connected-journey/MeetingPanel';
       import { useJourney } from './src/scenes/connected-journey/api';
-      window.__dailyImports = 0; window.__mediaCalls = 0; window.__refreshes = 0; window.__completions = 0;
+      window.__dailyImports = 0; window.__mediaCalls = 0; window.__refreshes = 0; window.__completions = 0; window.__exits = 0;
       navigator.mediaDevices.getUserMedia = () => { window.__mediaCalls++; throw new Error('Unexpected capture'); };
       const mode = new URLSearchParams(location.search).get('screen');
       function Employer() {
@@ -41,11 +42,20 @@ before(async () => {
           {person ? <MeetingPanel person={person} journey={journey} onCallChange={() => {}}
             onComplete={() => { window.__completions++; }}/> : <p>Loading fixture</p>}</div>;
       }
-      createRoot(document.querySelector('#root')).render(mode === 'employer' ? <Employer/> : <div className="cp-root">
-        <InterviewRoom title="Интервью с рекрутером" start="2026-10-25T15:00:00Z" completed={false}
+      function Candidate() {
+        const [completed, setCompleted] = useState(mode === 'completed');
+        const [exited, setExited] = useState(false);
+        window.completeFixture = () => setCompleted(true);
+        return exited ? <p>Cabinet fixture</p> : <div className="cp-root">
+        <InterviewRoom title="Интервью с рекрутером" start="2026-10-25T15:00:00Z" completed={completed}
           configured callProvider="zoom" guestToken={mode === 'guest' ? 'fixture-guest-invite' : undefined}
-          onRefresh={async () => { window.__refreshes++; }} onBack={() => {}}/>
-      </div>);`, resolveDir: fileURLToPath(new URL('../', import.meta.url)), loader: 'tsx' },
+          onRefresh={async () => { window.__refreshes++; }} onBack={() => {}}
+          onExit={() => { window.__exits++; setExited(true); }}/></div>;
+      }
+      createRoot(document.querySelector('#root')).render(mode === 'employer' ? <Employer/>
+        : mode === 'invitation' ? new URLSearchParams(location.search).get('cp') === 'home'
+          ? <p>Cabinet session boundary fixture</p> : <InvitationPortal kind="guest"/>
+        : <Candidate/>);`, resolveDir: fileURLToPath(new URL('../', import.meta.url)), loader: 'tsx' },
     bundle: true, write: false, format: 'esm', jsx: 'automatic', loader: { '.css': 'empty', '.svg': 'dataurl' },
     plugins: [{ name: 'daily-import-guard', setup(builder) {
       builder.onResolve({ filter: /^@daily-co\/daily-js$/ }, () => ({ path: 'daily-guard', namespace: 'fixture' }));
@@ -119,7 +129,7 @@ test('candidate consent gates access; Zoom joins without Daily or outer device c
   await assertNoLegacyMedia(page);
 });
 
-test('guest native leave only disconnects locally and rejoin requests fresh access', async t => {
+test('guest native leave exits to the cabinet without ending the meeting or rejoining', async t => {
   const page = await pageFor(t);
   const commands = [];
   await page.route('**/api/hr/candidate/**', async route => {
@@ -136,10 +146,48 @@ test('guest native leave only disconnects locally and rejoin requests fresh acce
   await page.frameLocator('iframe').getByRole('button', { name: 'Leave fixture' }).click();
   await page.locator('iframe').waitFor({ state: 'detached' });
   assert.equal(await page.evaluate(() => window.__refreshes), refreshesBeforeLeave + 1);
-  await page.getByRole('button', { name: 'Присоединиться', exact: true }).click();
-  await waitJoined(page);
-  assert.equal(commands.length, 2);
+  await page.getByText('Cabinet fixture', { exact: true }).waitFor();
+  assert.equal(await page.evaluate(() => window.__exits), 1);
+  assert.equal(await page.getByRole('button', { name: 'Присоединиться', exact: true }).count(), 0);
+  assert.equal(commands.length, 1);
   for (const command of commands) assert.deepEqual(command, { path: '/api/hr/candidate/guest/join', body: { token: 'fixture-guest-invite', consent: true } });
+  await assertNoLegacyMedia(page);
+});
+
+test('server completion while candidate is inside Zoom exits, but opening saved materials does not', async t => {
+  const page = await pageFor(t);
+  await page.route('**/api/hr/candidate/**', route => route.fulfill({ json: route.request().url().endsWith('/materials')
+    ? { recordings: [], transcripts: [], video: { status: 'not_recorded' }, transcription: { status: 'not_recorded' } } : credentials() }));
+  await page.goto(origin);
+  await enterCandidate(page);
+  await page.evaluate(() => window.completeFixture());
+  await page.getByText('Cabinet fixture', { exact: true }).waitFor();
+  assert.equal(await page.locator('iframe').count(), 0);
+  await page.goto(origin + '/?screen=completed');
+  await page.getByRole('heading', { name: 'Встреча завершена', exact: true }).waitFor();
+  assert.equal(await page.evaluate(() => window.__exits), 0);
+});
+
+for (const alreadyCompleted of [false, true]) test(`invitation ${alreadyCompleted ? 'already completed' : 'native leave'} goes to cabinet through normal session boundary`, async t => {
+  const page = await pageFor(t), commands = [];
+  await page.route('**/api/hr/candidate/**', async route => {
+    const path = new URL(route.request().url()).pathname;
+    commands.push(path);
+    await route.fulfill({ json: path.endsWith('/guest/state') ? {
+      name: 'Кандидат', videoConfigured: true,
+      interview: { start: '2026-10-25T15:00:00Z', status: alreadyCompleted ? 'completed' : 'live', callProvider: 'zoom', recruiterName: 'Рекрутер' },
+    } : credentials() });
+  });
+  await page.goto(origin + '/?screen=invitation&cp=guest#invite=fixture-secret');
+  if (!alreadyCompleted) {
+    await page.getByRole('button', { name: 'Подготовиться к встрече', exact: true }).click();
+    await enterCandidate(page);
+    await page.frameLocator('iframe').getByRole('button', { name: 'Leave fixture' }).click();
+  }
+  await page.waitForURL(url => url.searchParams.get('cp') === 'home');
+  await page.getByText('Cabinet session boundary fixture', { exact: true }).waitFor();
+  assert.equal(new URL(page.url()).hash, '');
+  assert.ok(commands.every(path => path.endsWith('/guest/state') || path.endsWith('/guest/join')));
   await assertNoLegacyMedia(page);
 });
 

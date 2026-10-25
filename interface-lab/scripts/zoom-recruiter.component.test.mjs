@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import { createServer } from 'node:http';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ? pathToFileURL(process.env.PLAYWRIGHT_MODULE).href : 'playwright');
@@ -88,15 +89,53 @@ test('Zoom owns the entire video stage; live host leave only reconciles and neve
   assert.equal(await page.evaluate(() => window.counts.closed), 1);
 });
 
-test('only server-confirmed ended session opens the completed state after native end', async t => {
+test('server-confirmed end returns to interviews automatically without another click', async t => {
   const { page, calls } = await fixture(t, { 'interview/reconcile': route => route.fulfill({ json: { completed: true, status: 'completed' } }) });
   await nativeLeave(page);
-  await page.getByRole('heading', { name: 'Интервью завершено' }).waitFor();
+  await page.waitForFunction(() => window.counts.completed === 1);
   assert.equal(calls.filter(path => path === 'interview/reconcile').length, 1);
   assert.equal(calls.includes('interview/complete'), false);
   assert.equal(await page.locator('iframe').count(), 0);
-  await page.getByRole('button', { name: 'Вернуться', exact: true }).click();
   assert.equal(await page.evaluate(() => window.counts.completed), 1);
+});
+
+test('confirmed end preserves failed notes for export before closing the editor', async t => {
+  const { page, calls } = await fixture(t, {
+    'interview/reconcile': route => route.fulfill({ json: { completed: true, status: 'completed' } }),
+    'interview/coach/progress': route => route.fulfill({ status: 503, json: { error: 'Fixture notes failure' } }),
+  });
+  await page.getByRole('textbox', { name: 'Заметка к текущему вопросу' }).fill('Final unsaved note');
+  await page.locator('[role=alert]').filter({ hasText: 'Fixture notes failure' }).waitFor();
+  await nativeLeave(page);
+  await page.getByText('Встреча завершена', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Скачать заметки', exact: true }).first().waitFor();
+  const downloading = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Скачать заметки', exact: true }).first().click();
+  const download = await downloading;
+  assert.ok(readFileSync(await download.path(), 'utf8').includes('Final unsaved note'));
+  assert.equal(await page.evaluate(() => window.counts.completed), 0);
+  assert.equal(calls.includes('interview/complete'), false);
+  await page.getByRole('button', { name: 'Вернуться к интервью', exact: true }).click();
+  assert.equal(await page.evaluate(() => window.counts.completed), 1);
+});
+
+test('final notes flush finishes before automatic navigation', async t => {
+  let release;
+  const pendingSave = new Promise(resolve => { release = resolve; });
+  const { page, calls } = await fixture(t, {
+    'interview/reconcile': route => route.fulfill({ json: { completed: true, status: 'completed' } }),
+    'interview/coach/progress': async route => {
+      await pendingSave;
+      return route.fulfill({ json: { ...coach, revision: 2, progress: route.request().postDataJSON().progress } });
+    },
+  });
+  await page.getByRole('textbox', { name: 'Заметка к текущему вопросу' }).fill('Final saved note');
+  await nativeLeave(page);
+  await page.getByText('Встреча завершена', { exact: true }).waitFor();
+  assert.equal(await page.evaluate(() => window.counts.completed), 0);
+  release();
+  await page.waitForFunction(() => window.counts.completed === 1);
+  assert.equal(calls.filter(path => path === 'interview/coach/progress').length, 1);
 });
 
 test('transient host receipt failure retries without another join or replacing the frame', async t => {

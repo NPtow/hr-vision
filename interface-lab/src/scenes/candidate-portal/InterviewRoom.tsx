@@ -13,7 +13,7 @@ import { ZoomCallFrame } from '../../components/call/ZoomCallFrame';
 import type { CallProvider, ZoomCredentials } from '../../components/call/call-provider';
 
 type InterviewRoomProps = {
-  title: string; start: string; completed: boolean; configured: boolean; callProvider?: CallProvider; applicationId?: string; meetingId?: string; guestToken?: string; onRefresh: () => Promise<void>; onBack: () => void;
+  title: string; start: string; completed: boolean; configured: boolean; callProvider?: CallProvider; applicationId?: string; meetingId?: string; guestToken?: string; onRefresh: () => Promise<void>; onBack: () => void; onExit?: () => void;
 };
 
 /** Choose the provider before mounting Daily's device or connection hooks. */
@@ -21,7 +21,7 @@ export function InterviewRoom(props: InterviewRoomProps) {
   return props.callProvider === 'zoom' ? <ZoomInterviewRoom {...props}/> : <DailyInterviewRoom {...props}/>;
 }
 
-function ZoomInterviewRoom({ title, start, completed, configured, applicationId, meetingId, guestToken, onRefresh, onBack }: InterviewRoomProps) {
+function ZoomInterviewRoom({ title, start, completed, configured, applicationId, meetingId, guestToken, onRefresh, onBack, onExit = onBack }: InterviewRoomProps) {
   const host = useRef<HTMLElement>(null);
   const returnFocus = useRef<HTMLElement | null>(null);
   const alive = useRef(true);
@@ -36,7 +36,14 @@ function ZoomInterviewRoom({ title, start, completed, configured, applicationId,
     setCredentials(null); setOpened(false); setJoining(false);
   };
   useEffect(() => { alive.current = true; return () => { alive.current = false; attempt.current++; }; }, []);
-  useEffect(() => { if (completed) close(); }, [completed]);
+  useEffect(() => {
+    if (completed) {
+      close();
+      // Only a call already open in this tab exits automatically. Opening a
+      // completed interview from the cabinet must still show its materials.
+      if (opened) onExit();
+    }
+  }, [completed]);
   useEffect(() => {
     if (!opened) return;
     const shell = host.current?.closest('.cp-root');
@@ -85,7 +92,7 @@ function ZoomInterviewRoom({ title, start, completed, configured, applicationId,
     {opened && createPortal(<div className="agency-product agency-product-theme cp-call-overlay" role="dialog" aria-modal="true" aria-label={title}>
       <div className="cp-call-stage">{credentials ? <ZoomCallFrame credentials={credentials}
         onJoined={() => { setJoining(false); void onRefresh().catch(() => undefined); }}
-        onLeft={() => { close(); void onRefresh().catch(() => undefined); }}
+        onLeft={() => { close(); void onRefresh().catch(() => undefined); onExit(); }}
         onError={message => { setJoining(false); setError(message); }}/>
         : <div className="md-zoom-after-call"><p role="status">Подключаемся…</p><Button variant="secondary" onClick={close}>Отменить</Button></div>}</div>
       {error && <div className="md-zoom-recovery"><Button variant="secondary" onClick={() => { close(); void onRefresh().catch(() => undefined); }}>Вернуться к подключению</Button></div>}
