@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ArrowUpRight, Check, ChevronRight, ListFilter, Search, Send, Table2, X } from 'lucide-react';
 import logo from '../employer-workspace/assets/hr-vision-logo.svg';
 import { useOperatorSession } from '../hh-outreach/session';
@@ -111,7 +111,7 @@ function Workbench({ token, expire }: { token: string; expire: () => void }) {
       </> : <div className="sl-empty"><Table2 size={24}/><h2>Ничего не найдено</h2><button onClick={() => { setFilter('all'); setSearch(''); }}>Показать всех</button></div>}
     </section>
     {person && <Detail person={person} busy={!!busy} onClose={() => setDetail('')} onSave={fields => void save(person, fields)}/>}
-    {confirm && <div className="sl-overlay"><section className="sl-dialog" role="dialog" aria-modal="true" aria-labelledby="sl-confirm-title"><button className="sl-close" aria-label="Закрыть подтверждение" disabled={!!busy} onClick={() => setConfirm(false)}><X size={20}/></button><h2 id="sl-confirm-title">Добавить в подборку?</h2><p>{vacancy?.company}<br/><strong>{vacancy?.title}</strong></p><ul>{checked.map(p => <li key={p.id}>{p.name}</li>)}</ul><p>Кандидаты получат предложение по почте и в подключённом Telegram. Работодатель увидит профиль после согласования.</p><div className="sl-dialog-actions"><button disabled={!!busy} onClick={() => setConfirm(false)}>Назад</button><button className="sl-primary" disabled={!!busy} onClick={() => void publish()}>{busy || 'Добавить и пригласить'}</button></div></section></div>}
+    {confirm && <div className="sl-overlay"><ModalPanel className="sl-dialog" titleId="sl-confirm-title" onClose={() => { if (!busy) setConfirm(false); }}><button className="sl-close" aria-label="Закрыть подтверждение" disabled={!!busy} onClick={() => setConfirm(false)}><X size={20}/></button><h2 id="sl-confirm-title">Добавить в подборку?</h2><p>{vacancy?.company}<br/><strong>{vacancy?.title}</strong></p><ul>{checked.map(p => <li key={p.id}>{p.name}</li>)}</ul><p>Кандидаты получат предложение по почте и в подключённом Telegram. Работодатель увидит профиль после согласования.</p><div className="sl-dialog-actions"><button disabled={!!busy} onClick={() => setConfirm(false)}>Назад</button><button className="sl-primary" disabled={!!busy} onClick={() => void publish()}>{busy || 'Добавить и пригласить'}</button></div></ModalPanel></div>}
   </div>;
 }
 
@@ -122,13 +122,14 @@ function InlineCell({ value, label, disabled, onSave }: { value: string; label: 
   return <input className="sl-cell-input" aria-label={label} autoFocus value={draft} onChange={e => setDraft(e.target.value)} onBlur={() => { setEditing(false); if (draft !== value) onSave(draft); }} onKeyDown={e => { if (e.key === 'Escape') { setDraft(value); setEditing(false); } if (e.key === 'Enter') e.currentTarget.blur(); }}/>;
 }
 
-function Detail({ person: p, busy, onClose, onSave }: { person: SelectionPerson; busy: boolean; onClose: () => void; onSave: (fields: Partial<Pick<SelectionPerson, 'name' | 'desiredRole' | 'city' | 'about'>>) => void }) {
+function ModalPanel({ className, titleId, onClose, children }: { className: string; titleId: string; onClose: () => void; children: ReactNode }) {
   const panel = useRef<HTMLElement>(null);
+  const close = useRef(onClose); close.current = onClose;
   useEffect(() => {
     const before = document.activeElement as HTMLElement | null;
     panel.current?.focus();
     const key = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') close.current();
       if (e.key === 'Tab' && panel.current) {
         const items = [...panel.current.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),select,a[href],textarea:not(:disabled)')];
         const first = items[0], last = items.at(-1);
@@ -137,8 +138,12 @@ function Detail({ person: p, busy, onClose, onSave }: { person: SelectionPerson;
       }
     };
     document.addEventListener('keydown', key); return () => { document.removeEventListener('keydown', key); before?.focus(); };
-  }, [onClose]);
-  return <div className="sl-overlay sl-drawer-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}><section ref={panel} tabIndex={-1} className="sl-drawer" role="dialog" aria-modal="true" aria-labelledby="sl-person-title"><button className="sl-close" aria-label="Закрыть карточку" onClick={onClose}><X size={20}/></button><h2 id="sl-person-title">{p.name}</h2><p className="sl-muted">{p.desiredRole}</p><div className="sl-detail-fields"><label>Имя<InlineCell value={p.name} label="Имя" disabled={busy} onSave={name => onSave({ name })}/></label><label>Город<InlineCell value={p.city} label="Город" disabled={busy} onSave={city => onSave({ city })}/></label></div><p className="sl-about">{p.about || 'Описание пока не заполнено'}</p>
-      <h3>Приглашения</h3>{p.deliveries.length ? <div>{p.deliveries.map(d => <p key={d.channel}>{d.channel === 'email' ? 'Почта' : 'Telegram'}: {({ delivered: 'Принято сервисом', pending: 'В очереди', sending: 'Отправляется', disabled: 'Не настроено', unbound: 'Нет контакта', unverified: 'Адрес не подтверждён', error: 'Ошибка' } as Record<string, string>)[d.status] || d.status}</p>)}</div> : <p className="sl-muted">Ещё не отправлялись</p>}<h3>Оценка ядра</h3>{p.assessment ? <><p>{verdicts[p.assessment.recommendation] || p.assessment.recommendation}. {p.assessment.reason}</p><div className="sl-criteria"><table><thead><tr><th>Критерий</th><th>Баллы</th><th>Основание</th></tr></thead><tbody>{p.assessment.criteria.map(c => <tr key={c.criterion_id}><td title={c.criterion_id}>{criterionNames[c.criterion_id] || c.criterion_id}</td><td>{c.failed_processing ? 'Ошибка' : c.level === null ? '—' : `${c.level} / 5`}</td><td>{c.failed_processing ? 'Обработка не завершена' : states[c.state] || c.state}{c.reason_codes?.map(r => <small key={r}>{reasons[r] || r}</small>)}</td></tr>)}</tbody></table></div><details><summary>Источник и ограничения</summary><p>{p.assessment.model} · {new Date(p.assessment.createdAt).toLocaleString('ru-RU')}</p><p className="sl-hash">{p.assessment.documentHash}</p><ul>{p.assessment.limitations.map((v, i) => <li key={i}>{v.code} · {v.subject}</li>)}</ul></details></> : <p className="sl-muted">Результат ещё не получен. Баллы появятся после обработки ядром.</p>}
-    </section></div>;
+  }, []);
+  return <section ref={panel} tabIndex={-1} className={className} role="dialog" aria-modal="true" aria-labelledby={titleId}>{children}</section>;
+}
+
+function Detail({ person: p, busy, onClose, onSave }: { person: SelectionPerson; busy: boolean; onClose: () => void; onSave: (fields: Partial<Pick<SelectionPerson, 'name' | 'desiredRole' | 'city' | 'about'>>) => void }) {
+  return <div className="sl-overlay sl-drawer-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}><ModalPanel className="sl-drawer" titleId="sl-person-title" onClose={onClose}><button className="sl-close" aria-label="Закрыть карточку" onClick={onClose}><X size={20}/></button><h2 id="sl-person-title">{p.name}</h2><p className="sl-muted">{p.desiredRole}</p><div className="sl-detail-fields"><label>Имя<InlineCell value={p.name} label="Имя" disabled={busy} onSave={name => onSave({ name })}/></label><label>Город<InlineCell value={p.city} label="Город" disabled={busy} onSave={city => onSave({ city })}/></label></div><p className="sl-about">{p.about || 'Описание пока не заполнено'}</p>
+      <h3>Приглашения</h3>{p.deliveries.length ? <div>{p.deliveries.map(d => <p key={d.id}>{d.event === 'selection.invitation' ? 'Профиль · ' : 'Вакансия · '}{d.channel === 'email' ? 'Почта' : 'Telegram'}: {({ delivered: 'Принято сервисом', pending: 'В очереди', sending: 'Отправляется', disabled: 'Не настроено', unbound: 'Нет контакта', unverified: 'Адрес не подтверждён', error: 'Ошибка' } as Record<string, string>)[d.status] || d.status}</p>)}</div> : <p className="sl-muted">Ещё не отправлялись</p>}<h3>Оценка ядра</h3>{p.assessment ? <><p>{verdicts[p.assessment.recommendation] || p.assessment.recommendation}. {p.assessment.reason}</p><div className="sl-criteria"><table><thead><tr><th>Критерий</th><th>Баллы</th><th>Основание</th></tr></thead><tbody>{p.assessment.criteria.map(c => <tr key={c.criterion_id}><td title={c.criterion_id}>{criterionNames[c.criterion_id] || c.criterion_id}</td><td>{c.failed_processing ? 'Ошибка' : c.level === null ? '—' : `${c.level} / 5`}</td><td>{c.failed_processing ? 'Обработка не завершена' : states[c.state] || c.state}{c.reason_codes?.map(r => <small key={r}>{reasons[r] || r}</small>)}</td></tr>)}</tbody></table></div><details><summary>Источник и ограничения</summary><p>{p.assessment.model} · {new Date(p.assessment.createdAt).toLocaleString('ru-RU')}</p><p className="sl-hash">{p.assessment.documentHash}</p><ul>{p.assessment.limitations.map((v, i) => <li key={i}>{v.code} · {v.subject}</li>)}</ul></details></> : <p className="sl-muted">Результат ещё не получен. Баллы появятся после обработки ядром.</p>}
+    </ModalPanel></div>;
 }

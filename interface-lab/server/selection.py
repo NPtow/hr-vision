@@ -252,9 +252,11 @@ def directory(db, vid=None):
         nominated = db.execute('SELECT id,state FROM sl_nominations WHERE candidate_id=? AND vacancy_id=?',
                                 (cid, vid)).fetchone() if vid else None
         item['nomination'] = {'id': nominated[0], 'state': nominated[1]} if nominated else None
-        item['deliveries'] = [dict(zip(('channel', 'status', 'error'), r)) for r in db.execute(
-            'SELECT channel,status,last_error FROM cn_outbox WHERE candidate_id=? AND event_key=?',
-            (cid, 'selection:' + nominated[0]))] if nominated else []
+        event_keys = (['selection:' + nominated[0]] if nominated else []) + (['application.proposed:' + row[0]] if row else [])
+        item['deliveries'] = [dict(zip(('id', 'event', 'channel', 'status', 'error'), r)) for r in db.execute(
+            'SELECT id,event_type,channel,status,last_error FROM cn_outbox WHERE candidate_id=? AND event_key IN ('
+            + ','.join('?' for _ in event_keys) + ') ORDER BY created_at,rowid',
+            (cid, *event_keys))] if event_keys else []
         item['canAdd'] = bool(item['searching'] and
             item['interviewStatus'] == 'completed' and item['assessment'] and
             item['assessment']['recommendation'] == 'ranked' and not item['application'] and not nominated)

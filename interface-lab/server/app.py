@@ -584,6 +584,9 @@ class Handler(BaseHTTPRequestHandler):
                 # Authenticate before reading a potentially large private file.
                 with connect() as db:
                     CANDIDATE_PORTAL.session_candidate(db, self.headers)
+            if SELECTION_ROUTES.handles(path):
+                with connect() as db:
+                    require(self.actor(db) == 'manager', 'Доступ только для команды HR Vision.', 403)
             outreach_discovery = bool(re.fullmatch(r'/api/hr/outreach/campaigns/[A-Za-z0-9_-]+/discover', path))
             if outreach_discovery:
                 OUTREACH_ROUTES.authorize(self.actor)

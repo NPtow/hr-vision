@@ -8,6 +8,7 @@ import candidate_invites
 import candidate_notifications as notices
 import selection
 import test_employer_store as fixture
+import test_employer_acceptance as http_fixture
 
 
 def sealed(format, body, **extra):
@@ -183,6 +184,27 @@ class SelectionTest(fixture.EmployerStoreTest):
             db.execute('UPDATE cp_candidates SET email=?,profile=? WHERE id=?', ('private@example.test', json.dumps(profile), cid))
             selection.reconcile_nominations(db, self.portal, cid)
             self.assertEqual(db.execute('SELECT state FROM sl_nominations WHERE candidate_id=?', (cid,)).fetchone()[0], 'blocked')
+
+
+class SelectionHTTPTest(unittest.TestCase):
+    setUpClass = classmethod(http_fixture.EmployerAcceptanceTest.setUpClass.__func__)
+    tearDownClass = classmethod(http_fixture.EmployerAcceptanceTest.tearDownClass.__func__)
+    setUp = http_fixture.EmployerAcceptanceTest.setUp
+    request = http_fixture.EmployerAcceptanceTest.request
+    ok = http_fixture.EmployerAcceptanceTest.ok
+    employer = http_fixture.EmployerAcceptanceTest.employer
+    vacancy = http_fixture.EmployerAcceptanceTest.vacancy
+
+    def test_real_handler_rejects_employer_and_anonymous_and_lists_actual_vacancies(self):
+        employer = self.employer()
+        job = self.vacancy(employer)
+        self.assertEqual(self.request('selection/vacancies')[0], 401)
+        self.assertEqual(self.request('selection/vacancies', token=employer['token'])[0], 401)
+        rows = self.ok('selection/vacancies', token=self.manager)['vacancies']
+        self.assertIn(job['id'], [v['id'] for v in rows])
+        self.assertEqual(self.request('selection/cohort', {'vacancyId': job['id'], 'candidateIds': []}, token=self.manager)[0], 400)
+        self.assertEqual(self.request('selection/cohort', {'vacancyId': job['id'], 'candidateIds': []},
+            token=self.manager, headers={'Origin': 'https://foreign.invalid'})[0], 403)
 
 
 if __name__ == '__main__':

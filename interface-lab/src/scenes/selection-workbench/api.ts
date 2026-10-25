@@ -12,7 +12,7 @@ export type SelectionPerson = {
   consentReuse: boolean; interviewId: string | null; interviewStatus: string | null;
   resumeAvailable: boolean; inCohort: boolean; canAdd: boolean;
   assessment: Assessment | null; application: { id: string; status: string } | null;
-  nomination: { id: string; state: string } | null; deliveries: { channel: string; status: string; error: string | null }[];
+  nomination: { id: string; state: string } | null; deliveries: { id: string; event: string; channel: string; status: string; error: string | null }[];
 };
 export type SelectionVacancy = { id: string; title: string; company: string; city: string; salary: string; description: string; status?: string; revision: number; generation: string; workspaceId: string; contentHash: string };
 export type Directory = { candidates: SelectionPerson[]; count: number };
