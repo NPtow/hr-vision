@@ -8,6 +8,7 @@ import { downloadResume, loadResumeFile, type IntakePerson, type PreparedProfile
 import { EmployerCandidateProfile, EmployerTimecodeComment } from './EmployerCandidateProfile';
 import { candidateDecision, respondToCandidate } from './candidate-response';
 import type { EmployerCandidateResponseValues } from './employer-candidate-profile-types';
+import { useInterviewAssessment } from './useInterviewAssessment';
 
 function webUrl(value: string) {
   if (!value.trim()) return '';
@@ -23,6 +24,8 @@ function PreparedInterview({ person, profile, index, token, vacancyId, busy, onC
   onComment: (values: CommentValues) => Promise<boolean>; header?: ReactNode;
 }) {
   const source = profile.recordings[index];
+  const assessment = useInterviewAssessment(token, vacancyId && source ? { source: 'intake', id: person.id, index, vacancyId } : null,
+    JSON.stringify([source, profile.transcriptText]));
   const [media, setMedia] = useState<{ url: string; mime: string } | null>(null);
   const [loading, setLoading] = useState(Boolean(source));
   const [error, setError] = useState('');
@@ -57,9 +60,11 @@ function PreparedInterview({ person, profile, index, token, vacancyId, busy, onC
       onSave={canComment ? (text, expectedRevision, requestId) => onComment({ recordingIndex: index, seconds, chapterTitle, text, expectedRevision, requestId }) : undefined}/>;
   }
   return <>
+    {assessment.error && <div className="ew-inline-error" role="alert"><p>{assessment.error}</p><Button type="button" variant="ghost" onClick={assessment.retry}>Повторить загрузку оценки</Button></div>}
     {error && <div className="ew-inline-error" role="alert"><p>{error}</p><Button type="button" variant="ghost" onClick={() => setAttempt(value => value + 1)}>Повторить загрузку</Button></div>}
     <SourceScreeningReview appearance="candidate" sourceId={`${person.id}:prepared:${index}:${source?.publicUrl || 'none'}`}
       name={person.name} header={header} chapters={chapters} fullChapters={chapters} transcriptText={transcript}
+      assessment={assessment.assessment}
       assistant={vacancyId && transcript ? interviewAssistant(token, { source: 'intake', id: person.id, index, vacancyId }) : undefined}
       media={media ? { src: media.url, label: source?.name } : undefined}
       renderChapterComment={chapter => chapter.seconds === null ? null : comment(chapter.seconds, chapter.title)}
