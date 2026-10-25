@@ -1,0 +1,11 @@
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { ProductionTaskStates } from './ProductionTaskStates';
+const meta = { title: 'HR Vision/QA · Задачи работодателя', id: 'hr-vision-employer-task-production', component: ProductionTaskStates, parameters: { layout: 'fullscreen', controls: { disable: true } } } satisfies Meta<typeof ProductionTaskStates>;
+export default meta;
+type Story = StoryObj<typeof meta>;
+export const Completed: Story = { name: 'Встреча · реальный плеер', args: { scenario: 'completed' } };
+export const Scheduled: Story = { name: 'Предстоящая · Daily', args: { scenario: 'scheduled', provider: 'daily' } };
+export const ScheduledZoom: Story = { name: 'Предстоящая · Zoom', args: { scenario: 'scheduled', provider: 'zoom' } };
+export const NextStep: Story = { name: 'Следующий шаг · без оффера', args: { scenario: 'no-offer' } };
+export const Offer: Story = { name: 'Оффер · существует', args: { scenario: 'offer' } };
+export const ReadOnly: Story = { name: 'История после закрытия', args: { scenario: 'read-only' } };

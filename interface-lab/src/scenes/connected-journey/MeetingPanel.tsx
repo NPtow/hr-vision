@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { DailyCall } from '@daily-co/daily-js';
+import { Dialog } from 'radix-ui';
 import { Button } from '../../components/ui/button';
 import { Check, PhoneOff, Video } from 'lucide-react';
 import { dateTime, request, type Journey, type Person, type SharedState } from './api';
@@ -8,33 +9,45 @@ import { ZoomMeeting } from '../../components/call/ZoomMeeting';
 import { startZoomSessionReconcile } from '../../components/call/zoom-session-reconcile';
 import { CallProviderSelector } from '../../components/call/CallProviderSelector';
 import type { CallCredentials } from '../../components/call/call-provider';
+import './meeting-panel-compact.css';
 
 type Turn = { id: string; text: string; seconds: number };
-type MeetingPanelProps = { person: Person; journey: Journey; onComplete?: () => void; onCallChange: (open: boolean) => void; onReschedule?: () => void };
+type MeetingPanelProps = { person: Person; journey: Journey; onComplete?: () => void; onCallChange: (open: boolean) => void; onReschedule?: () => void; compact?: boolean };
+type ProviderPanelProps = MeetingPanelProps & { prejoinOpen: boolean; onPrejoinOpenChange: (open: boolean) => void; providerSelector?: ReactNode };
 
 export function MeetingPanel(props: MeetingPanelProps) {
   const { person, journey } = props;
   const meeting = person.meeting!;
+  const [prejoinOpen, setPrejoinOpen] = useState(false);
+  const compact = !!props.compact && journey.state?.actor === 'manager' && ['pending', 'confirmed', 'live'].includes(meeting.status);
+  useEffect(() => { setPrejoinOpen(false); }, [meeting.id]);
+  useEffect(() => { if (!compact || !['confirmed', 'live'].includes(meeting.status)) setPrejoinOpen(false); }, [compact, meeting.status]);
+  const providerSelector = journey.state?.mode === 'employer' && journey.state.actor === 'manager' && ['pending', 'confirmed', 'live'].includes(meeting.status) ? <CallProviderSelector
+    value={meeting.callProvider || 'daily'} locked={meeting.callProviderLocked || meeting.status === 'live'} options={meeting.callProviderOptions}
+    disabled={journey.busy} onChange={provider => { void journey.setCallProvider(person, provider); }}/> : undefined;
+  const providerProps = { ...props, compact, prejoinOpen, onPrejoinOpenChange: setPrejoinOpen, providerSelector };
   return <>
-    {journey.state?.mode === 'employer' && journey.state.actor === 'manager' && ['pending', 'confirmed', 'live'].includes(meeting.status) && <CallProviderSelector
-      value={meeting.callProvider || 'daily'} locked={meeting.callProviderLocked || meeting.status === 'live'} options={meeting.callProviderOptions}
-      disabled={journey.busy} onChange={provider => { void journey.setCallProvider(person, provider); }}/>}
-    {meeting.callProvider === 'zoom' ? <ZoomMeetingPanel key={`${meeting.id}:zoom`} {...props}/> : <DailyMeetingPanel key={`${meeting.id}:daily`} {...props}/>}
+    {!compact && providerSelector}
+    {meeting.callProvider === 'zoom' ? <ZoomMeetingPanel key={`${meeting.id}:zoom`} {...providerProps}/> : <DailyMeetingPanel key={`${meeting.id}:daily`} {...providerProps}/>}
   </>;
 }
 
-function ZoomMeetingPanel({ person, journey, onComplete, onCallChange, onReschedule }: MeetingPanelProps) {
+function ZoomMeetingPanel({ person, journey, onComplete, onCallChange, onReschedule, compact, prejoinOpen, onPrejoinOpenChange, providerSelector }: ProviderPanelProps) {
   const { state, token, act, busy } = journey;
   const reconcile = useRef<(() => void) | null>(null);
   useEffect(() => () => reconcile.current?.(), []);
   const m = person.meeting!;
   const manager = state!.actor === 'manager';
+  const configured = m.videoConfigured ?? state!.videoConfigured;
   const identity = { candidate: person.id, meetingId: m.id, generation: state!.generation };
   const hostIdentity = { ...identity, vacancyId: person.vacancyId || state!.vacancy.id, applicationId: person.applicationId };
-  return <section className="cj-meeting">
-    {['confirmed', 'live'].includes(m.status) ? <>
+  return <section className={`cj-meeting${compact ? ' cj-meeting-compact' : ''}`}>
+    {compact || ['confirmed', 'live'].includes(m.status) ? <>
       <ZoomMeeting title={manager ? person.name : `${state!.vacancy.company} · ${state!.actorName}`} subtitle={dateTime(m.start)}
-        unavailable={!(m.videoConfigured ?? state!.videoConfigured) ? 'Видеовстреча пока недоступна.' : busy ? 'Сохраняем изменения встречи…' : undefined}
+        unavailable={m.status === 'pending' ? 'Ждём подтверждения кандидата.' : !configured ? 'Видеовстреча пока недоступна.' : busy ? 'Сохраняем изменения встречи…' : undefined}
+        renderEntry={compact ? ({ consent, onConsentChange, join, opened }) => <CompactMeetingEntry meeting={m}
+          consent={consent} onConsentChange={onConsentChange} consentText="Согласен на запись встречи и сохранение видео в сервисе."
+          opening={opened} busy={busy} configured={configured} onJoin={join} open={prejoinOpen} onOpenChange={onPrejoinOpenChange}>{providerSelector}</CompactMeetingEntry> : undefined}
         join={signal => request<CallCredentials>('room', token, { ...identity, consent: true }, signal)}
         onOpenChange={open => { if (open) reconcile.current?.(); onCallChange(open); }}
         onJoined={async () => { await request('action', token, { ...identity, action: 'meeting.joined' }); await journey.refresh(); }}
@@ -49,7 +62,7 @@ function ZoomMeetingPanel({ person, journey, onComplete, onCallChange, onResched
             });
           },
         } : undefined}/>
-      {m.status === 'confirmed' && <Button variant="ghost" disabled={busy} onClick={async () => { if (manager) onReschedule?.(); else if (await act('meeting.cancel', person.id, { meetingId: m.id })) onReschedule?.(); }}>Нужно другое время</Button>}
+      {!compact && m.status === 'confirmed' && <Button variant="ghost" disabled={busy} onClick={async () => { if (manager) onReschedule?.(); else if (await act('meeting.cancel', person.id, { meetingId: m.id })) onReschedule?.(); }}>Нужно другое время</Button>}
     </> : <>
       <div className="cj-section-heading"><div><span className="cj-kicker">{manager ? person.name : state!.vacancy.company}</span><h1>{dateTime(m.start)}</h1></div></div>
       {m.status === 'pending' && <div className="cj-actions">{manager && <Button variant="outline" disabled={busy} onClick={onReschedule}>Перенести встречу</Button>}{!manager && <Button disabled={busy} onClick={() => act('meeting.confirm', person.id, { meetingId: m.id })}>Подтвердить встречу<Check size={15}/></Button>}<Button variant={manager ? 'outline' : 'ghost'} disabled={busy} onClick={async () => { if (await act('meeting.cancel', person.id, { meetingId: m.id })) onReschedule?.(); }}>{manager ? 'Отменить приглашение' : 'Нужно другое время'}</Button></div>}
@@ -59,7 +72,7 @@ function ZoomMeetingPanel({ person, journey, onComplete, onCallChange, onResched
   </section>;
 }
 
-function DailyMeetingPanel({ person, journey, onComplete, onCallChange, onReschedule }: MeetingPanelProps) {
+function DailyMeetingPanel({ person, journey, onComplete, onCallChange, onReschedule, compact, prejoinOpen, onPrejoinOpenChange, providerSelector }: ProviderPanelProps) {
   const { state, token, act, busy, setError } = journey;
   const m = person.meeting!;
   const manager = state!.actor === 'manager';
@@ -185,7 +198,9 @@ function DailyMeetingPanel({ person, journey, onComplete, onCallChange, onResche
   }
   async function leave() { attempt.current++; ending.current = true; await closeFrame(); ending.current = false; }
   const live = m.status === 'live';
-  return <section ref={panel} className="cj-meeting">
+  return <section ref={panel} className={`cj-meeting${compact ? ' cj-meeting-compact' : ''}`}>
+    {compact ? <CompactMeetingEntry meeting={m} consent={consent} onConsentChange={setConsent} consentText="Согласен на запись и расшифровку встречи. Материалы доступны участникам."
+      opening={opening} busy={busy} configured={m.videoConfigured ?? state!.videoConfigured} onJoin={open} open={prejoinOpen} onOpenChange={onPrejoinOpenChange}>{providerSelector}</CompactMeetingEntry> : <>
     <div className="cj-section-heading"><div><span className="cj-kicker">{manager ? person.name : `${journey.state!.vacancy.company} · Иван Петров`}</span><h1>{dateTime(m.start)}</h1><p className="cj-meeting-meta">30 минут · {({ pending: manager ? 'Ждём подтверждения кандидата' : 'Подтвердите время', confirmed: 'Встреча подтверждена', live: 'Комната открыта', cancelled: 'Нужно новое время', completed: 'Встреча завершена' })[m.status]}</p></div></div>
     {m.status === 'pending' && <div className="cj-actions">{manager && <Button variant="outline" disabled={busy} onClick={onReschedule}>Перенести встречу</Button>}{!manager && <Button disabled={busy} onClick={() => act('meeting.confirm', person.id, { meetingId: m.id })}>Подтвердить встречу<Check size={15}/></Button>}<Button variant={manager ? 'outline' : 'ghost'} disabled={busy} onClick={async () => { if (await act('meeting.cancel', person.id, { meetingId: m.id })) onReschedule?.(); }}>{manager ? 'Отменить приглашение' : 'Нужно другое время'}</Button></div>}
     {['confirmed', 'live'].includes(m.status) && <>
@@ -196,10 +211,54 @@ function DailyMeetingPanel({ person, journey, onComplete, onCallChange, onResche
     </>}
     {m.status === 'cancelled' && <><p>Предыдущее время освобождено.</p><Button onClick={onReschedule}>{manager ? 'Выбрать новое время' : 'Изменить расписание'}</Button></>}
     {m.status === 'completed' && manager && person.feedback && <Button onClick={onComplete}>Открыть разбор</Button>}
+    </>}
     {opened && createPortal(<div className="agency-product agency-product-theme cj-call-overlay" role="dialog" aria-modal="true" aria-label={`Видеовстреча с ${manager ? person.name : 'Иваном Петровым'}`}>
       <div className="cj-call-bar"><div><strong>{manager ? person.name : 'Иван Петров'}</strong><span role="status">{!joined ? 'Подключение' : remotePresent ? 'Встреча' : 'Ждём собеседника'}{mediaStatus ? ` · ${mediaStatus}` : ''}</span></div><Button autoFocus className={joined && manager ? 'cj-call-end' : ''} variant={joined && manager ? 'destructive' : 'secondary'} disabled={finishing || busy} onClick={joined && manager ? () => finish() : leave}><PhoneOff size={16}/>{finishing ? 'Завершаем…' : joined && manager ? 'Завершить встречу' : joined ? 'Выйти' : 'Отменить'}</Button></div>
       {callError && <div role="alert" className="cj-call-error">{callError}</div>}
       <div ref={mount} className="cj-room"/>
     </div>, document.body)}
   </section>;
+}
+
+
+/** The entry stays compact; consent is explicit and keeps each provider's existing wording. */
+function CompactMeetingEntry({ meeting, consent, onConsentChange, consentText, opening, busy, configured, onJoin, open, onOpenChange, children }: {
+  meeting: NonNullable<Person['meeting']>; consent: boolean; onConsentChange: (value: boolean) => void;
+  consentText: string; opening: boolean; busy: boolean; configured: boolean; onJoin: () => Promise<void>;
+  open: boolean; onOpenChange: (open: boolean) => void; children?: ReactNode;
+}) {
+  const joinAfterClose = useRef(false);
+  const alive = useRef(true);
+  const joinFrame = useRef<number | undefined>(undefined);
+  const canJoin = ['confirmed', 'live'].includes(meeting.status) && consent && configured && !opening && !busy;
+  const latest = useRef({ canJoin, onJoin });
+  latest.current = { canJoin, onJoin };
+  useEffect(() => {
+    alive.current = true;
+    return () => { alive.current = false; if (joinFrame.current !== undefined) cancelAnimationFrame(joinFrame.current); };
+  }, []);
+  const live = meeting.status === 'live';
+  return <Dialog.Root open={open} onOpenChange={onOpenChange}>
+    <div className="cj-meeting-compact-copy"><h3>{live ? 'Встреча идёт' : 'Предстоящая встреча'}</h3><p><time dateTime={meeting.start}>{dateTime(meeting.start)}</time></p></div>
+    <Dialog.Trigger asChild><Button type="button" disabled={meeting.status === 'pending' || opening || busy} title={meeting.status === 'pending' ? 'Ждём подтверждения кандидата' : undefined}><Video size={16}/>{opening ? 'Подключаем…' : live ? 'Вернуться во встречу' : 'Подключиться'}</Button></Dialog.Trigger>
+    <Dialog.Portal>
+      <Dialog.Overlay className="cj-meeting-prejoin-overlay"/>
+      <Dialog.Content className="agency-product-theme cj-meeting-prejoin" onCloseAutoFocus={event => {
+        if (!joinAfterClose.current) return;
+        event.preventDefault(); joinAfterClose.current = false;
+        // Release the modal's focus trap, pointer lock and aria-hidden before opening the call overlay.
+        joinFrame.current = requestAnimationFrame(() => { if (alive.current && latest.current.canJoin) void latest.current.onJoin(); });
+      }}>
+        <Dialog.Title>Подключение к встрече</Dialog.Title>
+        <Dialog.Description>{dateTime(meeting.start)}</Dialog.Description>
+        {children}
+        <label className="cj-meeting-prejoin-consent"><input type="checkbox" checked={consent} onChange={event => onConsentChange(event.target.checked)}/><span>{consentText}</span></label>
+        {!configured && <p className="cj-meeting-prejoin-info">Видеосервис ещё не подключён.</p>}
+        <div className="cj-meeting-prejoin-actions"><Dialog.Close asChild><Button type="button" variant="ghost">Отмена</Button></Dialog.Close><Button type="button" disabled={!canJoin} onClick={() => {
+          if (!canJoin) return;
+          joinAfterClose.current = true; onOpenChange(false);
+        }}>Продолжить</Button></div>
+      </Dialog.Content>
+    </Dialog.Portal>
+  </Dialog.Root>;
 }
