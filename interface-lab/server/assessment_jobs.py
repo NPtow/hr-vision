@@ -51,6 +51,8 @@ def read(db, kind, owner_id, revision, recording_id=None):
         return None
     if row[0] != revision:
         return {'assessment': None, 'status': 'pending'}
+    if row[1] == 'failed':
+        return {'assessment': None, 'status': 'failed', 'error': row[3]}
     if recording_id is not None and row[4] != recording_id:
         return {'assessment': None, 'status': 'pending'}
     result = json.loads(row[2]) if row[2] and row[1] == 'completed' else None
@@ -123,6 +125,15 @@ class Bridge:
                 if not isinstance(result, dict):
                     raise ValueError()
                 return result
+        except urllib.error.HTTPError as error:
+            if error.code == 422:
+                try:
+                    code = json.loads(error.read(4096)).get('error', '')
+                except (ValueError, AttributeError):
+                    code = ''
+                raise Problem(code if isinstance(code, str) and re.fullmatch('[a-z_0-9]{1,80}', code)
+                              else 'invalid_assessment_input', 422) from None
+            raise Problem('assessment_service_unavailable', 503) from None
         except (OSError, ValueError, urllib.error.URLError):
             raise Problem('assessment_service_unavailable', 503) from None
 
@@ -225,9 +236,13 @@ class Bridge:
                      result.get('error'), time.time() + (600 if result['status'] in ('completed', 'failed', 'cancelled', 'expired') else 10), time.time(), row['id']))
         except Exception as error:
             # Do not log exceptions that may embed transcript/provider responses.
-            code = str(error) if isinstance(error, Problem) and re.fullmatch('[a-z_]{1,80}', str(error)) else 'assessment_sync_failed'
+            code = error.message if isinstance(error, Problem) and re.fullmatch('[a-z_0-9]{1,80}', error.message) else 'assessment_sync_failed'
             with self.connect() as db:
-                db.execute('UPDATE as_bindings SET error=?,next_check=?,updated=? WHERE id=?', (code, time.time() + 60, time.time(), row['id']))
+                if isinstance(error, Problem) and error.status in (400, 413, 422):
+                    db.execute("UPDATE as_bindings SET status='failed',assessment=NULL,source_revision=?,error=?,next_check=?,updated=? WHERE id=?",
+                               (current, code, time.time() + 600, time.time(), row['id']))
+                else:
+                    db.execute('UPDATE as_bindings SET error=?,next_check=?,updated=? WHERE id=?', (code, time.time() + 60, time.time(), row['id']))
         return True
 
     def tick_match(self):
