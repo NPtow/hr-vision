@@ -50,7 +50,7 @@ export function FragmentQuestion({ assessment, block, overlapping, playing, comm
         {answers.map(answer => <button type="button" key={answer.value} data-answer={answer.value} aria-pressed={draft.opinion.answer === answer.value}
           disabled={busy} onClick={() => { void feedback.save(target, { ...draft.opinion, answer: answer.value }); }}>{answer.label}</button>)}
       </div>
-      <button type="button" className="iv-fragment-comment" aria-expanded={commentOpen} onClick={commentOpen ? onCommentClose : onCommentOpen}>
+      <button type="button" className="iv-fragment-comment" aria-label="Пояснить" aria-expanded={commentOpen} onClick={commentOpen ? onCommentClose : onCommentOpen}>
         <MessageSquare size={14}/><span>Пояснить</span>
       </button>
       <span className="iv-fragment-status" role="status">{busy ? 'Сохраняю…' : draft.status === 'saved' || (!dirty && draft.saved.version > 0) ? 'Сохранено' : dirty && draft.status === 'idle' ? 'Черновик' : ''}</span>
