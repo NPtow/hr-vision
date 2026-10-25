@@ -6,6 +6,7 @@ import { EmployerResumeDialog } from './EmployerResumeDialog';
 import { EmployerCandidateResponse } from './EmployerCandidateResponse';
 import type { EmployerCandidateDecision, EmployerCandidateMeetingOptions, EmployerCandidateProfileSource, EmployerCandidateResponseValues, EmployerCandidateResume, ScreeningComment } from './employer-candidate-profile-types';
 import './employer-candidate-profile.css';
+import './candidate-review-presentation.css';
 
 export type EmployerCandidateProfileProps = {
   person: { id: string; name: string; role?: string; photo?: string | null };
@@ -40,7 +41,7 @@ function CandidateProfile({ person, source, interview, resume, onRespond, decisi
     </header>}
     <div className="ecp-interview">{inPlayer ? interview(identity) : interview}</div>
     <div className="ecp-review-footer">
-      <div className="ecp-meta">{contacts && <p>{contacts}</p>}{score !== null && <p>Оценка рекрутера · {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(score)} / 5</p>}</div>
+      <div className="ecp-meta">{contacts && <p>{contacts}</p>}{score !== null && <p className="ecp-recruiter-score">Оценка рекрутера · {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(score)} / 5</p>}</div>
       <EmployerCandidateResponse key={responseIdentity || person.id} onRespond={onRespond} decision={decision}
         workflowRevision={workflowRevision} busy={busy} rejectQuestions={rejectQuestions} meetingOptions={meetingOptions}/>
     </div>
