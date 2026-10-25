@@ -19,7 +19,7 @@ export function RecruiterInterviewWorkspace({ candidate, token, videoConfigured,
   const [switching, setSwitching] = useState(false);
   const [providerError, setProviderError] = useState('');
   useEffect(() => setInterview(candidate.interview!), [candidate.interview]);
-  const provider = interview.callProvider || 'daily';
+  const provider = interview.callProvider === undefined ? 'daily' : interview.callProvider;
   const configured = interview.videoConfigured ?? videoConfigured;
   const coach = useInterviewCoach({ candidateId: candidate.id, interviewId: interview.id, token });
   const [currentId, setCurrentId] = useState('');
@@ -30,7 +30,7 @@ export function RecruiterInterviewWorkspace({ candidate, token, videoConfigured,
   const selectedId = currentId || coach.progress.currentId;
   const current = Math.max(0, questions.findIndex(q => q.id === selectedId));
   const completed = (coach.data?.interviewStatus || interview.status) === 'completed';
-  const available = !completed && configured && now >= Date.parse(interview.start) - 15 * 60_000 && now <= Date.parse(interview.end) + 90 * 60_000;
+  const available = provider !== null && !completed && configured && now >= Date.parse(interview.start) - 15 * 60_000 && now <= Date.parse(interview.end) + 90 * 60_000;
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -44,7 +44,7 @@ export function RecruiterInterviewWorkspace({ candidate, token, videoConfigured,
   };
   async function close() { if (await coach.flush()) onClose(); }
   async function join() {
-    if (!available || joining || switching || (provider === 'zoom' && !recordingConsent)) return;
+    if (provider === null || !available || joining || switching || (provider === 'zoom' && !recordingConsent)) return;
     setJoining(true);
     if (provider === 'zoom') { void coach.flush().catch(() => false); onJoin(provider, recordingConsent); }
     else if (await coach.flush()) onJoin(provider);
@@ -72,7 +72,7 @@ export function RecruiterInterviewWorkspace({ candidate, token, videoConfigured,
       mediaSlot={<div className="ric-approved-prejoin">
         <Video size={30} aria-hidden="true"/>
         <p>{completed ? 'Интервью завершено' : materialsOnly ? 'Материалы интервью' : formatDate(interview.start)}</p>
-        {!completed && !materialsOnly && <>
+        {!completed && !materialsOnly && provider !== null && <>
           <CallProviderSelector value={provider} locked={interview.callProviderLocked} options={interview.callProviderOptions}
             disabled={joining || switching} onChange={next => void chooseProvider(next)}/>
           {providerError && <span role="alert">{providerError}</span>}

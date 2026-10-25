@@ -125,7 +125,7 @@ function RecruiterWorkspace() {
     .sort((a, b) => Date.parse(b.interview!.start) - Date.parse(a.interview!.start));
   function openCandidate(candidate: RecruiterCandidate, materials = false) {
     cancelZoomReconcile.current?.();
-    setActiveCall({ kind: 'interview', callProvider: candidate.interview!.callProvider || 'daily',
+    setActiveCall({ kind: 'interview', callProvider: candidate.interview!.callProvider === undefined ? 'daily' : candidate.interview!.callProvider,
       candidateId: candidate.id, interviewId: candidate.interview!.id, title: candidate.name,
       candidate, recording: candidate.interview!.recording,
       preview: materials || candidate.interview!.callProvider !== 'zoom' || candidate.interview!.status === 'completed' });
@@ -172,7 +172,7 @@ function RecruiterWorkspace() {
     </div>
     {activeCall?.preview && activeCall.candidate ? <RecruiterInterviewWorkspace
       key={`${identity.generation}-${activeCall.interviewId}`} candidate={state?.candidates.find(person => person.id === activeCall.candidateId) || activeCall.candidate}
-      token={token} videoConfigured={state?.videoConfigured || false} materialsOnly={activeCall.callProvider === 'zoom'} onClose={() => setActiveCall(null)} onUpdated={refresh}
+      token={token} videoConfigured={state?.videoConfigured || false} materialsOnly={activeCall.callProvider === 'zoom' || activeCall.callProvider === null} onClose={() => setActiveCall(null)} onUpdated={refresh}
       onJoin={(callProvider, recordingConsent) => setActiveCall({ ...activeCall, callProvider, recordingConsent, preview: false })}/>
       : activeCall && <RecruiterCall key={`${identity.generation}-${activeCall.kind}-${activeCall.interviewId || activeCall.meetingId || activeCall.applicationId || activeCall.candidateId}`} active={{ ...activeCall, accountActive: state?.candidates.find(person => person.id === activeCall.candidateId)?.accountActive ?? activeCall.accountActive }} token={token} onClose={() => { setActiveCall(null); void refresh(); }} onJoined={() => void refresh()} onZoomHostLeft={reconcileZoom} onCompleted={() => markCompleted(activeCall.candidateId)}/ >}
   </div>;
