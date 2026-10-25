@@ -1,0 +1,121 @@
+.ecj-journal {
+  --ecj-text: #27242b;
+  --ecj-muted: #8a8592;
+  --ecj-gap: clamp(28px, 4vw, 64px);
+  color: var(--ecj-text);
+  font: inherit;
+  padding-block: 34px 8px;
+}
+
+.ecj-journal__columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  align-items: start;
+  column-gap: var(--ecj-gap);
+  row-gap: 32px;
+}
+
+.ecj-journal__section {
+  min-width: 0;
+}
+
+.ecj-journal__heading {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-block-end: 22px;
+}
+
+.ecj-journal__heading h3 {
+  margin: 0;
+  color: inherit;
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -.012em;
+}
+
+.ecj-journal__heading > p {
+  margin: 0;
+  color: var(--ecj-muted);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.ecj-journal__discussion {
+  display: grid;
+  gap: 24px;
+}
+
+.ecj-journal__verdict {
+  margin-block-start: 32px;
+  padding-block-start: 24px;
+}
+
+.ecj-journal__verdict-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px 24px;
+}
+
+.ecj-journal__verdict-row > h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.ecj-journal .ecj-journal__reason {
+  display: block;
+  width: min(100%, 620px);
+  box-sizing: border-box;
+  min-height: 44px;
+  margin-block-start: 10px;
+  padding: 10px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ecj-text);
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.ecj-journal .ecj-journal__reason::placeholder {
+  color: var(--ecj-muted);
+  opacity: 1;
+}
+
+.ecj-journal .ecj-journal__reason:focus-visible {
+  outline: 2px solid #8e7cdb;
+  outline-offset: 5px;
+  border-radius: 2px;
+}
+
+@media (max-width: 760px) {
+  .ecj-journal {
+    padding-block-start: 26px;
+  }
+
+  .ecj-journal__columns {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 34px;
+  }
+
+  .ecj-journal__heading {
+    margin-block-end: 16px;
+  }
+
+  .ecj-journal__heading h3 {
+    font-size: 18px;
+  }
+
+  .ecj-journal__verdict {
+    margin-block-start: 22px;
+    padding-block-start: 14px;
+  }
+}

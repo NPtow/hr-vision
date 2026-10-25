@@ -1,0 +1,65 @@
+.ets-preview { min-height:100dvh; background:#f4f3f7; }
+.ets-labbar,.ets-lab-context,.ets-lab-status { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }
+.ets-labbar { display:flex; gap:16px; align-items:center; min-height:54px; padding:8px 24px; background:#fff; border-bottom:1px solid #eeedf1; }
+.ets-labbar nav { display:flex; gap:4px; flex:1; overflow:auto; scrollbar-width:none; }
+.ets-labbar button { flex:none; background:none; color:#77737e; border:0; border-radius:9px; padding:9px 13px; font:inherit; font-size:13px; cursor:pointer; }
+.ets-labbar button[aria-current=page] { background:#eeebf7; color:#6351c0; }
+.ets-labbar .ets-reset { display:grid; place-items:center; width:36px; height:36px; padding:0; }
+.ets-labbar button:hover { background:#f3f2f7; }
+.ets-labbar button:focus-visible,.ets-lab-context select:focus-visible { outline:2px solid #6756ce; outline-offset:2px; }
+.ets-lab-context { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 20px; min-height:36px; padding:6px 28px; color:#817b8e; font-size:11px; }
+.ets-lab-context label { display:flex; gap:8px; align-items:center; }
+.ets-lab-context select { border:0; border-radius:6px; background:#fff; color:#615c6b; font:inherit; padding:4px 8px; }
+.ets-lab-status { padding:14px 28px; margin:0; color:#817b8e; font-size:12px; background:#f4f3f7; }
+.ets-product .ew-topbar { background:transparent!important; }
+.ets-product .ew-shell { min-height:calc(100dvh - 90px); }
+.ets-product .esc-candidate-nav > span { opacity:.75; }
+.ets-product .ets-next { display:grid; gap:28px; min-height:340px; }
+.ets-product .ets-view-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+.ets-product .ets-view-heading h3 { font-size:22px; font-weight:600; line-height:1.3; margin:0; }
+.ets-product .ets-view-heading h3:focus { outline:none; }
+.ets-product .ets-outcome { margin-bottom:16px; display:flex; gap:10px; align-items:center; padding:18px 24px; border-radius:18px; background:#e7f3ed; color:#2c6450; }
+.ets-product .ets-slots { border:0; margin:0; padding:0; display:flex; gap:12px; flex-wrap:wrap; }
+.ets-product .ets-slots legend { margin-bottom:12px; color:#6a6377; font-size:15px; }
+.ets-product .ets-slots label { position:relative; display:block; }
+.ets-product .ets-slots input { position:absolute; opacity:0; width:1px; height:1px; min-height:0; padding:0; }
+.ets-product .ets-slots span { display:block; padding:12px 23px; border-radius:12px; background:white; color:#534566; cursor:pointer; }
+.ets-product .ets-slots input:checked + span { color:#5944be; background:#e7e1fc; }
+.ets-product .ets-slots input:focus-visible + span { outline:2px solid #6756ce; outline-offset:3px; }
+.ets-call-overlay { position:fixed; inset:0; z-index:110; background:#11131c88; backdrop-filter:blur(4px); }
+.ets-call-dialog { position:fixed; z-index:111; left:50%; top:50%; transform:translate(-50%,-50%); width:min(680px,calc(100vw - 32px)); padding:32px; border-radius:24px; background:#141414; color:#fff; font-family:'HRDS Roboto Flex',Arial,sans-serif; box-sizing:border-box; }
+.ets-call-dialog h2 { margin:0 0 12px; font-size:24px; }
+.ets-call-dialog p { color:#aaa; line-height:1.5; }
+.ets-call-avatar { display:grid; place-items:center; width:100px; height:100px; border-radius:50%; background:#29252f; margin:64px auto; font-size:40px; }
+.ets-call-actions { display:flex; justify-content:flex-end; gap:14px; }
+.ets-call-actions button { border:0; padding:12px 18px; height:auto; border-radius:12px; background:#802d3e; color:white; font:inherit; cursor:pointer; }
+.ets-call-actions button[data-variant=secondary] { background:#333; }
+@media(max-width:700px) {
+  .ets-labbar { padding:8px 12px; gap:4px; }
+  .ets-labbar button { font-size:12px; padding:9px; }
+  .ets-lab-context { padding:8px 16px; }
+  .ets-product .ets-view-heading { align-items:start; }
+  .ets-product .ets-view-heading h3 { font-size:20px; }
+  .ets-product .cj-materials-toolbar { flex-wrap:wrap; }
+  .ets-call-dialog { padding:24px; }
+  .ets-call-actions { flex-wrap:wrap; }
+}
+@media(prefers-reduced-motion:reduce) { .ets-preview * { transition:none!important; animation:none!important; } }
+
+.ets-product .ets-upcoming { display:flex; flex-direction:row; align-items:center; justify-content:space-between; gap:24px; padding:28px 32px; }
+.ets-product .ets-upcoming-copy { display:grid; gap:10px; min-width:0; }
+.ets-product .ets-upcoming h3 { margin:0; font-size:20px; font-weight:600; line-height:1.4; }
+.ets-product .ets-upcoming p { margin:0; color:var(--esc-muted); font-size:16px; line-height:1.5; }
+.ets-product .ets-upcoming > button { min-height:44px; }
+@media(max-width:700px) {
+  .ets-product .ets-upcoming { flex-direction:column; align-items:flex-start; padding:24px; gap:24px; }
+  .ets-product .ets-upcoming > button { width:100%; }
+  .ets-product .ets-upcoming h3 { font-size:18px; }
+}
+
+.ets-product .ets-decision { display:flex; flex-wrap:wrap; gap:12px; padding:8px 0; }
+.ets-product .ets-decision > button { min-height:52px; padding:14px 24px; border:0; border-radius:14px; background:#f5f5f7; color:#302b38; font-size:16px; font-weight:500; transition:background 140ms ease; }
+.ets-product .ets-decision > button:hover { background:#eeebf7; }
+.ets-product .ets-decision > button:disabled { opacity:.5; cursor:default; }
+@media(max-width:700px) { .ets-product .ets-decision { flex-direction:column; } .ets-product .ets-decision > button { width:100%; } }
+@media(prefers-reduced-motion:reduce) { .ets-product .ets-decision > button { transition:none; } }
