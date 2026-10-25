@@ -1,10 +1,12 @@
 """Opt-in IDs-only notification; coordinator/Core own ASR authorization.
 
 Reconciliation retries HTTP acknowledgement loss with the same event identity.
-A required activation timestamp bounds automatic processing of new recordings.
+A required activation timestamp bounds automatic processing to recordings first
+discovered after activation; a binding may have been scheduled before activation.
 """
 import hashlib
 import json
+import math
 from pathlib import Path
 import sqlite3
 import time
@@ -20,7 +22,7 @@ class ASRDispatch:
             raise ValueError('Invalid ASR coordinator URL')
         if parsed.scheme=='http' and parsed.hostname not in ('localhost','127.0.0.1','::1'):
             raise ValueError('ASR coordinator requires TLS or loopback')
-        if not token or len(token)<32 or not providers or activated_at<=0:
+        if not token or len(token)<32 or not providers or not math.isfinite(activated_at) or activated_at<=0:
             raise ValueError('ASR token, providers and activation timestamp required')
         self.url,self.token,self.providers,self.activated_at=url.rstrip('/'),token,frozenset(providers),activated_at
         self.send=send or self._send
@@ -49,10 +51,15 @@ class ASRDispatch:
     def dispatch(self,sources,repository):
         accepted=failed=attempted=0
         for source in sources:
-            if source['provider'] not in self.providers or source['created_at']<self.activated_at or source['metadata'].get('capture_disabled'):
+            if (source['provider'] not in self.providers or source.get('revoked') or
+                    source['metadata'].get('capture_disabled')):
                 continue
             for asset in repository.list_assets(source['id']):
-                if asset['kind'] not in ('video','audio') or asset['state']!='ready' or asset['created_at']<self.activated_at:
+                # Discovery time is immutable. A later ready transition, copy,
+                # location or generation cannot turn an existing asset into a
+                # new automatic request. Pre-activation assets use manual API.
+                if (asset['kind'] not in ('video','audio') or asset['state']!='ready' or
+                        asset['created_at']<self.activated_at):
                     continue
                 event={'owner_kind':source['owner_kind'],'owner_id':source['owner_id'],'binding_id':source['id'],
                        'generation':source['generation'],'asset_id':asset['id']}

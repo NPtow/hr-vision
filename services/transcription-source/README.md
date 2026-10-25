@@ -13,7 +13,7 @@ Install `pip install -e 'services/transcription-source[test]'` in the service ve
 Run these three separate processes with the same protected environment file:
 
 ```sh
-python -m hr_transcription_source api --port 8093
+python -m hr_transcription_source api --port 8107
 python -m hr_transcription_source worker
 python -m hr_transcription_source scheduler
 ```
@@ -38,8 +38,8 @@ Required environment values (secrets must live outside Git):
 | Variable | Value |
 |---|---|
 | `TRANSCRIPTION_SOURCE_DATA_DIR` | private independent service state directory; default `/var/lib/hr-transcription-source` |
-| `TRANSCRIPTION_SOURCE_CORE_URL` | configured Core origin, e.g. `http://127.0.0.1:8092` |
-| `TRANSCRIPTION_SOURCE_ASR_URL` | independent ASR origin, e.g. `http://127.0.0.1:8091` |
+| `TRANSCRIPTION_SOURCE_CORE_URL` | configured Core origin, e.g. `http://127.0.0.1:8093` |
+| `TRANSCRIPTION_SOURCE_ASR_URL` | independent ASR origin, e.g. `http://127.0.0.1:8106` |
 | `TRANSCRIPTION_SOURCE_ASR_TOKEN` | ASR caller Bearer credential, at least 32 characters |
 | `TRANSCRIPTION_SOURCE_CALLERS_JSON` | `{"collector":{"token":"INGRESS_SECRET_32_OR_MORE","core_read_token":"CORE_PORTAL_SECRET_32_OR_MORE"}}` |
 | `TRANSCRIPTION_SOURCE_CORE_SOURCES_JSON` | `[{"provider":"zoom","connection_id":"zoom","token":"CORE_SOURCE_SECRET_32_OR_MORE"}]` |
@@ -148,15 +148,20 @@ Existing collector adds only a bounded IDs-only notification during reconcile:
 
 ```sh
 HR_MATERIALS_ASR_ENABLED=1
-HR_MATERIALS_ASR_URL=http://127.0.0.1:8093
+HR_MATERIALS_ASR_URL=http://127.0.0.1:8107
 HR_MATERIALS_ASR_TOKEN=<ingress credential>
 HR_MATERIALS_ASR_PROVIDERS=zoom
 HR_MATERIALS_ASR_ACTIVATED_AT=<explicit Unix epoch activation time>
 HR_MATERIALS_ASR_DISPATCH_DB=/var/lib/hr-vision-api/asr-dispatch.sqlite3
 ```
 
-Default is disabled. Both source and asset must have been created at or after
-activation. Only explicit provider allowlist members are notified; no backfill.
+Default is disabled. A recording asset must first be discovered at or after
+activation and become ready; the binding itself may be older (for example, a
+scheduled interview). The gate uses immutable asset creation time, never mutable
+rediscovery/copy timestamps. Already discovered assets, including pending assets
+at activation, require explicit manual API submission. This conservative cutover
+does not infer a legacy asset's history or trigger paid backfill on recopy.
+Only explicit provider allowlist members are notified.
 At most three network attempts (3 seconds each) per reconcile; successful 202
 notifications are checkpointed in the separate dispatch DB. Outage and lost ack
 retry with the stable event key. Existing discovery continues on later ticks;
