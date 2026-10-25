@@ -144,22 +144,35 @@ class CoreClient:
     def access(self, asset_id):
         return self.http.call('GET', '/v1/assets/' + _part(asset_id) + '/access')
 
+    def collect(self, owner_kind, owner_id, storage_policy=None):
+        require(owner_kind in ('interview', 'meeting'), 'invalid_material_owner', 400)
+        return self.http.call('POST', '/v1/owners/' + owner_kind + '/' + _part(owner_id) + '/collect',
+            {} if storage_policy is None else {'storage_policy': storage_policy})
+
 
 class CoreMaterialsCatalog:
-    def __init__(self, core, source, outbox):
+    def __init__(self, core, source=None, outbox=None, *, connect=None):
         self.core, self.source, self.outbox = core, source, outbox
+        self.connect = outbox.connect if outbox else connect
+        require(self.connect is not None, 'materials_database_required', 503)
 
     def register_owner(self, owner_kind, meeting, storage_policy=None):
+        if self.outbox is None:
+            return self.core.collect(owner_kind, meeting['id'], storage_policy)
+        require((meeting.get('room') or {}).get('provider', 'daily') == 'daily',
+                'materials_source_provider_unavailable', 503)
         require(storage_policy in (None, 'remote', 'owned'), 'Выберите способ хранения записи.', 400)
         with self.outbox.connect() as db:
             return self.outbox.record(db, owner_kind, meeting['id'], meeting.get('room') or {}, storage_policy)
 
     def _check(self, access_check):
         if access_check:
-            with self.outbox.connect() as db:
+            with self.connect() as db:
                 access_check(db)
 
     def legacy_materials(self, owner_kind, meeting, *, access_check=None):
+        require(self.outbox is None or (meeting.get('room') or {}).get('provider', 'daily') == 'daily',
+                'materials_source_provider_unavailable', 503)
         self._check(access_check)
         if (meeting.get('room') or {}).get('captureNeverStarted'):
             channel = {'status': 'not_recorded', 'ids': []}
@@ -169,10 +182,10 @@ class CoreMaterialsCatalog:
             data = self.core.materials(owner_kind, meeting['id'])
         except ServiceError as error:
             # A newly committed outbox may not have created the binding yet.
-            if error.status != 404 or not self.outbox.pending(owner_kind, meeting['id']):
+            if error.status != 404 or not self.outbox or not self.outbox.pending(owner_kind, meeting['id']):
                 raise
             data = {'sources': [], 'assets': [], 'transcripts': [], 'channels': []}
-        if not data.get('sources') and self.outbox.delivery_failed(owner_kind, meeting['id']) is True:
+        if not data.get('sources') and self.outbox and self.outbox.delivery_failed(owner_kind, meeting['id']) is True:
             raise ServiceError('materials_delivery_retrying', 503)
         active_sources = [s for s in data.get('sources', []) if not s.get('revoked')]
         require(not data.get('sources') or active_sources, 'Материалы недоступны.', 410)
@@ -184,6 +197,7 @@ class CoreMaterialsCatalog:
             try:
                 access = self.core.access(asset['id'])
                 if access.get('storage') == 'remote':
+                    require(self.source is not None, 'materials_owned_copy_required', 503)
                     resolved = self.source.access(access['binding_id'], access['external_id'])
                     access = {'id': asset['id'], 'storage': 'remote', 'url': resolved['url'], 'expires': resolved.get('expires')}
                 url = urllib.parse.urlsplit(access.get('url', ''))
@@ -228,6 +242,30 @@ class CoreMaterialsCatalog:
             'status': 'ready' if 'ready' in states else 'error' if 'error' in states else
                       'processing' if 'processing' in states else 'not_recorded',
             'catalogVersion': 1, 'checkedAt': dt.datetime.now(dt.timezone.utc).isoformat()}
+
+
+class ProviderMaterialsCatalog:
+    """Explicit transition: Daily source API and existing Zoom collector.
+
+    The portal passes a meeting loaded from its authorized owner row. Provider
+    identity is never accepted from an HTTP materials request or inferred from
+    an adapter error. A missing provider cannot fall through to another source.
+    """
+    def __init__(self, daily, zoom=None):
+        self.daily, self.zoom = daily, zoom
+
+    def _catalog(self, meeting):
+        provider = (meeting.get('room') or {}).get('provider', 'daily')
+        require(provider in ('daily', 'zoom'), 'Неизвестный источник материалов.', 409)
+        catalog = self.daily if provider == 'daily' else self.zoom
+        require(catalog is not None, 'Источник материалов ещё не подключён.', 503)
+        return catalog
+
+    def register_owner(self, owner_kind, meeting, storage_policy=None):
+        return self._catalog(meeting).register_owner(owner_kind, meeting, storage_policy)
+
+    def legacy_materials(self, owner_kind, meeting, *, access_check=None):
+        return self._catalog(meeting).legacy_materials(owner_kind, meeting, access_check=access_check)
 
 
 def clients_from_env(environ=None):

@@ -31,6 +31,13 @@ class CompletionOutbox:
         """Use the caller's completion transaction, never connect/commit here."""
         if room.get('captureNeverStarted') or not room:
             return None
+        # Only the Daily source exists behind this outbox. Zoom keeps its exact
+        # session identity and owned-copy pipeline in the explicit legacy path.
+        provider = room.get('provider', 'daily')
+        if provider == 'zoom':
+            return None
+        if provider != 'daily':
+            raise ValueError('Unsupported completion provider')
         if owner_kind not in ('interview', 'meeting') or storage_policy not in (None, 'remote', 'owned'):
             raise ValueError('Invalid material completion intent')
         if owner_kind == 'interview':
@@ -43,7 +50,6 @@ class CompletionOutbox:
             if never_started:
                 return None
         connection = room.get('connectionId', self.connection_id)
-        provider = room.get('provider', 'daily')
         ref = owner_source_ref(owner_kind, owner_id, room, provider, connection)
         payload = {'schema_version': 1, 'owner_kind': owner_kind, 'owner_id': owner_id,
             'provider': provider, 'connection_id': connection, 'source_ref': ref, 'storage_policy': storage_policy}
@@ -78,6 +84,8 @@ class CompletionOutbox:
             db.execute("UPDATE portal_materials_outbox SET status='running',attempts=attempts+1,lease_token=?,lease_until=?,updated_at=? WHERE id=?",
                        (lease, stamp + 120, stamp, identity))
         try:
+            if payload.get('provider') != 'daily':
+                raise ValueError('Unsupported completion provider')
             if payload['storage_policy'] is None:
                 capabilities = self.source.capabilities()
                 policy = capabilities.get('default_storage_policy')

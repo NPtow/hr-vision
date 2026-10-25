@@ -186,8 +186,36 @@ print(json.dumps({'media':type(app.MEDIA).__name__,'daily_loaded':'daily_media' 
                 self.assertEqual(result.returncode, 0, result.stderr)
                 mode = json.loads(result.stdout)
                 self.assertEqual(mode, {'media': 'SourceMedia' if enabled == '1' else 'DailyMedia',
-                    'daily_loaded': enabled == '0', 'runtime_loaded': False,
+                    'daily_loaded': enabled == '0', 'runtime_loaded': enabled == '1',
                     'outbox': enabled == '1', 'configured': True})
+
+    def test_services_app_keeps_configured_zoom_collector_without_loading_daily_sdk(self):
+        code = '''import json,sys,urllib.request
+def forbidden(*args,**kwargs):
+    raise AssertionError('Startup must not contact any provider or service')
+urllib.request.OpenerDirector.open=forbidden
+import app
+runtime=app.MATERIALS_RUNTIME
+print(json.dumps({'media':type(app.MEDIA).__name__,'daily_loaded':'daily_media' in sys.modules,
+    'captures':sorted([list(key) for key in runtime.captures]),
+    'scope':sorted(runtime.provider_allowlist),'catalog':type(app.CANDIDATE_PORTAL.materials_catalog).__name__,
+    'zoom_selection':app.CANDIDATE_PORTAL.calls.zoom.selection_enabled}))
+'''
+        with tempfile.TemporaryDirectory(prefix='portal-zoom-services-mode-') as root:
+            env = dict(os.environ, HR_DATA_DIR=root, HR_TEAM_KEY='synthetic-team-key',
+                HR_MATERIALS_SERVICES_ENABLED='1', HR_MATERIALS_ENABLED='1', HR_VIDEO_ENABLED='1',
+                HR_MATERIALS_CORE_URL='http://127.0.0.1:8180', HR_MATERIALS_CORE_KEY='synthetic-core-key',
+                HR_MATERIALS_SOURCE_URL='http://127.0.0.1:8181', HR_MATERIALS_SOURCE_KEY='synthetic-source-key',
+                HR_MATERIALS_STORAGE_BACKEND='filesystem', HR_MATERIALS_STORAGE_ROOT=root + '/materials',
+                HR_ZOOM_ENABLED='0', HR_ZOOM_CONNECTION_ID='synthetic-zoom',
+                ZOOM_S2S_ACCOUNT_ID='synthetic-account', ZOOM_S2S_CLIENT_ID='synthetic-client',
+                ZOOM_S2S_CLIENT_SECRET='synthetic-secret')
+            result = subprocess.run([sys.executable, '-c', code], cwd=Path(__file__).parent,
+                env=env, capture_output=True, text=True, timeout=30)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout), {'media': 'SourceMedia', 'daily_loaded': False,
+                'captures': [['zoom', 'synthetic-zoom']], 'scope': ['zoom'],
+                'catalog': 'ProviderMaterialsCatalog', 'zoom_selection': False})
 
 
 class CompletionIntegrationTests(unittest.TestCase):
@@ -448,7 +476,8 @@ class ServicesWebhookRouteTests(unittest.TestCase):
         self.assertEqual(upstream_headers['x-webhook-signature'], headers['X-Webhook-Signature'])
         self.assertEqual(upstream_headers['authorization'], 'Bearer synthetic-source-key')
         self.assertNotIn('cookie', upstream_headers)
-        self.assertIsNone(self.app.MATERIALS_RUNTIME)
+        self.assertEqual(self.app.MATERIALS_RUNTIME.provider_allowlist, frozenset({'zoom'}))
+        self.assertFalse(any(key[0] == 'daily' for key in self.app.MATERIALS_RUNTIME.captures))
 
     def test_invalid_hmac_upstream_rejection_is_not_acknowledged(self):
         status, result, _ = self.post(b'{ "test" : "test" }', invalid=True)

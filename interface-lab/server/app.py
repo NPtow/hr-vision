@@ -17,6 +17,7 @@ import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from domain import NAMES, Problem, accounts, actor_name, fresh, public_state, require, transition, text, iso, now, timestamp
+from zoom_api_client import zoom_from_env
 from media_runtime import provider_budget, provider_timeout
 from feedback import questionnaire, vtt_turns
 import browser_access
@@ -92,7 +93,8 @@ with connect() as db:
     db.execute('CREATE TABLE IF NOT EXISTS intake_batches (id TEXT PRIMARY KEY, digest TEXT NOT NULL)')
 os.chmod(DB, 0o600)
 CANDIDATE_PORTAL = CandidatePortal(connect, LOCK, MEDIA, ORIGIN, candidate_notifications,
-                                  origins=ORIGINS, recruiter_origin=os.environ.get('HR_RECRUITER_ORIGIN', ORIGIN))
+                                  origins=ORIGINS, recruiter_origin=os.environ.get('HR_RECRUITER_ORIGIN', ORIGIN),
+                                  zoom=zoom_from_env())
 CANDIDATE_BOT = CandidateBot(CANDIDATE_PORTAL, candidate_notifications)
 HH_ROUTES = HHRecruiterRoutes(connect, CANDIDATE_PORTAL)
 CANDIDATE_PORTAL.invitation_lookup = HH_ROUTES.existing_invitation
@@ -109,17 +111,36 @@ EMPLOYER_ROUTES = EmployerRoutes(connect, LOCK, CANDIDATE_PORTAL, MEDIA, ORIGIN)
 MEETING_LAB = MeetingLab(connect, LOCK, MEDIA)
 MATERIALS_RUNTIME = None
 if MATERIALS_SERVICES_ENABLED:
-    from core_source_client import CoreMaterialsCatalog
+    from core_source_client import CoreMaterialsCatalog, ProviderMaterialsCatalog
     from core_source_outbox import CompletionOutbox
     CANDIDATE_PORTAL.materials_outbox = CompletionOutbox(connect, CORE_CLIENT, MEDIA,
         connection_id=os.environ.get('HR_MATERIALS_CONNECTION_ID', 'daily'))
-    CANDIDATE_PORTAL.materials_catalog = CoreMaterialsCatalog(CORE_CLIENT, MEDIA, CANDIDATE_PORTAL.materials_outbox)
+    daily_catalog = CoreMaterialsCatalog(CORE_CLIENT, MEDIA, CANDIDATE_PORTAL.materials_outbox)
+    zoom_catalog = None
+    if os.environ.get('HR_MATERIALS_ENABLED') == '1':
+        from materials_runtime import build_runtime
+        from materials_service import MaterialsService
+        # Transitional Zoom collector only. Services mode fences legacy Daily
+        # work in runtime/worker; it never constructs a Daily provider client.
+        # Keep owned Zoom playback available even without provider credentials.
+        MATERIALS_RUNTIME = build_runtime(connect=connect, publish=lambda _job_id: None)
+        zoom_catalog = MaterialsService(MATERIALS_RUNTIME)
+    CANDIDATE_PORTAL.materials_catalog = ProviderMaterialsCatalog(daily_catalog, zoom_catalog)
 elif os.environ.get('HR_MATERIALS_ENABLED') == '1':
     from materials_runtime import build_runtime
     from materials_service import MaterialsService
     # HTTP requests commit intent locally; the separate scheduler dispatches it.
     MATERIALS_RUNTIME = build_runtime(connect=connect, media=MEDIA, publish=lambda _job_id: None)
     CANDIDATE_PORTAL.materials_catalog = MaterialsService(MATERIALS_RUNTIME)
+
+if os.environ.get('HR_CORE_CATALOG_ENABLED') == '1':
+    # Daily remains the explicit existing reserve. Zoom materials belong to core;
+    # the portal only authorizes the person and renders the core response.
+    from core_source_client import CoreClient, CoreMaterialsCatalog, ProviderMaterialsCatalog, ServiceHTTP
+    CORE_CLIENT = CoreClient(ServiceHTTP(os.environ['HR_MATERIALS_CORE_URL'],
+        os.environ['HR_MATERIALS_CORE_KEY'], timeout=10))
+    CANDIDATE_PORTAL.materials_catalog = ProviderMaterialsCatalog(
+        CANDIDATE_PORTAL.materials_catalog, CoreMaterialsCatalog(CORE_CLIENT, connect=connect))
 
 
 def read(db, scope='sfera'):
