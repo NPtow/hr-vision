@@ -6,7 +6,7 @@ from pathlib import Path
 import unittest
 
 from assessment_core.corpus import build_corpus
-from assessment_core.engine import UNKNOWN, build_rubric, interpret, prepare
+from assessment_core.engine import UNKNOWN, build_rubric, interpret, prepare, validate_plan
 from assessment_core.providers.jev import JevError
 
 
@@ -49,10 +49,16 @@ class EngineTests(unittest.TestCase):
         original = copy.deepcopy((corpus, rubric))
         plan = prepare(corpus, rubric)
         expected = build_corpus(corpus)
-        self.assertEqual(plan["request"]["state"], {
-            "sources": expected["sources"], "chunks": expected["chunks"],
-        })
-        self.assertEqual(plan["request"]["state"]["chunks"], plan["corpus"]["chunks"])
+        self.assertEqual(plan['corpus'], expected)
+        state = plan['request']['state']
+        source_ids = [s['source_id'] for s in expected['sources']]
+        self.assertEqual(state['sources'], [{'source_id': 's' + str(i + 1), 'kind': s['kind']}
+            for i, s in enumerate(expected['sources'])])
+        for i, (wire, original_chunk) in enumerate(zip(state['chunks'], expected['chunks'])):
+            self.assertEqual(wire['chunk_id'], 'c' + str(i + 1))
+            self.assertEqual(wire['source_id'], 's' + str(source_ids.index(original_chunk['source_id']) + 1))
+            for field in ('text', 'speaker', 'role', 'start_ms', 'end_ms'):
+                self.assertEqual(wire[field], original_chunk[field])
         self.assertEqual(len(plan["request"]["state"]["chunks"]), 5)
         self.assertEqual(
             [c["text"] for c in plan["request"]["state"]["chunks"]],
@@ -68,6 +74,19 @@ class EngineTests(unittest.TestCase):
             self.assertEqual(question["type"], "choice")
             self.assertIn("state.chunks", question["instructions"])
         self.assertEqual((corpus, rubric), original)
+
+    def test_compact_request_keeps_all_long_source_content_and_old_plans_remain_replayable(self):
+        corpus, rubric = inputs()
+        corpus['sources'][1]['source_id'] = 'provider:' + 'a1f2' * 100
+        corpus['sources'][1]['version'] = 'v' + 'b3c4' * 100
+        corpus['sources'][1]['units'] = [dict(corpus['sources'][1]['units'][0], unit_id=str(i)) for i in range(200)]
+        old = prepare(corpus, rubric, request_format='expanded-provenance-v1')
+        new = prepare(corpus, rubric)
+        self.assertEqual(old['corpus'], new['corpus'])
+        self.assertNotEqual(old['run_id'], new['run_id'])
+        self.assertLess(len(json.dumps(new['request'])), len(json.dumps(old['request'])) / 2)
+        validate_plan(old)
+        validate_plan(new)
 
     def test_each_parameter_uses_its_own_level_descriptions_and_definition(self):
         corpus, rubric = inputs()

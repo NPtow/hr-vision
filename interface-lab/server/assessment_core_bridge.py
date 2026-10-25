@@ -16,6 +16,7 @@ from domain import Problem, require
 
 
 STATES = {'queued', 'sent', 'response_saved', 'completed', 'failed', 'outcome_unknown'}
+REQUEST_FORMAT = 'compact-provenance-v1'
 LABELS = {'queued': 'queued', 'sent': 'processing', 'response_saved': 'processing',
           'completed': 'ready', 'failed': 'error', 'outcome_unknown': 'outcome_unknown',
           'dispatching': 'queued', 'stale': 'stale'}
@@ -40,6 +41,8 @@ def init(db):
       manifest TEXT NOT NULL, run_id TEXT, status TEXT NOT NULL, receipt TEXT,
       created REAL NOT NULL, updated REAL NOT NULL)''')
     db.execute('CREATE INDEX IF NOT EXISTS ac_candidate ON ac_bindings(candidate_id,created DESC)')
+    if 'request_format' not in {row[1] for row in db.execute('PRAGMA table_info(ac_bindings)')}:
+        db.execute("ALTER TABLE ac_bindings ADD COLUMN request_format TEXT NOT NULL DEFAULT 'expanded-provenance-v1'")
 
 
 def latest(db, cid):
@@ -52,7 +55,7 @@ def latest(db, cid):
 
 def overview(db, cid):
     row = latest(db, cid)
-    return {'state': LABELS.get(row['status'], 'unavailable') if row else 'not_started',
+    return {'state': ('stale' if row.get('request_format') != REQUEST_FORMAT else LABELS.get(row['status'], 'unavailable')) if row else 'not_started',
             'origin': 'assessment-core', 'revisionId': row['run_id'] if row else None}
 
 
@@ -118,15 +121,15 @@ class Bridge:
             snapshot = self.collector.revalidate(snapshot)
         except CollectionError:
             raise Problem('Материалы изменились или недоступны. Обновите карточку.', 409) from None
-        identity = digest([cid, snapshot['revision'], self.rubric_hash, self.model])
+        identity = digest([cid, snapshot['revision'], self.rubric_hash, self.model, REQUEST_FORMAT])
         with self.lock, self.connect() as db:
             self.authorize(cid)
             init(db)
             db.execute('''INSERT OR IGNORE INTO ac_bindings
-              (id,candidate_id,source_revision,rubric_hash,model,manifest,status,created,updated)
-              VALUES (?,?,?,?,?,?,'dispatching',?,?)''',
+              (id,candidate_id,source_revision,rubric_hash,model,manifest,status,created,updated,request_format)
+              VALUES (?,?,?,?,?,?,'dispatching',?,?,?)''',
               (identity, cid, snapshot['revision'], self.rubric_hash, self.model,
-               dump(snapshot['manifest']), time.time(), time.time()))
+               dump(snapshot['manifest']), time.time(), time.time(), REQUEST_FORMAT))
             old = db.execute('SELECT run_id FROM ac_bindings WHERE id=?', (identity,)).fetchone()[0]
         # This POST is safe to repeat after an uncertain HTTP result: the core
         # derives the same run ID from the exact full input and never re-bills it.
@@ -149,7 +152,8 @@ class Bridge:
         base = {'state': 'not_started', 'result': None, 'match': {'state': 'not_compared'}, **self.options()}
         if row is None:
             return base
-        if row['rubric_hash'] != self.rubric_hash or row['model'] != self.model:
+        if (row['rubric_hash'] != self.rubric_hash or row['model'] != self.model
+                or row['request_format'] != REQUEST_FORMAT):
             return {**base, 'state': 'stale'}
         try:
             current = self.collector.revalidate({'candidate_id': cid, 'revision': row['source_revision']})

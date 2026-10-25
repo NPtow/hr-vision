@@ -97,6 +97,13 @@ class BridgeTests(unittest.TestCase):
         self.assertTrue(value['canRun'])
         self.assertEqual(self.service.calls, [])
 
+    def test_request_format_change_invalidates_old_binding_without_deleting_history(self):
+        self.bridge.start('c1')
+        with self.connect() as db:
+            db.execute("UPDATE ac_bindings SET request_format='expanded-provenance-v1'")
+        self.assertEqual(self.bridge.read('c1')['state'], 'stale')
+        self.assertTrue(self.bridge.read('c1')['canRun'])
+
     def test_entire_cv_and_every_interview_reach_core_and_same_input_is_reused(self):
         result = self.bridge.start('c1')
         self.assertEqual(result['coreRun']['assessment']['candidate_id'], 'c1')

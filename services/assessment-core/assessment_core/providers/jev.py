@@ -33,6 +33,7 @@ _MESSAGES = {
     "configuration": "Jev configuration is missing or invalid.",
     "invalid_request": "Jev request does not match the supported typed contract.",
     "request_too_large": "Jev request exceeds the configured size limit.",
+    "context_limit": "The complete corpus and questions exceed Jev's context limit.",
     "invalid_response": "Jev returned an invalid or inconsistent typed response.",
     "response_too_large": "Jev response exceeds the configured size limit.",
     "redirect": "Jev redirected the request; redirects are disabled.",
@@ -269,7 +270,15 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
-def _http_error(status):
+def _http_error(status, raw=b''):
+    # Only this documented/observed machine code is retained. Error bodies may
+    # echo private input, so never expose their free-form messages or fields.
+    if status == 400:
+        try:
+            if json.loads(raw).get('detail', {}).get('error_type') == 'max_tokens_exceeded':
+                return JevError('context_limit', status=status)
+        except (ValueError, TypeError, AttributeError):
+            pass
     code = ({401: "authentication", 403: "authentication", 402: "exhausted_balance",
              413: "request_too_large", 429: "rate_limited"}.get(status, "http_error"))
     if 300 <= status < 400:
@@ -309,8 +318,13 @@ class JevClient:
                     raise _http_error(incoming.getcode())
                 raw = incoming.read(self.config.max_response_bytes + 1)
         except urllib.error.HTTPError as error:
-            error.close()
-            raise _http_error(error.code) from None
+            try:
+                diagnostic = error.read(4096)
+            except OSError:
+                diagnostic = b''
+            finally:
+                error.close()
+            raise _http_error(error.code, diagnostic) from None
         except (TimeoutError, socket.timeout):
             raise JevError("timeout", outcome_unknown=True) from None
         except urllib.error.URLError as error:
@@ -365,7 +379,7 @@ class JevClient:
             raise JevError('invalid_response', outcome_unknown=True)
         status = int(raw[-3:])
         if status != 200:
-            raise _http_error(status)
+            raise _http_error(status, raw[:-4])
         try:
             response = json.loads(raw[:-4].decode('utf-8'), object_pairs_hook=_unique_object,
                                   parse_constant=_reject_constant)
