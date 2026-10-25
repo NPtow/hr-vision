@@ -83,8 +83,13 @@ def person(db, cid):
     source = digest({'interview': list(interview[:3]) if interview else None, 'room': room_identity,
                      'resumeUploadedAt': resume[0] if resume else None})
     contact = db.execute('SELECT contact_email FROM cp_intake WHERE candidate_id=?', (cid,)).fetchone()
+    # Connection means an established account or consented booking channel.
+    # A scraped address is searchable, but does not itself connect the mailbox.
+    email_target = invitation_target(db, cid, 'email')
+    telegram_target = invitation_target(db, cid, 'telegram')
     return {'id': cid, **{key: profile.get(key, '') for key in EDITABLE},
-            'email': row[2] or (contact[0] if contact else ''), 'accountActive': bool(row[2]),
+            'email': email_target or (contact[0] if contact else '') or '', 'accountActive': bool(row[2]),
+            'emailConnected': bool(email_target), 'telegramConnected': bool(telegram_target),
             'searching': bool(row[3]), 'consentReuse': profile.get('consentReuse') is True,
             'interviewId': interview[0] if interview else None,
             'interviewStatus': interview[1] if interview else None, 'resumeAvailable': bool(resume),
