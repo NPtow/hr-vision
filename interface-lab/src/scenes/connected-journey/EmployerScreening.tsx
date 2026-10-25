@@ -35,8 +35,9 @@ function Screening({ journey, person, source, appearance = 'panel', header, enab
     vacancyId, generation, recordingId: recordings[0].id,
   } : null, transcript);
   const transcriptChapters = recordings.length <= 1 ? parseMeetingTranscript(transcript) : [];
-  const chapters = source.shortChapters.length ? source.shortChapters : transcriptChapters;
-  const fullChapters = source.fullChapters.length ? source.fullChapters : transcriptChapters;
+  const materialChapters = materials?.chapters?.length ? materials.chapters : transcriptChapters;
+  const chapters = source.shortChapters.length ? source.shortChapters : materialChapters;
+  const fullChapters = source.fullChapters.length ? source.fullChapters : materialChapters;
   const emptyMessage = error || (!available ? 'Видеосервис ещё не подключён.'
     : materials?.video.status === 'not_recorded' ? 'Запись первичного интервью отсутствует.'
     : materials?.video.status === 'error' ? 'Сейчас не удалось получить запись первичного интервью.'

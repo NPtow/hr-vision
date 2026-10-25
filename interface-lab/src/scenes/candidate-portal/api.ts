@@ -120,6 +120,7 @@ export type CallMaterials = {
   status: MediaStatus;
   recordings: { id: string; url: string; duration?: number | null; expires?: number | null }[];
   transcripts: { id: string; text: string }[];
+  chapters?: import('../interview-review/InterviewReview').RecordingChapter[];
   video: MediaChannel;
   transcription: MediaChannel;
   checkedAt: string | number;
