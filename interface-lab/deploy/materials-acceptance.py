@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Single-interview HTTP, worker, S3 and offline transcript acceptance."""
 import argparse
+import hashlib
 import http.client
 import json
 import os
@@ -67,7 +68,7 @@ def catalog(db):
     if asset_ids:
         slots = ','.join('?' for _ in asset_ids)
         result['locations'] = rows(db, 'SELECT asset_id,backend,object_key,state,size,sha256 FROM asset_locations WHERE asset_id IN (' + slots + ')', asset_ids)
-        result['transcripts'] = rows(db, 'SELECT id,asset_id,version FROM transcript_versions WHERE asset_id IN (' + slots + ')', asset_ids)
+        result['transcripts'] = rows(db, 'SELECT id,asset_id,version,raw_ref FROM transcript_versions WHERE asset_id IN (' + slots + ')', asset_ids)
     job_ids = [row['id'] for row in result['jobs']]
     if job_ids:
         slots = ','.join('?' for _ in job_ids)
@@ -156,13 +157,45 @@ def check_http(result, policy):
     return videos[0], texts[0]
 
 
-def verify_s3(video):
-    from materials_runtime import build_runtime
-    storage = build_runtime().storage
+def stream_hash(storage, key, expected_size, expected_sha256, max_bytes):
+    need(type(expected_size) is int and 0 < expected_size <= max_bytes and
+         isinstance(expected_sha256, str) and re.fullmatch('[0-9a-f]{64}', expected_sha256),
+         'invalid_expected_digest')
+    digest, count = hashlib.sha256(), 0
+    body = storage.open(key)
+    try:
+        while chunk := body.read(1024 * 1024):
+            count += len(chunk)
+            need(count <= expected_size, 'object_size_mismatch')
+            digest.update(chunk)
+    finally:
+        body.close()
+    need(count == expected_size and digest.hexdigest() == expected_sha256, 'object_digest_mismatch')
+
+
+def verify_raw_text(transcript, data, storage):
+    raw = json.loads(transcript['raw_ref'])
+    need(raw.get('backend') == 's3' and raw.get('object_key') and
+         raw.get('object_key') == raw.get('key') and raw.get('sha256') and
+         any(row['asset_id'] == transcript['asset_id'] and row['backend'] == 's3' and
+             row['state'] == 'verified' and row['object_key'] == raw['object_key'] and
+             row['size'] == raw.get('size') and row['sha256'] == raw['sha256']
+             for row in data['locations']), 'raw_transcript_reference_mismatch')
+    need(raw['object_key'] == storage.object_key(raw['sha256']), 'invalid_raw_transcript_key')
+    raw_head = storage.head(raw['object_key'])
+    need(raw_head.size == raw.get('size') and raw_head.sha256 == raw['sha256'], 'raw_transcript_head_mismatch')
+    stream_hash(storage, raw['object_key'], raw['size'], raw['sha256'],
+                int(os.environ.get('HR_MATERIALS_TRANSCRIPT_MAX_BYTES', str(20 * 1024**2))))
+
+
+def verify_s3(video, transcript, data, storage):
     need(storage.backend == 's3' and video['size'] and re.fullmatch('[0-9a-f]{64}', video['sha256'] or '') and
          video['object_key'] == storage.object_key(video['sha256']), 'invalid_owned_video')
     stored = storage.head(video['object_key'])
     need(stored.size == video['size'] and stored.sha256 == video['sha256'], 's3_head_mismatch')
+    stream_hash(storage, video['object_key'], video['size'], video['sha256'],
+                int(os.environ.get('HR_MATERIALS_MAX_DOWNLOAD_BYTES', str(2 * 1024**3))))
+    verify_raw_text(transcript, data, storage)
 
 
 def verify_range(url):
@@ -181,19 +214,23 @@ def verify_range(url):
             need(signed, 'public_access_not_denied')
 
 
-def verify_offline_text(transcript_id):
+def verify_offline_text(transcript_id, video_id=None):
     # An isolated process has no Daily credentials or capture adapter.
     code = ('from materials_runtime import build_runtime\n'
             'from materials_service import MaterialsService\n'
             'import os,sys\n'
             'r=build_runtime(captures={})\n'
             't=MaterialsService(r).get_transcript("interview",os.environ["ACCEPT_INTERVIEW"],os.environ["ACCEPT_TRANSCRIPT"])\n'
-            'sys.exit(0 if t.get("text", "").strip() else 1)\n')
+            'ok=bool(t.get("text", "").strip())\n'
+            'if os.environ.get("ACCEPT_VIDEO"):\n'
+            ' a=MaterialsService(r).get_asset_access("interview",os.environ["ACCEPT_INTERVIEW"],os.environ["ACCEPT_VIDEO"])\n'
+            ' ok=ok and a.get("storage")=="owned" and a.get("url", "").startswith("https://")\n'
+            'sys.exit(0 if ok else 1)\n')
     env = dict(os.environ, DAILY_API_KEY='', HR_VIDEO_ENABLED='0', ACCEPT_INTERVIEW=INTERVIEW,
-               ACCEPT_TRANSCRIPT=transcript_id)
+               ACCEPT_TRANSCRIPT=transcript_id, ACCEPT_VIDEO=video_id or '')
     result = subprocess.run([sys.executable, '-c', code], env=env, cwd=os.getcwd(),
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
-    need(result.returncode == 0, 'offline_transcript_unavailable')
+    need(result.returncode == 0, 'offline_material_unavailable')
 
 
 def main():
@@ -212,9 +249,11 @@ def main():
             need(all(row['storage_policy'] == 'remote' for row in before['sources']), 'remote_downgrade_refused')
             need(materials(candidate_id, session(), 'remote').get('catalogVersion') == 1, 'materials_http_not_enabled')
         elif args.phase == 'assert-remote':
-            _, _, texts = wait_ready(db, 'remote')
+            data, _, texts = wait_ready(db, 'remote')
             video, text = check_http(materials(candidate_id, session()), 'remote')
             need(any(row['id'] == text['id'] for row in texts), 'transcript_revision_mismatch')
+            from materials_runtime import build_runtime
+            verify_raw_text(next(row for row in texts if row['id'] == text['id']), data, build_runtime().storage)
             verify_offline_text(text['id'])
         elif args.phase == 'upgrade-owned':
             done, _, _ = ready(before, 'remote')
@@ -227,9 +266,14 @@ def main():
             video, text = check_http(materials(candidate_id, session()), 'owned')
             need(any(row['id'] == video['id'] for row in data['assets'] if row['kind'] == 'video') and
                  any(row['id'] == text['id'] for row in texts), 'owned_revision_mismatch')
-            verify_s3(owned[0])
+            selected = next(row for row in texts if row['id'] == text['id'])
+            matching_locations = [row for row in owned if row['asset_id'] == video['id']]
+            need(matching_locations, 'owned_video_location_mismatch')
+            video_location = matching_locations[0]
+            from materials_runtime import build_runtime
+            verify_s3(video_location, selected, data, build_runtime().storage)
             verify_range(video['url'])
-            verify_offline_text(text['id'])
+            verify_offline_text(text['id'], video['id'])
         print(json.dumps({'phase': args.phase, 'result': summary(catalog(db))}, sort_keys=True))
 
 

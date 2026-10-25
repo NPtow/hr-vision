@@ -12,7 +12,7 @@ EnvironmentFile=/etc/hr-vision/api.env
 EnvironmentFile=/etc/hr-vision/materials.env
 Environment=PYTHONDONTWRITEBYTECODE=1
 ExecStart=/opt/hr-vision-materials/venv/bin/python /usr/local/libexec/hr-vision-materials/acceptance.py %i --interview-id interview_75123c5506a524094e5c0c21
-TimeoutStartSec=900
+TimeoutStartSec=1800
 MemoryMax=256M
 UMask=0077
 NoNewPrivileges=true

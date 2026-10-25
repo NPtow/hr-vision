@@ -45,7 +45,7 @@ states. It obtains a short manager session through the existing team grant and
 calls the authorized recruiter materials endpoint on `127.0.0.1:8391`. The API
 commits jobs, then the scheduler publishes them to the broker for the worker.
 Assertions wait up to 12 minutes and check successful worker attempts. The unit
-never starts a call, downloads the recording, runs ASR, or scans other owners.
+never starts a call, runs ASR, or scans other owners.
 Do not run the next phase until the previous assertion succeeds.
 
 ```sh
@@ -60,12 +60,15 @@ sudo journalctl -u hr-vision-materials-acceptance@assert-owned.service -n 10 --n
 ```
 
 `assert-remote` requires a ready provider video, no owned video, and an owned
-provider transcript revision readable in a separate process without Daily.
+provider transcript revision. It recomputes the raw transcript SHA-256 from S3
+and reads the normalized text in a separate process without Daily.
 `upgrade-owned` changes only this interview's storage policy, causing a copy
-job. `assert-owned` checks the S3 video's size and SHA-256 metadata against the
-catalog, performs a 64-byte signed Range GET, requires an unsigned public GET
-to return 403, and reads the retained transcript without Daily. It does not
-fetch the full recording. If provider files or worker jobs have not settled
+job. `assert-owned` streams the full owned video from S3 in bounded chunks
+without writing a local file, recomputes its SHA-256 and size, and recomputes
+the raw transcript SHA-256. It performs a 64-byte signed Range GET, requires
+an unsigned public GET to return 403, and obtains the owned video link and
+retained transcript in a process with Daily disabled. This reads the full owned
+recording from S3 for verification. If provider files or worker jobs have not settled
 after 12 minutes, inspect the read-only status command:
 
 ```sh
