@@ -74,6 +74,20 @@ class ServiceTest(unittest.TestCase):
         self.assertEqual(len(transport.calls), 4)
         self.assertTrue(all(c['level'] is None and not c['evidence'] for c in job['assessment']['criteria']))
 
+    def test_equivalent_source_choices_do_not_erase_evidence_probability(self):
+        body = source()
+        body['chunks'] = [{**body['chunks'][0], 'id': 'c' + str(i)} for i in (1, 2, 3)]
+        original = Transport()
+        def distributed(payload, key):
+            result = original(payload, key)
+            for answer in result['answers'].values():
+                if answer.get('choice') == 'c1':
+                    answer['probabilities'] = {'NONE': 0, 'c1': 1/3, 'c2': 1/3, 'c3': 1/3}
+            return result
+        job, _ = self.run_job(distributed, body)
+        self.assertEqual(job['status'], 'completed')
+        self.assertTrue(all(c['level'] == 3 for c in job['assessment']['criteria']))
+
     def test_duplicates_cache_entire_job(self):
         job, transport = self.run_job()
         again = self.store.submit(source(), 'jev-1.14.0')

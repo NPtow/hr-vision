@@ -96,6 +96,17 @@ class AssessmentJobsTest(unittest.TestCase):
             self.assertEqual(result['error'], 'transcript_format_unsupported')
         self.assertEqual(self.requests, [])
 
+    def test_provider_inline_speaker_is_preserved_and_uniquely_bound(self):
+        transcript = 'WEBVTT\n\n00:00:01.000 --> 00:00:05.000\nNikita: Что вы сделали?\n\n00:00:05.000 --> 00:00:12.000\nElena: Я уточнила задачу.\n'
+        chunks = jobs.assessment_chunks(transcript, 'Иванова Елена')
+        self.assertEqual([r['speakerName'] for r in chunks], ['Nikita', 'Кандидат'])
+        self.assertEqual(chunks[1]['text'], 'Elena: Я уточнила задачу.')
+        self.assertEqual(chunks[1]['startMs'], 5000)
+        unrelated = jobs.assessment_chunks(transcript, 'Анна Петрова')
+        self.assertEqual(unrelated[1]['speakerName'], 'Elena')
+        ambiguous = transcript + '\n00:00:12.000 --> 00:00:15.000\nЕлена: Другая участница.\n'
+        self.assertNotIn('Кандидат', [r['speakerName'] for r in jobs.assessment_chunks(ambiguous, 'Иванова Елена')])
+
 
 if __name__ == '__main__':
     unittest.main()

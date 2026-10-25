@@ -19,6 +19,34 @@ from interview_assistant import transcript_turns, search_chunks
 from structured_model import NoRedirect, scan
 
 
+def assessment_chunks(transcript, candidate_name):
+    """Keep source speaker labels and bind a unique name match to the candidate.
+
+    Some provider VTT cues use `Elena: text` rather than <v Elena>. Never infer
+    identity from voice, writing style, gender or what someone claims in a reply.
+    A plain/transliterated name match is allowed only when it is unambiguous.
+    """
+    alphabet = dict(zip('абвгдеёжзийклмнопрстуфхцчшщъыьэюя',
+        ('a','b','v','g','d','e','e','zh','z','i','y','k','l','m','n','o','p','r','s','t','u','f','kh','ts','ch','sh','shch','','y','','e','yu','ya')))
+    def tokens(value):
+        normalized = ''.join(alphabet.get(char, char) for char in value.lower())
+        return set(re.findall('[a-z]+', normalized))
+    turns = transcript_turns(transcript)
+    for turn in turns:
+        if not turn['speakerName']:
+            prefix = re.match(r"^([A-Za-zА-Яа-яЁё][A-Za-zА-Яа-яЁё .'-]{0,79}):\s+", turn['text'])
+            if prefix:
+                turn['speakerName'] = prefix[1]
+    name = tokens(candidate_name)
+    labels = {turn['speakerName'] for turn in turns if turn['speakerName']}
+    matches = [label for label in labels if tokens(label) and tokens(label) <= name]
+    if len(matches) == 1:
+        for turn in turns:
+            if turn['speakerName'] == matches[0]:
+                turn['speakerName'] = 'Кандидат'
+    return search_chunks(turns)
+
+
 def init(db):
     db.execute('''CREATE TABLE IF NOT EXISTS as_bindings (
       id TEXT PRIMARY KEY, kind TEXT NOT NULL, owner_id TEXT NOT NULL,
@@ -166,6 +194,9 @@ class Bridge:
                 transcript = profile['transcriptText']
                 recording_id = str(recording.get('id') or '0')
                 source_hash = interview_assessment.recording_fingerprint(profile, 0)
+                candidate_name = person.get('name', '')
+            else:
+                candidate_name = selection.person(db, row['owner_id']).get('name', '')
         if row['kind'] == 'candidate':
             cid = row['owner_id']
             def authorize(db):
@@ -180,7 +211,7 @@ class Bridge:
             source_hash = selection.digest([revision, recording_id, hashlib.sha256(transcript.encode()).hexdigest()])
         # Use the same timing/parser as the existing source player. No CV/contacts
         # are sent; filenames and external source links never enter the model.
-        chunks = search_chunks(transcript_turns(transcript))
+        chunks = assessment_chunks(transcript, candidate_name)
         if not chunks:
             raise Problem('transcript_format_unsupported', 422)
         clean = []
