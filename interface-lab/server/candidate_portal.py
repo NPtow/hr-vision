@@ -704,6 +704,8 @@ class CandidatePortal:
             db.execute('INSERT INTO cp_consent_log VALUES (?,?,?,?,?,?)',
                        (uid('consent'), cid, iso(now()), int(profile['consentReuse']),
                         int(profile['autoApprove']), 'candidate-preferences-v1'))
+        import selection
+        selection.reconcile_nominations(db, self, cid)
 
     def resume_metadata(self, db, cid):
         row = db.execute('SELECT filename,mime,length(content),extracted,uploaded_at FROM cp_resumes WHERE candidate_id=?', (cid,)).fetchone()
@@ -1024,6 +1026,8 @@ class CandidatePortal:
         if self.notifications:
             self.notifications.set_email(db, cid, email, verified=False)
         self.event(db, cid, 'candidate.registered', cid)
+        import selection
+        selection.reconcile_nominations(db, self, cid)
         return cid
 
     def capability_request(self, path, body, ip):
