@@ -1,6 +1,8 @@
 import { defineConfig } from 'vite';
 import { collectStaticCopy } from './scripts/replay-static-copy.mjs';
 export default defineConfig({
+  // Storybook chooses public assets by target; telemetry must not copy lab media into service.
+  publicDir: false,
   define: {
     __HR_RELEASE__: JSON.stringify(process.env.GITHUB_SHA ?? process.env.HR_RELEASE ?? 'development'),
     __HR_REPLAY_STATIC_TEXT__: JSON.stringify(collectStaticCopy(['src/AgencyProduct.stories.tsx','corporate-demo/src/main.tsx'])),
