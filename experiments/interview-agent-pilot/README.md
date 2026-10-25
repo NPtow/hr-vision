@@ -5,6 +5,9 @@ CLIProxyAPI chat model, and HR Vision's deployed Jev transcript search adapter.
 AWS credentials are not needed. This is self-hosted Strands, not the managed
 AgentCore service.
 
+The first live YC run is complete: see [acceptance results](./acceptance.md),
+[raw receipts](./acceptance-20261025.json), and the [UI integration plan](./integration-plan.md).
+
 Only synthetic fixtures are available. No production database, candidate workflow,
 public route, or frontend is changed. The package supplies the agent loop, tool
 selection, context management and durable conversation snapshots. Our code provides
