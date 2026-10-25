@@ -1,0 +1,35 @@
+[Unit]
+Description=HR material catalogue and collector API
+After=network-online.target hr-vision-zoom.service hr-vision-normalizer.service
+Wants=network-online.target
+
+[Service]
+User=hr-vision
+Group=hr-vision
+WorkingDirectory=/opt/hr-vision-materials/services/core/current
+EnvironmentFile=/etc/hr-vision-services/core.env
+ExecStart=/opt/hr-vision-materials/venv/bin/python /opt/hr-vision-materials/services/core/current/run.py core
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=90
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/hr-vision-api
+InaccessiblePaths=-/etc/hr-vision-services/zoom.env
+CapabilityBoundingSet=
+AmbientCapabilities=
+MemoryMax=256M
+MemorySwapMax=0
+CPUQuota=100%
+TasksMax=128
+LimitNOFILE=1024
+StandardOutput=journal
+StandardError=journal
+LogRateLimitIntervalSec=30s
+LogRateLimitBurst=200
+
+[Install]
+WantedBy=multi-user.target

@@ -189,6 +189,10 @@ class EmployerRoutes:
                 return {'ok': True}, {'Set-Cookie': access.logout(db, headers)}
         if route == '/room' and method == 'POST':
             return self._room(headers, body), {}
+        if route in ('/call-provider', '/call-connected') and method == 'POST':
+            return self._call_provider(headers, body, connected=route == '/call-connected'), {}
+        if route == '/call-reconcile' and method == 'POST':
+            return self._reconcile_call(headers, body), {}
         if route == '/materials' and method == 'POST':
             return self._materials(headers, body), {}
         if route == '/screening/materials' and method == 'POST':
@@ -535,6 +539,20 @@ class EmployerRoutes:
         self.portal.workflow_events(db, result['events'])
         store.reject(db, wid, aid, request_id=body.get('requestId'), expected_revision=body.get('vacancyRevision'))
 
+    def _call_provider(self, headers, body, *, connected=False):
+        with self.lock, self.connect() as db:
+            principal, app, _ = self._identity(db, headers, body)
+            meeting = self._meeting(db, app, body, current=True)
+        check = self._access_check(headers, body, principal, app, meeting['id'])
+        if connected:
+            return self.portal.call_connected(app['candidateId'], app['applicationId'],
+                                              meeting['id'], access_check=check)
+        self.portal.select_call_provider(app['candidateId'], app['applicationId'], body.get('provider'),
+            'workspace:' + principal['workspaceId'], meeting_id=meeting['id'], access_check=check)
+        with self.lock, self.connect() as db:
+            check(db)
+            return self._state(db, principal, app['vacancyId'])
+
     def _room(self, headers, body):
         require(body.get('consent') is True, 'Подтвердите запись разговора.', 400)
         with self.lock, self.connect() as db:
@@ -543,6 +561,7 @@ class EmployerRoutes:
             require(meeting['status'] in ('confirmed', 'live'), 'Кандидат должен подтвердить время встречи.', 409)
         result = self.portal.join(app['candidateId'], app['applicationId'], True, owner=True,
               owner_name=principal['name'], owner_id='manager', meeting_id=meeting['id'],
+              consent_actor_id='employer:' + principal['accountId'],
               access_check=self._access_check(headers, body, principal, app, meeting['id']))
         with self.lock, self.connect() as db:
             latest, current, _ = self._identity(db, headers, body)
@@ -569,6 +588,18 @@ class EmployerRoutes:
             if meeting['status'] != 'completed':
                 store.bump_revision(db, latest['workspaceId'], app['vacancyId'])
             return self._state(db, latest, app['vacancyId'])
+
+    def _reconcile_call(self, headers, body):
+        with self.lock, self.connect() as db:
+            principal, app, _ = self._identity(db, headers, body, include_unapproved=True)
+            meeting = self._meeting(db, app, body)
+        check = self._access_check(headers, body, principal, app, meeting['id'], finish=True)
+        result = self.portal.reconcile_zoom_end(app['candidateId'], app['applicationId'], meeting['id'], access_check=check)
+        with self.lock, self.connect() as db:
+            check(db)
+            if result['completed'] and meeting['status'] != 'completed':
+                store.bump_revision(db, principal['workspaceId'], app['vacancyId'])
+        return result
 
     def _materials(self, headers, body, *, screening=False):
         with self.lock, self.connect() as db:

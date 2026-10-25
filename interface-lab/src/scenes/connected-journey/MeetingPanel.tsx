@@ -4,9 +4,62 @@ import type { DailyCall } from '@daily-co/daily-js';
 import { Button } from '../../components/ui/button';
 import { Check, PhoneOff, Video } from 'lucide-react';
 import { dateTime, request, type Journey, type Person, type SharedState } from './api';
+import { ZoomMeeting } from '../../components/call/ZoomMeeting';
+import { startZoomSessionReconcile } from '../../components/call/zoom-session-reconcile';
+import { CallProviderSelector } from '../../components/call/CallProviderSelector';
+import type { CallCredentials } from '../../components/call/call-provider';
 
 type Turn = { id: string; text: string; seconds: number };
-export function MeetingPanel({ person, journey, onComplete, onCallChange, onReschedule }: { person: Person; journey: Journey; onComplete?: () => void; onCallChange: (open: boolean) => void; onReschedule?: () => void }) {
+type MeetingPanelProps = { person: Person; journey: Journey; onComplete?: () => void; onCallChange: (open: boolean) => void; onReschedule?: () => void };
+
+export function MeetingPanel(props: MeetingPanelProps) {
+  const { person, journey } = props;
+  const meeting = person.meeting!;
+  return <>
+    {journey.state?.mode === 'employer' && journey.state.actor === 'manager' && ['pending', 'confirmed', 'live'].includes(meeting.status) && <CallProviderSelector
+      value={meeting.callProvider || 'daily'} locked={meeting.callProviderLocked || meeting.status === 'live'} options={meeting.callProviderOptions}
+      disabled={journey.busy} onChange={provider => { void journey.setCallProvider(person, provider); }}/>}
+    {meeting.callProvider === 'zoom' ? <ZoomMeetingPanel key={`${meeting.id}:zoom`} {...props}/> : <DailyMeetingPanel key={`${meeting.id}:daily`} {...props}/>}
+  </>;
+}
+
+function ZoomMeetingPanel({ person, journey, onComplete, onCallChange, onReschedule }: MeetingPanelProps) {
+  const { state, token, act, busy } = journey;
+  const reconcile = useRef<(() => void) | null>(null);
+  useEffect(() => () => reconcile.current?.(), []);
+  const m = person.meeting!;
+  const manager = state!.actor === 'manager';
+  const identity = { candidate: person.id, meetingId: m.id, generation: state!.generation };
+  const hostIdentity = { ...identity, vacancyId: person.vacancyId || state!.vacancy.id, applicationId: person.applicationId };
+  return <section className="cj-meeting">
+    {['confirmed', 'live'].includes(m.status) ? <>
+      <ZoomMeeting title={manager ? person.name : `${state!.vacancy.company} · ${state!.actorName}`} subtitle={dateTime(m.start)}
+        unavailable={!(m.videoConfigured ?? state!.videoConfigured) ? 'Видеовстреча пока недоступна.' : busy ? 'Сохраняем изменения встречи…' : undefined}
+        join={signal => request<CallCredentials>('room', token, { ...identity, consent: true }, signal)}
+        onOpenChange={open => { if (open) reconcile.current?.(); onCallChange(open); }}
+        onJoined={async () => { await request('action', token, { ...identity, action: 'meeting.joined' }); await journey.refresh(); }}
+        onLeft={() => { void journey.refresh(); }}
+        host={manager && state!.mode === 'employer' ? {
+          connected: signal => request('employer/call-connected', token, hostIdentity, signal),
+          left: () => {
+            void journey.refresh(); reconcile.current?.();
+            reconcile.current = startZoomSessionReconcile({
+              request: signal => request('employer/call-reconcile', token, hostIdentity, signal),
+              onCompleted: () => { void journey.refresh(); onComplete?.(); },
+            });
+          },
+        } : undefined}/>
+      {m.status === 'confirmed' && <Button variant="ghost" disabled={busy} onClick={async () => { if (manager) onReschedule?.(); else if (await act('meeting.cancel', person.id, { meetingId: m.id })) onReschedule?.(); }}>Нужно другое время</Button>}
+    </> : <>
+      <div className="cj-section-heading"><div><span className="cj-kicker">{manager ? person.name : state!.vacancy.company}</span><h1>{dateTime(m.start)}</h1></div></div>
+      {m.status === 'pending' && <div className="cj-actions">{manager && <Button variant="outline" disabled={busy} onClick={onReschedule}>Перенести встречу</Button>}{!manager && <Button disabled={busy} onClick={() => act('meeting.confirm', person.id, { meetingId: m.id })}>Подтвердить встречу<Check size={15}/></Button>}<Button variant={manager ? 'outline' : 'ghost'} disabled={busy} onClick={async () => { if (await act('meeting.cancel', person.id, { meetingId: m.id })) onReschedule?.(); }}>{manager ? 'Отменить приглашение' : 'Нужно другое время'}</Button></div>}
+      {m.status === 'cancelled' && <><p>Предыдущее время освобождено.</p><Button onClick={onReschedule}>{manager ? 'Выбрать новое время' : 'Изменить расписание'}</Button></>}
+      {m.status === 'completed' && <><p>Встреча завершена</p>{manager && person.feedback && <Button onClick={onComplete}>Открыть разбор</Button>}</>}
+    </>}
+  </section>;
+}
+
+function DailyMeetingPanel({ person, journey, onComplete, onCallChange, onReschedule }: MeetingPanelProps) {
   const { state, token, act, busy, setError } = journey;
   const m = person.meeting!;
   const manager = state!.actor === 'manager';
@@ -68,7 +121,11 @@ export function MeetingPanel({ person, journey, onComplete, onCallChange, onResc
     const id = ++attempt.current;
     setOpening(true); setOpened(true); setCallError(''); setMediaStatus(''); setError(''); ending.current = false;
     try {
-      const room = await request<{ url: string; token: string }>('room', token, { ...identity, consent });
+      const room = await request<CallCredentials>('room', token, { ...identity, consent });
+      if (room.provider === 'zoom') {
+        void journey.refresh();
+        throw new Error('Сервис встречи изменился. Подключитесь ещё раз.');
+      }
       const { default: DailyIframe } = await import('@daily-co/daily-js');
       if (!alive.current || attempt.current !== id) return;
       if (!mount.current) await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
@@ -134,8 +191,8 @@ export function MeetingPanel({ person, journey, onComplete, onCallChange, onResc
     {['confirmed', 'live'].includes(m.status) && <>
       <label className="cj-check"><input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)}/><span>Согласен на запись и расшифровку встречи. Материалы доступны участникам.</span></label>
       <div className="cj-actions"><Button disabled={!consent || opening || busy} onClick={open}><Video size={16}/>{opening ? 'Подключаем…' : live ? 'Вернуться во встречу' : 'Войти в видеовстречу'}</Button>{m.status === 'confirmed' && <Button variant="ghost" disabled={busy} onClick={async () => { if (manager) onReschedule?.(); else if (await act('meeting.cancel', person.id, { meetingId: m.id })) onReschedule?.(); }}>Нужно другое время</Button>}</div>
-      {!state!.videoConfigured && <p className="cj-info">Видеосервис ещё не подключён.</p>}
-      {manager && !state!.videoConfigured && m.status === 'confirmed' && <details className="cj-test-controls"><summary>Проверка следующих экранов</summary><p>В тесте можно пропустить звонок. Записи и расшифровки у такой встречи не будет.</p><Button variant="outline" disabled={busy} onClick={() => finish(true)}>Пропустить звонок в тесте</Button></details>}
+      {!(m.videoConfigured ?? state!.videoConfigured) && <p className="cj-info">Видеосервис ещё не подключён.</p>}
+      {manager && !(m.videoConfigured ?? state!.videoConfigured) && m.status === 'confirmed' && <details className="cj-test-controls"><summary>Проверка следующих экранов</summary><p>В тесте можно пропустить звонок. Записи и расшифровки у такой встречи не будет.</p><Button variant="outline" disabled={busy} onClick={() => finish(true)}>Пропустить звонок в тесте</Button></details>}
     </>}
     {m.status === 'cancelled' && <><p>Предыдущее время освобождено.</p><Button onClick={onReschedule}>{manager ? 'Выбрать новое время' : 'Изменить расписание'}</Button></>}
     {m.status === 'completed' && manager && person.feedback && <Button onClick={onComplete}>Открыть разбор</Button>}

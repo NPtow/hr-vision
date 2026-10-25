@@ -66,6 +66,26 @@ class ReceiverTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'public file'):
             r.unpack(a, s, 'mockups')
 
+    def test_accepts_only_exact_zoom_public_html(self):
+        for target, name, accepted in (
+            ('service', 'call/zoom/client.html', True),
+            ('service', 'call/zoom/left.html', True),
+            ('mockups', 'call/zoom/client.html', True),
+            ('mockups', 'call/zoom/left.html', True),
+            ('service', 'call/zoom/admin.html', False),
+            ('service', 'prototypes/zoom-meeting-sdk/web/client.html', False),
+        ):
+            def add_client(manifest, files):
+                files['ui/' + name] = b'<html/>'
+                manifest['files']['ui/' + name] = r.digest(files['ui/' + name])
+            with self.subTest(target=target, name=name):
+                archive, stage, manifest = self.bundle(target, mutate=add_client)
+                if accepted:
+                    self.assertEqual(r.unpack(archive, stage, target), manifest)
+                else:
+                    with self.assertRaisesRegex(ValueError, 'public file'):
+                        r.unpack(archive, stage, target)
+
     def assert_runtime_imports(self, server, runtime):
         """Check absolute/relative imports and package initializers at any depth."""
         def local_paths(module):
@@ -138,9 +158,14 @@ class ReceiverTest(unittest.TestCase):
         self.assertEqual(r.PRE_OBSERVABILITY_RUNTIME - r.PRE_CALL_CLEANUP_RUNTIME, {'call_cleanup.py', 'media_runtime.py'})
         self.assertEqual(r.PRE_CANDIDATE_CALENDAR_RUNTIME - r.PRE_OBSERVABILITY_RUNTIME, {'observability.py'})
         self.assertEqual(r.PRE_INTERVIEW_ASSISTANT_RUNTIME - r.PRE_CANDIDATE_CALENDAR_RUNTIME, {'candidate_availability.py'})
-        self.assertEqual(r.RUNTIME - r.PRE_INTERVIEW_ASSISTANT_RUNTIME, {'interview_assistant.py'})
+        self.assertEqual(r.PRE_MATERIALS_RUNTIME - r.PRE_INTERVIEW_ASSISTANT_RUNTIME, {'interview_assistant.py'})
+        self.assertEqual(r.PRE_SERVICES_RUNTIME - r.PRE_MATERIALS_RUNTIME, r.MATERIALS_RUNTIME)
+        self.assertEqual(r.SERVICES_ONLY_RUNTIME - r.PRE_SERVICES_RUNTIME, r.SERVICES_RUNTIME)
+        self.assertEqual(r.ZOOM_ONLY_RUNTIME - r.PRE_ZOOM_RUNTIME, r.ZOOM_RUNTIME)
+        self.assertEqual(r.RUNTIME, r.SERVICES_ONLY_RUNTIME | r.ZOOM_ONLY_RUNTIME)
+        self.assertEqual(len(r.MATERIALS_RUNTIME), 9)
         for runtime in (r.LEGACY_RUNTIME, r.BOT_RUNTIME, r.PRE_IMPORT_RUNTIME, r.PRE_OUTREACH_RUNTIME,
-                        r.PRE_ACCESS_RUNTIME, r.PRE_CV_RUNTIME, r.PRE_POOLED_RUNTIME, r.PRE_EMPLOYER_TELEGRAM_RUNTIME, r.PRE_REMINDERS_RUNTIME, r.PRE_MEETING_NOTICES_RUNTIME, r.PRE_MEETING_LAB_RUNTIME, r.PRE_RECRUITER_COACH_RUNTIME, r.PRE_CALL_CLEANUP_RUNTIME, r.PRE_OBSERVABILITY_RUNTIME, r.PRE_CANDIDATE_CALENDAR_RUNTIME, r.PRE_INTERVIEW_ASSISTANT_RUNTIME, r.RUNTIME):
+                        r.PRE_ACCESS_RUNTIME, r.PRE_CV_RUNTIME, r.PRE_POOLED_RUNTIME, r.PRE_EMPLOYER_TELEGRAM_RUNTIME, r.PRE_REMINDERS_RUNTIME, r.PRE_MEETING_NOTICES_RUNTIME, r.PRE_MEETING_LAB_RUNTIME, r.PRE_RECRUITER_COACH_RUNTIME, r.PRE_CALL_CLEANUP_RUNTIME, r.PRE_OBSERVABILITY_RUNTIME, r.PRE_CANDIDATE_CALENDAR_RUNTIME, r.PRE_INTERVIEW_ASSISTANT_RUNTIME, r.PRE_MATERIALS_RUNTIME, r.PRE_ZOOM_RUNTIME, r.SERVICES_ONLY_RUNTIME, r.ZOOM_ONLY_RUNTIME, r.RUNTIME):
             with self.subTest(count=len(runtime)):
                 a, s, m = self.bundle('service', runtime=runtime)
                 self.assertEqual(r.unpack(a, s, 'service'), m)
@@ -150,6 +175,20 @@ class ReceiverTest(unittest.TestCase):
             a, staging, _ = self.bundle('service', runtime=r.RUNTIME - {module})
             with self.assertRaises(ValueError):
                 r.unpack(a, staging, 'service')
+
+    def test_partial_materials_runtime_is_rejected(self):
+        for module in r.MATERIALS_RUNTIME:
+            with self.subTest(module=module):
+                a, stage, _ = self.bundle('service', runtime=r.RUNTIME - {module})
+                with self.assertRaisesRegex(ValueError, 'Incomplete API'):
+                    r.unpack(a, stage, 'service')
+
+    def test_partial_zoom_runtime_is_rejected(self):
+        for module in r.ZOOM_RUNTIME:
+            with self.subTest(module=module):
+                archive, stage, _ = self.bundle('service', runtime=r.RUNTIME - {module})
+                with self.assertRaisesRegex(ValueError, 'Incomplete API'):
+                    r.unpack(archive, stage, 'service')
 
     def test_partial_recruiter_layout_is_rejected(self):
         for module in r.PRE_ACCESS_RUNTIME - r.BOT_RUNTIME:
@@ -234,7 +273,8 @@ class ReceiverTest(unittest.TestCase):
                 patch.object(r, 'current_branch_sha', return_value=m['sha']), \
                 patch.object(r, 'guard_and_backup') as backup, \
                 patch.object(r, 'restart_api') as restart, \
-                patch.object(r, 'check_origin', side_effect=RuntimeError('unhealthy')) as health:
+                patch.object(r, 'check_origin', side_effect=RuntimeError('unhealthy')) as health, \
+                patch.object(r, 'pause_materials', return_value=[]):
             with self.assertRaisesRegex(RuntimeError, 'unhealthy'):
                 r.activate(s, m)
             backup.assert_called_once_with(m['release'])
@@ -286,6 +326,17 @@ class ReceiverTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Unexpected API file'):
             r.unpack(a, s, 'service')
 
+    def test_materials_dependencies_config_docs_and_tests_are_not_runtime(self):
+        for name in ('requirements-materials.txt', 'requirements-materials.lock', 'requirements-api-extras.lock',
+                     'MATERIALS.md', 'test_materials_worker.py', 'materials.env'):
+            def mutate(m, files):
+                files['api/' + name] = b'not runtime'
+                m['files']['api/' + name] = r.digest(files['api/' + name])
+            with self.subTest(name=name):
+                a, stage, _ = self.bundle('service', mutate=mutate)
+                with self.assertRaisesRegex(ValueError, 'Unexpected API file'):
+                    r.unpack(a, stage, 'service')
+
     def test_service_package_allowlist_stays_closed(self):
         def mutate(m, f):
             # The operator patch generator and private browser config are not API runtime.
@@ -305,8 +356,18 @@ class ReceiverTest(unittest.TestCase):
             source = fixture / 'server' / name
             source.parent.mkdir(parents=True, exist_ok=True)
             source.write_text('# synthetic runtime fixture\n')
+        # Dependency installation/configuration is outside the public release
+        # producer. Even adjacent files must not leak into an API archive.
+        non_runtime = ('requirements-materials.txt', 'requirements-materials.lock', 'requirements-api-extras.lock',
+                       'MATERIALS.md', 'test_materials_worker.py', 'materials.env')
+        for name in non_runtime:
+            (fixture / 'server' / name).write_text('must not be packaged\n')
         for name in ('index.html', 'iframe.html'):
             (fixture / 'storybook-static' / name).write_text('<html/>')
+        zoom_client = fixture / 'storybook-static' / 'call' / 'zoom'
+        zoom_client.mkdir(parents=True)
+        for name, body in (('client.html', '<html/>'), ('left.html', '<html/>'), ('client.js', '// client'), ('client.css', 'body {}')):
+            (zoom_client / name).write_text(body)
         entries = {f'hr-vision-product--{name}': {} for name in ('start', 'manager', 'candidate')}
         (fixture / 'storybook-static' / 'index.json').write_text(json.dumps({'entries': entries}))
         script = Path(__file__).resolve().parents[2] / 'scripts' / 'package-release.mjs'
@@ -318,6 +379,17 @@ class ReceiverTest(unittest.TestCase):
         stage.mkdir()
         manifest = r.unpack(fixture / 'release.tgz', stage, 'service')
         self.assertEqual({p[4:] for p in manifest['files'] if p.startswith('api/')}, r.RUNTIME)
+        self.assertTrue(all('api/' + name not in manifest['files'] for name in non_runtime))
+        self.assertTrue({'ui/call/zoom/client.html', 'ui/call/zoom/left.html', 'ui/call/zoom/client.js', 'ui/call/zoom/client.css'} <= manifest['files'].keys())
+
+        # A new SDK frame does not allow other HTML or PoC screens to ship.
+        unexpected = zoom_client / 'admin.html'
+        unexpected.write_text('<html/>')
+        invalid = subprocess.run(['node', str(script)], cwd=fixture, env=environment,
+                                 capture_output=True, text=True, timeout=30)
+        self.assertNotEqual(invalid.returncode, 0)
+        self.assertIn('Unexpected public file: call/zoom/admin.html', invalid.stderr)
+        unexpected.unlink()
 
         # The operator lives in manager?workspace=outreach, never a fourth public story.
         entries['hr-vision-product--outreach'] = {}
@@ -326,6 +398,20 @@ class ReceiverTest(unittest.TestCase):
                                  capture_output=True, text=True, timeout=30)
         self.assertNotEqual(invalid.returncode, 0)
         self.assertIn('exactly start, manager and candidate', invalid.stderr)
+
+        # Shared browser-assets are copied into mockups too; the same two SDK
+        # pages may ship, but the release must still contain no API files.
+        (fixture / 'storybook-static' / 'index.json').write_text(json.dumps({
+            'entries': {'hr-vision-employer-menu--gallery': {}},
+        }))
+        mockup_environment = {**environment, 'HR_BUILD_TARGET': 'mockups', 'GITHUB_REF_NAME': 'codex/mockups'}
+        subprocess.run(['node', str(script)], cwd=fixture, env=mockup_environment, check=True,
+                       capture_output=True, text=True, timeout=30)
+        mockup_stage = self.root / 'producer-mockup-stage'
+        mockup_stage.mkdir()
+        mockup_manifest = r.unpack(fixture / 'release.tgz', mockup_stage, 'mockups')
+        self.assertTrue({'ui/call/zoom/client.html', 'ui/call/zoom/left.html'} <= mockup_manifest['files'].keys())
+        self.assertFalse(any(name.startswith('api/') for name in mockup_manifest['files']))
 
     def test_rejects_sensitive_public_file(self):
         def mutate(m, f):
@@ -398,13 +484,35 @@ class ReceiverTest(unittest.TestCase):
             db.execute('UPDATE scenario_variants SET body=?', (json.dumps({'candidates': {}}),))
             r.guard_live_interviews(db)
 
+    def test_material_units_drain_and_resume_in_order(self):
+        states = iter(('loaded', 'active', 'inactive') * len(r.MATERIALS_UNITS))
+        def systemctl(argv, **kwargs):
+            if argv[1] in ('show', 'is-active'):
+                return subprocess.CompletedProcess(argv, 0, stdout=next(states))
+            return subprocess.CompletedProcess(argv, 0)
+        with patch.object(r.subprocess, 'run', side_effect=systemctl) as run:
+            active = r.pause_materials()
+            self.assertEqual(active, list(r.MATERIALS_UNITS))
+            r.resume_materials(active)
+        commands = [call.args[0][1:] for call in run.call_args_list]
+        self.assertEqual([item for item in commands if item[0] == 'stop'],
+                         [['stop', unit] for unit in r.MATERIALS_UNITS])
+        self.assertEqual([item for item in commands if item[0] == 'start'],
+                         [['start', unit] for unit in reversed(r.MATERIALS_UNITS)])
+
+    def test_uninstalled_material_units_do_not_trigger_systemd_mutations(self):
+        with patch.object(r.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, stdout='not-found')) as run:
+            self.assertEqual(r.pause_materials(), [])
+            r.resume_materials([])
+        self.assertEqual([call.args[0][1] for call in run.call_args_list], ['show'] * len(r.MATERIALS_UNITS))
+
     def test_failed_service_health_restores_both_pointers(self):
         a, s, m = self.bundle('service'); r.unpack(a, s, 'service')
         base = self.root / 'site'; base.mkdir(); (base / 'current').symlink_to('releases/old-ui')
         api = self.root / 'api'; api.mkdir(); (api / 'current').symlink_to('releases/old-api')
         self.runtime(api / 'releases' / 'old-api', r.PRE_MEETING_NOTICES_RUNTIME)
         database = self.outbox()
-        with patch.dict(r.BASES, service=base), patch.object(r, 'API', api), patch.object(r, 'DATABASE', database), patch.object(r, 'stop_api'), patch.object(r, 'current_branch_sha', return_value=m['sha']), patch.object(r, 'guard_and_backup') as backup, patch.object(r, 'restart_api') as restart, patch.object(r, 'check_origin', side_effect=RuntimeError('unhealthy')):
+        with patch.dict(r.BASES, service=base), patch.object(r, 'API', api), patch.object(r, 'DATABASE', database), patch.object(r, 'stop_api'), patch.object(r, 'current_branch_sha', return_value=m['sha']), patch.object(r, 'guard_and_backup') as backup, patch.object(r, 'restart_api') as restart, patch.object(r, 'check_origin', side_effect=RuntimeError('unhealthy')), patch.object(r, 'pause_materials', return_value=[]):
             with self.assertRaisesRegex(RuntimeError, 'unhealthy'): r.activate(s, m)
             backup.assert_called_once_with(m['release'])
             self.assertEqual(restart.call_count, 2)
@@ -444,6 +552,7 @@ class ReceiverTest(unittest.TestCase):
                 stack.enter_context(patch.object(r, key, value))
             stack.enter_context(patch.object(r, 'current_branch_sha', return_value=manifest['sha']))
             stack.enter_context(patch.object(r, 'guard_and_backup'))
+            stack.enter_context(patch.object(r, 'pause_materials', return_value=[]))
             stop = stack.enter_context(patch.object(r, 'stop_api'))
             restart = stack.enter_context(patch.object(r, 'restart_api'))
             health = stack.enter_context(patch.object(r, 'check_origin'))
@@ -513,6 +622,156 @@ class ReceiverTest(unittest.TestCase):
                 with self.subTest(state=state), self.assertRaisesRegex(ValueError, 'Call cleanup schema'):
                     r.guard_outbox_runtime(db, prior)
                 r.guard_outbox_runtime(db, current)
+
+    def test_materials_sources_block_old_runtime_even_when_terminal_or_disabled(self):
+        prior = self.runtime(self.root / 'before-materials', r.PRE_MATERIALS_RUNTIME)
+        current = self.runtime(self.root / 'with-materials', r.RUNTIME)
+        with sqlite3.connect(':memory:') as db:
+            r.guard_outbox_runtime(db, prior)
+            db.execute('CREATE TABLE media_sources (id TEXT, state TEXT, metadata TEXT)')
+            r.guard_outbox_runtime(db, prior)  # Feature-off empty schema is reversible.
+            for state, metadata in (('pending', '{}'), ('ready', '{}'),
+                                    ('unsupported', '{"capture_disabled":true}')):
+                db.execute('DELETE FROM media_sources')
+                db.execute('INSERT INTO media_sources VALUES (?,?,?)', ('source', state, metadata))
+                before = db.execute('SELECT * FROM media_sources').fetchall()
+                with self.subTest(state=state), self.assertRaisesRegex(ValueError, 'Materials catalog.*forward recovery'):
+                    r.guard_outbox_runtime(db, prior)
+                self.assertEqual(db.execute('SELECT * FROM media_sources').fetchall(), before)
+                r.guard_outbox_runtime(db, current)
+
+    def test_core_source_data_requires_services_runtime(self):
+        prior = self.runtime(self.root / 'before-services', r.PRE_SERVICES_RUNTIME)
+        current = self.runtime(self.root / 'with-services', r.RUNTIME)
+        for table in ('portal_materials_outbox', 'core_material_receipts', 'core_material_channels', 'core_material_asset_bindings'):
+            with self.subTest(table=table), sqlite3.connect(':memory:') as db:
+                r.guard_outbox_runtime(db, prior)
+                db.execute('CREATE TABLE ' + table + ' (id TEXT)')
+                r.guard_outbox_runtime(db, prior)
+                db.execute('INSERT INTO ' + table + ' VALUES (?)', ('durable',))
+                with self.assertRaisesRegex(ValueError, 'Core/source data.*forward recovery'):
+                    r.guard_outbox_runtime(db, prior)
+                r.guard_outbox_runtime(db, current)
+
+    def test_core_source_view_does_not_bypass_runtime_guard(self):
+        prior = self.runtime(self.root / 'before-services', r.PRE_SERVICES_RUNTIME)
+        with sqlite3.connect(':memory:') as db:
+            db.execute('CREATE VIEW portal_materials_outbox AS SELECT 1 WHERE 0')
+            with self.assertRaisesRegex(ValueError, 'Cannot verify core/source schema'):
+                r.guard_outbox_runtime(db, prior)
+
+    def test_materials_view_does_not_bypass_old_runtime_guard(self):
+        prior = self.runtime(self.root / 'before-materials', r.PRE_MATERIALS_RUNTIME)
+        with sqlite3.connect(':memory:') as db:
+            db.execute('CREATE VIEW media_sources AS SELECT 1 WHERE 0')
+            with self.assertRaisesRegex(ValueError, 'Cannot verify materials catalog schema'):
+                r.guard_outbox_runtime(db, prior)
+
+    def test_zoom_choices_require_zoom_runtime_before_and_after_room_creation(self):
+        prior = self.runtime(self.root / 'before-zoom', r.PRE_ZOOM_RUNTIME)
+        current = self.runtime(self.root / 'with-zoom', r.RUNTIME)
+        with sqlite3.connect(':memory:') as db:
+            r.guard_outbox_runtime(db, prior)
+            db.execute('CREATE TABLE cp_call_provider_choices (meeting_id TEXT, provider TEXT, state TEXT)')
+            r.guard_outbox_runtime(db, prior)
+            db.execute("INSERT INTO cp_call_provider_choices VALUES ('daily-meeting','daily','ready')")
+            r.guard_outbox_runtime(db, prior)
+            for state in ('selected', 'creating', 'ready'):
+                db.execute("DELETE FROM cp_call_provider_choices WHERE provider='zoom'")
+                db.execute("INSERT INTO cp_call_provider_choices VALUES ('zoom-meeting','zoom',?)", (state,))
+                before = db.execute('SELECT * FROM cp_call_provider_choices').fetchall()
+                with self.subTest(state=state), self.assertRaisesRegex(ValueError, 'Zoom meetings.*forward recovery'):
+                    r.guard_outbox_runtime(db, prior)
+                self.assertEqual(db.execute('SELECT * FROM cp_call_provider_choices').fetchall(), before)
+                r.guard_outbox_runtime(db, current)
+
+    def test_zoom_choices_schema_fails_closed_for_old_runtime(self):
+        prior = self.runtime(self.root / 'before-zoom', r.PRE_ZOOM_RUNTIME)
+        with sqlite3.connect(':memory:') as db:
+            db.execute('CREATE VIEW cp_call_provider_choices AS SELECT 1 WHERE 0')
+            with self.assertRaisesRegex(ValueError, 'Cannot verify call provider choices schema'):
+                r.guard_outbox_runtime(db, prior)
+            db.execute('DROP VIEW cp_call_provider_choices')
+            db.execute('CREATE TABLE cp_call_provider_choices (meeting_id TEXT)')
+            with self.assertRaisesRegex(ValueError, 'Cannot verify call provider choices schema'):
+                r.guard_outbox_runtime(db, prior)
+
+    def test_explicit_pre_zoom_rollback_restores_current_compatible_runtime(self):
+        with self.service_activation(incoming=r.PRE_ZOOM_RUNTIME, installed=r.RUNTIME) as (stage, m, base, api, database, stop, restart, health):
+            with sqlite3.connect(database) as db:
+                db.execute('CREATE TABLE cp_call_provider_choices (meeting_id TEXT, provider TEXT, state TEXT)')
+                db.execute("INSERT INTO cp_call_provider_choices VALUES ('preserved-meeting','zoom','selected')")
+            started = []
+            restart.side_effect = lambda: started.append(r.pointer(api))
+            with self.assertRaisesRegex(ValueError, 'Zoom meetings'):
+                r.activate(stage, m)
+            self.assertEqual(started, ['releases/old-api'])
+            self.assertEqual(stop.call_count, 2)
+            health.assert_not_called()
+            self.assertEqual(r.pointer(api), 'releases/old-api')
+            self.assertEqual(r.pointer(base), 'releases/old-ui')
+
+    def test_last_zoom_choice_after_failed_health_blocks_old_fallback(self):
+        with self.service_activation(installed=r.PRE_ZOOM_RUNTIME) as (stage, m, base, api, database, stop, restart, health):
+            health.side_effect = RuntimeError('unhealthy')
+            def stopped():
+                if stop.call_count == 2:
+                    with sqlite3.connect(database) as db:
+                        db.execute('CREATE TABLE cp_call_provider_choices (meeting_id TEXT, provider TEXT, state TEXT)')
+                        db.execute("INSERT INTO cp_call_provider_choices VALUES ('last-commit','zoom','creating')")
+            stop.side_effect = stopped
+            with self.assertRaisesRegex(RuntimeError, 'rollback refused.*Zoom meetings'):
+                r.activate(stage, m)
+            restart.assert_called_once()
+            self.assertEqual(r.pointer(api), 'releases/' + m['release'])
+            with sqlite3.connect(database) as db:
+                self.assertEqual(db.execute('SELECT * FROM cp_call_provider_choices').fetchall(), [('last-commit', 'zoom', 'creating')])
+
+    def test_compatible_zoom_fallback_keeps_provider_choices(self):
+        with self.service_activation(installed=r.RUNTIME) as (stage, m, base, api, database, stop, restart, health):
+            with sqlite3.connect(database) as db:
+                db.execute('CREATE TABLE cp_call_provider_choices (meeting_id TEXT, provider TEXT, state TEXT)')
+                db.execute("INSERT INTO cp_call_provider_choices VALUES ('preserved-meeting','zoom','ready')")
+            health.side_effect = RuntimeError('unhealthy')
+            with self.assertRaisesRegex(RuntimeError, '^unhealthy$'):
+                r.activate(stage, m)
+            self.assertEqual(stop.call_count, 2)
+            self.assertEqual(restart.call_count, 2)
+            self.assertEqual(r.pointer(api), 'releases/old-api')
+            self.assertEqual(r.pointer(base), 'releases/old-ui')
+            with sqlite3.connect(database) as db:
+                self.assertEqual(db.execute('SELECT * FROM cp_call_provider_choices').fetchall(), [('preserved-meeting', 'zoom', 'ready')])
+
+    def test_explicit_pre_materials_rollback_restores_current_compatible_runtime(self):
+        with self.service_activation(incoming=r.PRE_MATERIALS_RUNTIME, installed=r.RUNTIME) as (stage, m, base, api, database, stop, restart, health):
+            with sqlite3.connect(database) as db:
+                db.execute('CREATE TABLE media_sources (id TEXT)')
+                db.execute("INSERT INTO media_sources VALUES ('preserved-source')")
+            started = []
+            restart.side_effect = lambda: started.append(r.pointer(api))
+            with self.assertRaisesRegex(ValueError, 'Materials catalog'):
+                r.activate(stage, m)
+            self.assertEqual(started, ['releases/old-api'])
+            self.assertEqual(stop.call_count, 2)
+            health.assert_not_called()
+            self.assertEqual(r.pointer(api), 'releases/old-api')
+            self.assertEqual(r.pointer(base), 'releases/old-ui')
+
+    def test_last_materials_commit_after_failed_health_blocks_old_fallback(self):
+        with self.service_activation(installed=r.PRE_MATERIALS_RUNTIME) as (stage, m, base, api, database, stop, restart, health):
+            health.side_effect = RuntimeError('unhealthy')
+            def stopped():
+                if stop.call_count == 2:
+                    with sqlite3.connect(database) as db:
+                        db.execute('CREATE TABLE media_sources (id TEXT)')
+                        db.execute("INSERT INTO media_sources VALUES ('last-worker-commit')")
+            stop.side_effect = stopped
+            with self.assertRaisesRegex(RuntimeError, 'rollback refused.*Materials catalog'):
+                r.activate(stage, m)
+            restart.assert_called_once()
+            self.assertEqual(r.pointer(api), 'releases/' + m['release'])
+            with sqlite3.connect(database) as db:
+                self.assertEqual(db.execute('SELECT id FROM media_sources').fetchall(), [('last-worker-commit',)])
 
     def test_malformed_outbox_fails_closed_for_old_runtime(self):
         old = self.runtime(self.root / 'old', r.PRE_MEETING_NOTICES_RUNTIME)

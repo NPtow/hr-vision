@@ -1,0 +1,47 @@
+name: md-transcription
+
+x-service: &service
+  build: .
+  image: md-transcription:local
+  restart: unless-stopped
+  init: true
+  environment: &environment
+    TRANSCRIPTION_DATA_DIR: /var/lib/transcription
+    TRANSCRIPTION_API_KEYS: ${TRANSCRIPTION_API_KEYS:?Configure unique service keys}
+    TRANSCRIPTION_BROKER_URL: ${TRANSCRIPTION_BROKER_URL:-}
+    TRANSCRIPTION_ASR_URL: ${TRANSCRIPTION_ASR_URL:-}
+    TRANSCRIPTION_ASR_MODEL: ${TRANSCRIPTION_ASR_MODEL:-}
+    TRANSCRIPTION_ASR_API_KEY: ${TRANSCRIPTION_ASR_API_KEY:-}
+    TRANSCRIPTION_ASR_RESPONSE_FORMAT: ${TRANSCRIPTION_ASR_RESPONSE_FORMAT:-verbose_json}
+    TRANSCRIPTION_ALLOW_INSECURE_ASR_HTTP: ${TRANSCRIPTION_ALLOW_INSECURE_ASR_HTTP:-false}
+  volumes:
+    - transcription-data:/var/lib/transcription
+  read_only: true
+  tmpfs:
+    - /tmp:size=64m,mode=1777
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  stop_grace_period: 6m
+
+services:
+  api:
+    <<: *service
+    ports:
+      - "127.0.0.1:${TRANSCRIPTION_PORT:-8093}:8080"
+    command: [python, -m, md_transcription, api, --host, 0.0.0.0]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health/live', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+  worker:
+    <<: *service
+    profiles: [asr]
+    command: [python, -m, md_transcription, worker]
+  scheduler:
+    <<: *service
+    profiles: [asr]
+    command: [python, -m, md_transcription, beat]
+
+volumes:
+  transcription-data:

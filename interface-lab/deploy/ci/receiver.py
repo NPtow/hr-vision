@@ -48,12 +48,24 @@ PRE_CALL_CLEANUP_RUNTIME = PRE_RECRUITER_COACH_RUNTIME | {'recruiter_coach.py'}
 PRE_OBSERVABILITY_RUNTIME = PRE_CALL_CLEANUP_RUNTIME | {'call_cleanup.py', 'media_runtime.py'}
 PRE_CANDIDATE_CALENDAR_RUNTIME = PRE_OBSERVABILITY_RUNTIME | {'observability.py'}
 PRE_INTERVIEW_ASSISTANT_RUNTIME = PRE_CANDIDATE_CALENDAR_RUNTIME | {'candidate_availability.py'}
-RUNTIME = PRE_INTERVIEW_ASSISTANT_RUNTIME | {'interview_assistant.py'}
+PRE_MATERIALS_RUNTIME = PRE_INTERVIEW_ASSISTANT_RUNTIME | {'interview_assistant.py'}
+MATERIALS_RUNTIME = {
+    'materials_capture.py', 'materials_daily.py', 'materials_repository.py',
+    'materials_http.py', 'materials_storage.py', 'materials_transcripts.py',
+    'materials_worker.py', 'materials_runtime.py', 'materials_service.py',
+}
+PRE_SERVICES_RUNTIME = PRE_MATERIALS_RUNTIME | MATERIALS_RUNTIME
+SERVICES_RUNTIME = {'core_source_client.py', 'core_source_outbox.py', 'zoom_api_client.py'}
+PRE_ZOOM_RUNTIME = PRE_SERVICES_RUNTIME
+ZOOM_RUNTIME = {'call_providers.py', 'zoom_media.py', 'materials_zoom.py', 'zoom_recording_retention.py'}
+SERVICES_ONLY_RUNTIME = PRE_SERVICES_RUNTIME | SERVICES_RUNTIME
+ZOOM_ONLY_RUNTIME = PRE_ZOOM_RUNTIME | ZOOM_RUNTIME
+RUNTIME = SERVICES_ONLY_RUNTIME | ZOOM_RUNTIME
 BOT_RUNTIME = PRE_IMPORT_RUNTIME - {'recruiter_access.py', 'recruiter_sources.py', 'recruiter_notifications.py'}
 LEGACY_RUNTIME = BOT_RUNTIME - {'candidate_bot.py'}
 RUNTIME_LAYOUTS = {frozenset(LEGACY_RUNTIME), frozenset(BOT_RUNTIME), frozenset(PRE_IMPORT_RUNTIME),
-                   frozenset(PRE_OUTREACH_RUNTIME), frozenset(PRE_ACCESS_RUNTIME), frozenset(PRE_CV_RUNTIME),
-                   frozenset(PRE_POOLED_RUNTIME), frozenset(PRE_EMPLOYER_TELEGRAM_RUNTIME), frozenset(PRE_REMINDERS_RUNTIME), frozenset(PRE_MEETING_NOTICES_RUNTIME), frozenset(PRE_MEETING_LAB_RUNTIME), frozenset(PRE_RECRUITER_COACH_RUNTIME), frozenset(PRE_CALL_CLEANUP_RUNTIME), frozenset(PRE_OBSERVABILITY_RUNTIME), frozenset(PRE_CANDIDATE_CALENDAR_RUNTIME), frozenset(PRE_INTERVIEW_ASSISTANT_RUNTIME), frozenset(RUNTIME)}
+                   frozenset(PRE_SERVICES_RUNTIME), frozenset(SERVICES_ONLY_RUNTIME), frozenset(ZOOM_ONLY_RUNTIME), frozenset(PRE_OUTREACH_RUNTIME), frozenset(PRE_ACCESS_RUNTIME), frozenset(PRE_CV_RUNTIME),
+                   frozenset(PRE_POOLED_RUNTIME), frozenset(PRE_EMPLOYER_TELEGRAM_RUNTIME), frozenset(PRE_REMINDERS_RUNTIME), frozenset(PRE_MEETING_NOTICES_RUNTIME), frozenset(PRE_MEETING_LAB_RUNTIME), frozenset(PRE_RECRUITER_COACH_RUNTIME), frozenset(PRE_CALL_CLEANUP_RUNTIME), frozenset(PRE_OBSERVABILITY_RUNTIME), frozenset(PRE_CANDIDATE_CALENDAR_RUNTIME), frozenset(PRE_INTERVIEW_ASSISTANT_RUNTIME), frozenset(PRE_MATERIALS_RUNTIME), frozenset(RUNTIME)}
 MAX_ARCHIVE = 50 * 1024 * 1024
 MAX_CONTENT = 120 * 1024 * 1024
 
@@ -105,6 +117,7 @@ def unpack(archive, destination, target):
                 require(name.startswith('ui/') and not any(part.startswith('.') for part in PurePosixPath(rel).parts), 'Unexpected public path')
                 require(re.search(r'\.(js|css|svg|woff2?|ttf|png|jpe?g|webp|ico|gif)$', rel)
                         or rel in {'index.html', 'iframe.html', 'index.json', 'project.json', 'deployment.json'}
+                        or rel in {'call/zoom/client.html', 'call/zoom/left.html'}
                         or (target == 'mockups' and rel == 'presentations/hrds-2026-10-07/index.html')
                         or rel.endswith('.LICENSE.txt'), 'Unexpected public file')
         require({'ui/index.html', 'ui/iframe.html', 'ui/index.json', 'ui/deployment.json'} <= files.keys(), 'Missing UI files')
@@ -206,9 +219,71 @@ def stop_api():
     subprocess.run(['systemctl', 'stop', 'hr-vision-api'], check=True, timeout=45)
 
 
+MATERIALS_UNITS = ('hr-vision-core-outbox', 'hr-vision-data-services',
+                  'hr-vision-materials-scheduler', 'hr-vision-materials-worker')
+
+
+def pause_materials():
+    """Drain separate SQLite writers before backup and API pointer changes."""
+    active = []
+    try:
+        for unit in MATERIALS_UNITS:
+            state = subprocess.run(['systemctl', 'show', unit, '--property=LoadState', '--value'],
+                                   check=True, capture_output=True, text=True, timeout=10).stdout.strip()
+            if state == 'not-found':
+                continue
+            require(state == 'loaded', 'Cannot verify materials unit: ' + unit)
+            running = subprocess.run(['systemctl', 'is-active', unit], capture_output=True,
+                                     text=True, timeout=10).stdout.strip()
+            require(running in ('active', 'inactive', 'failed'), 'Cannot verify materials state: ' + unit)
+            if running != 'active':
+                continue
+            active.append(unit)
+            subprocess.run(['systemctl', 'stop', unit], check=True, timeout=345)
+            stopped = subprocess.run(['systemctl', 'is-active', unit], capture_output=True,
+                                     text=True, timeout=10).stdout.strip()
+            require(stopped == 'inactive', 'Materials unit did not drain: ' + unit)
+    except Exception:
+        resume_materials(active)
+        raise
+    return active
+
+
+def resume_materials(active):
+    for unit in reversed(active):
+        subprocess.run(['systemctl', 'start', unit], check=True, timeout=45)
+
+
 def guard_outbox_runtime(db, source):
     runtime = frozenset(path.relative_to(source).as_posix() for path in source.rglob('*') if path.is_file())
     require(runtime in RUNTIME_LAYOUTS, 'Incomplete recovery API')
+    if not SERVICES_RUNTIME.issubset(runtime):
+        for table in ('portal_materials_outbox', 'core_material_receipts', 'core_material_channels', 'core_material_asset_bindings'):
+            schema = db.execute('SELECT type FROM sqlite_master WHERE name=?', (table,)).fetchall()
+            if schema:
+                require(schema == [('table',)], 'Cannot verify core/source schema: ' + table)
+                # Even completed delivery intents and receipts preserve replay
+                # identities. Old collectors must not resume ownership of them.
+                require(not db.execute('SELECT 1 FROM ' + table + ' LIMIT 1').fetchone(),
+                        'Core/source data requires services runtime; use a compatible forward recovery')
+    if not ZOOM_RUNTIME.issubset(runtime):
+        schema = db.execute("SELECT type FROM sqlite_master WHERE name='cp_call_provider_choices'").fetchall()
+        if schema:
+            require(schema == [('table',)], 'Cannot verify call provider choices schema')
+            columns = {row[1] for row in db.execute('PRAGMA table_info(cp_call_provider_choices)')}
+            require('provider' in columns, 'Cannot verify call provider choices schema')
+            # Even a selected/not-yet-created Zoom meeting must never silently
+            # reopen as Daily under an older runtime. Keep the durable choice.
+            require(not db.execute("SELECT 1 FROM cp_call_provider_choices WHERE provider='zoom' LIMIT 1").fetchone(),
+                    'Zoom meetings require Zoom runtime; use a compatible forward recovery')
+    if not MATERIALS_RUNTIME.issubset(runtime):
+        schema = db.execute("SELECT type FROM sqlite_master WHERE name='media_sources'").fetchall()
+        if schema:
+            require(schema == [('table',)], 'Cannot verify materials catalog schema')
+            # Terminal/disabled sources still reference immutable transcripts and
+            # owned objects. Old code cannot safely interpret or preserve them.
+            require(not db.execute('SELECT 1 FROM media_sources LIMIT 1').fetchone(),
+                    'Materials catalog requires materials runtime; use a compatible forward recovery')
     if 'candidate_availability.py' not in runtime:
         schema = db.execute("SELECT type FROM sqlite_master WHERE name='cp_candidates'").fetchall()
         if schema:
@@ -314,41 +389,48 @@ def activate(stage, manifest):
     previous_ui = pointer(base)
     previous_api = pointer(API) if target == 'service' else None
     change_api = target == 'service' and api_changed(stage / 'api')
-    if change_api:
-        guard_and_backup(release)
-    ui_release = base / 'releases' / release
-    require(not ui_release.exists(), 'Workflow attempt was already installed; rerun it for a new attempt')
-    ui_release.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(stage / 'ui', ui_release)
-    if target == 'service':
-        retain_replay_assets(base / previous_ui if previous_ui else None, ui_release)
-    if change_api:
-        api_release = API / 'releases' / release
-        require(not api_release.exists(), 'API release already exists')
-        shutil.copytree(stage / 'api', api_release)
-    attempted_api = False
+    paused = pause_materials() if change_api else []
+    safe_to_resume = True
     try:
         if change_api:
-            attempted_api = True
-            activate_api('releases/' + release)
-        switch(base, 'current', 'releases/' + release)
-        check_origin(target, manifest['sha'])
-    except Exception:
-        if attempted_api:
-            try:
-                # The new runtime may have committed lifecycle rows during its
-                # health check. Recheck after stopping it, never reuse preflight.
-                activate_api(previous_api)
-            except Exception as recovery:
-                raise RuntimeError('API rollback refused or failed; receiver will not restart an unsafe runtime. '
-                                   'Verify unit state and deploy a compatible forward recovery. ' + str(recovery)) from recovery
-        switch(base, 'current', previous_ui)
-        raise
-    if previous_ui:
-        switch(base, 'previous', previous_ui)
-    if attempted_api and previous_api:
-        switch(API, 'previous', previous_api)
-    print(json.dumps({'published': target, 'sha': manifest['sha'], 'release': release, 'apiRestarted': change_api}), flush=True)
+            guard_and_backup(release)
+        ui_release = base / 'releases' / release
+        require(not ui_release.exists(), 'Workflow attempt was already installed; rerun it for a new attempt')
+        ui_release.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(stage / 'ui', ui_release)
+        if target == 'service':
+            retain_replay_assets(base / previous_ui if previous_ui else None, ui_release)
+        if change_api:
+            api_release = API / 'releases' / release
+            require(not api_release.exists(), 'API release already exists')
+            shutil.copytree(stage / 'api', api_release)
+        attempted_api = False
+        try:
+            if change_api:
+                attempted_api = True
+                activate_api('releases/' + release)
+            switch(base, 'current', 'releases/' + release)
+            check_origin(target, manifest['sha'])
+        except Exception:
+            if attempted_api:
+                try:
+                    # The new runtime may have committed lifecycle rows during its
+                    # health check. Recheck after stopping it, never reuse preflight.
+                    activate_api(previous_api)
+                except Exception as recovery:
+                    safe_to_resume = False
+                    raise RuntimeError('API rollback refused or failed; receiver will not restart an unsafe runtime. '
+                                       'Verify unit state and deploy a compatible forward recovery. ' + str(recovery)) from recovery
+            switch(base, 'current', previous_ui)
+            raise
+        if previous_ui:
+            switch(base, 'previous', previous_ui)
+        if attempted_api and previous_api:
+            switch(API, 'previous', previous_api)
+        print(json.dumps({'published': target, 'sha': manifest['sha'], 'release': release, 'apiRestarted': change_api}), flush=True)
+    finally:
+        if safe_to_resume:
+            resume_materials(paused)
 
 
 def main():

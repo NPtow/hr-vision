@@ -1,3 +1,4 @@
+import type { CallCredentials, CallProviderMeeting } from '../../components/call/call-provider';
 export type Availability = { start: string; end: string };
 export type DayAvailability = { startTime: string; endTime: string };
 export type WeeklyAvailability = DayAvailability & { id: string; startDate: string; weekdays: number[]; timezone: string };
@@ -29,8 +30,8 @@ export type CandidatePreferences = Pick<CandidateProfile, MissingPreference | 'c
 export type CandidateResume = { filename: string; mime: string; size: number; uploadedAt: string | number; extractedFields: string[] };
 export type RecruiterSlot = { id: string; start: string; end: string; recruiterName: string };
 export type InterviewRecording = { consentReceived: boolean; consentSource: 'recruiter_oral' | null; startRequested: boolean; recordingRequested: boolean; transcriptionRequested: boolean };
-export type CandidateInterview = RecruiterSlot & { status: 'booked' | 'live' | 'completed'; recording?: InterviewRecording };
-export type CandidateMeeting = { id: string; start: string; end: string; status: 'pending' | 'confirmed' | 'live' | 'completed'; revision?: number; completedAt?: string | null };
+export type CandidateInterview = RecruiterSlot & CallProviderMeeting & { status: 'booked' | 'live' | 'completed'; recording?: InterviewRecording };
+export type CandidateMeeting = CallProviderMeeting & { id: string; start: string; end: string; status: 'pending' | 'confirmed' | 'live' | 'completed'; revision?: number; completedAt?: string | null };
 export type CandidateMeetingHistory = Omit<CandidateMeeting, 'status'> & {
   status: CandidateMeeting['status'] | 'cancelled' | 'declined';
   cancelledAt?: string | null;
@@ -109,7 +110,7 @@ export type CandidateState = CandidateProfile & {
 export type CandidateSession = { authenticated: boolean; candidate?: CandidateState; videoConfigured: boolean; channels?: Channels };
 export type GuestState = { name: string; interview: CandidateInterview; videoConfigured: boolean };
 export type ClaimState = { candidate: Partial<CandidateProfile> & { name: string; resume: CandidateResume | null; interview?: CandidateInterview | null } | null; claimed: boolean };
-export type RoomCredentials = { url: string; token: string };
+export type RoomCredentials = CallCredentials;
 export type MediaStatus = 'ready' | 'processing' | 'not_recorded' | 'error';
 export type MediaChannel = { status: MediaStatus; error?: string };
 export type CallMaterials = {
@@ -125,7 +126,7 @@ export class CandidateApiError extends Error {
   constructor(message: string, public status: number) { super(message); }
 }
 
-export async function candidateRequest<T>(path: string, body?: unknown): Promise<T> {
+export async function candidateRequest<T>(path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), path === 'resume' && body !== undefined ? 180000 : path.endsWith('/materials') ? 60000 : 25000);
   try {
@@ -135,7 +136,7 @@ export async function candidateRequest<T>(path: string, body?: unknown): Promise
       cache: 'no-store',
       headers: { Accept: 'application/json', ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
       body: body === undefined ? undefined : JSON.stringify(body),
-      signal: controller.signal,
+      signal: signal ? AbortSignal.any([controller.signal, signal]) : controller.signal,
     });
     const data = await response.json().catch(() => null);
     if (!response.ok) {
