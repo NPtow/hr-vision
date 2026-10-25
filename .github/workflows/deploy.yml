@@ -77,7 +77,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends poppler-utils tesseract-ocr tesseract-ocr-eng tesseract-ocr-rus antiword
-          python3 -m pip install --require-hashes --only-binary=:all: -r requirements-materials.lock -r requirements-api-extras.lock
+          python3 -m pip install --require-hashes --only-binary=:all: -r requirements-materials.lock -r requirements-api-extras.lock -r ../../services/deploy/requirements-tests.lock
           python3 -m pip check
           python3 -m unittest discover -v
       - name: Check deployment safety
