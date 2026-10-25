@@ -559,8 +559,18 @@ class Handler(BaseHTTPRequestHandler):
             # Session bearer auth is tab-scoped; explicit JSON + origin blocks browser CSRF.
             require(self.headers.get('Origin') is None or self.headers.get('Origin') in ORIGINS,
                     'Другой источник запроса.', 403)
-            require(self.headers.get('Content-Type', '').startswith('application/json'), 'Нужен JSON.', 415)
             path = urllib.parse.urlsplit(self.path).path
+            upload_part = re.fullmatch(r'/api/hr/employer/recordings/uploads/([a-f0-9]{32})/parts/([0-9]{1,2})', path)
+            if upload_part:
+                require(self.headers.get('Sec-Fetch-Site') not in ('cross-site', 'none'), 'Другой источник запроса.', 403)
+                require(self.headers.get('Content-Type') == 'application/octet-stream' and
+                        not self.headers.get('Transfer-Encoding'), 'Нужен файл с известным размером.', 415)
+                size = int(self.headers.get('Content-Length', '0'))
+                require(0 < size <= 1024**3, 'Файл должен быть не больше 1 ГБ.', 413)
+                self.connection.settimeout(300)
+                result = EMPLOYER_ROUTES.recording_uploads.stream_part(self.headers, upload_part[1], int(upload_part[2]), self.rfile, size)
+                return self.answer(200, result)
+            require(self.headers.get('Content-Type', '').startswith('application/json'), 'Нужен JSON.', 415)
             if EMPLOYER_ROUTES.handles(path) or MEETING_LAB.handles(path) or SELECTION_ROUTES.handles(path):
                 require(self.headers.get('Sec-Fetch-Site') not in ('cross-site', 'none') or
                         self.headers.get('Sec-Fetch-Site') == 'none' and self.headers.get('Origin') in ORIGINS,

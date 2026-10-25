@@ -8,7 +8,7 @@ export type PreparedProfile = {
   cvText: string;
   evaluationText: string;
   evaluationUrl?: string;
-  recordings: { name: string; publicUrl: string; mime: string; size?: number }[];
+  recordings: { id?: string; name?: string; publicUrl: string; mime: string; size?: number; sha256?: string; duration?: number; source?: string }[];
   sourceLabel: string;
   transcriptText?: string;
   chapters?: RecordingChapter[];

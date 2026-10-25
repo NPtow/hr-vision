@@ -10,6 +10,7 @@ import hashlib
 import hmac
 from http.cookies import SimpleCookie
 import json
+import os
 import re
 import secrets
 import sqlite3
@@ -1488,7 +1489,7 @@ class CandidatePortal:
             if not application_id:
                 saved = db.execute('SELECT body FROM cp_internal_profiles WHERE candidate_id=?', (cid,)).fetchone()
                 imported = json.loads(saved[0]).get('importedInterview') if saved else None
-                if imported is not None:
+                if imported is not None and os.environ.get('HR_CORE_CATALOG_ENABLED') != '1':
                     require(storage_policy in (None, 'remote'),
                             'Исходная запись хранится в панели ДСА.', 409)
                     from dsa_panel import imported_materials

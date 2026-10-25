@@ -13,6 +13,7 @@ class Principal:
     provider: str | None = None
     connection_id: str | None = None
     candidate_ids: frozenset[str] | None = None
+    workspace_ids: frozenset[str] | None = None
 
     def __post_init__(self):
         if self.role not in ("portal", "source") or not self.name:

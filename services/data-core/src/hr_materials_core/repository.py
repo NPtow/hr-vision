@@ -4,6 +4,8 @@ Legacy catalogue IDs and immutable transcript versions remain authoritative.
 The bundled legacy repository supplies schema and connection primitives only;
 no provider adapter, worker, queue, or portal runtime is imported here.
 """
+import base64
+import math
 import hashlib
 import json
 import secrets
@@ -42,13 +44,35 @@ def portal(principal, candidate_id):
     _require(principal.candidate_ids is None or candidate_id in principal.candidate_ids, "owner_forbidden", 403)
 
 
+def authorize_owner(principal, owner):
+    if owner.get("owner_kind") == "intake":
+        _require(principal.role == "portal", "portal_required", 403)
+        _require(principal.candidate_ids is None, "owner_forbidden", 403)
+        _require(principal.workspace_ids is None or owner["workspace_id"] in principal.workspace_ids,
+                 "owner_forbidden", 403)
+    else:
+        _require(principal.workspace_ids is None, "owner_forbidden", 403)
+        portal(principal, owner["candidate_id"])
+
+
 class OwnerBridge:
     """Reads trusted HR owner/room rows; performs no provider calls."""
     def __init__(self, default_connections):
         self.default_connections = default_connections.copy()
 
     def owner(self, db, kind, identity, *, completed=False):
-        _require(kind in ("interview", "meeting"), "invalid_owner", 400)
+        _require(kind in ("interview", "meeting", "intake"), "invalid_owner", 400)
+        if kind == "intake":
+            _require(any(r[2] == "em_intake_candidates" and r[3] == "intake_id"
+                         for r in db.execute("PRAGMA foreign_key_list(media_sources)")),
+                     "intake_schema_migration_required", 503)
+            row = db.execute("""SELECT i.*,v.archived_at FROM em_intake_candidates i
+                JOIN em_vacancies v ON v.vacancy_id=i.vacancy_id AND v.workspace_id=i.workspace_id
+                WHERE i.id=?""", (identity,)).fetchone()
+            _require(row is not None, "owner_not_found", 404)
+            owner = dict(row)
+            _require(not json.loads(owner["body"]).get("archived") and not owner["archived_at"], "owner_archived", 410)
+            return {**owner, "owner_kind": "intake", "status": "completed"}
         if kind == "interview":
             row = db.execute("SELECT * FROM cp_interviews WHERE id=?", (identity,)).fetchone()
         else:
@@ -62,7 +86,16 @@ class OwnerBridge:
             _require(owner["status"] == "completed", "owner_not_completed")
         return owner
 
-    def trusted_ref(self, owner, kind, identity, provider, connection_id):
+    def trusted_ref(self, owner, kind, identity, provider, connection_id, *, db=None, source_ref=None):
+        if provider == "upload" and source_ref and str(source_ref.get("capture_instance_id", "")).startswith("product-upload:"):
+            _require(db is not None, "upload_registration_required", 403)
+            capture = source_ref["capture_instance_id"]
+            row = db.execute("SELECT * FROM hr_recording_uploads WHERE capture_identity=?", (capture,)).fetchone()
+            _require(row is not None and not row["revoked_at"] and
+                     (row["owner_kind"], row["owner_id"], row["connection_id"]) == (kind, identity, connection_id),
+                     "upload_registration_required", 403)
+            return {"room_id": row["id"], "room_name": row["id"], "capture_instance_id": capture}
+        _require(kind != "intake", "upload_registration_required", 403)
         try:
             room = json.loads(owner["room"]) if isinstance(owner["room"], str) else owner["room"]
         except (ValueError, TypeError):
@@ -105,6 +138,8 @@ class CoreRepository(MaterialsRepository):
         tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         _require({"cp_candidates", "cp_interviews", "cp_meetings", "cp_applications"} <= tables,
                  "hr_owner_schema_required", 503)
+        from .schema import ensure_sources_v2
+        ensure_sources_v2(db)
         super().init(db)
         db.execute("""CREATE TABLE IF NOT EXISTS core_material_receipts (
             binding_id TEXT NOT NULL REFERENCES media_sources(id), generation INTEGER NOT NULL,
@@ -175,11 +210,11 @@ class CoreRepository(MaterialsRepository):
             _require((source["provider"], source["connection_id"]) ==
                      (principal.provider, principal.connection_id), "source_forbidden", 403)
         else:
-            portal(principal, owner["candidate_id"])
+            authorize_owner(principal, owner)
         if active:
             _require(self._family_active(db, source), "binding_revoked", 410)
             trusted = self.bridge.trusted_ref(owner, source["owner_kind"], source["owner_id"],
-                                               source["provider"], source["connection_id"])
+                                               source["provider"], source["connection_id"], db=db, source_ref=self.canonical_ref(source))
             # exclusive_room_owner is a derived server attestation, not a
             # persisted identity requirement in pre-split session children.
             # Every room/capture/session identity must still match HR storage.
@@ -196,8 +231,8 @@ class CoreRepository(MaterialsRepository):
         _reference(body.source_ref)
         with self._db(write=True) as db:
             owner = self.bridge.owner(db, body.owner_kind, body.owner_id, completed=True)
-            portal(principal, owner["candidate_id"])
-            trusted = self.bridge.trusted_ref(owner, body.owner_kind, body.owner_id, body.provider, body.connection_id)
+            authorize_owner(principal, owner)
+            trusted = self.bridge.trusted_ref(owner, body.owner_kind, body.owner_id, body.provider, body.connection_id, db=db, source_ref=body.source_ref)
             required = {"room_id", "room_name", "capture_instance_id"}
             _require(required <= body.source_ref.keys() and all(trusted.get(k) == v for k, v in body.source_ref.items()),
                      "source_identity_conflict")
@@ -218,9 +253,9 @@ class CoreRepository(MaterialsRepository):
                     family = [r[0] for r in db.execute("""WITH RECURSIVE family(id) AS (
                         SELECT id FROM media_sources WHERE id=? UNION
                         SELECT s.id FROM media_sources s JOIN family f ON s.parent_source_id=f.id
-                        WHERE s.provider=? AND s.connection_id=? AND s.interview_id IS ? AND s.meeting_id IS ?)
+                        WHERE s.provider=? AND s.connection_id=? AND s.interview_id IS ? AND s.meeting_id IS ? AND s.intake_id IS ?)
                         SELECT s.id FROM media_sources s JOIN family f ON f.id=s.id WHERE s.storage_policy<>'owned'""",
-                        (source["id"], source["provider"], source["connection_id"], source["interview_id"], source["meeting_id"]))]
+                        (source["id"], source["provider"], source["connection_id"], source["interview_id"], source["meeting_id"], source.get("intake_id")))]
                     for member in family:
                         self._invalidate(db, member)
                         db.execute("UPDATE media_sources SET storage_policy='owned' WHERE id=?", (member,))
@@ -228,11 +263,45 @@ class CoreRepository(MaterialsRepository):
                 return self.binding(self._one(db, "media_sources", source["id"]))
             identity, stamp = secrets.token_hex(16), self.clock()
             db.execute("""INSERT INTO media_sources
-                (id,interview_id,meeting_id,provider,connection_id,capture_identity,source_ref,storage_policy,created_at,updated_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?)""", (identity, body.owner_id if body.owner_kind == "interview" else None,
-                body.owner_id if body.owner_kind == "meeting" else None, body.provider, body.connection_id, capture,
+                (id,interview_id,meeting_id,intake_id,provider,connection_id,capture_identity,source_ref,storage_policy,created_at,updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?)""", (identity, body.owner_id if body.owner_kind == "interview" else None,
+                body.owner_id if body.owner_kind == "meeting" else None, body.owner_id if body.owner_kind == "intake" else None, body.provider, body.connection_id, capture,
                 _reference(trusted), body.storage_policy, stamp, stamp))
             return self.binding(self._one(db, "media_sources", identity))
+
+    def catalogue_assets(self, principal, created_since, cursor=None, limit=50):
+        _require(math.isfinite(created_since) and created_since >= 0 and 1 <= limit <= 100,
+                 "invalid_page", 400)
+        after = (created_since, "")
+        if cursor:
+            try:
+                value = json.loads(base64.urlsafe_b64decode(cursor.encode()))
+                _require(isinstance(value, list) and len(value) == 3 and value[0] == created_since
+                         and type(value[1]) in (int, float) and math.isfinite(value[1]) and value[1] >= created_since
+                         and isinstance(value[2], str) and len(value[2]) <= 500, "invalid_cursor", 400)
+                after = (value[1], value[2])
+            except (ValueError, TypeError, UnicodeError):
+                raise RepositoryError("invalid_cursor", 400) from None
+        with self._db() as db:
+            rows = db.execute("""SELECT a.* FROM media_assets a
+                WHERE a.kind IN ('video','audio') AND (a.created_at,a.id)>(?,?)
+                ORDER BY a.created_at,a.id LIMIT ?""", (*after, limit)).fetchall()
+            items = []
+            for row in rows:
+                asset = self._decode(row)
+                source = self._one(db, "media_sources", asset["source_id"])
+                try:
+                    self._authorize(db, source, principal, active=True)
+                    _require(asset["state"] == "ready" and source["storage_policy"] == "owned", "not_ready")
+                    _require(db.execute("""SELECT 1 FROM asset_locations WHERE asset_id=? AND backend='s3'
+                        AND state='verified' AND sha256 IS NOT NULL AND size>0""", (asset["id"],)).fetchone(), "not_ready")
+                except RepositoryError:
+                    continue
+                items.append({"asset_id": asset["id"], "binding_id": source["id"], "generation": source["generation"],
+                    "created_at": asset["created_at"], "kind": asset["kind"], "state": asset["state"],
+                    **{k: source[k] for k in ("owner_kind", "owner_id", "provider", "connection_id", "storage_policy")}})
+            next_cursor = base64.urlsafe_b64encode(json.dumps([created_since, rows[-1]["created_at"], rows[-1]["id"]]).encode()).decode() if len(rows) == limit else None
+            return {"items": items, "next_cursor": next_cursor}
 
     def read_binding(self, principal, identity):
         with self._db() as db:
@@ -267,10 +336,10 @@ class CoreRepository(MaterialsRepository):
             family = {r[0] for r in db.execute("""WITH RECURSIVE family(id) AS (
                 SELECT id FROM media_sources WHERE id=? UNION
                 SELECT s.id FROM media_sources s JOIN family f ON s.parent_source_id=f.id
-                WHERE s.provider=? AND s.connection_id=? AND s.interview_id IS ? AND s.meeting_id IS ?
+                WHERE s.provider=? AND s.connection_id=? AND s.interview_id IS ? AND s.meeting_id IS ? AND s.intake_id IS ?
                 AND COALESCE(json_extract(s.metadata,'$.capture_disabled'),0)<>1)
                 SELECT id FROM family""", (identity, source["provider"], source["connection_id"],
-                                         source["interview_id"], source["meeting_id"]))}
+                                         source["interview_id"], source["meeting_id"], source.get("intake_id")))}
             for item in body.assets:
                 # A proven child of this binding may already hold a historical
                 # asset. Update it in place without changing its source/IDs.
@@ -367,16 +436,16 @@ class CoreRepository(MaterialsRepository):
         rows = db.execute("""WITH RECURSIVE family(id) AS (
             SELECT id FROM media_sources WHERE id=? UNION
             SELECT s.id FROM media_sources s JOIN family f ON s.parent_source_id=f.id
-            WHERE s.provider=? AND s.connection_id=? AND s.interview_id IS ? AND s.meeting_id IS ?)
+            WHERE s.provider=? AND s.connection_id=? AND s.interview_id IS ? AND s.meeting_id IS ? AND s.intake_id IS ?)
             SELECT s.* FROM media_sources s JOIN family f ON s.id=f.id""",
-            (source["id"], source["provider"], source["connection_id"], source["interview_id"], source["meeting_id"]))
+            (source["id"], source["provider"], source["connection_id"], source["interview_id"], source["meeting_id"], source.get("intake_id")))
         return {row["id"] for row in rows if self._binding_current(db, self._decode(row))}
 
     def _binding_current(self, db, source):
         try:
             if not self._family_active(db, source): return False
             owner = self.bridge.owner(db, source["owner_kind"], source["owner_id"], completed=True)
-            trusted = self.bridge.trusted_ref(owner, source["owner_kind"], source["owner_id"], source["provider"], source["connection_id"])
+            trusted = self.bridge.trusted_ref(owner, source["owner_kind"], source["owner_id"], source["provider"], source["connection_id"], db=db, source_ref=self.canonical_ref(source))
             ref = self.canonical_ref(source)
             return all(ref.get(key) == value for key, value in trusted.items() if key != "exclusive_room_owner") and (
                 "exclusive_room_owner" not in ref or ref["exclusive_room_owner"] == trusted.get("exclusive_room_owner"))
@@ -520,7 +589,7 @@ class CoreRepository(MaterialsRepository):
         with self._db() as db:
             db.execute("BEGIN")
             owner = self.bridge.owner(db, kind, identity)
-            portal(principal, owner["candidate_id"])
+            authorize_owner(principal, owner)
             sources = [self._decode(row) for row in db.execute(f"SELECT * FROM media_sources WHERE {kind}_id=?", (identity,))]
             if sources:
                 _require(any(self._family_active(db, source) for source in sources), "binding_revoked", 410)
@@ -631,14 +700,14 @@ class CoreRepository(MaterialsRepository):
         with self._db() as db:
             db.execute("BEGIN")
             owner = self.bridge.owner(db, kind, identity)
-            portal(principal, owner["candidate_id"])
+            authorize_owner(principal, owner)
             return self._materials(db, kind, identity)
 
     def collection_owner(self, principal, kind, identity):
         with self._db() as db:
             db.execute("BEGIN")
             owner = self.bridge.owner(db, kind, identity, completed=True)
-            portal(principal, owner["candidate_id"])
+            authorize_owner(principal, owner)
             try:
                 room = json.loads(owner["room"]) if isinstance(owner["room"], str) else owner["room"]
             except (ValueError, TypeError):

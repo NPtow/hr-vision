@@ -15,7 +15,7 @@ Ref = Annotated[str, Field(min_length=1, max_length=500), AfterValidator(safe_re
 Digest = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
 ChannelState = Literal["processing", "ready", "error", "not_recorded", "unsupported"]
 TranscriptionState = Literal["not_requested", "awaiting_configuration", "queued", "running", "succeeded", "failed"]
-OwnerKind = Literal["interview", "meeting"]
+OwnerKind = Literal["interview", "meeting", "intake"]
 def version(value):
     if type(value) is not int or value != 1:
         raise ValueError("unsupported_schema_version")
@@ -44,6 +44,7 @@ class CollectInput(Model):
 
 
 class Metadata(Model):
+    part_index: Annotated[int, Field(ge=0, le=999)] | None = None
     duration: Annotated[float, Field(ge=0)] | None = None
     format: Ref | None = None
     session_id: Ref | None = None

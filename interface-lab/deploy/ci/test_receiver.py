@@ -188,7 +188,10 @@ class ReceiverTest(unittest.TestCase):
         self.assertEqual(r.PRE_SELECTION_RUNTIME - r.PRE_PUBLIC_PROFILE_RUNTIME, {'public_profiles.py'})
         self.assertEqual(r.PRE_JEV_RUNTIME - r.PRE_SELECTION_RUNTIME, {'selection.py'})
         self.assertEqual(r.PRE_ASR_DISPATCH_RUNTIME - r.PRE_JEV_RUNTIME, {'assessment_jobs.py'})
-        self.assertEqual(r.RUNTIME - r.PRE_ASR_DISPATCH_RUNTIME, {'materials_asr_dispatch.py'})
+        self.assertEqual(r.PRE_PRODUCT_RECORDINGS_RUNTIME - r.PRE_ASR_DISPATCH_RUNTIME, {'materials_asr_dispatch.py'})
+        self.assertEqual(r.RUNTIME - r.PRE_PRODUCT_RECORDINGS_RUNTIME,
+                         {'recording_uploads.py', 'canonical_materials.py', 'transcript_bundle.py'})
+        self.assertIn(frozenset(r.PRE_PRODUCT_RECORDINGS_RUNTIME), r.RUNTIME_LAYOUTS)
         self.assertIn(frozenset(r.PRE_ASR_DISPATCH_RUNTIME), r.RUNTIME_LAYOUTS)
         self.assertIn(frozenset(r.PRE_JEV_RUNTIME), r.RUNTIME_LAYOUTS)
         self.assertIn(frozenset(r.PRE_PUBLIC_PROFILE_RUNTIME), r.RUNTIME_LAYOUTS)

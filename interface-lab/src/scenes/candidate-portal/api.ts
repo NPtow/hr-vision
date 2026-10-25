@@ -115,8 +115,8 @@ export type MediaStatus = 'ready' | 'processing' | 'not_recorded' | 'error';
 export type MediaChannel = { status: MediaStatus; error?: string };
 export type CallMaterials = {
   status: MediaStatus;
-  recordings: { id: string; url: string; duration?: number | null; expires?: number | null }[];
-  transcripts: { id: string; text: string }[];
+  recordings: { id: string; url: string; duration?: number | null; expires?: number | null; partIndex?: number; name?: string }[];
+  transcripts: { id: string; text: string; recordingId?: string; selectionRevision?: number; origin?: string; model?: string }[];
   video: MediaChannel;
   transcription: MediaChannel;
   checkedAt: string | number;

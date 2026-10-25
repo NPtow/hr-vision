@@ -59,6 +59,7 @@ def test_full_deepgram_path_and_receipt_ack_loss(tmp_path, monkeypatch):
     connect=lambda:sqlite3.connect(tmp_path/'hr.sqlite3',timeout=10)
     with connect() as db:
         db.executescript('''
+          CREATE TABLE em_intake_candidates(id TEXT PRIMARY KEY,workspace_id TEXT,vacancy_id TEXT,body TEXT);
           CREATE TABLE cp_candidates(id TEXT PRIMARY KEY,email TEXT,password_hash TEXT,profile TEXT,created_at TEXT,updated_at TEXT);
           CREATE TABLE cp_interviews(id TEXT PRIMARY KEY,candidate_id TEXT,status TEXT,room TEXT,created_at TEXT,completed_at TEXT);
           CREATE TABLE cp_applications(id TEXT PRIMARY KEY,candidate_id TEXT,status TEXT);

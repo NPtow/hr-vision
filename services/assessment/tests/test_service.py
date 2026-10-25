@@ -11,7 +11,7 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app import Store, handler
-from engine import Failure, JevBoundary, PACK, assess, intake, validate_response
+from engine import Failure, JevBoundary, PACK, assess, intake, validate_response, retrieve, neighbors
 
 
 def source(text='Я уточнил проблему, предложил вариант и проверил результат.'):
@@ -67,6 +67,36 @@ class ServiceTest(unittest.TestCase):
             self.assertEqual(c['evidence'][0]['seconds'], 1)
             self.assertNotIn('feedbackQuestion', c)
         self.assertEqual(result['provenance']['model'], 'jev-1.14.0')
+
+    def test_multipart_evidence_and_both_neighbor_windows_stay_in_one_recording(self):
+        body = source()
+        base = body['chunks'][0]
+        body['chunks'] = [{**base, 'id': 'c' + str(i), 'recordingId': 'part-a', 'transcriptId': 'text-a'}
+                          for i in range(2, 11)] + [
+            {**base, 'id': 'c1', 'recordingId': 'part-a', 'transcriptId': 'text-a'},
+            {**base, 'id': 'other', 'text': 'Соседняя запись', 'startMs': 0, 'endMs': 1000,
+             'recordingId': 'part-b', 'transcriptId': 'text-b'}]
+        self.assertEqual(neighbors(body['chunks'], 9), [8, 9])
+        retrieved = retrieve(body['chunks'], {'business_quality_justification': 'уточнил проблему'})
+        self.assertNotIn('other', [r['id'] for r in retrieved])
+        job, transport = self.run_job(body=body)
+        self.assertEqual(job['status'], 'completed')
+        for criterion in job['assessment']['criteria']:
+            self.assertTrue(criterion['evidence'])
+            self.assertTrue(all(e['recordingId'] == 'part-a' and e['transcriptId'] == 'text-a'
+                                for e in criterion['evidence']))
+        # The scoring and basis model states cannot inherit part B's zero timestamp.
+        self.assertNotIn('other', json.dumps(transport.calls[4:]))
+
+    def test_extended_chunk_links_are_paired_and_cannot_mix_legacy_or_alias_versions(self):
+        for change in ('partial', 'mixed', 'alias'):
+            with self.subTest(change=change):
+                body = source()
+                body['chunks'][0].update(recordingId='a', transcriptId='t')
+                if change == 'partial': body['chunks'][0].pop('transcriptId')
+                if change == 'mixed': body['chunks'].append({**source()['chunks'][0], 'id': 'c2'})
+                if change == 'alias': body['chunks'].append({**body['chunks'][0], 'id': 'c2', 'recordingId': 'b'})
+                with self.assertRaises(Failure): intake(body)
 
     def test_no_evidence_does_not_call_scoring_or_judge(self):
         job, transport = self.run_job(Transport(empty=True))

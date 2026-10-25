@@ -3,7 +3,6 @@
 This adapter knows authorizations/source identities. The isolated assessment
 process receives sanitized transcript chunks, never accounts or database access.
 """
-import hashlib
 import json
 import os
 import re
@@ -15,36 +14,10 @@ import urllib.request
 from domain import Problem
 import selection
 import interview_assessment
-from interview_assistant import transcript_turns, search_chunks
 from structured_model import NoRedirect, scan
+import transcript_bundle
+from transcript_bundle import assessment_chunks
 
-
-def assessment_chunks(transcript, candidate_name):
-    """Keep source speaker labels and bind a unique name match to the candidate.
-
-    Some provider VTT cues use `Elena: text` rather than <v Elena>. Never infer
-    identity from voice, writing style, gender or what someone claims in a reply.
-    A plain/transliterated name match is allowed only when it is unambiguous.
-    """
-    alphabet = dict(zip('абвгдеёжзийклмнопрстуфхцчшщъыьэюя',
-        ('a','b','v','g','d','e','e','zh','z','i','y','k','l','m','n','o','p','r','s','t','u','f','kh','ts','ch','sh','shch','','y','','e','yu','ya')))
-    def tokens(value):
-        normalized = ''.join(alphabet.get(char, char) for char in value.lower())
-        return set(re.findall('[a-z]+', normalized))
-    turns = transcript_turns(transcript)
-    for turn in turns:
-        if not turn['speakerName']:
-            prefix = re.match(r"^([A-Za-zА-Яа-яЁё][A-Za-zА-Яа-яЁё .'-]{0,79}):\s+", turn['text'])
-            if prefix:
-                turn['speakerName'] = prefix[1]
-    name = tokens(candidate_name)
-    labels = {turn['speakerName'] for turn in turns if turn['speakerName']}
-    matches = [label for label in labels if tokens(label) and tokens(label) <= name]
-    if len(matches) == 1:
-        for turn in turns:
-            if turn['speakerName'] == matches[0]:
-                turn['speakerName'] = 'Кандидат'
-    return search_chunks(turns)
 
 
 def init(db):
@@ -76,17 +49,19 @@ def enqueue(db, kind, owner_id, vacancy_id=None, workspace_id=None):
 def read(db, kind, owner_id, revision, recording_id=None):
     if not db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='as_bindings'").fetchone():
         return None
-    row = db.execute('SELECT source_revision,status,assessment,error,recording_id FROM as_bindings WHERE id=?', (kind + ':' + owner_id,)).fetchone()
+    row = db.execute('SELECT source_revision,status,assessment,error,recording_id,source_material FROM as_bindings WHERE id=?', (kind + ':' + owner_id,)).fetchone()
     if not row:
         return None
     if row[0] != revision:
         return {'assessment': None, 'status': 'pending'}
     if row[1] == 'failed':
         return {'assessment': None, 'status': 'failed', 'error': row[3]}
-    if recording_id is not None and row[4] != recording_id:
+    source = json.loads(row[5]) if row[5] else {}
+    recording_ids = [p['recordingId'] for p in source.get('parts', [])] or [row[4]]
+    if recording_id is not None and recording_id not in recording_ids:
         return {'assessment': None, 'status': 'pending'}
     result = json.loads(row[2]) if row[2] and row[1] == 'completed' else None
-    return {'assessment': result, 'status': row[1], 'error': row[3]}
+    return {'assessment': result, 'status': row[1], 'error': row[3], 'recordingIds': recording_ids}
 
 
 def read_candidate(db, candidate_id, recording_id=None, vacancy_id=None):
@@ -112,8 +87,13 @@ def candidate_revision(db, candidate_id, *, include_transcript=True):
         # Read the authoritative selection, never the provider label or a local
         # copy of Core tables. Failure is closed: no stale assessment fallback.
         primary = client.primary_transcripts('interview', row[0])
-        if primary.get('status') != 'not_requested':
-            revision = selection.digest([revision, transcript_selection_identity(primary)])
+        materials = client.materials('interview', row[0])
+        active_sources = {s.get('binding_id', s.get('id')) for s in materials.get('sources', [])
+                          if not s.get('revoked') and not s.get('capture_disabled')}
+        inventory = sorted([[asset.get(key) for key in ('id', 'source_id', 'kind', 'state', 'sha256', 'content_sha256', 'metadata')]
+            for asset in materials.get('assets', []) if asset.get('kind') in ('audio', 'video') and
+            (not materials.get('sources') or asset.get('source_id') in active_sources)], key=lambda item: str(item[0]))
+        revision = selection.digest([revision, inventory, transcript_selection_identity(primary)])
     return revision
 
 
@@ -193,11 +173,20 @@ class Bridge:
                            (row['owner_id'], row['workspace_id'], row['vacancy_id'])).fetchone()
         if not found or json.loads(found[0]).get('archived'):
             return None
+        if os.environ.get('HR_CORE_CATALOG_ENABLED') == '1':
+            return self.intake_source(row)[1]
         _, fingerprint, _ = interview_assessment.intake_binding(db, row['workspace_id'],
             {'source': 'intake', 'vacancyId': row['vacancy_id'], 'id': row['owner_id'], 'index': 0}, allow_missing_transcript=True)
         return fingerprint
 
+    def intake_source(self, row):
+        from canonical_materials import read_intake
+        materials = read_intake(self.portal, row['workspace_id'], row['vacancy_id'], row['owner_id'])
+        value = transcript_bundle.bundle(materials)
+        return value, transcript_bundle.fingerprint(value)
+
     def snapshot(self, row):
+        core = os.environ.get('HR_CORE_CATALOG_ENABLED') == '1'
         with self.connect() as db:
             revision = self.active(db, row)
             if not revision:
@@ -205,43 +194,33 @@ class Bridge:
             if row['kind'] == 'intake':
                 person = json.loads(db.execute('SELECT body FROM em_intake_candidates WHERE id=?', (row['owner_id'],)).fetchone()[0])
                 profile = person.get('preparedProfile', {})
-                recording = profile['recordings'][0]
-                transcript = profile['transcriptText']
-                recording_id = str(recording.get('id') or '0')
-                source_hash = interview_assessment.recording_fingerprint(profile, 0)
                 candidate_name = person.get('name', '')
+                if not core:
+                    recording = profile['recordings'][0]
+                    materials = {'recordings': [{**recording, 'id': str(recording.get('id') or '0')}],
+                        'transcripts': [{'text': profile['transcriptText']}]}
             else:
                 candidate_name = selection.person(db, row['owner_id']).get('name', '')
-        source_material = None
         if row['kind'] == 'candidate':
-            cid = row['owner_id']
             def authorize(db):
                 if self.active(db, row) != revision:
                     raise Problem('assessment_source_changed', 409)
-            materials = self.portal.materials(cid, access_check=authorize)
-            recordings, transcripts = materials.get('recordings', []), materials.get('transcripts', [])
-            if len(recordings) != 1 or len(transcripts) != 1 or not transcripts[0].get('text'):
-                raise Problem('waiting_for_transcript', 409)
-            recording_id = recordings[0]['id']
-            if transcripts[0].get('recordingId') and transcripts[0]['recordingId'] != recording_id:
-                raise Problem('transcript_recording_mismatch', 409)
-            transcript = transcripts[0]['text']
-            source_material = {'transcriptId': transcripts[0].get('id'), 'recordingId': recording_id,
-                'textSha256': hashlib.sha256(transcript.encode()).hexdigest(),
-                'origin': transcripts[0].get('origin'), 'model': transcripts[0].get('model'),
-                'selectionRevision': transcripts[0].get('selectionRevision')}
-            source_hash = selection.digest([revision, recording_id, source_material])
-        # Use the same timing/parser as the existing source player. No CV/contacts
-        # are sent; filenames and external source links never enter the model.
-        chunks = assessment_chunks(transcript, candidate_name)
-        if not chunks:
-            raise Problem('transcript_format_unsupported', 422)
-        clean = []
-        for chunk in chunks:
-            content, _ = scan(chunk['text'])
-            clean.append({'id': chunk['id'], 'text': content, 'speaker': chunk['speakerName'],
-                          'startMs': chunk['startMs'], 'endMs': chunk['endMs']})
-        return revision, recording_id, {'subject': row['id'], 'sourceHash': source_hash, 'chunks': clean}, source_material
+            materials = self.portal.materials(row['owner_id'], access_check=authorize)
+            value = transcript_bundle.bundle(materials, allow_legacy=not core)
+        elif core:
+            value, fingerprint = self.intake_source(row)
+            if fingerprint != revision:
+                raise Problem('assessment_source_changed', 409)
+        else:
+            value = transcript_bundle.bundle(materials, allow_legacy=True)
+        clean = transcript_bundle.chunks(value, candidate_name)
+        parts = transcript_bundle.metadata(value)
+        source_material = {'schemaVersion': 1, 'parts': parts, 'inputChunks': clean}
+        if len(parts) == 1:
+            source_material.update(parts[0])
+        source_hash = selection.digest([revision, transcript_bundle.fingerprint(value)])
+        source_material['sourceHash'] = source_hash
+        return revision, parts[0]['recordingId'], {'subject': row['id'], 'sourceHash': source_hash, 'chunks': clean}, source_material
 
     def tick(self):
         with self.connect() as db:
@@ -252,6 +231,7 @@ class Bridge:
             row = dict(zip([d[0] for d in cursor.description], found))
             # Durable retry window; a crash may repeat HTTP but never inference.
             db.execute('UPDATE as_bindings SET next_check=? WHERE id=?', (time.time() + 60, row['id']))
+        current = None
         try:
             with self.connect() as db:
                 current = self.active(db, row)
@@ -276,8 +256,12 @@ class Bridge:
                 if assessment['revisionId'] != result['id']:
                     raise Problem('invalid_assessment_response', 502)
                 if source_material:
-                    assessment = {**assessment, 'provenance': {**assessment['provenance'],
-                                  'sourceTranscript': source_material}}
+                    if source_material.get('inputChunks'):
+                        transcript_bundle.check_evidence(assessment, source_material)
+                    provenance = {**assessment['provenance'], 'sourceTranscripts': source_material.get('parts', [source_material])}
+                    if len(provenance['sourceTranscripts']) == 1:
+                        provenance['sourceTranscript'] = provenance['sourceTranscripts'][0]
+                    assessment = {**assessment, 'provenance': provenance}
             with self.connect() as db:
                 db.execute('BEGIN IMMEDIATE')
                 if self.active(db, row) != revision:

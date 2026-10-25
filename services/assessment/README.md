@@ -16,7 +16,7 @@ The browser never calls TypeSafe or this service directly.
   change to an application's stage. Missing evidence is unknown, never a zero score.
 
 `assessment_jobs.py` inserts intents in the product transaction, without external I/O.
-It resolves one completed interview, one recording and its transcript on the server,
+It resolves one completed interview and every recording with its selected transcript on the server,
 rechecks access/source before storing, and polls the private durable queue.
 Intake feedback projections carry their own vacancy fingerprint and reference the
 unchanged base revision. Stale projections are not returned. A changed source is
@@ -30,7 +30,7 @@ Pack .1 records the initial synthetic experiment. The criteria and 5-level behav
 anchors come from the project's criteria-2026-10-v1 / CD-24/v2 rubric.
 
 1. Strict input schema and injection scan before storage.
-2. Deterministic retrieval of up to 10 matching fragments plus immediate neighbors per skill.
+2. Deterministic retrieval of up to 10 matching fragments plus immediate neighbors per skill, bounded to the same recording/transcript pair.
 3. Four typed evidence calls select source IDs (or NONE). No generated quotations.
 4. Typed evidence basis: observed, narrated, hypothetical, unknown.
 5. Typed five-level score; expected value is computed from validated probabilities.
@@ -57,10 +57,28 @@ All routes except health require constant-time Bearer verification.
 | Route | Body/result |
 |---|---|
 | `GET /healthz` | version, model, process health |
-| `POST /v1/jobs` | `{subject,sourceHash,chunks:[{id,text,speaker,startMs,endMs}]}` |
+| `POST /v1/jobs` | `{subject,sourceHash,chunks:[{id,text,speaker,startMs,endMs,recordingId,transcriptId}]}` |
 | `POST /v1/matches` | `{baseJobId,vacancyId,vacancyHash,requirements:[{id,text}]}` |
 | `GET /v1/jobs/{id}` | id, status, assessment, error code |
 | `DELETE /v1/jobs/{id}` | cancel and erase payload/result |
+
+New source bundles contain one explicitly linked immutable transcript per recording.
+Missing, pending or failed parts block assessment; provider alternatives cannot fill
+that gap. `transcript_bundle.py` orders complete unique source ordinals, otherwise
+recording IDs deterministically without claiming chronological order. Every part
+keeps its own clock and voice namespace. No combined VTT or guessed clock offsets
+are created. Evidence includes `recordingId` and `transcriptId`; `seconds` and
+`endSeconds` are local to that recording. Both context windows stay within the pair.
+
+Legacy five-field chunks remain accepted as one source, but cannot be mixed with
+linked chunks in a job. The HR adapter accepts legacy one-recording/one-transcript
+inference only with Core disabled. In Core mode intake reads the authorized
+`canonical_materials.read_intake` projection, never preparedProfile transcriptText
+as a fallback. The entire ordered source bundle and recording inventory invalidate
+the base assessment when any part changes, appears, disappears or is revoked.
+Published provenance contains ordered `sourceTranscripts`; `sourceTranscript` is a
+compatibility alias only for a single part. The HR bridge persists the sanitized
+fragment map and verifies returned evidence IDs, quotes, times and source links.
 
 States: queued, running, completed, failed, cancelled, expired. Job identity includes
 sanitized inputs, exact pack hash and model. One consumer; completed stages replay
