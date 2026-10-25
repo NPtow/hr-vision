@@ -114,6 +114,18 @@ SQLite ради обхода проверки: это потеряет новы�
 Доставка всех lifecycle-строк сама по себе не открывает откат — записи остаются
 в базе. Если проверка базы недоступна, сначала восстановите её доступность.
 
+## Оценки и обратная связь по фрагментам
+
+Перед выпуском оценок установите reviewed receiver с assessment-проверкой:
+любые строки `ia_assessment_revisions`, `ia_assessment_feedback`,
+`ia_assessment_feedback_events` или `ia_assessment_commands` запрещают активацию
+и fallback на runtime без `interview_assessment.py`. Проверка выполняется под той
+же write reservation перед сменой API; оценки, отзывы и очереди не очищаются.
+Пустые таблицы и историческая база без этих таблиц допускают прежние полные
+layout. Текущий полный runtime объединяет service/core-source, Zoom/materials
+и assessment; прежние layouts остаются в allowlist только для совместимой базы.
+При отказе используйте совместимый forward recovery с новым номером попытки.
+
 ## Отдельная демка заметок на встрече
 
 `manager&demo=meeting-notes` использует обычную авторизацию работодателя и отдельные

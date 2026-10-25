@@ -58,6 +58,7 @@ jobs:
           node --test scripts/observability-privacy.test.ts
           node --test scripts/candidate-player-model.test.ts
           node --test scripts/interview-answer-model.test.ts
+          node --test src/scenes/interview-assessment/fragment-feedback.test.mjs
           node --test scripts/candidate-review-queue.test.ts
           node --test scripts/employer-entry.test.ts
           node --test scripts/employer-agenda.test.ts

@@ -10,6 +10,7 @@ import candidateRepeatAsset from '../employer-workspace/assets/candidate-profile
 import { groupTranscriptTurns, parseMeetingTranscript, transcriptInRange } from '../connected-journey/transcript';
 import { CandidateInterviewPlayer } from './CandidateInterviewPlayer';
 import type { InterviewAssistantRequest } from './interview-assistant-api';
+import type { AssessmentPresentation } from '../interview-assessment/types';
 
 export type { InterviewMedia } from './InterviewMediaContext';
 export type InterviewReviewProps = {
@@ -60,6 +61,8 @@ export type RecordingReviewProps = {
   comments?: { id: string; seconds: number; text: string; createdAt: string }[];
   canComment?: boolean;
   assistant?: InterviewAssistantRequest;
+  /** Only an authenticated adapter may supply a ready assessment and persistence. */
+  assessment?: AssessmentPresentation;
 };
 
 /** Parse a source's mm:ss or hh:mm:ss. A missing timestamp is never a seekable chapter. */

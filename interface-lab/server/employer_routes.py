@@ -17,6 +17,7 @@ import employer_notifications as notifications
 import employer_workflow as workflow
 import vacancy_import
 from interview_assistant import InterviewAssistant
+import interview_assessment
 
 
 PREFIX = '/api/hr/employer'
@@ -40,6 +41,7 @@ class EmployerRoutes:
             notifications.init(db)
             intake.init(db)
             vacancy_import.init(db)
+            interview_assessment.init(db)
             db.execute('''CREATE TABLE IF NOT EXISTS em_meeting_transcripts (
               meeting_id TEXT PRIMARY KEY REFERENCES cp_meetings(id),
               application_id TEXT NOT NULL REFERENCES cp_applications(id),
@@ -199,6 +201,8 @@ class EmployerRoutes:
             return self._materials(headers, body, screening=True), {}
         if route == '/interview-assistant' and method == 'POST':
             return self._interview_assistant(headers, body), {}
+        if route in ('/interview-assessment', '/interview-assessment/feedback') and method == 'POST':
+            return self._interview_assessment(headers, body, feedback=route.endswith('/feedback')), {}
         if route == '/feedback/questions' and method == 'POST':
             return self._questions(headers, body), {}
         if route == '/action' and method == 'POST' and body.get('action') == 'meeting.finish':
@@ -267,6 +271,37 @@ class EmployerRoutes:
             if route == '/action' and method == 'POST':
                 return self._action(db, headers, body), {}
             raise Problem('Действие не найдено.', 404)
+
+    def _interview_assessment(self, headers, body, *, feedback=False):
+        require(isinstance(body, dict) and body.get('source') in ('intake', 'screening', 'meeting'),
+                'Проверьте источник интервью.', 400)
+        feedback_keys = {'revisionId', 'criterionId', 'evidenceId', 'answer', 'comment', 'expectedVersion', 'requestId'}
+        scope = {key: value for key, value in body.items() if key not in feedback_keys} if feedback else body
+        if not feedback:
+            require(not set(body) & feedback_keys, 'Проверьте источник интервью.', 400)
+        with self.lock, self.connect() as db:
+            if scope['source'] == 'intake':
+                principal = access.authenticate(db, headers)
+                binding, fingerprint, _ = interview_assessment.intake_binding(db, principal['workspaceId'], scope, allow_missing_transcript=True)
+                if fingerprint is None:
+                    require(not feedback, 'Материалы интервью изменились. Откройте оценку ещё раз.', 409)
+                    return {'assessment': None}
+                if feedback:
+                    values = {key: value for key, value in body.items() if key in feedback_keys}
+                    return interview_assessment.save_feedback(db, principal, binding, fingerprint, values)
+                return interview_assessment.read(db, principal, binding, fingerprint)
+            allowed = {'source', 'candidate', 'applicationId', 'vacancyId', 'generation', 'recordingId'}
+            if scope['source'] == 'meeting':
+                allowed.add('meetingId')
+            require(set(scope) <= allowed and isinstance(scope.get('recordingId'), str),
+                    'Проверьте источник интервью.', 400)
+            principal, app, _ = self._identity(db, headers, scope, allow_archived=True)
+            meeting = self.portal.interview(db, app['candidateId']) if scope['source'] == 'screening' else self._meeting(db, app, scope)
+            require(meeting and meeting['status'] == 'completed', 'Материалы доступны после встречи.', 409)
+            # The read-ready boundary keeps real call/materials handling untouched.
+            # No assessment has been imported for these sources in this release.
+            require(not feedback, 'Оценка этого интервью недоступна.', 404)
+            return {'assessment': None}
 
     def _interview_assistant(self, headers, body):
         allowed = {'source', 'action', 'query', 'requestId', 'candidate', 'applicationId',

@@ -60,11 +60,17 @@ PRE_ZOOM_RUNTIME = PRE_SERVICES_RUNTIME
 ZOOM_RUNTIME = {'call_providers.py', 'zoom_media.py', 'materials_zoom.py', 'zoom_recording_retention.py'}
 SERVICES_ONLY_RUNTIME = PRE_SERVICES_RUNTIME | SERVICES_RUNTIME
 ZOOM_ONLY_RUNTIME = PRE_ZOOM_RUNTIME | ZOOM_RUNTIME
-RUNTIME = SERVICES_ONLY_RUNTIME | ZOOM_RUNTIME
+# Preserve both independently shipped complete histories. New releases include
+# the main core/source service boundary and the approved assessment capability.
+ASSESSMENT_ONLY_RUNTIME = ZOOM_ONLY_RUNTIME | {'interview_assessment.py'}
+PRE_ASSESSMENT_RUNTIME = SERVICES_ONLY_RUNTIME | ZOOM_RUNTIME
+RUNTIME = PRE_ASSESSMENT_RUNTIME | {'interview_assessment.py'}
 BOT_RUNTIME = PRE_IMPORT_RUNTIME - {'recruiter_access.py', 'recruiter_sources.py', 'recruiter_notifications.py'}
 LEGACY_RUNTIME = BOT_RUNTIME - {'candidate_bot.py'}
 RUNTIME_LAYOUTS = {frozenset(LEGACY_RUNTIME), frozenset(BOT_RUNTIME), frozenset(PRE_IMPORT_RUNTIME),
-                   frozenset(PRE_SERVICES_RUNTIME), frozenset(SERVICES_ONLY_RUNTIME), frozenset(ZOOM_ONLY_RUNTIME), frozenset(PRE_OUTREACH_RUNTIME), frozenset(PRE_ACCESS_RUNTIME), frozenset(PRE_CV_RUNTIME),
+                   frozenset(PRE_SERVICES_RUNTIME), frozenset(SERVICES_ONLY_RUNTIME), frozenset(ZOOM_ONLY_RUNTIME),
+                   frozenset(ASSESSMENT_ONLY_RUNTIME), frozenset(PRE_ASSESSMENT_RUNTIME),
+                   frozenset(PRE_OUTREACH_RUNTIME), frozenset(PRE_ACCESS_RUNTIME), frozenset(PRE_CV_RUNTIME),
                    frozenset(PRE_POOLED_RUNTIME), frozenset(PRE_EMPLOYER_TELEGRAM_RUNTIME), frozenset(PRE_REMINDERS_RUNTIME), frozenset(PRE_MEETING_NOTICES_RUNTIME), frozenset(PRE_MEETING_LAB_RUNTIME), frozenset(PRE_RECRUITER_COACH_RUNTIME), frozenset(PRE_CALL_CLEANUP_RUNTIME), frozenset(PRE_OBSERVABILITY_RUNTIME), frozenset(PRE_CANDIDATE_CALENDAR_RUNTIME), frozenset(PRE_INTERVIEW_ASSISTANT_RUNTIME), frozenset(PRE_MATERIALS_RUNTIME), frozenset(RUNTIME)}
 MAX_ARCHIVE = 50 * 1024 * 1024
 MAX_CONTENT = 120 * 1024 * 1024
@@ -257,6 +263,17 @@ def resume_materials(active):
 def guard_outbox_runtime(db, source):
     runtime = frozenset(path.relative_to(source).as_posix() for path in source.rglob('*') if path.is_file())
     require(runtime in RUNTIME_LAYOUTS, 'Incomplete recovery API')
+    if 'interview_assessment.py' not in runtime:
+        for table in ('ia_assessment_revisions', 'ia_assessment_feedback',
+                      'ia_assessment_feedback_events', 'ia_assessment_commands'):
+            schema = db.execute('SELECT type FROM sqlite_master WHERE name=?', (table,)).fetchall()
+            if schema:
+                require(schema == [('table',)], 'Cannot verify interview assessment schema: ' + table)
+                # Keep immutable projections, fragment feedback, audit history
+                # and retry identities readable. Never clear them to permit a
+                # downgrade; an empty historical schema remains reversible.
+                require(not db.execute('SELECT 1 FROM ' + table + ' LIMIT 1').fetchone(),
+                        'Interview assessment data requires interview_assessment.py; use a compatible forward recovery')
     if not SERVICES_RUNTIME.issubset(runtime):
         for table in ('portal_materials_outbox', 'core_material_receipts', 'core_material_channels', 'core_material_asset_bindings'):
             schema = db.execute('SELECT type FROM sqlite_master WHERE name=?', (table,)).fetchall()
