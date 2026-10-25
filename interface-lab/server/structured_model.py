@@ -113,8 +113,23 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
+def _gemini_schema(value):
+    """Keep nullable types, but omit null enum members rejected by CPA/Gemini."""
+    if isinstance(value, dict):
+        return {key: [item for item in child if item is not None] if key == 'enum'
+                else _gemini_schema(child) for key, child in value.items()}
+    if isinstance(value, list):
+        return [_gemini_schema(child) for child in value]
+    return value
+
+
 @observability.operation("llm.structured_completion")
 def provider(config, payload, key, timeout):
+    if config.model.startswith('gemini-') and payload.get('response_format', {}).get('type') == 'json_schema':
+        output = payload['response_format']
+        spec = output['json_schema']
+        payload = {**payload, 'response_format': {**output, 'json_schema': {
+            **spec, 'schema': _gemini_schema(spec['schema'])}}}
     request = urllib.request.Request(config.base_url + '/chat/completions', data=dump(payload).encode(),
         headers={'Authorization': 'Bearer ' + config.api_key, 'Content-Type': 'application/json',
                  'Idempotency-Key': key, 'User-Agent': 'HRVision-Structured/1.0'})
