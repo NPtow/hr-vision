@@ -8,6 +8,8 @@ from unittest.mock import patch
 from domain import Problem
 from public_profiles import PublicProfiles, PUBLIC, OWNER
 import test_candidate_portal as fixture
+import selection
+from domain import iso, now
 
 
 class PublicProfileTest(unittest.TestCase):
@@ -135,3 +137,71 @@ class PublicProfileTest(unittest.TestCase):
         for value in (None, 123, {}, 'x' * 42):
             self.problem(404, lambda: self.call(body={'token': value}))
         self.problem(410, lambda: self.call(body={'token': 'x' * 43}))
+
+    def core_result(self):
+        # Protocol double only; never used as candidate data or model evidence.
+        doc = {'engine_contract': 'engine-v1', 'format': 'candidate_profile/1', 'synthetic': False,
+               'document_sha256': '', 'notice': 'Synthetic test double',
+               'model': {'mode': 'provider', 'call_count': 1},
+               'body': {'candidate_id': 'synthetic-engine-person', 'families': [{'criteria': [
+                   {'criterion_id': 'A01', 'state': 'unknown', 'level': None, 'missing_reason': 'task_not_given', 'basis': None},
+                   {'criterion_id': 'A08', 'state': 'not_applicable', 'level': None, 'missing_reason': 'not_applicable', 'basis': None},
+               ]}]}}
+        doc['document_sha256'] = selection.digest(doc)
+        with self.flow.connect() as db:
+            selection.init(db)
+            person = selection.person(db, self.person['id'])
+            db.execute('INSERT INTO sl_core_results VALUES (?,?,?,?,?,?,?,?,?,?)',
+                ('synthetic-result', self.person['id'], person['interviewId'], 'synthetic-engine-person', 'test-job',
+                 'a' * 64, person['sourceRevision'], doc['document_sha256'], json.dumps(doc), iso(now())))
+
+    def test_public_analytics_are_source_bound_without_inventing_scores(self):
+        self.core_result()
+        token = self.issue()
+        value = self.call(PUBLIC + '/assessment', {'token': token})[0]['assessment']
+        self.assertEqual(value['revisionId'], 'synthetic-result')
+        self.assertEqual(value['feedback'], [])
+        self.assertEqual(len(value['criteria']), 1)
+        criterion = value['criteria'][0]
+        self.assertEqual((criterion['id'], criterion['state'], criterion['level']), ('A01', 'unknown', None))
+        self.assertEqual(criterion['evidence'], [])
+        self.assertNotIn('nextQuestion', criterion)
+        self.assertNotIn('model', value)
+        with self.flow.connect() as db:
+            db.execute("UPDATE cp_resumes SET uploaded_at='changed' WHERE candidate_id=?", (self.person['id'],))
+        self.assertIsNone(self.call(PUBLIC + '/assessment', {'token': token})[0]['assessment'])
+
+    def test_missing_analytics_are_explicitly_unavailable(self):
+        token = self.issue()
+        self.assertIsNone(self.call(PUBLIC + '/assessment', {'token': token})[0]['assessment'])
+
+    def test_public_assistant_uses_existing_engine_with_only_this_transcript(self):
+        token = self.issue()
+        materials = {'recordings': [{'id': 'bound-recording'}], 'transcripts': [{'id': 'bound-text', 'text': 'Synthetic source transcript.'}]}
+        def run(principal, source, transcript, body, authorize):
+            self.assertTrue(principal['accountId'].startswith('public-profile:profile_'))
+            self.assertEqual(principal['workspaceId'], principal['accountId'])
+            self.assertEqual(transcript, 'Synthetic source transcript.')
+            self.assertIn('bound-recording', source)
+            self.assertNotIn(token, source)
+            self.assertEqual(set(body), {'action', 'query', 'requestId'})
+            with self.flow.connect() as db:
+                authorize(db)
+            return {'mode': 'chat', 'text': 'Synthetic answer.', 'evidence': []}
+        with patch.object(self.flow.portal, 'materials', return_value=materials), patch.object(self.shares.assistant, 'run', side_effect=run) as engine:
+            result, _ = self.call(PUBLIC + '/assistant', {'token': token, 'action': 'chat', 'query': 'Опыт кандидата?', 'requestId': 'synthetic-query-1'})
+        self.assertEqual(result['mode'], 'chat')
+        self.assertEqual(engine.call_count, 1)
+        self.problem(400, lambda: self.call(PUBLIC + '/assistant', {'token': token, 'action': 'chat', 'query': 'Опыт?', 'requestId': 'test-request', 'candidateId': 'other'}))
+
+    def test_revocation_stops_public_assistant_even_during_inference(self):
+        token = self.issue()
+        materials = {'recordings': [{'id': 'recording'}], 'transcripts': [{'id': 'text', 'text': 'Synthetic transcript.'}]}
+        def run(principal, source, transcript, body, authorize):
+            with self.flow.connect() as db:
+                self.shares.revoke(db, self.person['id'])
+            with self.flow.connect() as db:
+                authorize(db)
+        with patch.object(self.flow.portal, 'materials', return_value=materials), patch.object(self.shares.assistant, 'run', side_effect=run):
+            self.problem(410, lambda: self.call(PUBLIC + '/assistant', {'token': token, 'action': 'search', 'query': 'Опыт?', 'requestId': 'synthetic-query-1'}))
+        self.problem(410, lambda: self.call(PUBLIC + '/assessment', {'token': token}))
