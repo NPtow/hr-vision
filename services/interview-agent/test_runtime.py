@@ -1,9 +1,12 @@
 """Offline storage/isolation checks. Live model acceptance is recorded separately."""
 import copy
+import asyncio
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 import runtime
 from domain import Problem
@@ -58,6 +61,46 @@ class RuntimeTest(unittest.TestCase):
             self.assertFalse((snapshot / 'secret-from-first').exists()); return {'ok': True}
         with patch.object(runtime, 'answer', side_effect=isolated):
             runtime.execute({**self.payload, 'runId': 'd' * 64, 'sessionId': 'e' * 64})
+
+    def grounding_run(self, final_grounded):
+        prompts, judgements = [], iter([False, final_grounded])
+        def response(value):
+            return SimpleNamespace(structured_output=value,
+                metrics=SimpleNamespace(accumulated_usage={'inputTokens': 10, 'outputTokens': 2, 'totalTokens': 12}))
+        class Session:
+            async def __aenter__(self): return self
+            async def __aexit__(self, *args): pass
+        class Harness(Session):
+            async def invoke_async(self, prompt, **kwargs):
+                prompts.append(prompt)
+                return response(runtime.Answer(parts=[runtime.Part(text='Обсудили задачу.', sourceIds=['fragment-0'])]))
+        class Judge(Session):
+            def __init__(self, **kwargs): pass
+            async def invoke_async(self, prompt, **kwargs):
+                grounded = next(judgements)
+                return response(runtime.Grounding(grounded=grounded,
+                    reason='supported' if grounded else 'unsupported_fact',
+                    issues=[] if grounded else ['Убери неподтвержденный вывод о результате.']))
+        with patch.dict(os.environ, {'HR_AGENT_MODEL': 'test', 'HR_LLM_BASE_URL': 'https://example.invalid/v1', 'HR_LLM_API_KEY': 'synthetic'}), \
+                patch.object(runtime, 'OpenAIModel'), patch.object(runtime, 'create_harness', return_value=Harness()), \
+                patch.object(runtime, 'Agent', Judge):
+            result = asyncio.run(runtime.answer(self.payload, runtime.ROOT / 'working'))
+        return result, prompts
+
+    def test_rejected_answer_is_repaired_and_validated_before_delivery(self):
+        result, prompts = self.grounding_run(True)
+        self.assertEqual(len(prompts), 2)
+        self.assertIn('неподтвержденный вывод', prompts[1])
+        self.assertEqual(result['metadata']['repairs'], 1)
+        self.assertEqual(result['metadata']['budgetUnits'], 48)
+        self.assertTrue(result['metadata']['grounded'])
+        self.assertEqual(len(list((runtime.ROOT / 'rejected').glob('*.json'))), 1)
+
+    def test_a_second_grounding_failure_is_never_delivered_as_success(self):
+        with self.assertRaises(Problem) as error:
+            self.grounding_run(False)
+        self.assertEqual(error.exception.status, 502)
+        self.assertEqual(len(list((runtime.ROOT / 'rejected').glob('*.json'))), 2)
 
 
 if __name__ == '__main__': unittest.main()

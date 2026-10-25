@@ -359,8 +359,12 @@ def agent_enabled():
 
 
 def agent_session(principal, source_id, transcript, context):
+    # A background assessment refresh must not erase the employer's conversation.
+    # The fresh assessment is still scoped/rechecked for each run and exposed by
+    # its read tool; changes to the underlying job/profile/transcript start anew.
+    stable_context = {k: v for k, v in (context or {}).items() if k != 'assessment'}
     return digest(dump([AGENT_VERSION, principal['workspaceId'], principal['accountId'],
-                        source_id, digest(transcript), context]))
+                        source_id, digest(transcript), stable_context]))
 
 
 def agent_completion(payload, deadline, check):
