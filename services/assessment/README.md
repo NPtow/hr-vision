@@ -25,7 +25,7 @@ The initial backfill covers active public profiles only, not every historical ca
 
 ## Pipeline and contract
 
-Pinned model: `jev-1.14.0`; active immutable prompt pack: `2026-10-25.2.json`.
+Pinned model: `jev-1.14.0`; active immutable prompt pack: `2026-10-25.3.json`.
 Pack .1 records the initial synthetic experiment. The criteria and 5-level behavior
 anchors come from the project's criteria-2026-10-v1 / CD-24/v2 rubric.
 
@@ -37,7 +37,9 @@ anchors come from the project's criteria-2026-10-v1 / CD-24/v2 rubric.
 6. Independent groundedness call; publish only supported evidence.
 7. Code assembles labels, exact quotes and source timestamps.
 
-Evidence/basis threshold 0.55; groundedness 0.75; comparison threshold 0.60.
+Evidence selection uses a validated non-NONE source ID with probability above NONE.
+Categorical source probability is not a binary evidence confidence: equivalent source
+fragments divide its mass. Basis threshold 0.55; groundedness 0.75; comparison 0.60.
 These are operational gates, **not calibrated probabilities of job performance**.
 One selected episode cannot establish the rubric's level 5. Display is capped at 4,
 or 3 for hypothetical answers. Self-reports are explicitly marked. Raw measurement
@@ -110,6 +112,6 @@ queue data exists. Never clear evidence or bypass a live-meeting guard for rollb
 
 `python3 -m unittest discover -s services/assessment/tests -v` is offline.
 `tests/live_goldens.py` is opt-in and makes paid requests with an operator-supplied
-`ASSESSMENT_JEV_KEY`; it contains synthetic data only. Recorded .2 acceptance covers
+`ASSESSMENT_JEV_KEY`; it contains synthetic data only. Recorded .3 acceptance covers
 positive evidence, no evidence, prompt injection, recruiter-only speech and vacancy
 comparison with invariant base scores. This is a regression gate, not psychometric calibration.

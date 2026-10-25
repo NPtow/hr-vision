@@ -10,7 +10,7 @@ import subprocess
 import tempfile
 import time
 
-VERSION = '2026-10-25.2'
+VERSION = '2026-10-25.3'
 PACK = json.loads((Path(__file__).parent / 'prompts' / (VERSION + '.json')).read_text())
 PACK_HASH = hashlib.sha256(json.dumps(PACK, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 INJECTION = re.compile(r'ignore\s+(?:all\s+)?(?:previous|above|system)|(?:system|developer)\s*(?:prompt|message)|игнорир\w*\s+(?:все\s+)?(?:предыдущ|инструкц)|(?:выведи|раскрой|покажи)\s+(?:ключ|токен|секрет)|<\|(?:im_start|system)|(?:администратор|admin)\s+(?:разреш|says)|you\s+are\s+(?:now|chatgpt)|выполни\s+(?:команд|код)|<script\b', re.I)
@@ -209,7 +209,10 @@ def assess(body, job_id, boundary):
         for cid, answer in response['answers'].items():
             chosen = answer['choice']
             # Selected IDs resolve back to source rows, never model-generated quotes.
-            if chosen != 'NONE' and answer['probabilities'][chosen] >= .55:
+            # Several equally useful fragments divide categorical probability.
+            # It is not the probability that evidence exists. Validate the chosen
+            # source against NONE, then use the independent basis and judge gates.
+            if chosen != 'NONE' and answer['probabilities'][chosen] > answer['probabilities']['NONE']:
                 index = next(i for i, r in enumerate(chunks) if r['id'] == chosen)
                 selected[cid] = chunks[max(0, index - 1):index + 2]
     scores, judged = {}, {}
