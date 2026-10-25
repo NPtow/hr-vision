@@ -6,6 +6,7 @@ from unittest.mock import patch
 import assessment_jobs as jobs
 import selection
 from public_profiles import PublicProfiles
+from domain import Problem
 import test_candidate_portal as fixture
 
 
@@ -85,6 +86,15 @@ class AssessmentJobsTest(unittest.TestCase):
             jobs.enqueue(db, 'candidate', self.person['id'], 'vacancy-one')
             self.assertEqual(db.execute('SELECT count(*) FROM as_bindings').fetchone()[0], 1)
             self.assertEqual(db.execute('SELECT count(*) FROM as_matches').fetchone()[0], 2)
+
+    def test_invalid_transcript_is_terminal_instead_of_infinite_loading(self):
+        with patch.object(self.bridge, 'snapshot', side_effect=Problem('transcript_format_unsupported', 422)):
+            self.bridge.tick()
+        with self.flow.connect() as db:
+            result = jobs.read_candidate(db, self.person['id'], 'recording')
+            self.assertEqual(result['status'], 'failed')
+            self.assertEqual(result['error'], 'transcript_format_unsupported')
+        self.assertEqual(self.requests, [])
 
 
 if __name__ == '__main__':
