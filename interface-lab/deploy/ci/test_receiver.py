@@ -160,11 +160,12 @@ class ReceiverTest(unittest.TestCase):
         self.assertEqual(r.PRE_INTERVIEW_ASSISTANT_RUNTIME - r.PRE_CANDIDATE_CALENDAR_RUNTIME, {'candidate_availability.py'})
         self.assertEqual(r.PRE_MATERIALS_RUNTIME - r.PRE_INTERVIEW_ASSISTANT_RUNTIME, {'interview_assistant.py'})
         self.assertEqual(r.PRE_ZOOM_RUNTIME - r.PRE_MATERIALS_RUNTIME, r.MATERIALS_RUNTIME)
-        self.assertEqual(r.RUNTIME - r.PRE_ZOOM_RUNTIME, r.ZOOM_RUNTIME)
+        self.assertEqual(r.PRE_ASSESSMENT_RUNTIME - r.PRE_ZOOM_RUNTIME, r.ZOOM_RUNTIME)
+        self.assertEqual(r.RUNTIME - r.PRE_ASSESSMENT_RUNTIME, {'interview_assessment.py'})
         self.assertEqual(r.ZOOM_RUNTIME, {'call_providers.py', 'zoom_media.py', 'materials_zoom.py', 'zoom_recording_retention.py'})
         self.assertEqual(len(r.MATERIALS_RUNTIME), 9)
         for runtime in (r.LEGACY_RUNTIME, r.BOT_RUNTIME, r.PRE_IMPORT_RUNTIME, r.PRE_OUTREACH_RUNTIME,
-                        r.PRE_ACCESS_RUNTIME, r.PRE_CV_RUNTIME, r.PRE_POOLED_RUNTIME, r.PRE_EMPLOYER_TELEGRAM_RUNTIME, r.PRE_REMINDERS_RUNTIME, r.PRE_MEETING_NOTICES_RUNTIME, r.PRE_MEETING_LAB_RUNTIME, r.PRE_RECRUITER_COACH_RUNTIME, r.PRE_CALL_CLEANUP_RUNTIME, r.PRE_OBSERVABILITY_RUNTIME, r.PRE_CANDIDATE_CALENDAR_RUNTIME, r.PRE_INTERVIEW_ASSISTANT_RUNTIME, r.PRE_MATERIALS_RUNTIME, r.PRE_ZOOM_RUNTIME, r.RUNTIME):
+                        r.PRE_ACCESS_RUNTIME, r.PRE_CV_RUNTIME, r.PRE_POOLED_RUNTIME, r.PRE_EMPLOYER_TELEGRAM_RUNTIME, r.PRE_REMINDERS_RUNTIME, r.PRE_MEETING_NOTICES_RUNTIME, r.PRE_MEETING_LAB_RUNTIME, r.PRE_RECRUITER_COACH_RUNTIME, r.PRE_CALL_CLEANUP_RUNTIME, r.PRE_OBSERVABILITY_RUNTIME, r.PRE_CANDIDATE_CALENDAR_RUNTIME, r.PRE_INTERVIEW_ASSISTANT_RUNTIME, r.PRE_MATERIALS_RUNTIME, r.PRE_ZOOM_RUNTIME, r.PRE_ASSESSMENT_RUNTIME, r.RUNTIME):
             with self.subTest(count=len(runtime)):
                 a, s, m = self.bundle('service', runtime=runtime)
                 self.assertEqual(r.unpack(a, s, 'service'), m)

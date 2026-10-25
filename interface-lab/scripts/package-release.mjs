@@ -59,7 +59,7 @@ if (target === 'service') for (const name of [
   'employer_access.py', 'employer_store.py', 'employer_workflow.py', 'employer_routes.py',
   'employer_projection.py', 'employer_intake.py', 'vacancy_import.py', 'vacancy_sources.py',
   'daily_media.py', 'media_runtime.py', 'call_cleanup.py',
-  'call_providers.py', 'zoom_media.py', 'materials_zoom.py', 'zoom_recording_retention.py', 'domain.py', 'dsa_panel.py', 'feedback.py', 'meeting_lab.py', 'interview_assistant.py',
+  'call_providers.py', 'zoom_media.py', 'materials_zoom.py', 'zoom_recording_retention.py', 'domain.py', 'dsa_panel.py', 'feedback.py', 'meeting_lab.py', 'interview_assistant.py', 'interview_assessment.py',
   'materials_capture.py', 'materials_daily.py', 'materials_repository.py', 'materials_http.py',
   'materials_storage.py', 'materials_transcripts.py', 'materials_worker.py', 'materials_runtime.py', 'materials_service.py',
 ]) add(`server/${name}`, `api/${name}`);

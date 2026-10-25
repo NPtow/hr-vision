@@ -86,7 +86,7 @@ export function journeyRequestTarget(path: string, token?: string, body?: unknow
   };
 }
 
-class RequestError extends Error {
+export class RequestError extends Error {
   constructor(message: string, public status: number) { super(message); }
 }
 
