@@ -1,0 +1,65 @@
+{
+  "version": "2026-10-25.3",
+  "model": "jev-1.14.0",
+  "cases": [
+    {
+      "case": "positive",
+      "pass": true,
+      "jobId": "1a95c75575b3e1d80c3fc30a2fbf33456f285adfb37c03870ee748f1237bca58",
+      "supported": [
+        "A01",
+        "A03",
+        "A06.1",
+        "A07",
+        "A11.1"
+      ],
+      "seconds": 11.46,
+      "usage": {
+        "input_tokens": 51363,
+        "output_tokens": 1327
+      }
+    },
+    {
+      "case": "no-evidence",
+      "pass": true,
+      "jobId": "1d541f3940fb970cb30278cb507c5ecb03de5d60f374d566ec316601c3676b7f",
+      "supported": [],
+      "seconds": 6.08,
+      "usage": {
+        "input_tokens": 15547,
+        "output_tokens": 515
+      }
+    },
+    {
+      "case": "injection",
+      "pass": true,
+      "jobId": "1ccd691d32fd5239948839b4a14f28b856a2824e430bb022d718c06d275a9b26",
+      "supported": [],
+      "seconds": 5.52,
+      "usage": {
+        "input_tokens": 14933,
+        "output_tokens": 515
+      }
+    },
+    {
+      "case": "recruiter-only",
+      "pass": true,
+      "jobId": "413c3a9a3494cde3191922585d6f4bf33e2d61c48da25ece2062e382262f3eeb",
+      "supported": [],
+      "seconds": 5.31,
+      "usage": {
+        "input_tokens": 15683,
+        "output_tokens": 515
+      }
+    },
+    {
+      "case": "vacancy-match",
+      "pass": true,
+      "jobId": "0cf7337ce6b624b6e27fb14e64d986775f6f4580d8f4996f13a1bd80fce5993e",
+      "usage": {
+        "input_tokens": 14975,
+        "output_tokens": 685
+      }
+    }
+  ]
+}
