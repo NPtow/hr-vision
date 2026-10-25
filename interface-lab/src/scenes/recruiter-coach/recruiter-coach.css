@@ -200,3 +200,21 @@
 .rcc-root .rcc-stage-toolbar {flex-shrink:0;padding:0 22px 12px;color:#bbb;font-size:12px;}
 .rcc-root .rcc-header:has(> .rcc-tool) {justify-content:flex-start;gap:8px;}
 .rcc-root .rcc-header .rcc-recording{margin-left:auto;}
+
+/* Zoom Client View owns the entire stage, including its native controls. */
+.rcc-root.rcc-native-provider .rcc-stage { padding: 0; gap: 0; }
+.rcc-root.rcc-native-provider .rcc-video-stage { flex: 1; min-height: 0; margin: 0; border-radius: 0; }
+.rcc-root.rcc-native-provider .rcc-remote { border-radius: 0; }
+.rcc-root.rcc-native-provider .md-zoom-call { border-radius: 0; }
+.rcc-native-notice { padding: 12px 20px; color: var(--rcc-muted, #6f6c7a); font-size: 13px; }
+
+.rcc-native-provider .rcc-sidebar { display: flex; flex-direction: column; }
+.rcc-native-provider .rcc-tabs-root { flex: 1; height: auto; }
+.rcc-native-notice { flex-shrink: 0; }
+.rcc-root .rcc-native-profile { margin: 12px 20px 0; padding: 8px; flex-shrink: 0; }
+
+@media (max-width: 720px) {
+  /* Keep the provider's dialogs and toolbar at phone viewport size. Notes can
+     scroll below the call without replacing or shrinking the SDK document. */
+  .rcc-root.rcc-native-provider { grid-template-rows: 100dvh 100dvh; overflow-y: auto; overflow-x: hidden; }
+}

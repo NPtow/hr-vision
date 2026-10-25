@@ -18,6 +18,7 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from domain import NAMES, Problem, accounts, actor_name, fresh, public_state, require, transition, text, iso, now, timestamp
 from daily_media import DailyMedia
+from zoom_media import ZoomMedia
 from media_runtime import provider_budget, provider_timeout
 from feedback import questionnaire, vtt_turns
 import browser_access
@@ -88,7 +89,8 @@ with connect() as db:
     db.execute('CREATE TABLE IF NOT EXISTS intake_batches (id TEXT PRIMARY KEY, digest TEXT NOT NULL)')
 os.chmod(DB, 0o600)
 CANDIDATE_PORTAL = CandidatePortal(connect, LOCK, MEDIA, ORIGIN, candidate_notifications,
-                                  origins=ORIGINS, recruiter_origin=os.environ.get('HR_RECRUITER_ORIGIN', ORIGIN))
+                                  origins=ORIGINS, recruiter_origin=os.environ.get('HR_RECRUITER_ORIGIN', ORIGIN),
+                                  zoom=ZoomMedia.from_env())
 CANDIDATE_BOT = CandidateBot(CANDIDATE_PORTAL, candidate_notifications)
 HH_ROUTES = HHRecruiterRoutes(connect, CANDIDATE_PORTAL)
 CANDIDATE_PORTAL.invitation_lookup = HH_ROUTES.existing_invitation

@@ -21,6 +21,38 @@ provider has been selected or enabled.
 This change is prepared locally. It does not provision a broker, bucket, keys,
 webhook subscription, production Python, or enable a production feature.
 
+## Zoom recordings
+
+The parallel Zoom path uses the same catalog, worker and private storage.
+Zoom sources always use `owned` storage, including when the global Daily policy
+is `remote`; an existing Zoom remote source is upgraded with generation fencing.
+Daily's default and existing sources retain their policy. Recording discovery is
+bound to the saved Zoom connection, meeting number and exact pinned session UUID.
+Authenticated download headers are private worker transport data, never playback
+URLs. A ready video requires a verified owned file; transcript readiness is separate.
+
+New Zoom rooms use native automatic cloud recording after each participant's
+explicit consent before credential issuance. The call interface and controls are
+Zoom's; the shared material worker imports provider files independently of call
+transport, notes and coaching. `HR_ZOOM_DEFAULT_HOST_ID` explicitly supplies a licensed
+host for organizers without a more specific actor mapping. Account entitlements
+still govern Zoom capacity. See [ZOOM_PROVIDER.md](ZOOM_PROVIDER.md) for the switch,
+native completion reconciliation, credentials and deployment acceptance.
+
+Optional cleanup requires `HR_ZOOM_RECORDING_RETENTION_ENABLED=1`. It keeps a
+30-day buffer after both recording end and our verified copy, then moves only
+individually verified files to Zoom's trash. Current checksum/size, storage
+namespace, exact session/account, completed owner, source generation and inventory
+must still match. Uncopied or uncertain files remain; no whole-meeting, permanent
+or local-object deletion occurs. The account must allow recovery from trash and
+have provider automatic deletion disabled. Missing permissions/settings block
+cleanup, not meetings or copying; ambiguous mutations are not replayed.
+
+Cleanup needs `account:read:settings:admin` and
+`cloud_recording:delete:recording_file:admin`. Both were absent in the fresh token
+check during 2026-10-25 deployment preparation, when production Zoom credentials
+were still uninstalled. Cleanup is prepared but is not confirmed active.
+
 ## Dependencies and isolated Python
 
 Use the isolated **CPython 3.12** runtime for both the materials worker and the

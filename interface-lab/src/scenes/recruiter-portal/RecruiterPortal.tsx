@@ -121,7 +121,7 @@ function RecruiterWorkspace() {
   const completed = (state?.candidates || []).filter(candidate => candidate.interview?.status === 'completed')
     .sort((a, b) => Date.parse(b.interview!.start) - Date.parse(a.interview!.start));
   const renderCandidateDetails = (candidate: RecruiterCandidate) => <RecruiterCandidateDetails key={`${identity.generation}-${candidate.id}`} candidate={candidate} token={token} onOpen={() => setActiveCall({
-    kind: 'interview', candidateId: candidate.id, interviewId: candidate.interview!.id,
+    kind: 'interview', callProvider: candidate.interview!.callProvider || 'daily', candidateId: candidate.id, interviewId: candidate.interview!.id,
     title: candidate.name, candidate, recording: candidate.interview!.recording, preview: true,
   })}/>;
   return <div className="ew-root rp-root">
@@ -148,7 +148,7 @@ function RecruiterWorkspace() {
     {activeCall?.preview && activeCall.candidate ? <RecruiterInterviewWorkspace
       key={`${identity.generation}-${activeCall.interviewId}`} candidate={state?.candidates.find(person => person.id === activeCall.candidateId) || activeCall.candidate}
       token={token} videoConfigured={state?.videoConfigured || false} onClose={() => setActiveCall(null)} onUpdated={refresh}
-      onJoin={() => setActiveCall({ ...activeCall, preview: false })}/>
+      onJoin={(callProvider, recordingConsent) => setActiveCall({ ...activeCall, callProvider, recordingConsent, preview: false })}/>
       : activeCall && <RecruiterCall key={`${identity.generation}-${activeCall.kind}-${activeCall.interviewId || activeCall.meetingId || activeCall.applicationId || activeCall.candidateId}`} active={{ ...activeCall, accountActive: state?.candidates.find(person => person.id === activeCall.candidateId)?.accountActive ?? activeCall.accountActive }} token={token} onClose={() => { setActiveCall(null); void refresh(); }} onJoined={() => void refresh()} onCompleted={() => {
       if (!isCurrent(identity)) return;
       setActiveCall(null); setPage('interviews'); setCompletedOpen(true); setCompletedFocusId(activeCall.candidateId);

@@ -39,9 +39,17 @@ class MaterialsRuntime:
                        source_ref=None, storage_policy=None):
         if not self.enabled:
             return None
+        policy = _policy(storage_policy or ('owned' if provider == 'zoom' else self.default_policy))
+        if provider == 'zoom' and policy != 'owned':
+            raise ValueError('Zoom recordings require owned storage')
         source = self.repository.ensure_source(owner_kind, owner_id, provider,
             connection_id or self.connection_id, source_ref or {},
-            storage_policy=_policy(storage_policy or self.default_policy))
+            storage_policy=policy)
+        # Existing sources keep their identity. Upgrading only the Zoom source
+        # fences old remote jobs and schedules copying in the new generation.
+        if (provider == 'zoom' and source['storage_policy'] != 'owned' and
+                not source['metadata'].get('capture_disabled')):
+            source = self.repository.update_source_policy(source['id'], 'owned')
         if not source['metadata'].get('capture_disabled'):
             self.enqueue_discovery(source['id'])
         return source
@@ -50,7 +58,11 @@ class MaterialsRuntime:
         return self.worker.enqueue_discovery(source_id, token=token)
 
     def upgrade_policy(self, source_id, policy='owned'):
-        source = self.repository.update_source_policy(source_id, _policy(policy))
+        policy = _policy(policy)
+        source = self.repository.get_source(source_id)
+        if source['provider'] == 'zoom' and policy != 'owned':
+            raise ValueError('Zoom recordings require owned storage')
+        source = self.repository.update_source_policy(source_id, policy)
         if not source['metadata'].get('capture_disabled'):
             self.enqueue_discovery(source_id)
         return source
@@ -81,20 +93,26 @@ class MaterialsRuntime:
                     continue
                 # Invalid/reusable rooms must not occupy the first page forever.
                 clean_room = "CASE WHEN json_valid(p.room) THEN p.room ELSE '{}' END"
-                eligible = (f"(json_extract({clean_room},'$.session_id') IS NOT NULL OR "
+                legacy_binding = (f"(json_extract({clean_room},'$.session_id') IS NOT NULL OR "
                     f"json_extract({clean_room},'$.sessionId') IS NOT NULL OR "
                     f"json_extract({clean_room},'$.meetingSessionId') IS NOT NULL OR "
                     f"json_extract({clean_room},'$.mtgSessionId') IS NOT NULL OR "
                     f"json_extract({clean_room},'$.name')='hrv-' || p.id)")
+                provider_sql = f"COALESCE(json_extract({clean_room},'$.provider'),'daily')"
+                zoom_binding = ' AND '.join(
+                    f"COALESCE(length(json_extract({clean_room},'$.{key}')),0)>0"
+                    for key in ('meetingNumber', 'meetingSessionId', 'connectionId'))
+                eligible = (f"COALESCE((({provider_sql}='daily' AND {legacy_binding}) OR "
+                    f"({provider_sql}='zoom' AND {zoom_binding})),0)")
                 base = (f"FROM {table} p WHERE status='completed' AND room IS NOT NULL "
                     f"AND NOT EXISTS (SELECT 1 FROM media_sources s WHERE s.{kind}_id=p.id)")
                 never_started = f"COALESCE(json_extract({clean_room},'$.captureNeverStarted'),0)<>0"
                 if kind == 'interview' and {'cp_intake', 'cp_recording_control'} <= tables:
                     # Legacy prepared introductions may predate the room flag.
                     # Both persisted facts are required; absent control is unknown.
-                    never_started += (" OR EXISTS (SELECT 1 FROM cp_intake intake "
+                    never_started += (f" OR ({provider_sql}='daily' AND EXISTS (SELECT 1 FROM cp_intake intake "
                         "JOIN cp_recording_control control ON control.interview_id=p.id "
-                        "WHERE intake.candidate_id=p.candidate_id AND control.start_requested_at IS NULL)")
+                        "WHERE intake.candidate_id=p.candidate_id AND control.start_requested_at IS NULL))")
                 skipped += db.execute('SELECT count(*) ' + base + ' AND (' + never_started + ')').fetchone()[0]
                 base += ' AND NOT (' + never_started + ')'
                 ambiguous += db.execute('SELECT count(*) ' + base + ' AND NOT ' + eligible).fetchone()[0]
@@ -115,10 +133,11 @@ class MaterialsRuntime:
                            room.get('meetingSessionId') or room.get('mtgSessionId'))
                 room_id, name = room.get('id'), room.get('name')
                 provider = room.get('provider', 'daily')
-                if not room_id or not name or (not session and name != 'hrv-' + identity):
+                if (provider not in ('daily', 'zoom') or not room_id or not name or
+                        (provider == 'daily' and not session and name != 'hrv-' + identity)):
                     ambiguous += 1
                     continue
-                connection = room.get('connectionId', self.connection_id)
+                connection = room.get('connectionId') if provider == 'zoom' else room.get('connectionId', self.connection_id)
                 ref = owner_source_ref(kind, identity, room, provider, connection)
                 if not dry_run:
                     self.register_owner(kind, identity, provider, connection, source_ref=ref)
@@ -182,6 +201,20 @@ class MaterialsRuntime:
         for source in self._sources():
             if source['metadata'].get('capture_disabled') or source['state'] in ('not_recorded', 'unsupported'):
                 continue
+            if source['provider'] == 'zoom' and source['storage_policy'] != 'owned':
+                # One-time recovery also applies after the provider settling
+                # window. The policy generation change makes this bounded.
+                self.upgrade_policy(source['id'], 'owned')
+                rediscovered += 1
+                continue
+            if source['provider'] == 'zoom' and not any(
+                    job['operation'] == 'discover' and job['generation'] == source['generation']
+                    for job in self.repository.list_jobs(source['id'])):
+                # Recover a crash after policy commit but before enqueue, even
+                # for old recordings outside the normal provider settle window.
+                self.enqueue_discovery(source['id'])
+                rediscovered += 1
+                continue
             # Refresh even ready sources while provider parts settle. Afterwards
             # preserve the honest waiting/error state, without infinite polling;
             # an authenticated event/manual wake can still schedule discovery.
@@ -215,6 +248,13 @@ def build_runtime(connect=None, media=None, environ=None, *, publish=None, captu
             media = DailyMedia(env.get('DAILY_API_KEY', ''), enabled)
         captures = {('daily', connection): DailyCapture(media, connection,
                     webhook_hmac=env.get('HR_MATERIALS_DAILY_WEBHOOK_HMAC'))}
+        from zoom_media import ZoomMedia
+        zoom = ZoomMedia.from_env(env)
+        # Disabling selection for new calls must not orphan existing recordings.
+        if zoom.capture_configured:
+            from materials_zoom import ZoomCapture
+            zoom_connection = env.get('HR_ZOOM_CONNECTION_ID', 'zoom')
+            captures[('zoom', zoom_connection)] = ZoomCapture(zoom, zoom_connection)
     if storage is None:
         # Construction is explicit. No default public bucket or signed GET URL.
         backend = env.get('HR_MATERIALS_STORAGE_BACKEND', 'filesystem')
@@ -256,15 +296,19 @@ def create_celery_app(environ=None):
     if not broker or (broker.startswith('memory:') and env.get('HR_MATERIALS_TEST_MODE') != '1'):
         raise ValueError('A durable materials broker is required')
     app = Celery('materials', broker=broker)
-    # RabbitMQ 4.3 rejects Celery's transient, non-exclusive pidbox queue.
-    # This worker uses the durable jobs table for coordination, not remote control.
+    schedule = {'materials-reconcile': {'task': 'materials.reconcile',
+                'schedule': int(env.get('HR_MATERIALS_RECONCILE_SECONDS', '10'))}}
+    if (env.get('HR_MATERIALS_ENABLED', '0') == '1' and
+            env.get('HR_ZOOM_RECORDING_RETENTION_ENABLED', '0') == '1'):
+        schedule['zoom-recording-retention'] = {
+            'task': 'materials.zoom_recording_retention', 'schedule': 3600}
     app.conf.update(task_default_queue='materials', task_serializer='json', accept_content=['json'],
         result_serializer='json', task_ignore_result=True, worker_prefetch_multiplier=1,
         task_acks_late=True, task_reject_on_worker_lost=True,
+        # RabbitMQ 4.3: avoid transient non-exclusive pidbox queues.
         worker_enable_remote_control=False, worker_send_task_events=False,
         broker_connection_timeout=3, task_publish_retry=False,
-        beat_schedule={'materials-reconcile': {'task': 'materials.reconcile',
-                       'schedule': int(env.get('HR_MATERIALS_RECONCILE_SECONDS', '10'))}})
+        beat_schedule=schedule)
 
     @app.task(name='materials.run_job')
     def run_job(identity):
@@ -275,6 +319,27 @@ def create_celery_app(environ=None):
     @app.task(name='materials.reconcile')
     def reconcile():
         return build_runtime(environ=env).reconcile()
+
+    @app.task(name='materials.zoom_recording_retention', shared=False)
+    def zoom_recording_retention():
+        if (env.get('HR_MATERIALS_ENABLED', '0') != '1' or
+                env.get('HR_ZOOM_RECORDING_RETENTION_ENABLED', '0') != '1'):
+            return {'enabled': False}
+        runtime = build_runtime(environ=env)
+        if not runtime.enabled:
+            return {'enabled': False}
+        from zoom_recording_retention import ZoomRecordingRetention
+        results = []
+        for key, capture in runtime.captures.items():
+            if not isinstance(key, tuple) or len(key) != 2 or key[0] != 'zoom':
+                continue
+            media = getattr(capture, 'media', None)
+            if getattr(media, 'connection_id', None) != key[1]:
+                continue
+            result = ZoomRecordingRetention(runtime.connect, runtime.repository,
+                runtime.storage, media, clock=runtime.clock).tick(limit=5)
+            results.append({'connection_id': key[1], **result})
+        return {'enabled': True, 'connections': results}
     return app
 
 

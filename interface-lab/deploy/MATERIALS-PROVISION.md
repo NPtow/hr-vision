@@ -39,7 +39,7 @@ replacement, not an in-place pip upgrade. A systemd or Docker startup failure
 must be investigated on outreach before any interview import.
 
 After the API release and private S3 probe, these are the exact acceptance
-commands for **only** `interview_75123c5506a524094e5c0c21`. The oneshot unit
+commands for **only** `interview_6f011d66502349266a5a402b`. The oneshot unit
 validates the stored completed Daily room and prints only catalog counts and
 states. It obtains a short manager session through the existing team grant and
 calls the authorized recruiter materials endpoint on `127.0.0.1:8391`. The API
@@ -47,6 +47,15 @@ commits jobs, then the scheduler publishes them to the broker for the worker.
 Assertions wait up to 12 minutes and check successful worker attempts. The unit
 never starts a call, runs ASR, or scans other owners.
 Do not run the next phase until the previous assertion succeeds.
+For a large recording, set `HR_MATERIALS_MAX_DOWNLOAD_BYTES` above its actual
+size and budget enough private staging space on the worker filesystem. The
+2026-10-25 rollout uses a 2 GiB limit and
+`HR_MATERIALS_DOWNLOAD_TIMEOUT_SECONDS=900`; restart the worker after changing
+these settings. A transfer streams to one temporary file, then uploads to S3
+and removes the file. Interrupted downloads restart from the beginning.
+The 12-minute assertion wait may finish before a transfer using the full
+15-minute download budget; inspect the existing job and rerun only the assertion
+after it settles, rather than starting another policy upgrade.
 
 ```sh
 sudo systemctl start hr-vision-materials-worker.service

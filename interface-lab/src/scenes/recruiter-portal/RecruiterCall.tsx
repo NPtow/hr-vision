@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { RecruiterZoomCall } from './RecruiterZoomCall';
+import type { CallProvider } from '../../components/call/call-provider';
 import type { DailyCall, DailyParticipant } from '@daily-co/daily-js';
 import { Camera, CameraOff, Maximize2, Mic, MicOff, Minimize2, MonitorUp, PanelRightOpen, PhoneOff, X } from 'lucide-react';
 import { Button } from '../../components/ui/button';
@@ -17,12 +19,16 @@ import { RecruiterCoachNotesAdapter, RecruiterOriginalResume } from './Recruiter
 import './interview-coach.css';
 import './recruiter-coach-live.css';
 
-export type ActiveCall = { kind: 'interview' | 'meeting'; preview?: boolean; candidateId: string; interviewId?: string; candidate?: RecruiterCandidate; applicationId?: string; meetingId?: string; title: string; accountActive?: boolean; recording?: InterviewRecording };
+export type ActiveCall = { callProvider?: CallProvider; kind: 'interview' | 'meeting'; preview?: boolean; recordingConsent?: boolean; candidateId: string; interviewId?: string; candidate?: RecruiterCandidate; applicationId?: string; meetingId?: string; title: string; accountActive?: boolean; recording?: InterviewRecording };
 type CaptureStatus = 'unknown' | 'active' | 'stopped' | 'error';
 
-export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }: {
+export type RecruiterCallProps = {
   active: ActiveCall; token: string; onClose: () => void; onJoined: () => void; onCompleted: () => void;
-}) {
+};
+export function RecruiterCall(props: RecruiterCallProps) {
+  return props.active.callProvider === 'zoom' ? <RecruiterZoomCall {...props}/> : <DailyRecruiterCall {...props}/>;
+}
+function DailyRecruiterCall({ active, token, onClose, onJoined, onCompleted }: RecruiterCallProps) {
   const preview = useRef<HTMLVideoElement>(null);
   const devices = useCallDeviceAccess();
   const prepared = useRef<(ReturnType<typeof callInputTracks> & { camera: boolean; microphone: boolean }) | null>(null);
@@ -176,6 +182,7 @@ export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }:
         if (cleanup.current) await cleanup.current;
         if (!alive || controller.signal.aborted) return;
         const access = recruiterRequest<Room>(`${active.kind}/join`, token, { ...identity, ...(active.kind === 'meeting' ? { consent: true } : {}) }).then(room => {
+          if (room.provider === 'zoom') throw new CallConnectionError('Видеосервис встречи изменился. Вернитесь к интервью и откройте его заново.');
           if (alive && !controller.signal.aborted) {
             setDirectUrl(directCallUrl(room));
             setConnectionHint('Загружаем видеокомнату…');

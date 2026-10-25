@@ -17,11 +17,14 @@ class MaterialsService:
 
     def register_owner(self, owner_kind, meeting, storage_policy=None):
         room = meeting.get('room') or {}
+        provider = room.get('provider', 'daily')
+        if provider == 'zoom' and storage_policy is not None:
+            require(storage_policy == 'owned',
+                    'Для записей Zoom требуется сохранение в нашем хранилище.', 400)
         if room.get('captureNeverStarted'):
             return None
         require(owner_kind in ('interview', 'meeting') and room.get('id') and room.get('name'),
                 'Источник материалов не определён.', 409)
-        provider = room.get('provider', 'daily')
         connection = room.get('connectionId', self.runtime.connection_id)
         ref = owner_source_ref(owner_kind, meeting['id'], room, provider, connection)
         if storage_policy is not None:

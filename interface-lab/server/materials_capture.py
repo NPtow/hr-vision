@@ -14,6 +14,22 @@ def owner_source_ref(owner_kind, owner_id, room, provider='daily', connection_id
     """
     if owner_kind not in ('interview', 'meeting') or not isinstance(room, dict) or not room.get('id') or not room.get('name'):
         raise ValueError('Invalid material owner room')
+    if provider == 'zoom':
+        # A reusable meeting number is not a recording instance. Only server-
+        # stored exact UUID + connection can authorize capture or backfill.
+        number, session = room.get('meetingNumber'), room.get('meetingSessionId')
+        if (room.get('provider') != 'zoom' or type(number) not in (str, int) or
+                not re.fullmatch(r'[0-9]{9,12}', str(number)) or str(room['id']) != str(number) or
+                not isinstance(session, str) or not 0 < len(session) <= 200 or
+                any(ord(c) < 33 or ord(c) == 127 for c in session) or
+                not isinstance(connection_id, str) or not connection_id or
+                room.get('connectionId') != connection_id):
+            raise ValueError('Exact Zoom account, meeting number and session UUID required')
+        capture_id = hashlib.sha256(json.dumps([owner_kind, owner_id, provider,
+            connection_id, str(number), session], separators=(',', ':')).encode()).hexdigest()
+        return {'room_id': str(number), 'room_name': room['name'],
+                'meeting_number': str(number), 'session_id': session,
+                'capture_instance_id': capture_id}
     capture_id = room.get('captureInstanceId') or hashlib.sha256(json.dumps(
         [owner_kind, owner_id, provider, connection_id, room['id']], separators=(',', ':')).encode()).hexdigest()
     ref = {'room_id': room['id'], 'room_name': room['name'], 'capture_instance_id': capture_id}
