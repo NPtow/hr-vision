@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { candidateLoginTarget, candidateNavigationURL, candidatePage, candidateCompletionStep, candidateAfterProfile, candidateDestination } from '../src/scenes/candidate-portal/candidate-navigation.ts';
 import type { CandidateState } from '../src/scenes/candidate-portal/api.ts';
 
-for (const cp of ['home', 'interview', 'meeting'] as const) {
+for (const cp of ['home', 'availability', 'interview', 'meeting'] as const) {
   test(`notification ${cp} survives login and reload with exact application/meeting`, () => {
     const entry = `https://fixture.test/iframe.html?id=hr-vision-product--candidate&cp=${cp}&application=owned&meeting=exact`;
     const login = candidateNavigationURL(entry, 'login', undefined, undefined, true);

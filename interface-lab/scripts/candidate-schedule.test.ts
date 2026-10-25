@@ -1,11 +1,21 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { scheduleDateKey, scheduleDayStart, scheduleInstant, scheduleTime } from '../src/scenes/candidate-portal/schedule-time.ts';
-import { availabilityForDate, validateDayIntervals } from '../src/scenes/candidate-portal/availability-model.ts';
+import { availabilityForDate, hasConfiguredAvailability, validateDayIntervals } from '../src/scenes/candidate-portal/availability-model.ts';
 import type { AvailabilitySchedule } from '../src/scenes/candidate-portal/api.ts';
 
 const weekly: AvailabilitySchedule = { weekly: [{ id: 'workdays', startDate: '2026-10-19', weekdays: [0, 1, 2, 3, 4], startTime: '09:00', endTime: '18:00', timezone: 'Europe/Moscow' }], dates: [] };
 const range = (startTime: string, endTime: string) => ({ startTime, endTime });
+
+test('availability reminder follows saved setup, including legacy slots and deliberate closed days', () => {
+  assert.equal(hasConfiguredAvailability({ availability: [] }), false);
+  assert.equal(hasConfiguredAvailability({ availability: [], availabilitySchedule: { weekly: [], dates: [] } }), false);
+  assert.equal(hasConfiguredAvailability({ availability: [{ start: '2026-10-01T09:00:00Z', end: '2026-10-01T10:00:00Z' }] }), true);
+  assert.equal(hasConfiguredAvailability({ availability: [], availabilitySchedule: weekly }), true);
+  assert.equal(hasConfiguredAvailability({ availability: [], availabilitySchedule: { weekly: [], dates: [{ date: '2026-10-21', timezone: 'Europe/Moscow', intervals: [] }] } }), true);
+  // An empty calculated horizon does not mean an existing recurring schedule was never configured.
+  assert.equal(hasConfiguredAvailability({ availability: [], availabilityManual: [], availabilitySchedule: weekly }), true);
+});
 
 test('selected zone controls both displayed dates and instants, including fractional offsets', () => {
   assert.equal(scheduleInstant('2026-10-21', '09:00', 'Europe/Moscow'), '2026-10-21T06:00:00.000Z');

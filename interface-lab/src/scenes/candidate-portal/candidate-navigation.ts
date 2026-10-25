@@ -1,7 +1,7 @@
 import type { CandidateState } from './api';
 
-export type CandidatePage = 'welcome' | 'login' | 'register' | 'resume' | 'preferences' | 'home' | 'calendar' | 'booking' | 'profile' | 'vacancies' | 'interview' | 'meeting';
-const pages: CandidatePage[] = ['welcome', 'login', 'register', 'resume', 'preferences', 'home', 'calendar', 'booking', 'profile', 'vacancies', 'interview', 'meeting'];
+export type CandidatePage = 'welcome' | 'login' | 'register' | 'resume' | 'preferences' | 'home' | 'calendar' | 'availability' | 'booking' | 'profile' | 'vacancies' | 'interview' | 'meeting';
+const pages: CandidatePage[] = ['welcome', 'login', 'register', 'resume', 'preferences', 'home', 'calendar', 'availability', 'booking', 'profile', 'vacancies', 'interview', 'meeting'];
 export const authenticatedCandidatePage = (page: CandidatePage) => !['welcome', 'login', 'register'].includes(page);
 
 export function candidateSetupPage(candidate: CandidateState, newBooking = false): 'resume' | 'preferences' | null {
