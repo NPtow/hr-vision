@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { interviewParagraphs, interviewTime, interviewTimeline } from '../src/scenes/interview-review/candidate-player-model.ts';
+import { interviewParagraphs, interviewTime, interviewTimeline, interviewTranscriptSections } from '../src/scenes/interview-review/candidate-player-model.ts';
 import { parseMeetingTranscript } from '../src/scenes/connected-journey/transcript.ts';
 
 test('DSA speech keeps every source word and speaker while making readable paragraphs', () => {
@@ -35,4 +35,48 @@ test('time labels retain hours and do not expose invalid media metadata', () => 
   assert.equal(interviewTime(443.9), '07:23');
   assert.equal(interviewTime(3601), '1:00:01');
   assert.equal(interviewTime(NaN), '00:00');
+});
+
+
+const chapter = (title: string, seconds: number | null) => ({ title, seconds, detail: '', fragment: '', source: '' });
+test('chapter boundaries stop visual paragraph merging without changing words, speakers or original cue times', () => {
+  const cues = parseMeetingTranscript('[00:00-00:05] К: Первый факт.\n[00:05-00:09] К: Второй факт.\n[00:09-00:12] Р: Вопрос.');
+  const result = interviewTranscriptSections(cues, [chapter('Начало', 0), chapter('Другой опыт', 5)]);
+  assert.deepEqual(result.paragraphs.map(row => [row.start, row.end, row.text]), [[0,5,'Первый факт.'],[5,9,'Второй факт.'],[9,12,'Вопрос.']]);
+  assert.deepEqual(result.sections.map(section => section.rows.map(({index}) => index)), [[0],[1,2]]);
+  assert.equal(result.sections.flatMap(section => section.rows).map(({row}) => row.text).join(' '), cues.map(cue => cue.fragment).join(' '));
+});
+
+test('cues crossing a boundary and the prelude remain whole and appear exactly once', () => {
+  const cues = parseMeetingTranscript('[00:01-00:04] Р: До главы.\n[00:04-00:08] К: Через границу.\n[00:09-00:12] Р: После границы.');
+  const result = interviewTranscriptSections(cues, [chapter('Глава',6)]);
+  assert.deepEqual(result.sections.map(section => section.rows.map(({row}) => [row.start,row.end])), [[[1,4],[4,8]],[[9,12]]]);
+  assert.equal(result.sections[0].chapters.length,0);
+  assert.equal(cues.length,3);
+});
+
+test('source-derived transcript cues never become chapter headings, including voice-less VTT', () => {
+  const cues = parseMeetingTranscript('WEBVTT\n\n00:01.000 --> 00:03.000\nРеплика без спикера.\n\n00:04.000 --> 00:05.000\n<v A>Реплика со спикером.</v>');
+  const result = interviewTranscriptSections(cues, cues);
+  assert.equal(result.sections.length,1);
+  assert.equal(result.sections[0].chapters.length,0);
+  assert.equal(result.paragraphs.length,2);
+});
+
+test('unsorted and repeated boundaries share one heading location; untimed descriptions never acquire a video clock', () => {
+  const invalid = [chapter('Без времени',null),chapter('Ошибочное время',NaN),chapter('Отрицательное время',-1)];
+  const input = [chapter('Поздняя',10),chapter('Ранняя',0),chapter('Ранняя',0),chapter('Ещё тема',0), ...invalid];
+  const result = interviewTranscriptSections(parseMeetingTranscript('[00:00-00:05] К: Факт.\n[00:11-00:14] Р: Вопрос.'), input);
+  assert.deepEqual(result.sections.slice(0,2).map(section => [section.start,section.chapters.map(ch => ch.title)]), [[0,['Ранняя','Ещё тема']],[10,['Поздняя']]]);
+  assert.deepEqual(result.sections.slice(2).map(section => section.start),[null,null,null]);
+  assert.deepEqual(result.sections.flatMap(section => section.rows).map(({index}) => index),[0,1]);
+  assert.equal(input[0].title,'Поздняя');
+});
+
+test('prepared quote chapters remain headings and a recording without chapters remains a plain transcript', () => {
+  const cues = parseMeetingTranscript('[00:00-00:03] К: Точная речь.');
+  const result = interviewTranscriptSections(cues,[{...chapter('Опыт',0),isQuote:true,fragment:'Точная речь.'}]);
+  assert.equal(result.sections[0].chapters[0].title,'Опыт');
+  assert.equal(interviewTranscriptSections(cues,[]).sections[0].chapters.length,0);
+  assert.deepEqual(interviewTranscriptSections([],[]).paragraphs,[]);
 });

@@ -534,3 +534,19 @@ to{opacity:1;margin-bottom:0}
 @container(max-width:760px){.iv-root .iv-sidebar{padding-bottom:0}.iv-root .iv-tabs>button{width:43px}.iv-root .iv-chat-suggestions{padding-top:0}.iv-root.iv-full .iv-sidebar{padding-bottom:12px}.iv-root .iv-assistant-composer input{font-size:16px}}
 @media(prefers-reduced-motion:reduce){.iv-tooltip{animation:none}.iv-root .iv-assistant-spinner{animation-duration:2s!important}}
 
+
+/* Chapters live in the transcript. Only its current heading is a sticky switcher. */
+.iv-root .iv-unified-transcript{padding:4px 2px 36px 0;mask-image:linear-gradient(#000 calc(100% - 22px),transparent)}
+.iv-transcript-section{position:relative;margin-bottom:18px}
+.iv-transcript-section:last-child:has(.iv-transcript-heading){min-height:var(--iv-transcript-height,100%)}
+.iv-transcript-heading{position:relative;z-index:1;background:var(--iv-panel);margin-bottom:14px}
+.iv-transcript-heading[data-current=true]{position:sticky;top:0;z-index:4}
+.iv-transcript-heading h3{margin:0;font-size:13px;line-height:1.5;font-weight:550;letter-spacing:0;color:#71627e}
+.iv-root .iv-chapter-trigger,.iv-chapter-heading-title{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;padding:13px 0!important;text-align:left;color:#71627e!important;font-size:13px!important;font-weight:550!important;line-height:1.5}
+.iv-root .iv-chapter-trigger:active{color:#35273f!important}
+.iv-chapter-outline{overflow:hidden;max-height:min(45dvh,360px);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+.iv-root .iv-chapter-outline>button{display:block;width:100%;padding:11px 10px!important;text-align:left;color:#8b8196;font-size:12px;border-radius:9px;line-height:1.6}
+.iv-root .iv-chapter-outline>button:hover{background:#f7f5f9;color:#4d425b}
+.iv-chapter-description{margin:0 0 18px;color:#969099;font-size:12px;line-height:1.6}
+@media(prefers-reduced-motion:reduce){.iv-root .iv-chapter-trigger,.iv-root .iv-chapter-outline{scroll-behavior:auto}}
+@media(prefers-contrast:more){.iv-transcript-heading h3,.iv-root .iv-chapter-trigger,.iv-chapter-heading-title{color:#44354f!important}.iv-root .iv-chapter-outline>button{color:#51445c}}

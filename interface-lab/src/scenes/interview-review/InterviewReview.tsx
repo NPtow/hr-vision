@@ -21,6 +21,8 @@ export type InterviewReviewProps = {
 };
 
 export type RecordingChapter = {
+  /** Parsed speech is not a thematic chapter, even when reused by legacy views. */
+  kind?: 'transcript';
   title: string;
   detail: string;
   fragment: string;
