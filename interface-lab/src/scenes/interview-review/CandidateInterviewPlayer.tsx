@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSPrope
 import { AlignLeft, ArrowUp, Bookmark, Captions, CaptionsOff, Check, ChevronDown, ChevronUp, Link as LinkIcon, Maximize2, MessageSquare, Minimize2, PanelRightClose, PanelRightOpen, Pause, Play, Redo2, Search, SmilePlus, Sparkles, Tv, Undo2, Volume2, VolumeX } from 'lucide-react';
 import { Tooltip } from 'radix-ui';
 import { useInterviewAssistant } from './useInterviewAssistant';
+import { InterviewChatAnswer } from './InterviewChatAnswer';
 import { parseMeetingTranscript } from '../connected-journey/transcript';
 import type { RecordingReviewProps } from './InterviewReview';
 import { interviewParagraphs, interviewTime as time, interviewTimeline } from './candidate-player-model';
@@ -296,9 +297,7 @@ export function CandidateInterviewPlayer({ sourceId, name, header, media, chapte
             {!assist.messages.length && <div className="iv-chat-suggestions">{['Кратко расскажи об опыте', 'Как работает с возражениями?', 'Что стоит уточнить на встрече?'].map(value => <button type="button" key={value} disabled={!!assist.busy || !assistant} onClick={() => { void submitChat(value); }}>{value}</button>)}</div>}
             {assist.messages.map(message => <div className="iv-chat-turn" key={message.id}>
               <p className="iv-chat-question">{message.query}</p>
-              {message.answer && <><p className="iv-chat-answer">{message.answer.text}</p><div className="iv-chat-evidence">{message.answer.evidence.map(evidence => <button type="button" key={evidence.id} disabled={!transcriptSeekable || evidence.startMs === null} onClick={() => { if (evidence.startMs !== null) seek(evidence.startMs / 1000); }}>
-                {evidence.startMs !== null && <time>{time(evidence.startMs / 1000)}</time>}<span>{evidence.quote}</span>
-              </button>)}</div>{message.answer.coverage.omitted > 0 && <small className="iv-chat-coverage">Ответ по выбранным фрагментам записи.</small>}</>}
+              {message.answer && <><InterviewChatAnswer answer={message.answer} seek={seek} canSeek={transcriptSeekable} portal={portal}/>{message.answer.coverage.omitted > 0 && <small className="iv-chat-coverage">Ответ по выбранным фрагментам записи.</small>}</>}
               {message.error && <div className="iv-assistant-error" role="alert"><p>{message.error}</p><button type="button" disabled={!!assist.busy} onClick={() => { void assist.submit('chat', message.query, message.id); }}>Повторить</button></div>}
               {!message.answer && !message.error && <p className="iv-chat-pending" role="status">Читаю интервью…</p>}
             </div>)}
