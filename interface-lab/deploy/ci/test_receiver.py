@@ -159,13 +159,16 @@ class ReceiverTest(unittest.TestCase):
         self.assertEqual(r.PRE_CANDIDATE_CALENDAR_RUNTIME - r.PRE_OBSERVABILITY_RUNTIME, {'observability.py'})
         self.assertEqual(r.PRE_INTERVIEW_ASSISTANT_RUNTIME - r.PRE_CANDIDATE_CALENDAR_RUNTIME, {'candidate_availability.py'})
         self.assertEqual(r.PRE_MATERIALS_RUNTIME - r.PRE_INTERVIEW_ASSISTANT_RUNTIME, {'interview_assistant.py'})
-        self.assertEqual(r.PRE_ZOOM_RUNTIME - r.PRE_MATERIALS_RUNTIME, r.MATERIALS_RUNTIME)
-        self.assertEqual(r.PRE_ASSESSMENT_RUNTIME - r.PRE_ZOOM_RUNTIME, r.ZOOM_RUNTIME)
+        self.assertEqual(r.PRE_SERVICES_RUNTIME - r.PRE_MATERIALS_RUNTIME, r.MATERIALS_RUNTIME)
+        self.assertEqual(r.SERVICES_ONLY_RUNTIME - r.PRE_SERVICES_RUNTIME, r.SERVICES_RUNTIME)
+        self.assertEqual(r.ZOOM_ONLY_RUNTIME - r.PRE_ZOOM_RUNTIME, r.ZOOM_RUNTIME)
+        self.assertEqual(r.PRE_ASSESSMENT_RUNTIME, r.SERVICES_ONLY_RUNTIME | r.ZOOM_ONLY_RUNTIME)
+        self.assertEqual(r.ASSESSMENT_ONLY_RUNTIME - r.ZOOM_ONLY_RUNTIME, {'interview_assessment.py'})
         self.assertEqual(r.RUNTIME - r.PRE_ASSESSMENT_RUNTIME, {'interview_assessment.py'})
         self.assertEqual(r.ZOOM_RUNTIME, {'call_providers.py', 'zoom_media.py', 'materials_zoom.py', 'zoom_recording_retention.py'})
         self.assertEqual(len(r.MATERIALS_RUNTIME), 9)
         for runtime in (r.LEGACY_RUNTIME, r.BOT_RUNTIME, r.PRE_IMPORT_RUNTIME, r.PRE_OUTREACH_RUNTIME,
-                        r.PRE_ACCESS_RUNTIME, r.PRE_CV_RUNTIME, r.PRE_POOLED_RUNTIME, r.PRE_EMPLOYER_TELEGRAM_RUNTIME, r.PRE_REMINDERS_RUNTIME, r.PRE_MEETING_NOTICES_RUNTIME, r.PRE_MEETING_LAB_RUNTIME, r.PRE_RECRUITER_COACH_RUNTIME, r.PRE_CALL_CLEANUP_RUNTIME, r.PRE_OBSERVABILITY_RUNTIME, r.PRE_CANDIDATE_CALENDAR_RUNTIME, r.PRE_INTERVIEW_ASSISTANT_RUNTIME, r.PRE_MATERIALS_RUNTIME, r.PRE_ZOOM_RUNTIME, r.PRE_ASSESSMENT_RUNTIME, r.RUNTIME):
+                        r.PRE_ACCESS_RUNTIME, r.PRE_CV_RUNTIME, r.PRE_POOLED_RUNTIME, r.PRE_EMPLOYER_TELEGRAM_RUNTIME, r.PRE_REMINDERS_RUNTIME, r.PRE_MEETING_NOTICES_RUNTIME, r.PRE_MEETING_LAB_RUNTIME, r.PRE_RECRUITER_COACH_RUNTIME, r.PRE_CALL_CLEANUP_RUNTIME, r.PRE_OBSERVABILITY_RUNTIME, r.PRE_CANDIDATE_CALENDAR_RUNTIME, r.PRE_INTERVIEW_ASSISTANT_RUNTIME, r.PRE_MATERIALS_RUNTIME, r.PRE_ZOOM_RUNTIME, r.SERVICES_ONLY_RUNTIME, r.ZOOM_ONLY_RUNTIME, r.ASSESSMENT_ONLY_RUNTIME, r.PRE_ASSESSMENT_RUNTIME, r.RUNTIME):
             with self.subTest(count=len(runtime)):
                 a, s, m = self.bundle('service', runtime=runtime)
                 self.assertEqual(r.unpack(a, s, 'service'), m)
@@ -484,8 +487,8 @@ class ReceiverTest(unittest.TestCase):
             db.execute('UPDATE scenario_variants SET body=?', (json.dumps({'candidates': {}}),))
             r.guard_live_interviews(db)
 
-    def test_material_units_are_drained_and_resumed_in_safe_order(self):
-        states = iter(('loaded', 'active', 'inactive', 'loaded', 'active', 'inactive'))
+    def test_material_units_drain_and_resume_in_order(self):
+        states = iter(('loaded', 'active', 'inactive') * len(r.MATERIALS_UNITS))
         def systemctl(argv, **kwargs):
             if argv[1] in ('show', 'is-active'):
                 return subprocess.CompletedProcess(argv, 0, stdout=next(states))
@@ -504,7 +507,7 @@ class ReceiverTest(unittest.TestCase):
         with patch.object(r.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, stdout='not-found')) as run:
             self.assertEqual(r.pause_materials(), [])
             r.resume_materials([])
-        self.assertEqual([call.args[0][1] for call in run.call_args_list], ['show', 'show'])
+        self.assertEqual([call.args[0][1] for call in run.call_args_list], ['show'] * len(r.MATERIALS_UNITS))
 
     def test_failed_service_health_restores_both_pointers(self):
         a, s, m = self.bundle('service'); r.unpack(a, s, 'service')
@@ -640,7 +643,109 @@ class ReceiverTest(unittest.TestCase):
                 self.assertEqual(db.execute('SELECT * FROM media_sources').fetchall(), before)
                 r.guard_outbox_runtime(db, current)
 
-    def test_materials_view_cannot_bypass_old_runtime_guard(self):
+    def test_core_source_data_requires_services_runtime(self):
+        prior = self.runtime(self.root / 'before-services', r.PRE_SERVICES_RUNTIME)
+        current = self.runtime(self.root / 'with-services', r.RUNTIME)
+        for table in ('portal_materials_outbox', 'core_material_receipts', 'core_material_channels', 'core_material_asset_bindings'):
+            with self.subTest(table=table), sqlite3.connect(':memory:') as db:
+                r.guard_outbox_runtime(db, prior)
+                db.execute('CREATE TABLE ' + table + ' (id TEXT)')
+                r.guard_outbox_runtime(db, prior)
+                db.execute('INSERT INTO ' + table + ' VALUES (?)', ('durable',))
+                with self.assertRaisesRegex(ValueError, 'Core/source data.*forward recovery'):
+                    r.guard_outbox_runtime(db, prior)
+                r.guard_outbox_runtime(db, current)
+
+    def test_core_source_view_does_not_bypass_runtime_guard(self):
+        prior = self.runtime(self.root / 'before-services', r.PRE_SERVICES_RUNTIME)
+        with sqlite3.connect(':memory:') as db:
+            db.execute('CREATE VIEW portal_materials_outbox AS SELECT 1 WHERE 0')
+            with self.assertRaisesRegex(ValueError, 'Cannot verify core/source schema'):
+                r.guard_outbox_runtime(db, prior)
+
+    def test_assessment_data_requires_capable_runtime_and_empty_history_stays_compatible(self):
+        prior = self.runtime(self.root / 'before-assessments', r.PRE_ASSESSMENT_RUNTIME)
+        current = self.runtime(self.root / 'with-assessments', r.RUNTIME)
+        with sqlite3.connect(':memory:') as db:
+            r.guard_outbox_runtime(db, prior)
+            for table in ('ia_assessment_revisions', 'ia_assessment_feedback',
+                          'ia_assessment_feedback_events', 'ia_assessment_commands'):
+                with self.subTest(table=table):
+                    db.execute('CREATE TABLE ' + table + ' (id TEXT)')
+                    r.guard_outbox_runtime(db, prior)
+                    db.execute('INSERT INTO ' + table + " VALUES ('preserved-assessment-row')")
+                    with self.assertRaisesRegex(ValueError, 'assessment data.*interview_assessment'):
+                        r.guard_outbox_runtime(db, prior)
+                    self.assertEqual(db.execute('SELECT * FROM ' + table).fetchall(), [('preserved-assessment-row',)])
+                    r.guard_outbox_runtime(db, current)
+                    db.execute('DROP TABLE ' + table)
+
+    def test_assessment_view_does_not_bypass_runtime_guard(self):
+        prior = self.runtime(self.root / 'before-assessments', r.PRE_ASSESSMENT_RUNTIME)
+        with sqlite3.connect(':memory:') as db:
+            db.execute('CREATE VIEW ia_assessment_revisions AS SELECT 1 WHERE 0')
+            with self.assertRaisesRegex(ValueError, 'Cannot verify interview assessment schema'):
+                r.guard_outbox_runtime(db, prior)
+
+    def test_explicit_assessment_downgrade_is_refused_without_changing_data_or_queues(self):
+        with self.service_activation(incoming=r.PRE_ASSESSMENT_RUNTIME, installed=r.RUNTIME) as (stage, m, base, api, database, stop, restart, health):
+            with sqlite3.connect(database) as db:
+                db.execute('CREATE TABLE ia_assessment_revisions (revision_id TEXT)')
+                db.execute("INSERT INTO ia_assessment_revisions VALUES ('approved-orbit')")
+            self.insert_notice(database, event='meeting.confirmed', payload='{}')
+            with sqlite3.connect(database) as db:
+                queue = db.execute('SELECT * FROM cn_outbox').fetchall()
+            started = []
+            restart.side_effect = lambda: started.append(r.pointer(api))
+            with self.assertRaisesRegex(ValueError, 'assessment data.*interview_assessment'):
+                r.activate(stage, m)
+            self.assertEqual(started, ['releases/old-api'])
+            self.assertEqual(stop.call_count, 2)
+            health.assert_not_called()
+            self.assertEqual(r.pointer(api), 'releases/old-api')
+            self.assertEqual(r.pointer(base), 'releases/old-ui')
+            with sqlite3.connect(database) as db:
+                self.assertEqual(db.execute('SELECT * FROM ia_assessment_revisions').fetchall(), [('approved-orbit',)])
+                self.assertEqual(db.execute('SELECT * FROM cn_outbox').fetchall(), queue)
+
+    def test_last_assessment_commit_after_failed_health_blocks_incapable_fallback(self):
+        with self.service_activation(installed=r.PRE_ASSESSMENT_RUNTIME) as (stage, m, base, api, database, stop, restart, health):
+            health.side_effect = RuntimeError('unhealthy')
+            def stopped():
+                if stop.call_count == 2:
+                    with sqlite3.connect(database) as db:
+                        db.execute('CREATE TABLE ia_assessment_revisions (revision_id TEXT)')
+                        db.execute("INSERT INTO ia_assessment_revisions VALUES ('last-assessment-commit')")
+            stop.side_effect = stopped
+            with self.assertRaisesRegex(RuntimeError, 'rollback refused.*assessment data'):
+                r.activate(stage, m)
+            restart.assert_called_once()
+            self.assertEqual(r.pointer(api), 'releases/' + m['release'])
+            with sqlite3.connect(database) as db:
+                self.assertEqual(db.execute('SELECT * FROM ia_assessment_revisions').fetchall(), [('last-assessment-commit',)])
+
+    def test_compatible_assessment_retry_and_fallback_preserve_existing_rows(self):
+        with self.service_activation(installed=r.RUNTIME) as (stage, m, base, api, database, stop, restart, health):
+            with sqlite3.connect(database) as db:
+                db.execute('CREATE TABLE ia_assessment_revisions (revision_id TEXT)')
+                db.execute("INSERT INTO ia_assessment_revisions VALUES ('approved-orbit')")
+            health.side_effect = RuntimeError('unhealthy')
+            with self.assertRaisesRegex(RuntimeError, '^unhealthy$'):
+                r.activate(stage, m)
+            self.assertEqual(stop.call_count, 2)
+            self.assertEqual(restart.call_count, 2)
+            self.assertEqual(r.pointer(api), 'releases/old-api')
+            self.assertEqual(r.pointer(base), 'releases/old-ui')
+            # Retry with a fresh release identity, retaining the same immutable DB.
+            retried = {**m, 'run': '12.2', 'release': m['sha'] + '-12.2'}
+            health.side_effect = None
+            r.activate(stage, retried)
+            self.assertEqual(r.pointer(api), 'releases/' + retried['release'])
+            self.assertEqual(r.pointer(base), 'releases/' + retried['release'])
+            with sqlite3.connect(database) as db:
+                self.assertEqual(db.execute('SELECT * FROM ia_assessment_revisions').fetchall(), [('approved-orbit',)])
+
+    def test_materials_view_does_not_bypass_old_runtime_guard(self):
         prior = self.runtime(self.root / 'before-materials', r.PRE_MATERIALS_RUNTIME)
         with sqlite3.connect(':memory:') as db:
             db.execute('CREATE VIEW media_sources AS SELECT 1 WHERE 0')

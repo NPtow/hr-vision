@@ -1,0 +1,156 @@
+{
+  "files": [
+    {
+      "sha256": "8e1959f43e2192f8313c568691efc4d3058aacd83aec4e10c2b8334add5e1319",
+      "source": "interface-lab/server/core_source_client.py",
+      "target": "compat/core_source_client.py"
+    },
+    {
+      "sha256": "c4ea6434a1f97e6419a1d9bf178e186a3c4dfeacbe9aa3277cc3ceeb1d74d6cc",
+      "source": "interface-lab/server/daily_media.py",
+      "target": "compat/daily_media.py"
+    },
+    {
+      "sha256": "c134d54d27d83ed8ac61811407b18243fbc88dd5f0a17c0e6f1208e16bff3b65",
+      "source": "interface-lab/server/domain.py",
+      "target": "compat/domain.py"
+    },
+    {
+      "sha256": "1a99483a7a0d26e2c65ef12e3ed60418006076a7ece57df5139a5a4baaaa8895",
+      "source": "interface-lab/server/feedback.py",
+      "target": "compat/feedback.py"
+    },
+    {
+      "sha256": "3a0ba03d15074277714416fa3ffd5f8ec589dc3c181b079a1f2255c177d4e640",
+      "source": "interface-lab/server/materials_capture.py",
+      "target": "compat/materials_capture.py"
+    },
+    {
+      "sha256": "55161c13144bcbf526a3a342a9f6b1bf7ad5ea70b0efa5f5a39094bfd540450a",
+      "source": "interface-lab/server/materials_daily.py",
+      "target": "compat/materials_daily.py"
+    },
+    {
+      "sha256": "1d6d503de34e9576bff102fc24f3eda35a21ee49d704319fddb1c655174782b1",
+      "source": "interface-lab/server/materials_http.py",
+      "target": "compat/materials_http.py"
+    },
+    {
+      "sha256": "babef4c8389bb187550ed85534a740798abd30672159df24f8f31ad5c730e06a",
+      "source": "interface-lab/server/materials_repository.py",
+      "target": "compat/materials_repository.py"
+    },
+    {
+      "sha256": "1a7dba0742bf19f8b6e1a677c23dff8757244ad296cfa9d9358a45f83fe10db9",
+      "source": "interface-lab/server/materials_runtime.py",
+      "target": "compat/materials_runtime.py"
+    },
+    {
+      "sha256": "01d04643ae228c733b9815aaec8363ef98d66b1c9e9d5150e87df01bb4de1afc",
+      "source": "interface-lab/server/materials_service.py",
+      "target": "compat/materials_service.py"
+    },
+    {
+      "sha256": "eb3d17a4d3b8062d22530930b0d581e5a4cbb0871426a3bc5f509042cb65aa93",
+      "source": "interface-lab/server/materials_storage.py",
+      "target": "compat/materials_storage.py"
+    },
+    {
+      "sha256": "93411cbd2014eb2d9844ad9995ad924f3168acd42118fe8a32c4896ed41405f8",
+      "source": "interface-lab/server/materials_transcripts.py",
+      "target": "compat/materials_transcripts.py"
+    },
+    {
+      "sha256": "aba79a31aa67c573fc9ebe39578fcf9b03c120c56bbbe59ab651d4bc8515a94b",
+      "source": "interface-lab/server/materials_worker.py",
+      "target": "compat/materials_worker.py"
+    },
+    {
+      "sha256": "d8553b8f7b64594fed635690b102634fa8f61bc4334efccfa7c85f665ec182d2",
+      "source": "interface-lab/server/materials_zoom.py",
+      "target": "compat/materials_zoom.py"
+    },
+    {
+      "sha256": "de0d389b7d54f6d6f572da695198b48691da0177ea92c3c243888c6b59ef7df9",
+      "source": "interface-lab/server/media_runtime.py",
+      "target": "compat/media_runtime.py"
+    },
+    {
+      "sha256": "b0501155a7d8f6dd8c6b1a020b877a9b36e9c90cc23675d54ae5764298de67b3",
+      "source": "interface-lab/server/observability.py",
+      "target": "compat/observability.py"
+    },
+    {
+      "sha256": "3f4cfcd0f86cbbcc2c5ff15966ca279cd7d5ac0125fa68d845688308343a14f7",
+      "source": "interface-lab/server/zoom_api_client.py",
+      "target": "compat/zoom_api_client.py"
+    },
+    {
+      "sha256": "915b4e45072924525c8ab8e6dc5b7e878eb4585e8b6a6c40099a5da1becaac40",
+      "source": "interface-lab/server/zoom_media.py",
+      "target": "compat/zoom_media.py"
+    },
+    {
+      "sha256": "c6a7ed6d66e5786117b090c2031061326eb13a23d4a22392cb765e38709d87a5",
+      "source": "interface-lab/server/zoom_recording_retention.py",
+      "target": "compat/zoom_recording_retention.py"
+    },
+    {
+      "sha256": "ab2b9c77833242a41a236322f18d1c46f9bcc18deba8210906887b2c03216e8a",
+      "source": "services/data-core/pyproject.toml",
+      "target": "pyproject.toml"
+    },
+    {
+      "sha256": "a405c9813234455ed44c6f9e67da48f328e41c968022ec64167a4395c910b09b",
+      "source": "services/data-core/src/hr_materials_core/__init__.py",
+      "target": "src/hr_materials_core/__init__.py"
+    },
+    {
+      "sha256": "47afdbdd7c9e3578a93c73d1b2b9b7b3bdd670de5bfeb40678e4616b0afa2571",
+      "source": "services/data-core/src/hr_materials_core/__main__.py",
+      "target": "src/hr_materials_core/__main__.py"
+    },
+    {
+      "sha256": "97fa1624c8a798de719bf35fd9f65980337581498e3bd8238daf4cb5e1b5fa63",
+      "source": "services/data-core/src/hr_materials_core/app.py",
+      "target": "src/hr_materials_core/app.py"
+    },
+    {
+      "sha256": "9564f25926892d8f8b148d48ca14274cd5e47a0ad78d6e2a08913fea6c442165",
+      "source": "services/data-core/src/hr_materials_core/auth.py",
+      "target": "src/hr_materials_core/auth.py"
+    },
+    {
+      "sha256": "587cafc35a79322657884da2919cf1c1af7731b173ed7037565fbbc910f98e33",
+      "source": "services/data-core/src/hr_materials_core/repository.py",
+      "target": "src/hr_materials_core/repository.py"
+    },
+    {
+      "sha256": "464f33a0268a598d0d8208feb8951c8e37ef615f73c76fd8d1ebf4983f8519a4",
+      "source": "services/data-core/src/hr_materials_core/schemas.py",
+      "target": "src/hr_materials_core/schemas.py"
+    },
+    {
+      "sha256": "ec3afc8b33fe87a30c05c4e689a46daafd34ae041536f2e2e8b88e666a3a5a6a",
+      "source": "services/data-core/src/hr_materials_core/service.py",
+      "target": "src/hr_materials_core/service.py"
+    },
+    {
+      "sha256": "ea4df37d13d5573ba2dd30ba4f46588a904ba79a2a0d7cff46d3af9c858387c4",
+      "source": "services/data-core/src/hr_materials_core/settings.py",
+      "target": "src/hr_materials_core/settings.py"
+    },
+    {
+      "sha256": "cee00e9ac3631dc721c781d08a443092ab1a0a6d69a5d6daa4c016ca32e36317",
+      "source": "services/deploy/requirements-runtime.lock",
+      "target": "runtime.lock"
+    },
+    {
+      "sha256": "ca98b1761b7769fb72437ccffb6cbd860324c8264151c66bd53db060c6431184",
+      "source": "services/deploy/simple/run.py",
+      "target": "run.py"
+    }
+  ],
+  "schema_version": 1,
+  "service": "core"
+}

@@ -1,0 +1,35 @@
+[Unit]
+Description=Private transcript normalization API (ASR disabled)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+DynamicUser=true
+WorkingDirectory=/opt/hr-vision-materials/services/normalizer/current
+EnvironmentFile=/etc/hr-vision-services/normalizer.env
+ExecStart=/opt/hr-vision-transcription/venv/bin/python /opt/hr-vision-materials/services/normalizer/current/run.py normalizer
+StateDirectory=hr-vision-transcription
+StateDirectoryMode=0700
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=90
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+InaccessiblePaths=-/var/lib/hr-vision-api -/etc/hr-vision-services/core.env -/etc/hr-vision-services/zoom.env
+CapabilityBoundingSet=
+AmbientCapabilities=
+MemoryMax=256M
+MemorySwapMax=0
+CPUQuota=100%
+TasksMax=128
+LimitNOFILE=1024
+StandardOutput=journal
+StandardError=journal
+LogRateLimitIntervalSec=30s
+LogRateLimitBurst=200
+
+[Install]
+WantedBy=multi-user.target

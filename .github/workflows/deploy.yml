@@ -58,6 +58,7 @@ jobs:
           node --test scripts/observability-privacy.test.ts
           node --test scripts/candidate-player-model.test.ts
           node --test scripts/interview-answer-model.test.ts
+          node --test src/scenes/interview-assessment/fragment-feedback.test.mjs
           node --test scripts/candidate-review-queue.test.ts
           node --test scripts/employer-entry.test.ts
           node --test scripts/employer-agenda.test.ts
@@ -82,6 +83,14 @@ jobs:
       - name: Check deployment safety
         working-directory: interface-lab/deploy/ci
         run: python3 -m unittest -v test_receiver
+      - name: Check core and private Zoom service
+        env:
+          PYTHONPATH: interface-lab/server:services/data-core/src:services/transcription/src
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python3 -m pip install --require-hashes --only-binary=:all: -r services/deploy/requirements-tests.lock
+          python3 -m pip check
+          python3 -m pytest services/data-core/tests services/zoom-api/test_zoom_api.py services/deploy/simple/tests services/tests/test_zoom_core_http_integration.py -q
       - name: Build and package only this destination
         working-directory: interface-lab
         run: |

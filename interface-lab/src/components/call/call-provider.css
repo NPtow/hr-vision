@@ -12,3 +12,11 @@
 
 
 .md-zoom-recovery { position: absolute; z-index: 2; top: 16px; right: 16px; }
+.md-zoom-overlay { position: fixed; inset: 0; z-index: 10000; display: flex; background: #17191c; }
+.md-zoom-entry { max-width: 640px; margin: 0 auto; padding: 32px 24px; }
+.md-zoom-entry h1 { font-size: 24px; margin: 0 0 12px; }
+.md-zoom-entry label { display: flex; align-items: start; gap: 10px; margin: 24px 0; }
+.md-zoom-entry-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 20px; }
+.md-zoom-entry-actions button { padding: 12px 18px; border: 0; border-radius: 10px; background: #7461c6; color: #fff; cursor: pointer; }
+.md-zoom-entry-actions button:disabled { opacity: .45; cursor: default; }
+.md-zoom-entry-dialog { position: fixed; inset: 0; z-index: 1000; overflow: auto; background: var(--ew-bg, #fafafa); }

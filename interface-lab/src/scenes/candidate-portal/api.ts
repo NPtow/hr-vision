@@ -126,7 +126,7 @@ export class CandidateApiError extends Error {
   constructor(message: string, public status: number) { super(message); }
 }
 
-export async function candidateRequest<T>(path: string, body?: unknown): Promise<T> {
+export async function candidateRequest<T>(path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), path === 'resume' && body !== undefined ? 180000 : path.endsWith('/materials') ? 60000 : 25000);
   try {
@@ -136,7 +136,7 @@ export async function candidateRequest<T>(path: string, body?: unknown): Promise
       cache: 'no-store',
       headers: { Accept: 'application/json', ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
       body: body === undefined ? undefined : JSON.stringify(body),
-      signal: controller.signal,
+      signal: signal ? AbortSignal.any([controller.signal, signal]) : controller.signal,
     });
     const data = await response.json().catch(() => null);
     if (!response.ok) {

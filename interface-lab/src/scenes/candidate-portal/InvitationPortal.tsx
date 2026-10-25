@@ -63,13 +63,13 @@ function GuestInvitation({ token }: { token: string }) {
   if (loading) return <div className="cp-loading" role="status">Открываем приглашение…</div>;
   if (!state) return <section className="cp-form-page cp-invitation"><h1>Приглашение недоступно</h1><p className="cp-error" role="alert">{error}</p><p className="cp-muted">Попросите рекрутера проверить или обновить ссылку.</p><Button variant="secondary" onClick={() => void refresh()}><RefreshCw size={16}/>Проверить ещё раз</Button></section>;
   if (state.interview.status === 'completed') return <section className="cp-form-page cp-invitation"><CheckCircle2 size={32}/><h1>Спасибо за разговор</h1><Button onClick={() => openCabinet('home')}>В личный кабинет</Button></section>;
-  if (entering) return <><InterviewRoom title={`Интервью · ${state.interview.recruiterName}`} start={state.interview.start} completed={false} configured={state.interview.videoConfigured ?? state.videoConfigured} callProvider={state.interview.callProvider} guestToken={token} onRefresh={refresh} onBack={() => setEntering(false)} onExit={() => openCabinet('home')}/>{error && <p className="cp-error cp-invitation-error" role="alert">{error}</p>}</>;
+  if (entering || state.interview.callProvider === 'zoom') return <><InterviewRoom title={`Интервью · ${state.interview.recruiterName}`} start={state.interview.start} completed={false} configured={state.interview.videoConfigured ?? state.videoConfigured} callProvider={state.interview.callProvider} guestToken={token} onRefresh={refresh} onBack={() => state.interview.callProvider === 'zoom' ? openCabinet('home') : setEntering(false)} onExit={() => openCabinet('home')}/>{error && <p className="cp-error cp-invitation-error" role="alert">{error}</p>}</>;
   return <section className="cp-form-page cp-invitation">
     <span className="cp-large-icon"><Video size={25}/></span>
     <h1>{state.name ? `${state.name.split(' ')[0]}, до встречи` : 'До встречи на интервью'}</h1>
     <p className="cp-muted">Знакомство с HR Vision и разговор о вашем опыте. Регистрироваться перед встречей не нужно.</p>
     <div className="cp-card cp-invitation-details"><CalendarDays size={21}/><div><strong>{dateTimeLabel(state.interview.start)}</strong><p className="cp-muted">30 минут · {state.interview.recruiterName}</p></div></div>
-    {state.interview.callProvider !== 'zoom' && <p className="cp-muted">Начнём без записи. Рекрутер объяснит, как работает сервис, и спросит ваше согласие на запись интервью.</p>}
+    <p className="cp-muted">Начнём без записи. Рекрутер объяснит, как работает сервис, и спросит ваше согласие на запись интервью.</p>
     {error && <p className="cp-error" role="alert">{error}</p>}
     <Button onClick={() => setEntering(true)}><Video size={17}/>Подготовиться к встрече</Button>
   </section>;

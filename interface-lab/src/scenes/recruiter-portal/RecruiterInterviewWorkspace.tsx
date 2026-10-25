@@ -11,8 +11,8 @@ import { RecruiterCoachNotesAdapter, RecruiterOriginalResume } from './Recruiter
 import './recruiter-coach-live.css';
 
 /** Opening a scheduled interview never creates a room or enables capture. */
-export function RecruiterInterviewWorkspace({ candidate, token, videoConfigured, onJoin, onClose, onUpdated }: {
-  candidate: RecruiterCandidate; token: string; videoConfigured: boolean;
+export function RecruiterInterviewWorkspace({ candidate, token, videoConfigured, onJoin, onClose, onUpdated, materialsOnly = false }: {
+  candidate: RecruiterCandidate; token: string; videoConfigured: boolean; materialsOnly?: boolean;
   onJoin: (provider: CallProvider, recordingConsent?: boolean) => void; onClose: () => void; onUpdated: () => void | Promise<void>;
 }) {
   const [interview, setInterview] = useState<Interview>(candidate.interview!);
@@ -71,8 +71,8 @@ export function RecruiterInterviewWorkspace({ candidate, token, videoConfigured,
       finishLabel="Вернуться к интервью" finishDisabled={joining} closeDisabled={joining}
       mediaSlot={<div className="ric-approved-prejoin">
         <Video size={30} aria-hidden="true"/>
-        <p>{completed ? 'Интервью завершено' : formatDate(interview.start)}</p>
-        {!completed && <>
+        <p>{completed ? 'Интервью завершено' : materialsOnly ? 'Материалы интервью' : formatDate(interview.start)}</p>
+        {!completed && !materialsOnly && <>
           <CallProviderSelector value={provider} locked={interview.callProviderLocked} options={interview.callProviderOptions}
             disabled={joining || switching} onChange={next => void chooseProvider(next)}/>
           {providerError && <span role="alert">{providerError}</span>}
@@ -87,7 +87,7 @@ export function RecruiterInterviewWorkspace({ candidate, token, videoConfigured,
       saveError={coach.error}
       resumeContent={<RecruiterOriginalResume token={token} candidateId={candidate.id} interviewId={interview.id}/>}
       stageToolbar={completed ? <div className="ric-approved-materials"><RecruiterMediaActions kind="interview" candidateId={candidate.id} status="completed" token={token} onUpdated={onUpdated}/></div> : undefined}
-      notesContent={onSelectQuestion => <RecruiterCoachNotesAdapter coach={coach} token={token} candidateId={candidate.id} interviewId={interview.id} questions={questions} writable={completed} onSelectQuestion={onSelectQuestion}/>}
+      notesContent={onSelectQuestion => <RecruiterCoachNotesAdapter coach={coach} token={token} candidateId={candidate.id} interviewId={interview.id} questions={questions} writable={completed || interview.status === 'live'} onSelectQuestion={onSelectQuestion}/>}
     />
   </div>;
 }

@@ -26,19 +26,28 @@ def _policy(value):
 class MaterialsRuntime:
     def __init__(self, connect, repository, captures, storage, *, enabled=True,
                  default_policy='remote', connection_id='daily', publish=None,
-                 clock=None, settle_seconds=86400, backfill_enabled=False, **worker_options):
+                 clock=None, settle_seconds=86400, backfill_enabled=False,
+                 provider_allowlist=None, backfill_providers=None, **worker_options):
         self.connect, self.repository = connect, repository
         self.captures, self.storage, self.enabled = captures, storage, enabled
         self.default_policy, self.connection_id = _policy(default_policy), connection_id
         self.clock = clock or time.time
         self.settle_seconds = max(0, int(settle_seconds))
         self.backfill_enabled = backfill_enabled
-        self.worker = MaterialsWorker(repository, captures, storage, publish=publish, **worker_options)
+        self.backfill_providers = backfill_providers
+        self.provider_allowlist = None if provider_allowlist is None else frozenset(provider_allowlist)
+        self.worker = MaterialsWorker(repository, captures, storage, publish=publish,
+            provider_allowlist=self.provider_allowlist, **worker_options)
+
+    def _check_provider(self, provider):
+        if self.provider_allowlist is not None and provider not in self.provider_allowlist:
+            raise ValueError('Capture provider belongs to an independent service')
 
     def register_owner(self, owner_kind, owner_id, provider='daily', connection_id=None,
                        source_ref=None, storage_policy=None):
         if not self.enabled:
             return None
+        self._check_provider(provider)
         policy = _policy(storage_policy or ('owned' if provider == 'zoom' else self.default_policy))
         if provider == 'zoom' and policy != 'owned':
             raise ValueError('Zoom recordings require owned storage')
@@ -60,6 +69,7 @@ class MaterialsRuntime:
     def upgrade_policy(self, source_id, policy='owned'):
         policy = _policy(policy)
         source = self.repository.get_source(source_id)
+        self._check_provider(source['provider'])
         if source['provider'] == 'zoom' and policy != 'owned':
             raise ValueError('Zoom recordings require owned storage')
         source = self.repository.update_source_policy(source_id, policy)
@@ -70,7 +80,12 @@ class MaterialsRuntime:
     def _sources(self):
         db = self.connect()
         try:
-            ids = [row[0] for row in db.execute('SELECT id FROM media_sources ORDER BY updated_at,id')]
+            query, params = 'SELECT id FROM media_sources', []
+            if self.provider_allowlist is not None:
+                providers = sorted(self.provider_allowlist)
+                query += ' WHERE provider IN (' + ','.join('?' for _ in providers) + ')' if providers else ' WHERE 0'
+                params.extend(providers)
+            ids = [row[0] for row in db.execute(query + ' ORDER BY updated_at,id', params)]
         finally:
             db.close()
         return [self.repository.get_source(identity) for identity in ids]
@@ -105,7 +120,16 @@ class MaterialsRuntime:
                 eligible = (f"COALESCE((({provider_sql}='daily' AND {legacy_binding}) OR "
                     f"({provider_sql}='zoom' AND {zoom_binding})),0)")
                 base = (f"FROM {table} p WHERE status='completed' AND room IS NOT NULL "
-                    f"AND NOT EXISTS (SELECT 1 FROM media_sources s WHERE s.{kind}_id=p.id)")
+                    f"AND NOT EXISTS (SELECT 1 FROM media_sources s WHERE s.{kind}_id=p.id AND s.provider={provider_sql})")
+                provider_params = []
+                if self.provider_allowlist is not None:
+                    providers = sorted(self.provider_allowlist)
+                    base += (' AND ' + provider_sql + ' IN (' + ','.join('?' for _ in providers) + ')') if providers else ' AND 0'
+                    provider_params.extend(providers)
+                if self.backfill_providers is not None:
+                    providers = sorted(self.backfill_providers)
+                    base += (' AND ' + provider_sql + ' IN (' + ','.join('?' for _ in providers) + ')') if providers else ' AND 0'
+                    provider_params.extend(providers)
                 never_started = f"COALESCE(json_extract({clean_room},'$.captureNeverStarted'),0)<>0"
                 if kind == 'interview' and {'cp_intake', 'cp_recording_control'} <= tables:
                     # Legacy prepared introductions may predate the room flag.
@@ -113,19 +137,20 @@ class MaterialsRuntime:
                     never_started += (f" OR ({provider_sql}='daily' AND EXISTS (SELECT 1 FROM cp_intake intake "
                         "JOIN cp_recording_control control ON control.interview_id=p.id "
                         "WHERE intake.candidate_id=p.candidate_id AND control.start_requested_at IS NULL))")
-                skipped += db.execute('SELECT count(*) ' + base + ' AND (' + never_started + ')').fetchone()[0]
+                skipped += db.execute('SELECT count(*) ' + base + ' AND (' + never_started + ')', provider_params).fetchone()[0]
                 base += ' AND NOT (' + never_started + ')'
-                ambiguous += db.execute('SELECT count(*) ' + base + ' AND NOT ' + eligible).fetchone()[0]
+                ambiguous += db.execute('SELECT count(*) ' + base + ' AND NOT ' + eligible, provider_params).fetchone()[0]
                 rows.extend((kind, *row) for row in db.execute(
-                    'SELECT id,room ' + base + ' AND ' + eligible + ' ORDER BY id LIMIT ?', (limit,)))
+                    'SELECT id,room ' + base + ' AND ' + eligible + ' ORDER BY id LIMIT ?', (*provider_params, limit)))
         finally:
             db.close()
         for kind, identity, body in rows:
-            if self.repository.list_sources(kind, identity):
-                skipped += 1
-                continue
             try:
                 room = json.loads(body)
+                if any(source['provider'] == room.get('provider', 'daily')
+                       for source in self.repository.list_sources(kind, identity)):
+                    skipped += 1
+                    continue
                 if room.get('captureNeverStarted'):
                     skipped += 1
                     continue
@@ -153,6 +178,8 @@ class MaterialsRuntime:
             if not isinstance(key, tuple):
                 continue
             provider, connection = key
+            if self.provider_allowlist is not None and provider not in self.provider_allowlist:
+                continue
             for event in self.repository.list_events(provider, connection):
                 payload = event['payload'].get('payload', {})
                 session = payload.get('mtg_session_id') or payload.get('mtgSessionId') or payload.get('meeting_id')
@@ -181,6 +208,7 @@ class MaterialsRuntime:
     def handle_event(self, provider, headers, raw_body):
         if not self.enabled:
             raise ValueError('Materials are disabled')
+        self._check_provider(provider)
         adapter = self.captures.get((provider, self.connection_id))
         if adapter is None:
             raise ValueError('Capture provider unconfigured')
@@ -241,20 +269,35 @@ def build_runtime(connect=None, media=None, environ=None, *, publish=None, captu
     if enabled:
         repository.init()
     connection = env.get('HR_MATERIALS_CONNECTION_ID', 'daily')
+    provider_allowlist = ('zoom',) if env.get('HR_MATERIALS_SERVICES_ENABLED') == '1' else None
+    if env.get('HR_MATERIALS_PROVIDERS'):
+        provider_allowlist = tuple(env['HR_MATERIALS_PROVIDERS'].split(','))
+        if not provider_allowlist or not set(provider_allowlist) <= {'daily', 'zoom'}:
+            raise ValueError('Invalid materials provider scope')
+    backfill_providers = None
+    if env.get('HR_MATERIALS_BACKFILL_PROVIDERS'):
+        backfill_providers = tuple(env['HR_MATERIALS_BACKFILL_PROVIDERS'].split(','))
+        if not set(backfill_providers) <= {'daily', 'zoom'}:
+            raise ValueError('Invalid materials recovery scope')
     if captures is None:
-        from materials_daily import DailyCapture
-        if media is None:
-            from daily_media import DailyMedia
-            media = DailyMedia(env.get('DAILY_API_KEY', ''), enabled)
-        captures = {('daily', connection): DailyCapture(media, connection,
-                    webhook_hmac=env.get('HR_MATERIALS_DAILY_WEBHOOK_HMAC'))}
-        from zoom_media import ZoomMedia
-        zoom = ZoomMedia.from_env(env)
+        captures = {}
+        if provider_allowlist is None or 'daily' in provider_allowlist:
+            from materials_daily import DailyCapture
+            if media is None:
+                from daily_media import DailyMedia
+                media = DailyMedia(env.get('DAILY_API_KEY', ''), enabled)
+            captures[('daily', connection)] = DailyCapture(media, connection,
+                    webhook_hmac=env.get('HR_MATERIALS_DAILY_WEBHOOK_HMAC'))
+        from zoom_api_client import zoom_from_env
+        zoom = zoom_from_env(env)
         # Disabling selection for new calls must not orphan existing recordings.
-        if zoom.capture_configured:
+        if (provider_allowlist is None or 'zoom' in provider_allowlist) and zoom.capture_configured:
             from materials_zoom import ZoomCapture
             zoom_connection = env.get('HR_ZOOM_CONNECTION_ID', 'zoom')
             captures[('zoom', zoom_connection)] = ZoomCapture(zoom, zoom_connection)
+    if provider_allowlist is not None:
+        captures = {key: capture for key, capture in captures.items()
+                    if (key[0] if isinstance(key, tuple) else key) in provider_allowlist}
     if storage is None:
         # Construction is explicit. No default public bucket or signed GET URL.
         backend = env.get('HR_MATERIALS_STORAGE_BACKEND', 'filesystem')
@@ -280,8 +323,10 @@ def build_runtime(connect=None, media=None, environ=None, *, publish=None, captu
             app.send_task('materials.run_job', args=[identity], queue='materials',
                           retry=False)
     return MaterialsRuntime(connect, repository, captures, storage, enabled=enabled,
+        provider_allowlist=provider_allowlist,
         default_policy=env.get('HR_MATERIALS_VIDEO_POLICY', 'remote'), connection_id=connection,
         backfill_enabled=env.get('HR_MATERIALS_BACKFILL_ENABLED', '0') == '1',
+        backfill_providers=backfill_providers,
         settle_seconds=int(env.get('HR_MATERIALS_SETTLE_SECONDS', '86400')),
         publish=publish, lease_seconds=int(env.get('HR_MATERIALS_LEASE_SECONDS', '60')),
         max_bytes=int(env.get('HR_MATERIALS_MAX_DOWNLOAD_BYTES', str(2 * 1024**3))),
@@ -310,13 +355,13 @@ def create_celery_app(environ=None):
         broker_connection_timeout=3, task_publish_retry=False,
         beat_schedule=schedule)
 
-    @app.task(name='materials.run_job')
+    @app.task(name='materials.run_job', shared=False)
     def run_job(identity):
         if env.get('HR_MATERIALS_ENABLED', '0') != '1':
             return {'enabled': False}
         return build_runtime(environ=env).worker.run_once(identity)
 
-    @app.task(name='materials.reconcile')
+    @app.task(name='materials.reconcile', shared=False)
     def reconcile():
         return build_runtime(environ=env).reconcile()
 

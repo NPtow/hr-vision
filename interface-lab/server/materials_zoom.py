@@ -55,7 +55,7 @@ class ZoomCapture:
         if (not isinstance(rows, list) or len(rows) > self.max_files or
                 (count is not None and (type(count) is not int or count < len(rows)))):
             raise ValueError('Invalid Zoom metadata response')
-        complete = not result.get('next_page_token') and (count is None or count == len(rows))
+        complete = result.get('listing_complete', True) is True and not result.get('next_page_token') and (count is None or count == len(rows))
         return rows, complete
 
     @staticmethod
@@ -174,6 +174,9 @@ class ZoomCapture:
         inspected, row = self._inspect_row(artifact)
         if inspected.status != 'ready':
             raise ValueError('Zoom artifact is not ready')
+        from zoom_api_client import ZoomAPI
+        if isinstance(self.media, ZoomAPI):
+            return self.media.download_source(self._room(inspected.source), inspected.provider_asset_id)
         resolved = self.media.resolve_download(row)
         url, headers = resolved.get('url'), resolved.get('headers')
         if not isinstance(url, str) or len(url) > 16384 or '\\' in url or any(ord(c) < 33 for c in url):

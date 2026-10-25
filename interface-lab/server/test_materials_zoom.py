@@ -236,8 +236,10 @@ class ZoomRuntimeTest(unittest.TestCase):
             return DownloadResult(str(destination), len(body), hashlib.sha256(body).hexdigest(),
                                   'text/vtt' if body == VTT else 'video/mp4')
 
+        from test_materials_worker import _parser
         self.runtime = MaterialsRuntime(self.connect, self.repository,
-            {('zoom', 'zoom-account'): self.adapter}, self.storage, downloader=download)
+            {('zoom', 'zoom-account'): self.adapter}, self.storage, downloader=download,
+            normalizer=_parser.normalize_transcript)
 
     def set_room(self, data):
         with self.connect() as db:
