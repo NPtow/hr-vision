@@ -166,7 +166,8 @@ class ReceiverTest(unittest.TestCase):
         self.assertEqual(r.ASSESSMENT_ONLY_RUNTIME - r.ZOOM_ONLY_RUNTIME, {'interview_assessment.py'})
         self.assertEqual(r.PRE_PUBLIC_PROFILE_RUNTIME - r.PRE_ASSESSMENT_RUNTIME, {'interview_assessment.py'})
         self.assertEqual(r.PRE_SELECTION_RUNTIME - r.PRE_PUBLIC_PROFILE_RUNTIME, {'public_profiles.py'})
-        self.assertEqual(r.RUNTIME - r.PRE_SELECTION_RUNTIME, {'selection.py'})
+        self.assertEqual(r.PRE_JEV_RUNTIME - r.PRE_SELECTION_RUNTIME, {'selection.py'})
+        self.assertEqual(r.RUNTIME - r.PRE_JEV_RUNTIME, {'assessment_jobs.py'})
         self.assertIn(frozenset(r.PRE_PUBLIC_PROFILE_RUNTIME), r.RUNTIME_LAYOUTS)
         self.assertEqual(r.ZOOM_RUNTIME, {'call_providers.py', 'zoom_media.py', 'materials_zoom.py', 'zoom_recording_retention.py'})
         self.assertEqual(len(r.MATERIALS_RUNTIME), 9)
@@ -682,6 +683,23 @@ class ReceiverTest(unittest.TestCase):
                     self.assertEqual(db.execute('SELECT * FROM ' + table).fetchall(), [('preserved-assessment-row',)])
                     r.guard_outbox_runtime(db, current)
                     db.execute('DROP TABLE ' + table)
+
+    def test_jev_queue_requires_runtime_and_cannot_be_hidden_by_view(self):
+        prior = self.runtime(self.root / 'before-jev', r.PRE_JEV_RUNTIME)
+        current = self.runtime(self.root / 'with-jev', r.RUNTIME)
+        with sqlite3.connect(':memory:') as db:
+            for table in ('as_bindings', 'as_matches'):
+                db.execute('CREATE TABLE ' + table + ' (id TEXT)')
+                r.guard_outbox_runtime(db, prior)
+                db.execute('INSERT INTO ' + table + " VALUES ('queued')")
+                with self.assertRaisesRegex(ValueError, 'Jev queue data'):
+                    r.guard_outbox_runtime(db, prior)
+                r.guard_outbox_runtime(db, current)
+                db.execute('DROP TABLE ' + table)
+                db.execute('CREATE VIEW ' + table + ' AS SELECT 1 WHERE 0')
+                with self.assertRaisesRegex(ValueError, 'Cannot verify Jev'):
+                    r.guard_outbox_runtime(db, prior)
+                db.execute('DROP VIEW ' + table)
 
     def test_assessment_view_does_not_bypass_runtime_guard(self):
         prior = self.runtime(self.root / 'before-assessments', r.PRE_ASSESSMENT_RUNTIME)

@@ -438,6 +438,8 @@ def add(db, workspace_id, vacancy_id, body, prepared=None):
                 person['files'].append({'id': secrets.token_hex(12), 'name': file['name'], 'size': len(file['content'])})
             db.execute('INSERT INTO em_intake_candidates VALUES (?,?,?,?,?)',
                        (person['id'], workspace_id, vacancy_id, prepared.batch, _dump(person)))
+            import assessment_jobs
+            assessment_jobs.enqueue(db, 'intake', person['id'], vacancy_id, workspace_id)
             if file:
                 db.execute('INSERT INTO em_intake_files VALUES (?,?,?,?,?,?,?,?)',
                            (person['files'][0]['id'], person['id'], file['name'], file['mime'], file['content'],

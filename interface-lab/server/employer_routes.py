@@ -290,7 +290,11 @@ class EmployerRoutes:
                 if feedback:
                     values = {key: value for key, value in body.items() if key in feedback_keys}
                     return interview_assessment.save_feedback(db, principal, binding, fingerprint, values)
-                return interview_assessment.read(db, principal, binding, fingerprint)
+                import assessment_jobs
+                saved = interview_assessment.read(db, principal, binding, fingerprint)
+                pending = assessment_jobs.read_intake(db, principal['workspaceId'], scope['id'], fingerprint)
+                return assessment_jobs.with_match(db, saved if saved.get('assessment') else pending or saved,
+                                                  'intake:' + scope['id'], scope['vacancyId'])
             allowed = {'source', 'candidate', 'applicationId', 'vacancyId', 'generation', 'recordingId'}
             if scope['source'] == 'meeting':
                 allowed.add('meetingId')
@@ -299,8 +303,9 @@ class EmployerRoutes:
             principal, app, _ = self._identity(db, headers, scope, allow_archived=True)
             meeting = self.portal.interview(db, app['candidateId']) if scope['source'] == 'screening' else self._meeting(db, app, scope)
             require(meeting and meeting['status'] == 'completed', 'Материалы доступны после встречи.', 409)
-            # The read-ready boundary keeps real call/materials handling untouched.
-            # No assessment has been imported for these sources in this release.
+            if scope['source'] == 'screening' and not feedback:
+                import assessment_jobs
+                return assessment_jobs.read_candidate(db, app['candidateId'], scope['recordingId'], app['vacancyId']) or {'assessment': None}
             require(not feedback, 'Оценка этого интервью недоступна.', 404)
             return {'assessment': None}
 

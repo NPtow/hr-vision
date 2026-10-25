@@ -5,6 +5,7 @@ import { EmployerTimecodeComment } from '../employer-workspace/EmployerCandidate
 import { parseMeetingTranscript } from './transcript';
 import { request, type Journey, type Person, type SourceProfile } from './api';
 import { interviewAssistant } from '../interview-review/interview-assistant-api';
+import { useInterviewAssessment } from '../employer-workspace/useInterviewAssessment';
 
 /** Bind the existing interview view to this application's authorised source media. */
 type ScreeningProps = { journey: Journey; person: Person; source: SourceProfile; appearance?: 'panel' | 'candidate'; header?: ReactNode; enableComments?: boolean };
@@ -29,6 +30,10 @@ function Screening({ journey, person, source, appearance = 'panel', header, enab
 
   const transcript = materials?.transcripts.map(item => item.text).join('\n\n') || '';
   const recordings = materials?.recordings || (source.video ? [{ id: source.id, url: source.video }] : []);
+  const assessment = useInterviewAssessment(journey.token, vacancyId && recordings.length === 1 && transcript ? {
+    source: 'screening', candidate: person.id, applicationId: person.applicationId || person.id,
+    vacancyId, generation, recordingId: recordings[0].id,
+  } : null, transcript);
   const transcriptChapters = recordings.length <= 1 ? parseMeetingTranscript(transcript) : [];
   const chapters = source.shortChapters.length ? source.shortChapters : transcriptChapters;
   const fullChapters = source.fullChapters.length ? source.fullChapters : transcriptChapters;
@@ -63,6 +68,8 @@ function Screening({ journey, person, source, appearance = 'panel', header, enab
     key={recording?.id || 'pending'} appearance={appearance} sourceId={`${source.id}:${recording?.id || 'pending'}`}
     name={person.name} header={header} chapters={recordings.length <= 1 ? chapters : []} fullChapters={recordings.length <= 1 ? fullChapters : []}
     shortPlaylist={source.shortChapters.length > 0} media={recording ? { src: recording.url } : undefined}
+    assessment={recordings.length === 1 ? assessment.assessment : undefined}
+    hideFeedbackQuestions
     transcriptText={index === 0 ? transcript : undefined} transcriptSeekable={recordings.length <= 1} summary={index === 0 ? source.shortSummary : undefined}
     assistant={recording && recordings.length === 1 && transcript ? interviewAssistant(journey.token, {
       source: 'screening', candidate: person.id, applicationId: person.applicationId || person.id,
