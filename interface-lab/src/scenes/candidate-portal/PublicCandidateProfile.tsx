@@ -5,6 +5,8 @@ import { EmployerCandidateProfile } from '../employer-workspace/EmployerCandidat
 import type { EmployerCandidateResume } from '../employer-workspace/employer-candidate-profile-types';
 import { SourceScreeningReview } from '../interview-review/InterviewReview';
 import { parseMeetingTranscript } from '../connected-journey/transcript';
+import type { AssessmentPresentation } from '../interview-assessment/types';
+import type { InterviewAnswer, InterviewSearch, InterviewAssistantRequest } from '../interview-review/interview-assistant-api';
 import './public-candidate-profile.css';
 
 type Profile = { id: string; name: string; role: string; resume: { name: string; mime: string; size: number } | null };
@@ -18,16 +20,16 @@ class ShareError extends Error {
 }
 
 // No account cookies, persistent browser storage or tokens in request URLs.
-async function request<T>(token: string, suffix: string, signal: AbortSignal): Promise<T> {
+async function request<T>(token: string, suffix: string, signal: AbortSignal, values: Record<string, unknown> = {}, timeoutMs = 45_000): Promise<T> {
   const timeout = new AbortController();
-  const timer = setTimeout(() => timeout.abort(), 45_000);
+  const timer = setTimeout(() => timeout.abort(), timeoutMs);
   const abort = () => timeout.abort();
   signal.addEventListener('abort', abort, { once: true });
   if (signal.aborted) abort();
   try {
     const response = await fetch(`/api/hr/public-profile${suffix}`, {
       method: 'POST', credentials: 'omit', cache: 'no-store', referrerPolicy: 'no-referrer',
-      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }), signal: timeout.signal,
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...values, token }), signal: timeout.signal,
     });
     const body = await response.json();
     if (!response.ok) throw new ShareError(body.error || 'Не удалось открыть профиль.', response.status);
@@ -70,6 +72,26 @@ function PublicProfileCard({ token }: { token: string }) {
   const materialsRef = useRef<Materials | null>(null);
   const card = useRef<HTMLElement>(null);
   const [recordingId, setRecordingId] = useState('');
+  const [assessment, setAssessment] = useState<AssessmentPresentation>();
+  const [assessmentError, setAssessmentError] = useState('');
+  const [assessmentLoaded, setAssessmentLoaded] = useState(false);
+  const assistant = useMemo<InterviewAssistantRequest>(() => async (action, query, requestId, signal) => {
+    const result = await request<InterviewAnswer | InterviewSearch>(token, '/assistant', signal, { action, query, requestId }, 150_000);
+    if (result.mode !== action || (result.mode === 'chat' ? !Array.isArray(result.evidence) : !Array.isArray(result.matches))) throw new Error('Не удалось прочитать ответ. Попробуйте ещё раз.');
+    return result;
+  }, [token]);
+  useEffect(() => {
+    if (!/^[A-Za-z0-9_-]{43}$/.test(token)) return;
+    const controller = new AbortController();
+    void request<{ assessment: Omit<AssessmentPresentation, 'saveFeedback'> | null }>(token, '/assessment', controller.signal)
+      .then(result => {
+        if (controller.signal.aborted) return;
+        setAssessmentError('');
+        setAssessment(result.assessment ? { ...result.assessment, saveFeedback: async () => { throw new Error('Ответы по фрагментам в публичном просмотре отключены.'); } } : undefined);
+      }).catch(cause => { if (!controller.signal.aborted) setAssessmentError((cause as Error).message); })
+      .finally(() => { if (!controller.signal.aborted) setAssessmentLoaded(true); });
+    return () => controller.abort();
+  }, [token, attempt]);
   useEffect(() => {
     if (!/^[A-Za-z0-9_-]{43}$/.test(token)) { setClosed(true); setError('Ссылка недействительна.'); return; }
     const controller = new AbortController();
@@ -139,11 +161,14 @@ function PublicProfileCard({ token }: { token: string }) {
         <button type="button" key={item.id} aria-pressed={recording?.id === item.id} onClick={() => setRecordingId(item.id)}>Запись {index + 1}</button>)}</div>}
       <EmployerCandidateProfile person={profile} source={{}} resume={resume} workflowRevision={0}
         interview={header => <SourceScreeningReview sourceId={`${profile.id}:${recording?.id || 'transcript'}`} name={profile.name} header={header}
-          appearance="candidate" readOnly chapters={[]} fullChapters={chapters} transcriptText={transcript}
+          appearance="candidate" hideFeedbackQuestions assessment={assessment}
+          assessmentStatus={!assessmentLoaded ? 'loading' : !assessment ? 'unavailable' : undefined}
+          assistant={transcript ? assistant : undefined} chapters={[]} fullChapters={chapters} transcriptText={transcript}
           transcriptSeekable={materials.recordings.length === 1 && materials.transcripts.length === 1}
           media={recording ? { src: recording.url, label: 'Интервью' } : undefined}
           emptyMessage="Запись пока недоступна."/>}/>
     </> : <div className="public-candidate-state"><h1>{profile.name}</h1>{!materialError && <><span className="public-candidate-spinner" aria-hidden="true"/><p>Открываем интервью…</p></>}</div>}
     {(error || materialError) && <div className="public-candidate-state" role="alert"><p>{error || materialError}</p><button type="button" onClick={retry}>Попробовать снова</button></div>}
+    {assessmentError && <div className="public-candidate-state" role="alert"><p>{assessmentError}</p><button type="button" onClick={retry}>Повторить загрузку аналитики</button></div>}
   </section>;
 }

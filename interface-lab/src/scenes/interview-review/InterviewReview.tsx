@@ -60,11 +60,12 @@ export type RecordingReviewProps = {
   commentTimestamps?: { seconds: number; count: number }[];
   comments?: { id: string; seconds: number; text: string; createdAt: string }[];
   canComment?: boolean;
-  /** Public capabilities expose playback and transcript, without account tools. */
-  readOnly?: boolean;
+  /** Public profiles retain review modes but do not ask for fragment feedback. */
+  hideFeedbackQuestions?: boolean;
   assistant?: InterviewAssistantRequest;
   /** Only an authenticated adapter may supply a ready assessment and persistence. */
   assessment?: AssessmentPresentation;
+  assessmentStatus?: 'loading' | 'unavailable';
 };
 
 /** Parse a source's mm:ss or hh:mm:ss. A missing timestamp is never a seekable chapter. */

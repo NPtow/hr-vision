@@ -10,6 +10,8 @@ import secrets
 from urllib.parse import urlsplit
 
 from domain import iso, now, require
+from interview_assistant import InterviewAssistant
+import selection
 
 
 PUBLIC = '/api/hr/public-profile'
@@ -21,6 +23,7 @@ class PublicProfiles:
     def __init__(self, portal):
         self.portal = portal
         self.connect, self.lock = portal.connect, portal.lock
+        self.assistant = InterviewAssistant(self.connect, self.lock)
         with self.connect() as db:
             db.executescript('''
               CREATE TABLE IF NOT EXISTS cp_public_profiles (
@@ -35,7 +38,8 @@ class PublicProfiles:
 
     @staticmethod
     def handles(path):
-        return urlsplit(path).path in (PUBLIC, PUBLIC + '/materials', PUBLIC + '/resume', OWNER)
+        return urlsplit(path).path in (PUBLIC, PUBLIC + '/materials', PUBLIC + '/resume',
+                                      PUBLIC + '/assessment', PUBLIC + '/assistant', OWNER)
 
     @staticmethod
     def _fingerprint(room):
@@ -80,6 +84,40 @@ class PublicProfiles:
         return {'id': share['id'], 'name': person['name'], 'role': person.get('desiredRole', ''),
                 'resume': {'name': resume[0], 'mime': resume[1], 'size': resume[2]} if resume else None}
 
+    def assessment(self, db, share):
+        """Project the exact saved core result; never synthesize missing scores."""
+        if not db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='sl_core_results'").fetchone():
+            return {'assessment': None}
+        row = db.execute('''SELECT id,interview_id,source_revision,body,engine_candidate_id FROM sl_core_results
+          WHERE candidate_id=? ORDER BY rowid DESC LIMIT 1''', (share['candidateId'],)).fetchone()
+        if not row or row[1] != share['interviewId'] or row[2] != selection.person(db, share['candidateId'])['sourceRevision']:
+            return {'assessment': None}
+        doc = json.loads(row[3])
+        selection._seal(doc, 'candidate_profile/1')
+        require(doc['body']['candidate_id'] == row[4], 'Материалы аналитики изменились.', 409)
+        labels = {'A01': 'Диалог и слушание', 'A03': 'Квалификация', 'A04': 'Понимание задачи',
+                  'A06.1': 'Работа с возражениями', 'A07': 'Следующий шаг', 'A08': 'CRM и сопровождение',
+                  'A10': 'Продукт и обещания', 'A11.1': 'Гибкость в разговоре', 'NEW-01': 'Передача лида'}
+        reasons = {'task_not_given': 'На интервью не было задания, по которому можно оценить этот навык.',
+                   'not_observed': 'В записи не найдено подтверждения этого навыка.',
+                   'insufficient_evidence': 'В интервью недостаточно данных для оценки этого навыка.'}
+        criteria = []
+        for family in doc['body']['families']:
+            for item in family['criteria']:
+                state, cid = item['state'], item['criterion_id']
+                if state == 'not_applicable':
+                    continue
+                reason = reasons.get(item.get('missing_reason'), 'В интервью недостаточно данных для оценки этого навыка.')
+                criteria.append({'id': cid, 'label': labels.get(cid, cid), 'state': state,
+                    'level': item['level'] if state == 'supported' else None, 'target': None,
+                    'basis': item.get('basis') if item.get('basis') in ('observed', 'narrated', 'hypothetical', 'reflected') else None,
+                    'summary': reason if state != 'supported' else 'Уровень из сохранённого разбора интервью.',
+                    'missingReason': reason if state != 'supported' else None,
+                    'stateLabel': 'Недостаточно данных' if state == 'unknown' else 'Противоречивые данные' if state == 'conflict' else 'Подтверждено в интервью',
+                    'evidence': []})
+        return {'assessment': {'revisionId': row[0], 'criteria': criteria, 'feedback': [],
+                'provenance': {'method': 'saved-core-result', 'productionCore': True}}}
+
     def handle(self, method, raw_path, headers, body, ip):
         path = urlsplit(raw_path).path
         require(self.handles(path), 'Не найдено.', 404)
@@ -107,13 +145,16 @@ class PublicProfiles:
                 origin = headers.get('Origin') or self.portal.origin
                 return self.issue(db, cid, issuer='candidate:' + cid, origin=origin), HEADERS
         require(method == 'POST', 'Откройте персональную ссылку.', 405)
-        require(set(body) == {'token'}, 'Проверьте поля запроса.', 400)
+        allowed = {'token', 'action', 'query', 'requestId'} if path.endswith('/assistant') else {'token'}
+        require(set(body) == allowed, 'Проверьте поля запроса.', 400)
         self.portal.rate_limit('public-profile-ip:' + ip, 120, 60)
         token = body['token']
         with self.connect() as db:
             share = self.resolve(db, token)
             if path == PUBLIC:
                 return self.profile(db, share), HEADERS
+            if path.endswith('/assessment'):
+                return self.assessment(db, share), HEADERS
             if path.endswith('/resume'):
                 return self.portal.download_resume(db, share['candidateId']), HEADERS
         # Slow provider calls run outside the shared DB lock. The capability is
@@ -123,6 +164,17 @@ class PublicProfiles:
         result = self.portal.materials(share['candidateId'], meeting_id=share['interviewId'], access_check=check)
         with self.connect() as db:
             check(db)
+        if path.endswith('/assistant'):
+            recordings, transcripts = result.get('recordings', []), result.get('transcripts', [])
+            require(len(recordings) == 1 and len(transcripts) == 1, 'Расшифровка пока не сопоставлена с записью.', 422)
+            transcript = transcripts[0].get('text', '')
+            require(isinstance(transcript, str) and transcript.strip(), 'Расшифровка ещё не готова.', 422)
+            self.portal.rate_limit('public-profile-ai:' + share['id'], 30, 86400)
+            principal = {'workspaceId': 'public-profile:' + share['id'], 'accountId': 'public-profile:' + share['id']}
+            source = json.dumps(['public', share['id'], share['interviewId'], recordings[0]['id'],
+                                 hashlib.sha256(transcript.encode()).hexdigest()])
+            return self.assistant.run(principal, source, transcript,
+                {key: body[key] for key in ('action', 'query', 'requestId')}, check), HEADERS
         return {
             'recordings': [{key: row[key] for key in ('id', 'url', 'expires', 'duration') if key in row}
                            for row in result.get('recordings', [])],

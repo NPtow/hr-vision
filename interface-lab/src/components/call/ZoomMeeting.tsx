@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { ZoomCallFrame } from './ZoomCallFrame';
 import type { CallCredentials, ZoomCredentials } from './call-provider';
@@ -9,6 +9,8 @@ type Props = {
   join: (signal: AbortSignal) => Promise<CallCredentials>;
   onJoined?: () => void | Promise<void>; onLeft?: () => void; onBack?: () => void;
   onOpenChange?: (open: boolean) => void;
+  /** Product entry layout only; consent, access and the call remain owned here. */
+  renderEntry?: (entry: { consent: boolean; onConsentChange: (value: boolean) => void; join: () => Promise<void>; opened: boolean }) => ReactNode;
   host?: {
     connected: (signal: AbortSignal) => Promise<unknown>;
     left: () => void;
@@ -99,16 +101,18 @@ export function ZoomMeeting(props: Props) {
     // Product bookkeeping outlives the window; it never delays local exit.
     if (host) host.left(); else callbacks.current.onLeft?.();
   }
-  return <div ref={anchor} className="md-zoom-entry">
+  return <div ref={anchor} className="md-zoom-entry" style={props.renderEntry ? { display: 'contents' } : undefined}>
+    {props.renderEntry ? props.renderEntry({ consent, onConsentChange: setConsent, join, opened }) : <>
     <h1>{props.title}</h1>{props.subtitle && <p>{props.subtitle}</p>}
     <label><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)}/>Согласен на запись встречи и сохранение видео в сервисе.</label>
     {props.unavailable && <p role="status">{props.unavailable}</p>}
+    </>}
     {error && !opened && <p role="alert">{error}</p>}
     {status && <p role="status">{status}</p>}
-    <div className="md-zoom-entry-actions">
+    {!props.renderEntry && <div className="md-zoom-entry-actions">
       <button disabled={!consent || !!props.unavailable || props.completed || opened} onClick={() => void join()}>Присоединиться</button>
       {props.onBack && <button onClick={back}>Вернуться</button>}
-    </div>
+    </div>}
     {opened && createPortal(<div className="agency-product agency-product-theme md-zoom-overlay" role="dialog" aria-modal="true" aria-label={props.title}>
       {credentials ? <ZoomCallFrame credentials={credentials} onJoined={joined} onLeft={left} onError={setError}/>
         : <div className="md-zoom-after-call"><p role="status">Получаем доступ к встрече…</p><button onClick={close}>Отменить</button></div>}

@@ -37,6 +37,12 @@ export type CandidateStageCardProps = {
   person: CandidateStagePerson; stages: CandidateStage[]; workflowRevision: number;
   selectedStageId?: string; onSelectStage: (id: string) => void;
   onAddStage?: (kind: Exclude<CandidateStageKind, 'interview' | 'test'>) => void;
+  /** A dedicated decision view; legacy callers retain the existing menu. */
+  onOpenNextStep?: () => void;
+  /** Upcoming meeting is date/time and a connection action. */
+  compactUpcomingMeetings?: boolean;
+  /** Completed meeting uses the same recording view as the interview. */
+  renderCompletedMeeting?: (stage: CandidateStage) => ReactNode;
   renderInterview: (stage: CandidateStage) => ReactNode;
   renderMeeting?: (stage: CandidateStage) => ReactNode;
   renderOffer?: (stage: CandidateStage) => ReactNode;
@@ -56,7 +62,7 @@ export function CandidateStageCard(props: CandidateStageCardProps) {
   const labels = stages.map(stage => {
     const number = ++counts[stage.kind];
     if (stage.kind === 'interview') return 'Интервью';
-    if (stage.kind === 'meeting') return `Встреча ${number}`;
+    if (stage.kind === 'meeting') return props.compactUpcomingMeetings ? (['pending', 'confirmed'].includes(stage.status) ? 'Предстоящая встреча' : 'Встреча') : `Встреча ${number}`;
     return `Оффер${number > 1 ? ` ${number}` : ''}`;
   });
   const headingId = useId();
@@ -98,13 +104,13 @@ export function CandidateStageCard(props: CandidateStageCardProps) {
       </header>
       {!profileOpen && <div className="esc-stages">
         <div className="esc-stage-scroll" ref={stageScroll}><Tabs.List className="esc-stage-list" aria-label="Этапы кандидата">
-          {stages.map((stage, index) => <Tabs.Trigger className="esc-stage-tab" key={stage.id} value={stage.id} disabled={busy} title={stage.title}>
+          {stages.map((stage, index) => <Tabs.Trigger className="esc-stage-tab" key={stage.id} value={stage.id} onClick={() => { if (editor && selected?.id === stage.id) onSelectStage(stage.id); }} disabled={busy} title={props.compactUpcomingMeetings ? labels[index] : stage.title}>
             <span className="esc-stage-layer" aria-hidden="true"><img src={stageLayers[stage.kind][selected?.id === stage.id ? 0 : 1]} alt=""/></span>
             <span className="esc-stage-name">{labels[index]}</span>
             <span className="esc-stage-date">{stage.status === 'draft' ? 'Черновик' : dateLabel(stage.date) || statusLabels[stage.status] || ''}</span>
           </Tabs.Trigger>)}
         </Tabs.List></div>
-        {onAddStage && <DropdownMenu.Root>
+        {props.onOpenNextStep ? <button className="esc-add-stage" type="button" aria-label="Добавить следующий этап" disabled={busy} onClick={props.onOpenNextStep}><span aria-hidden="true">+</span></button> : onAddStage && <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild><button className="esc-add-stage" type="button" aria-label="Добавить следующий этап" disabled={busy}><span aria-hidden="true">+</span></button></DropdownMenu.Trigger>
           <DropdownMenu.Portal><DropdownMenu.Content className="esc-menu" sideOffset={12} align="end" collisionPadding={16}>
             <DropdownMenu.Label className="esc-menu-label">Что дальше?</DropdownMenu.Label>
@@ -126,6 +132,8 @@ export function CandidateStageCard(props: CandidateStageCardProps) {
 
 function StageMaterials(props: CandidateStageCardProps & { stage: CandidateStage }) {
   const { stage, person, renderInterview, renderMeeting, renderOffer, onEditStage, onOpenDocument, busy } = props;
+  if (stage.kind === 'meeting' && stage.status === 'completed' && props.renderCompletedMeeting) return <>{props.renderCompletedMeeting(stage)}</>;
+  if (stage.kind === 'meeting' && props.compactUpcomingMeetings && ['pending', 'confirmed', 'live'].includes(stage.status)) return <>{renderMeeting?.(stage)}</>;
   if (stage.kind === 'interview') return <div className="esc-interview" data-stage-id={stage.id}>
     {stage.date && <p className="esc-caption">Первичное интервью · {dateLabel(stage.date)}</p>}
     {renderInterview(stage)}
@@ -154,7 +162,7 @@ function StageMaterials(props: CandidateStageCardProps & { stage: CandidateStage
   </section>;
 }
 
-function MeetingFeedback({ stage }: { stage: CandidateStage }) {
+export function MeetingFeedback({ stage }: { stage: CandidateStage }) {
   const feedback = stage.feedback;
   if (!feedback) return null;
   const notes = [
@@ -173,7 +181,7 @@ function MeetingFeedback({ stage }: { stage: CandidateStage }) {
   </div>;
 }
 
-function StageDocuments({ stage, onOpen }: { stage: CandidateStage; onOpen?: CandidateStageCardProps['onOpenDocument'] }) {
+export function StageDocuments({ stage, onOpen }: { stage: CandidateStage; onOpen?: CandidateStageCardProps['onOpenDocument'] }) {
   if (!stage.documents.length) return null;
   return <div className="esc-documents">{stage.documents.map(document => {
     const contents = <><img src={documentIcon} alt=""/><span><strong>{document.title}</strong></span></>;
@@ -184,7 +192,7 @@ function StageDocuments({ stage, onOpen }: { stage: CandidateStage; onOpen?: Can
   })}</div>;
 }
 
-function StageNotes({ stage, workflowRevision, busy, onSave }: { stage: CandidateStage; workflowRevision: number; busy?: boolean; onSave?: CandidateStageCardProps['onSaveStageNotes'] }) {
+export function StageNotes({ stage, workflowRevision, busy, onSave }: { stage: CandidateStage; workflowRevision: number; busy?: boolean; onSave?: CandidateStageCardProps['onSaveStageNotes'] }) {
   const [editing, setEditing] = useState(false);
   const [values, setValues] = useState<CandidateStageNotes>({ notes: stage.notes, expectedRevision: workflowRevision });
   const [saving, setSaving] = useState(false);
