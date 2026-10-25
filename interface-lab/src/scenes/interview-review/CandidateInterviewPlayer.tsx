@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { AlignLeft, ArrowUp, Bookmark, Captions, CaptionsOff, Check, ChevronDown, ChevronUp, Link as LinkIcon, Maximize2, MessageSquare, Minimize2, PanelRightClose, PanelRightOpen, Pause, Play, Redo2, Search, SmilePlus, Sparkles, Tv, Undo2, Volume2, VolumeX } from 'lucide-react';
+import { AlignLeft, ArrowUp, Captions, CaptionsOff, Check, ChevronDown, ChevronUp, Link as LinkIcon, Maximize2, MessageSquare, Minimize2, PanelRightClose, PanelRightOpen, Pause, Play, Redo2, Search, SmilePlus, Sparkles, Tv, Undo2, Volume2, VolumeX } from 'lucide-react';
 import { Tooltip } from 'radix-ui';
 import { useInterviewAssistant } from './useInterviewAssistant';
 import { InterviewChatAnswer } from './InterviewChatAnswer';
+import { UnifiedInterviewTranscript } from './UnifiedInterviewTranscript';
 import { parseMeetingTranscript } from '../connected-journey/transcript';
 import type { RecordingReviewProps } from './InterviewReview';
-import { interviewParagraphs, interviewTime as time, interviewTimeline } from './candidate-player-model';
+import { interviewTranscriptSections, interviewTime as time, interviewTimeline } from './candidate-player-model';
 import './candidate-interview-player.css';
 
-type Tab = 'chapters' | 'transcript' | 'assistant' | 'comments';
+type Tab = 'transcript' | 'assistant' | 'comments';
 type Menu = 'speed' | 'quality' | 'emoji' | null;
 const emoji = ['❤️', '👍', '🔥', '👏', '🙌', '👀'];
 const moreEmoji = ['💡', '✅', '💬', '🎯', '🤔', '⭐', '💪', '🚀'];
@@ -28,7 +29,6 @@ export function CandidateInterviewPlayer({ sourceId, name, header, media, chapte
   const video = useRef<HTMLVideoElement>(null);
   const side = useRef<HTMLElement>(null);
   const transcriptList = useRef<HTMLDivElement>(null);
-  const chapterList = useRef<HTMLDivElement>(null);
   const lastFocus = useRef<HTMLElement | null>(null);
   const pendingSeek = useRef<number | null>(null);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -63,8 +63,8 @@ export function CandidateInterviewPlayer({ sourceId, name, header, media, chapte
   const [toast, setToast] = useState('');
   const [error, setError] = useState('');
   const [floating, setFloating] = useState<{ id: string; emoji: string }[]>([]);
-  const paragraphs = useMemo(() => interviewParagraphs(parseMeetingTranscript(transcriptText)), [transcriptText]);
   const topics = useMemo(() => (fullChapters?.length ? fullChapters : chapters), [chapters, fullChapters]);
+  const { paragraphs, sections } = useMemo(() => interviewTranscriptSections(parseMeetingTranscript(transcriptText), topics), [transcriptText, topics]);
   const segments = useMemo(() => interviewTimeline(topics, duration), [topics, duration]);
   const activeIndex = paragraphs.reduce((found, row, index) => row.start <= current ? index : found, 0);
   const active = transcriptSeekable ? paragraphs[activeIndex] : undefined;
@@ -90,7 +90,7 @@ export function CandidateInterviewPlayer({ sourceId, name, header, media, chapte
     toastTimer.current = setTimeout(() => setToast(''), 2500);
   }, []);
   const followMoment = useCallback((smooth = false) => {
-    const list = tab === 'transcript' ? transcriptList.current : tab === 'chapters' ? chapterList.current : null;
+    const list = tab === 'transcript' ? transcriptList.current : null;
     const row = list?.querySelector<HTMLElement>('[data-active="true"]');
     if (!row || !list) return;
     const top = row.getBoundingClientRect().top - list.getBoundingClientRect().top + list.scrollTop;
@@ -265,7 +265,7 @@ export function CandidateInterviewPlayer({ sourceId, name, header, media, chapte
 
       <aside ref={side} className="iv-sidebar" aria-label="Материалы интервью" hidden={theatre}>
         <div className="iv-side-heading"><div role="tablist" aria-label="Материалы интервью" className="iv-tabs">
-          {([{id:'chapters', label:'Главы', icon:Bookmark}, {id:'transcript', label:'Расшифровка', icon:AlignLeft}, {id:'assistant', label:'Спросить ИИ', icon:Sparkles}, {id:'comments', label:'Комментарии', icon:MessageSquare}] as const).map((item, index, items) => <Tooltip.Root key={item.id}>
+          {([{id:'transcript', label:'Расшифровка', icon:AlignLeft}, {id:'assistant', label:'Спросить ИИ', icon:Sparkles}, {id:'comments', label:'Комментарии', icon:MessageSquare}] as const).map((item, index, items) => <Tooltip.Root key={item.id}>
             <Tooltip.Trigger asChild><button type="button" id={`${id}-${item.id}-tab`} role="tab" aria-controls={`${id}-${item.id}`} aria-selected={tab === item.id} tabIndex={tab === item.id ? 0 : -1} aria-label={item.label} onClick={() => chooseTab(item.id)} onKeyDown={event => {
               if (event.key === 'ArrowRight' || event.key === 'ArrowLeft' || event.key === 'Home' || event.key === 'End') {
                 event.preventDefault(); const next = items[event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : items.length - 1)) % items.length];
@@ -277,21 +277,14 @@ export function CandidateInterviewPlayer({ sourceId, name, header, media, chapte
         </div><IconButton className="iv-panel-hide" label="Скрыть боковую панель" onClick={() => setTheatre(true)}><PanelRightClose/></IconButton></div>
 
         {tab === 'transcript' && <div className="iv-panel iv-transcript-panel" id={`${id}-transcript`} role="tabpanel" aria-labelledby={`${id}-transcript-tab`}>
-          <div ref={transcriptList} className="iv-transcript" onWheel={() => setFollow(false)} onTouchMove={() => setFollow(false)}>
-            {paragraphs.map((row, index) => <div key={`${row.start}:${index}`} className="iv-line" data-line-index={index} data-match={matchedRows.includes(index)} data-search-current={matchedRows[hit] === index} data-active={transcriptSeekable && index === activeIndex}>
+          <UnifiedInterviewTranscript list={transcriptList} sections={sections} seekable={transcriptSeekable} seek={seek} pauseFollow={() => setFollow(false)}
+            renderRow={(row, index) => <div key={`${row.start}:${index}`} className="iv-line" data-line-index={index} data-match={matchedRows.includes(index)} data-search-current={matchedRows[hit] === index} data-active={transcriptSeekable && index === activeIndex}>
               <button type="button" className="iv-line-content" disabled={!transcriptSeekable} onClick={() => seek(row.start)} aria-label={`${time(row.start)} ${row.text}`} aria-current={transcriptSeekable && index === activeIndex ? 'true' : undefined}><time>{time(row.start)}</time><span>{row.text}</span></button>
               {transcriptSeekable && <div className="iv-line-tools"><IconButton label={`Ссылка на ${time(row.start)}`} onClick={() => { void copyMoment(row.start); }}><LinkIcon/></IconButton>{canComment && <IconButton label={`Комментарий к ${time(row.start)}`} onClick={() => openComment(row.start)}><MessageSquare/></IconButton>}</div>}
-            </div>)}
-            {!paragraphs.length && <p className="iv-plain-transcript">{transcriptText.trim() && !/^\s*WEBVTT\b/.test(transcriptText) ? transcriptText : 'Расшифровки пока нет'}</p>}
-          </div>
+            </div>}
+            empty={<p className="iv-plain-transcript">{transcriptText.trim() && !/^\s*WEBVTT\b/.test(transcriptText) ? transcriptText : 'Расшифровки пока нет'}</p>}/>
         </div>}
-        {tab === 'chapters' && <div className="iv-panel iv-chapters-panel" id={`${id}-chapters`} role="tabpanel" aria-labelledby={`${id}-chapters-tab`}>
-          <div ref={chapterList} className="iv-chapters" onWheel={() => setFollow(false)} onTouchMove={() => setFollow(false)}>
-            {topics.map((chapter, index) => <button type="button" key={index} className={`iv-chapter${index === activeChapter ? ' iv-selected' : ''}`} data-active={index === activeChapter} aria-current={index === activeChapter ? 'true' : undefined} disabled={chapter.seconds === null} onClick={() => { if (chapter.seconds !== null) seek(chapter.seconds); }}><time>{chapter.seconds === null ? '—' : time(chapter.seconds)}</time><span><strong>{chapter.title}</strong>{chapter.detail && chapter.detail !== chapter.title && !chapter.isQuote && <small>{chapter.detail}</small>}</span>{index === activeChapter && <span className="iv-chapter-bars" aria-hidden="true"><i/><i/><i/></span>}</button>)}
-            {!topics.length && <p className="iv-plain-transcript">Ключевых моментов пока нет</p>}
-          </div>
-        </div>}
-        {(tab === 'chapters' || tab === 'transcript') && !assist.search && !follow && transcriptSeekable && <button type="button" className="iv-follow" onClick={() => { setFollow(true); followMoment(true); }}><AlignLeft size={14}/>К текущему моменту<ChevronDown size={13}/></button>}
+        {tab === 'transcript' && !assist.search && !follow && transcriptSeekable && <button type="button" className="iv-follow" onClick={() => { setFollow(true); followMoment(true); }}><AlignLeft size={14}/>К текущему моменту<ChevronDown size={13}/></button>}
         {tab === 'assistant' && <div className="iv-panel iv-chat" id={`${id}-assistant`} role="tabpanel" aria-labelledby={`${id}-assistant-tab`}>
           <div ref={chatList} className="iv-chat-scroll" role="log" aria-label="Диалог об интервью" aria-live="polite">
             {!assist.messages.length && <div className="iv-chat-suggestions">{['Кратко расскажи об опыте', 'Как работает с возражениями?', 'Что стоит уточнить на встрече?'].map(value => <button type="button" key={value} disabled={!!assist.busy || !assistant} onClick={() => { void submitChat(value); }}>{value}</button>)}</div>}
