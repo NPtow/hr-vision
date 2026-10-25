@@ -500,6 +500,12 @@ to{opacity:1;margin-bottom:0}
 .iv-root .iv-chat-turn{margin-bottom:24px;font-size:14px;line-height:1.6;overflow-wrap:anywhere}
 .iv-root .iv-chat-question{margin:0 0 20px;padding:12px 15px;border-radius:15px 15px 5px 15px;background:#f4f4f5;color:#65656c;white-space:pre-wrap}
 .iv-root .iv-chat-answer{margin:0 0 14px;white-space:pre-wrap;color:#242427;font-size:14px;line-height:1.7}
+.iv-root .iv-source-chip{display:inline-flex;align-items:center;justify-content:center;vertical-align:baseline;position:relative;top:-1px;min-width:22px;height:22px;margin:0 3px;padding:0 6px;border-radius:8px;background:#f0f0f3;color:#686873;font-size:11px;line-height:1;font-variant-numeric:tabular-nums;transition:background .15s,color .15s}
+.iv-root .iv-source-chip:hover{background:#e6e3f0;color:#403453}
+.iv-root .iv-source-chip:disabled{opacity:.55}
+.iv-source-tooltip{z-index:12000;display:grid;gap:7px;max-width:min(340px,calc(100vw - 28px));padding:13px 16px;border-radius:14px;background:#343139;color:#fff;box-shadow:0 6px 24px #29233225;font:13px/1.55 'Inter Variable',Inter,-apple-system,sans-serif;overflow-wrap:anywhere}
+.iv-source-tooltip strong{font-size:11px;color:#dedbe5;font-weight:500}
+.iv-source-tooltip span{display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-wrap}
 .iv-root .iv-chat-evidence{display:grid;gap:8px}
 .iv-root .iv-chat-evidence button{display:grid;grid-template-columns:42px minmax(0,1fr);gap:10px;text-align:left;padding:8px 0;color:#76767d;font-size:12px;line-height:1.65}
 .iv-root .iv-chat-evidence time{font-variant-numeric:tabular-nums;align-self:start;border-radius:5px;background:#f3f3f4;text-align:center;font-size:11px;color:#515158}

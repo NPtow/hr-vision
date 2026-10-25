@@ -1,7 +1,8 @@
 export type InterviewSearchMatch = { id: string; text: string; startMs: number; endMs: number; speakerName: string };
 export type InterviewAnswer = {
   mode: 'chat'; text: string; supported: boolean;
-  evidence: { id: string; quote: string; startMs: number | null; speakerName: string }[];
+  parts?: { text: string; sourceIds: string[] }[];
+  evidence: { id: string; quote: string; startMs: number | null; endMs?: number; speakerName: string }[];
   coverage: { selected: number; omitted: number }; model: string; version: string;
 };
 export type InterviewSearch = { mode: 'search'; matches: InterviewSearchMatch[]; totalMatches: number; coverage: string; model: string; version: string };
