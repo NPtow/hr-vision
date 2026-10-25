@@ -14,7 +14,7 @@ import urllib.error
 import urllib.request
 from urllib.parse import urlsplit, urlunsplit
 
-INTERVIEW = 'interview_75123c5506a524094e5c0c21'
+INTERVIEW = 'interview_6f011d66502349266a5a402b'
 # The installed helper lives outside the API checkout; imports must resolve
 # against the release selected by the API service.
 sys.path.insert(0, '/opt/hr-vision-api/current')
