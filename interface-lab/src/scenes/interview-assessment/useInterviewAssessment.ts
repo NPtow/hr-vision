@@ -8,8 +8,13 @@ export function useInterviewAssessment(assessment: AssessmentPresentation | unde
   const [state, setState] = useState<{ revision: string; playback: FeedbackPlayback }>({ revision, playback: initialFeedbackPlayback });
   const [selection, setSelection] = useState({ revision, id: '' });
   const playback = state.revision === revision ? state.playback : initialFeedbackPlayback;
-  const selectedId = selection.revision === revision && assessment?.criteria.some(criterion => criterion.id === selection.id && criterion.evidence.length)
-    ? selection.id : assessment?.criteria.find(criterion => criterion.evidence.length)?.id ?? '';
+  const selectable = useMemo(() => {
+    const criteria = assessment?.criteria ?? [];
+    const evidenced = criteria.filter(criterion => criterion.evidence.length > 0);
+    return evidenced.length ? evidenced : criteria.filter(criterion => criterion.state !== 'not_applicable');
+  }, [assessment?.criteria]);
+  const selectedId = selection.revision === revision && selectable.some(criterion => criterion.id === selection.id)
+    ? selection.id : selectable[0]?.id ?? '';
 
   function dispatch(event: FeedbackEvent) {
     setState(previous => ({ revision, playback: reduceFeedbackPlayback(previous.revision === revision ? previous.playback : initialFeedbackPlayback, event, blocks) }));
