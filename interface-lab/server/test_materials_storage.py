@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import io
 from pathlib import Path
@@ -41,7 +42,9 @@ class StorageTests(unittest.TestCase):
         class Client:
             def put_object(self, **kw):
                 self.kw = kw; self.content = kw['Body'].read()
-                self.head = {'ContentLength': len(self.content), 'Metadata': kw['Metadata'], 'ContentType': kw['ContentType']}
+                self.head = {'ContentLength': len(self.content),
+                             'Metadata': {'Sha256': kw['Metadata']['sha256']},
+                             'ContentType': kw['ContentType']}
             def head_object(self, **kw): return self.head
             def get_object(self, **kw): return {'Body': io.BytesIO(self.content), **self.head}
             def generate_presigned_url(self, op, **kw): return 'https://bucket.example/signed'
@@ -51,6 +54,8 @@ class StorageTests(unittest.TestCase):
             obj = storage.put_file(source)
             self.assertEqual(client.kw['IfNoneMatch'], '*')
             self.assertIn('ChecksumSHA256', client.kw)
+            self.assertEqual(client.kw['ContentMD5'],
+                             base64.b64encode(hashlib.md5(b'abc', usedforsecurity=False).digest()).decode())
             self.assertNotIn('ACL', client.kw)
             self.assertEqual(storage.read_bytes(obj.key), b'abc')
             self.assertTrue(storage.signed_url(obj.key).startswith('https://'))

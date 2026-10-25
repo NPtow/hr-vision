@@ -91,17 +91,19 @@ def main():
     digest = hashlib.sha256(body).digest()
     digest_hex = digest.hex()
     checksum = base64.b64encode(digest).decode('ascii')
+    content_md5 = base64.b64encode(hashlib.md5(body, usedforsecurity=False).digest()).decode('ascii')
     common = dict(Bucket=bucket, ContentType='application/octet-stream',
                   Metadata={'sha256': digest_hex}, IfNoneMatch='*')
 
     # Match materials_storage.S3Storage.put_file's conditional, checksum-bearing PUT.
     client.put_object(Key=key, Body=body, ContentLength=len(body),
-                      ChecksumSHA256=checksum, **common)
+                      ContentMD5=content_md5, ChecksumSHA256=checksum, **common)
     print('correct_checksum_put: PASS')
 
     head = client.head_object(Bucket=bucket, Key=key)
-    need(head.get('ContentLength') == len(body) and
-         head.get('Metadata', {}).get('sha256') == digest_hex,
+    recorded_sha256 = [value for name, value in head.get('Metadata', {}).items()
+                       if name.lower() == 'sha256']
+    need(head.get('ContentLength') == len(body) and recorded_sha256 == [digest_hex],
          'head_metadata_or_size_mismatch')
     service_checksum = head.get('ChecksumSHA256')
     need(service_checksum is None or service_checksum == checksum, 'head_checksum_mismatch')
@@ -117,21 +119,23 @@ def main():
          'get_sha256_mismatch')
     print('get_sha256: PASS')
 
-    wrong = base64.b64encode(bytes([digest[0] ^ 1]) + digest[1:]).decode('ascii')
+    md5_bytes = base64.b64decode(content_md5)
+    wrong_md5 = base64.b64encode(bytes([md5_bytes[0] ^ 1]) + md5_bytes[1:]).decode('ascii')
     try:
-        client.put_object(Key=key + '-wrong-checksum', Body=body, ContentLength=len(body),
-                          ChecksumSHA256=wrong, **common)
+        client.put_object(Key=key + '-wrong-md5', Body=body, ContentLength=len(body),
+                          ContentMD5=wrong_md5, ChecksumSHA256=checksum, **common)
     except ClientError as error:
-        need(status_of(error) in (400, 422), 'wrong_checksum_unexpected_status')
+        need(status_of(error) == 400, 'wrong_md5_unexpected_status')
     else:
-        raise ProbeFailure('wrong_checksum_accepted')
-    print('wrong_checksum_rejected: PASS')
+        raise ProbeFailure('wrong_md5_accepted')
+    print('wrong_md5_rejected_400: PASS')
 
     changed = b'different immutable content'
     changed_checksum = base64.b64encode(hashlib.sha256(changed).digest()).decode('ascii')
+    changed_md5 = base64.b64encode(hashlib.md5(changed, usedforsecurity=False).digest()).decode('ascii')
     try:
         client.put_object(Key=key, Body=changed, ContentLength=len(changed),
-                          ChecksumSHA256=changed_checksum, **common)
+                          ContentMD5=changed_md5, ChecksumSHA256=changed_checksum, **common)
     except ClientError as error:
         need(status_of(error) == 412, 'overwrite_unexpected_status')
     else:
@@ -170,7 +174,7 @@ def main():
     impossible_etag = '"00000000000000000000000000000000"'
     try:
         client.put_object(Key=key, Body=changed, ContentLength=len(changed),
-                          ChecksumSHA256=changed_checksum, IfMatch=impossible_etag,
+                          ContentMD5=changed_md5, ChecksumSHA256=changed_checksum, IfMatch=impossible_etag,
                           Bucket=bucket, ContentType='application/octet-stream')
     except ClientError as error:
         need(status_of(error) == 412, 'if_match_precondition_unexpected_status')
@@ -181,7 +185,7 @@ def main():
     outside_key = 'materials-prefix-denied-probe/' + secrets.token_hex(16) + '/payload'
     try:
         client.put_object(Key=outside_key, Body=changed, ContentLength=len(changed),
-                          ChecksumSHA256=changed_checksum, IfMatch=impossible_etag,
+                          ContentMD5=changed_md5, ChecksumSHA256=changed_checksum, IfMatch=impossible_etag,
                           Bucket=bucket, ContentType='application/octet-stream')
     except ClientError as error:
         need(status_of(error) == 403, 'outside_prefix_put_not_403')
