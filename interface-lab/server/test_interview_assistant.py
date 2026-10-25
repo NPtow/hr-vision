@@ -235,6 +235,71 @@ class InterviewAssistantTest(unittest.TestCase):
             self.assertEqual(self.send()[0], 502)
         self.assertEqual(provider.call_count, 2)
 
+    def agent_env(self):
+        return patch.dict(os.environ, {'HR_INTERVIEW_AGENT_URL': 'http://127.0.0.1:8424',
+            'HR_AGENT_INTERNAL_TOKEN': 'unit-' * 12, 'HR_AGENT_MODEL': 'unit-agent'})
+
+    def agent_answer(self, payload, deadline, check):
+        check()
+        return {'parts': [{'text': 'Ответ по текущему интервью.', 'sourceIds': [payload['chunks'][0]['chunkId']]}]}, {
+            'model': 'unit-agent', 'version': assistant.AGENT_VERSION, 'grounded': True, 'budgetUnits': 1200}
+
+    def test_agent_history_is_durable_scoped_and_idempotent(self):
+        payloads = []
+        def respond(payload, *args):
+            payloads.append(payload); return self.agent_answer(payload, *args)
+        with self.agent_env(), patch.object(assistant, 'agent_completion', side_effect=respond):
+            status, first, _ = self.send(); self.assertEqual(status, 200, first)
+            self.assertEqual(first['version'], assistant.AGENT_VERSION)
+            self.assertEqual(first['model'], 'unit-agent')
+            self.assertEqual(self.send()[1], first); self.assertEqual(len(payloads), 1)
+            self.assertEqual(payloads[0]['history'], [])
+            self.assertIn('vacancy', payloads[0]['context'])
+            history = self.send(action='history')[1]
+            self.assertEqual(history['messages'][0]['id'], self.body['requestId'])
+            self.assertEqual(history['messages'][0]['answer'], first)
+            status, second, _ = self.send(query='Почему?', requestId=uuid.uuid4().hex)
+            self.assertEqual(status, 200, second)
+            self.assertEqual(len(payloads[1]['history']), 1)
+            self.assertEqual(payloads[0]['sessionId'], payloads[1]['sessionId'])
+            other = self.employer('History outsider')
+            self.assertEqual(self.request('employer/interview-assistant', {**self.body, 'action': 'history'}, token=other['token'])[0], 404)
+            self.assertEqual(len(self.calls), 0)
+            with self.app.connect() as db:
+                amount = db.execute('SELECT sum(tokens) FROM ia_usage WHERE account_id=?', (self.owner['accountId'],)).fetchone()[0]
+            self.assertEqual(amount, 2400)
+
+    def test_agent_failure_never_falls_back_to_single_completion(self):
+        with self.agent_env(), patch.object(assistant, 'agent_completion', side_effect=Problem('Agent unavailable', 503)):
+            self.assertEqual(self.send()[0], 503)
+            self.assertEqual(self.send(action='history')[1]['messages'], [])
+        self.assertEqual(self.calls, [])
+
+    def test_agent_rechecks_access_before_delivery(self):
+        def revoke(payload, *args):
+            result = self.agent_answer(payload, *args)
+            with self.app.connect() as db:
+                db.execute('DELETE FROM em_sessions WHERE token_hash=?', (hashlib.sha256(self.owner['token'].encode()).hexdigest(),))
+            return result
+        with self.agent_env(), patch.object(assistant, 'agent_completion', side_effect=revoke):
+            self.assertEqual(self.send()[0], 401)
+
+    def test_agent_prevents_overlapping_turns_in_one_conversation(self):
+        def overlap(payload, *args):
+            self.assertEqual(self.send(query='Параллельный вопрос', requestId=uuid.uuid4().hex)[0], 409)
+            return self.agent_answer(payload, *args)
+        with self.agent_env(), patch.object(assistant, 'agent_completion', side_effect=overlap) as remote:
+            status, result, _ = self.send(); self.assertEqual(status, 200, result)
+        self.assertEqual(remote.call_count, 1)
+
+    def test_agent_search_remains_jev_only(self):
+        def score(config, query, chunks, *args):
+            return [{**chunks[0], 'score': 3}], {'model': 'jev-1.14.0'}
+        with self.agent_env(), patch.object(assistant, 'evaluate_jev', side_effect=score), patch.object(assistant, 'agent_completion') as remote:
+            self.assertEqual(self.send(action='search')[0], 200)
+            remote.assert_not_called()
+        self.assertEqual(self.calls, [])
+
 class JevBoundaryTest(unittest.TestCase):
     row = {'id': 'fragment-17', 'text': 'Обсудили цену.', 'startMs': 42000, 'endMs': 45000, 'speakerName': 'Кандидат'}
 

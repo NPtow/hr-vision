@@ -1,0 +1,2 @@
+strands-harness[openai]==0.3.2
+strands-agents==1.62.0

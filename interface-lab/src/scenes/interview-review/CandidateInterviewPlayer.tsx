@@ -299,6 +299,7 @@ export function CandidateInterviewPlayer({ sourceId, name, header, media, chapte
         {tab === 'transcript' && !assist.search && !follow && transcriptSeekable && <button type="button" className="iv-follow" onClick={() => { setFollow(true); followMoment(true); }}><AlignLeft size={14}/>К текущему моменту<ChevronDown size={13}/></button>}
         {tab === 'assistant' && <div className="iv-panel iv-chat" id={`${id}-assistant`} role="tabpanel" aria-labelledby={`${id}-assistant-tab`}>
           <div ref={chatList} className="iv-chat-scroll" role="log" aria-label="Диалог об интервью" aria-live="polite">
+            {assist.historyError && <div className="iv-assistant-error" role="alert"><p>{assist.historyError}</p><button type="button" disabled={!!assist.busy} onClick={assist.retryHistory}>Повторить загрузку</button></div>}
             {!assist.messages.length && <div className="iv-chat-suggestions">{['Кратко расскажи об опыте', 'Как работает с возражениями?', 'Что стоит уточнить на встрече?'].map(value => <button type="button" key={value} disabled={!!assist.busy || !assistant} onClick={() => { void submitChat(value); }}>{value}</button>)}</div>}
             {assist.messages.map(message => <div className="iv-chat-turn" key={message.id}>
               <p className="iv-chat-question">{message.query}</p>
