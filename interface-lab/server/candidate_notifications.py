@@ -1037,6 +1037,7 @@ def _outbox_email_role(row):
 
 
 def process_pending(connect, settings=None, limit=10, now=None, transport=None, telegram_renderer=None):
+    import selection
     config, timestamp = _config(settings), _now(now)
     sender = transport if transport is not None else Transport(config)
     counts = {'delivered': 0, 'pending': 0, 'error': 0, 'disabled': 0, 'unverified': 0, 'unbound': 0}
@@ -1063,6 +1064,7 @@ def process_pending(connect, settings=None, limit=10, now=None, transport=None, 
             if not row:
                 db.commit()
                 break
+            selection_invite = row['event_type'] == 'selection.invitation'
             reminder = row['event_type'] == meeting_reminders.EVENT
             lifecycle = meeting_notifications.is_lifecycle(row)
             reason = None if reminder or lifecycle else employer_notifications.prepare(db, row, config) or _delivery_block_reason(db, row)
@@ -1071,7 +1073,9 @@ def process_pending(connect, settings=None, limit=10, now=None, transport=None, 
                 db.commit()
                 counts['error'] += 1
                 continue
-            if lifecycle:
+            if selection_invite:
+                state, reason = selection.prepare_invitation(db, row, config, timestamp)
+            elif lifecycle:
                 state, reason = meeting_notifications.prepare(db, row, config, timestamp)
             elif reminder:
                 state, reason = meeting_reminders.prepare(db, row, config, timestamp)
@@ -1095,7 +1099,9 @@ def process_pending(connect, settings=None, limit=10, now=None, transport=None, 
             db.execute("UPDATE cn_outbox SET status='sending',attempts=attempts+1,lease_id=?,lease_until=? WHERE id=?",
                        (lease, timestamp + LEASE_SECONDS, row['id']))
             reply_markup, bot_payload = None, None
-            if lifecycle:
+            if selection_invite:
+                subject, content, reply_markup = selection.invitation_message(row)
+            elif lifecycle:
                 subject, content, reply_markup = meeting_notifications.message(db, row, config, timestamp)
             elif reminder:
                 subject, content, reply_markup = meeting_reminders.message(db, row, config, timestamp)
