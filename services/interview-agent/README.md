@@ -8,6 +8,9 @@ shell, web or subagent tools. A separate structured check validates grounding.
 
 The existing response shape (`parts`, `evidence`) and video citation component
 are retained. `action=history` restores completed turns after reopening a candidate.
+When grounding rejects a draft, the harness gets specific issues and can repair
+it once within the same deadline. A second rejection stays an error. Rejected
+drafts and check results are stored only under private state for diagnosis.
 Scopes include employer account, workspace, vacancy/source, content revision and
 prompt version. The browser cannot supply the transcript or choose a harness session.
 
