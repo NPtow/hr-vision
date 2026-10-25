@@ -54,11 +54,13 @@ MATERIALS_RUNTIME = {
     'materials_http.py', 'materials_storage.py', 'materials_transcripts.py',
     'materials_worker.py', 'materials_runtime.py', 'materials_service.py',
 }
-RUNTIME = PRE_MATERIALS_RUNTIME | MATERIALS_RUNTIME
+PRE_SERVICES_RUNTIME = PRE_MATERIALS_RUNTIME | MATERIALS_RUNTIME
+SERVICES_RUNTIME = {'core_source_client.py', 'core_source_outbox.py'}
+RUNTIME = PRE_SERVICES_RUNTIME | SERVICES_RUNTIME
 BOT_RUNTIME = PRE_IMPORT_RUNTIME - {'recruiter_access.py', 'recruiter_sources.py', 'recruiter_notifications.py'}
 LEGACY_RUNTIME = BOT_RUNTIME - {'candidate_bot.py'}
 RUNTIME_LAYOUTS = {frozenset(LEGACY_RUNTIME), frozenset(BOT_RUNTIME), frozenset(PRE_IMPORT_RUNTIME),
-                   frozenset(PRE_OUTREACH_RUNTIME), frozenset(PRE_ACCESS_RUNTIME), frozenset(PRE_CV_RUNTIME),
+                   frozenset(PRE_SERVICES_RUNTIME), frozenset(PRE_OUTREACH_RUNTIME), frozenset(PRE_ACCESS_RUNTIME), frozenset(PRE_CV_RUNTIME),
                    frozenset(PRE_POOLED_RUNTIME), frozenset(PRE_EMPLOYER_TELEGRAM_RUNTIME), frozenset(PRE_REMINDERS_RUNTIME), frozenset(PRE_MEETING_NOTICES_RUNTIME), frozenset(PRE_MEETING_LAB_RUNTIME), frozenset(PRE_RECRUITER_COACH_RUNTIME), frozenset(PRE_CALL_CLEANUP_RUNTIME), frozenset(PRE_OBSERVABILITY_RUNTIME), frozenset(PRE_CANDIDATE_CALENDAR_RUNTIME), frozenset(PRE_INTERVIEW_ASSISTANT_RUNTIME), frozenset(PRE_MATERIALS_RUNTIME), frozenset(RUNTIME)}
 MAX_ARCHIVE = 50 * 1024 * 1024
 MAX_CONTENT = 120 * 1024 * 1024
@@ -212,7 +214,8 @@ def stop_api():
     subprocess.run(['systemctl', 'stop', 'hr-vision-api'], check=True, timeout=45)
 
 
-MATERIALS_UNITS = ('hr-vision-materials-scheduler', 'hr-vision-materials-worker')
+MATERIALS_UNITS = ('hr-vision-core-outbox', 'hr-vision-data-services',
+                  'hr-vision-materials-scheduler', 'hr-vision-materials-worker')
 
 
 def pause_materials():
@@ -249,6 +252,15 @@ def resume_materials(active):
 def guard_outbox_runtime(db, source):
     runtime = frozenset(path.relative_to(source).as_posix() for path in source.rglob('*') if path.is_file())
     require(runtime in RUNTIME_LAYOUTS, 'Incomplete recovery API')
+    if not SERVICES_RUNTIME.issubset(runtime):
+        for table in ('portal_materials_outbox', 'core_material_receipts', 'core_material_channels'):
+            schema = db.execute('SELECT type FROM sqlite_master WHERE name=?', (table,)).fetchall()
+            if schema:
+                require(schema == [('table',)], 'Cannot verify core/source schema: ' + table)
+                # Even completed delivery intents and receipts preserve replay
+                # identities. Old collectors must not resume ownership of them.
+                require(not db.execute('SELECT 1 FROM ' + table + ' LIMIT 1').fetchone(),
+                        'Core/source data requires services runtime; use a compatible forward recovery')
     if not MATERIALS_RUNTIME.issubset(runtime):
         schema = db.execute("SELECT type FROM sqlite_master WHERE name='media_sources'").fetchall()
         if schema:

@@ -139,7 +139,8 @@ class ReceiverTest(unittest.TestCase):
         self.assertEqual(r.PRE_CANDIDATE_CALENDAR_RUNTIME - r.PRE_OBSERVABILITY_RUNTIME, {'observability.py'})
         self.assertEqual(r.PRE_INTERVIEW_ASSISTANT_RUNTIME - r.PRE_CANDIDATE_CALENDAR_RUNTIME, {'candidate_availability.py'})
         self.assertEqual(r.PRE_MATERIALS_RUNTIME - r.PRE_INTERVIEW_ASSISTANT_RUNTIME, {'interview_assistant.py'})
-        self.assertEqual(r.RUNTIME - r.PRE_MATERIALS_RUNTIME, r.MATERIALS_RUNTIME)
+        self.assertEqual(r.PRE_SERVICES_RUNTIME - r.PRE_MATERIALS_RUNTIME, r.MATERIALS_RUNTIME)
+        self.assertEqual(r.RUNTIME - r.PRE_SERVICES_RUNTIME, r.SERVICES_RUNTIME)
         self.assertEqual(len(r.MATERIALS_RUNTIME), 9)
         for runtime in (r.LEGACY_RUNTIME, r.BOT_RUNTIME, r.PRE_IMPORT_RUNTIME, r.PRE_OUTREACH_RUNTIME,
                         r.PRE_ACCESS_RUNTIME, r.PRE_CV_RUNTIME, r.PRE_POOLED_RUNTIME, r.PRE_EMPLOYER_TELEGRAM_RUNTIME, r.PRE_REMINDERS_RUNTIME, r.PRE_MEETING_NOTICES_RUNTIME, r.PRE_MEETING_LAB_RUNTIME, r.PRE_RECRUITER_COACH_RUNTIME, r.PRE_CALL_CLEANUP_RUNTIME, r.PRE_OBSERVABILITY_RUNTIME, r.PRE_CANDIDATE_CALENDAR_RUNTIME, r.PRE_INTERVIEW_ASSISTANT_RUNTIME, r.PRE_MATERIALS_RUNTIME, r.RUNTIME):
@@ -420,7 +421,7 @@ class ReceiverTest(unittest.TestCase):
             r.guard_live_interviews(db)
 
     def test_material_units_drain_and_resume_in_order(self):
-        states = iter(('loaded', 'active', 'inactive', 'loaded', 'active', 'inactive'))
+        states = iter(('loaded', 'active', 'inactive') * len(r.MATERIALS_UNITS))
         def systemctl(argv, **kwargs):
             if argv[1] in ('show', 'is-active'):
                 return subprocess.CompletedProcess(argv, 0, stdout=next(states))
@@ -439,7 +440,7 @@ class ReceiverTest(unittest.TestCase):
         with patch.object(r.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, stdout='not-found')) as run:
             self.assertEqual(r.pause_materials(), [])
             r.resume_materials([])
-        self.assertEqual([call.args[0][1] for call in run.call_args_list], ['show', 'show'])
+        self.assertEqual([call.args[0][1] for call in run.call_args_list], ['show'] * len(r.MATERIALS_UNITS))
 
     def test_failed_service_health_restores_both_pointers(self):
         a, s, m = self.bundle('service'); r.unpack(a, s, 'service')
@@ -571,6 +572,26 @@ class ReceiverTest(unittest.TestCase):
                 with self.subTest(state=state), self.assertRaisesRegex(ValueError, 'Materials catalog.*forward recovery'):
                     r.guard_outbox_runtime(db, prior)
                 r.guard_outbox_runtime(db, current)
+
+    def test_core_source_data_requires_services_runtime(self):
+        prior = self.runtime(self.root / 'before-services', r.PRE_SERVICES_RUNTIME)
+        current = self.runtime(self.root / 'with-services', r.RUNTIME)
+        for table in ('portal_materials_outbox', 'core_material_receipts', 'core_material_channels'):
+            with self.subTest(table=table), sqlite3.connect(':memory:') as db:
+                r.guard_outbox_runtime(db, prior)
+                db.execute('CREATE TABLE ' + table + ' (id TEXT)')
+                r.guard_outbox_runtime(db, prior)
+                db.execute('INSERT INTO ' + table + ' VALUES (?)', ('durable',))
+                with self.assertRaisesRegex(ValueError, 'Core/source data.*forward recovery'):
+                    r.guard_outbox_runtime(db, prior)
+                r.guard_outbox_runtime(db, current)
+
+    def test_core_source_view_does_not_bypass_runtime_guard(self):
+        prior = self.runtime(self.root / 'before-services', r.PRE_SERVICES_RUNTIME)
+        with sqlite3.connect(':memory:') as db:
+            db.execute('CREATE VIEW portal_materials_outbox AS SELECT 1 WHERE 0')
+            with self.assertRaisesRegex(ValueError, 'Cannot verify core/source schema'):
+                r.guard_outbox_runtime(db, prior)
 
     def test_materials_view_does_not_bypass_old_runtime_guard(self):
         prior = self.runtime(self.root / 'before-materials', r.PRE_MATERIALS_RUNTIME)

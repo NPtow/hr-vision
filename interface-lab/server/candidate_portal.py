@@ -30,6 +30,7 @@ import employer_workflow
 import recruiter_access
 import recruiter_notifications
 import recruiter_coach
+from core_source_client import SourceMedia, meeting_token
 
 COOKIE = '__Host-hr_candidate'
 SESSION_SECONDS = 30 * 86400
@@ -265,6 +266,7 @@ class CandidatePortal:
         self.candidate_access = None
         # Attached after portal schema initialization; independent of call state.
         self.materials_catalog = None
+        self.materials_outbox = None
         self._media_guard = threading.Lock()
         self._media_locks = {}
         self.dummy_hash = password_hash(secrets.token_urlsafe(24))
@@ -1082,7 +1084,7 @@ class CandidatePortal:
         if access_check:
             with self.connect() as db:
                 access_check(db)
-        token = self.media.request('/meeting-tokens', {'properties': {
+        token = meeting_token(self.media, room, {
             'room_name': room['name'], 'user_name': (owner_name or 'Рекрутер HR Vision') if owner else (person['name'] or 'Кандидат'),
             'user_id': owner_id if owner else cid, 'is_owner': bool(owner and can_record),
             'permissions': {'canAdmin': bool(owner and can_record)},
@@ -1092,7 +1094,7 @@ class CandidatePortal:
             # the same iframe into the call for candidates, guests and owners.
             'enable_prejoin_ui': True,
             'exp': token_expires, 'eject_at_token_exp': True,
-            'start_cloud_recording': False, 'auto_start_transcription': False}})
+            'start_cloud_recording': False, 'auto_start_transcription': False})
         require(isinstance(token.get('token'), str) and token['token'], 'Видеосервис не выдал доступ.', 502)
         with self.lock, self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
@@ -1156,6 +1158,23 @@ class CandidatePortal:
                 room_name = meeting['room']['name']
             if control['recordingRequested'] and control['transcriptionRequested']:
                 return
+            if isinstance(self.media, SourceMedia):
+                result = self.media.start_capture(meeting['room'],
+                    str(uuid.uuid5(uuid.NAMESPACE_URL, 'hr-vision:' + mid)),
+                    start_recording=not control['recordingRequested'],
+                    start_transcription=not control['transcriptionRequested'])
+                recording = control['recordingRequested'] or result.get('recording_requested') is True
+                transcription = control['transcriptionRequested'] or result.get('transcription_requested') is True
+                with self.lock, self.connect() as db:
+                    if access_check:
+                        access_check(db)
+                    current = self.interview(db, cid)
+                    require(current and current['id'] == mid and current['status'] == 'live',
+                            'Интервью уже завершено.', 409)
+                    db.execute('UPDATE cp_recording_control SET recording_requested=?,transcription_requested=? WHERE interview_id=?',
+                               (int(recording), int(transcription), mid))
+                require(recording and transcription, 'Не удалось запустить запись или расшифровку. Повторите попытку.', 502)
+                return
             # REST acknowledges a requested start; only Daily participant events
             # prove recording has started. Persist partial progress for safe retry.
             room_path = '/rooms/' + urllib.parse.quote(room_name, safe='')
@@ -1190,6 +1209,9 @@ class CandidatePortal:
                 meeting = self.interview(db, cid)
             require(meeting is not None, 'Интервью не найдено.', 404)
             if meeting['status'] == 'completed':
+                if self.materials_outbox:
+                    self.materials_outbox.record(db, 'meeting' if application_id else 'interview',
+                                                meeting['id'], meeting.get('room') or {})
                 return
             require(meeting['status'] == 'live' and meeting.get('room'), 'Сначала проведите интервью на платформе.', 409)
             mid, room = meeting['id'], meeting['room']
@@ -1204,6 +1226,9 @@ class CandidatePortal:
             row = db.execute(f'SELECT status,room FROM {table} WHERE id=?', (mid,)).fetchone()
             require(row, 'Интервью не найдено.', 404)
             if row[0] == 'completed':
+                if self.materials_outbox:
+                    self.materials_outbox.record(db, 'meeting' if application_id else 'interview', mid,
+                                                json.loads(row[1]) if row[1] else {})
                 return
             require(row[0] == 'live' and row[1], 'Сначала проведите интервью на платформе.', 409)
             room = json.loads(row[1])
@@ -1226,7 +1251,9 @@ class CandidatePortal:
                                  (iso(now()), dump(room), mid)).rowcount
             if changed:
                 self.event(db, cid, 'meeting.completed' if application_id else 'interview.completed', mid)
-        if changed and self.materials_catalog:
+                if self.materials_outbox:
+                    self.materials_outbox.record(db, 'meeting' if application_id else 'interview', mid, room)
+        if changed and self.materials_catalog and not self.materials_outbox:
             with self.connect() as db:
                 completed = self.meeting(db, application_id, mid) if application_id else self.interview(db, cid)
             try:

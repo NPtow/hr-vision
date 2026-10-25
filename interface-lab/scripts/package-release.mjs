@@ -60,6 +60,7 @@ if (target === 'service') for (const name of [
   'daily_media.py', 'media_runtime.py', 'call_cleanup.py', 'domain.py', 'dsa_panel.py', 'feedback.py', 'meeting_lab.py', 'interview_assistant.py',
   'materials_capture.py', 'materials_daily.py', 'materials_repository.py', 'materials_http.py',
   'materials_storage.py', 'materials_transcripts.py', 'materials_worker.py', 'materials_runtime.py', 'materials_service.py',
+  'core_source_client.py', 'core_source_outbox.py',
 ]) add(`server/${name}`, `api/${name}`);
 writeFileSync(`${stage}/release.json`, JSON.stringify(manifest) + '\n');
 execFileSync('tar', ['-czf', 'release.tgz', '-C', stage, 'release.json', 'ui', ...(target === 'service' ? ['api'] : [])], {
