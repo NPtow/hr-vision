@@ -104,7 +104,7 @@ export function CandidateStageCard(props: CandidateStageCardProps) {
       </header>
       {!profileOpen && <div className="esc-stages">
         <div className="esc-stage-scroll" ref={stageScroll}><Tabs.List className="esc-stage-list" aria-label="Этапы кандидата">
-          {stages.map((stage, index) => <Tabs.Trigger className="esc-stage-tab" key={stage.id} value={stage.id} onClick={() => { if (props.onOpenNextStep && editor && selected?.id === stage.id) onSelectStage(stage.id); }} disabled={busy} title={props.compactUpcomingMeetings ? labels[index] : stage.title}>
+          {stages.map((stage, index) => <Tabs.Trigger className="esc-stage-tab" key={stage.id} value={stage.id} onClick={() => { if (editor && selected?.id === stage.id) onSelectStage(stage.id); }} disabled={busy} title={props.compactUpcomingMeetings ? labels[index] : stage.title}>
             <span className="esc-stage-layer" aria-hidden="true"><img src={stageLayers[stage.kind][selected?.id === stage.id ? 0 : 1]} alt=""/></span>
             <span className="esc-stage-name">{labels[index]}</span>
             <span className="esc-stage-date">{stage.status === 'draft' ? 'Черновик' : dateLabel(stage.date) || statusLabels[stage.status] || ''}</span>

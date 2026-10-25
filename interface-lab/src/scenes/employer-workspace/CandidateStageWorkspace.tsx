@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { MoreHorizontal } from 'lucide-react';
 import { DropdownMenu } from 'radix-ui';
 import { Button } from '../../components/ui/button';
@@ -44,10 +44,14 @@ export function CandidateStageWorkspace({ journey, person, source, entry, onChat
   const locked = !!journey.state!.closedBy || person.decision === 'declined' || person.offer?.status === 'accepted';
   const selectedStage = stages.find(stage => stage.id === selectedId);
   const activeMeeting = person.meeting && ['pending', 'confirmed', 'live'].includes(person.meeting.status);
+  const handleCallChange = useCallback((open: boolean) => {
+    if (open && person.meeting?.id) setCompletedMeeting(person.meeting.id);
+    onCallChange(open);
+  }, [onCallChange, person.meeting?.id]);
 
   function selectStage(id: string, replace = false) {
     if (callActive) return;
-    setPendingStage(null); setSelectedId(id); setEditor(null); setView('stage'); setProfileOpen(false); journey.setError('');
+    setPendingStage(null); setCompletedMeeting(null); setSelectedId(id); setEditor(null); setView('stage'); setProfileOpen(false); journey.setError('');
     const url = new URL(location.href);
     url.searchParams.set('applicationId', person.id);
     url.searchParams.set('pool', 'selected'); url.searchParams.set('stageId', id);
@@ -56,7 +60,7 @@ export function CandidateStageWorkspace({ journey, person, source, entry, onChat
   }
   function openProfile() {
     if (journey.busy || callActive || profileOpen) return;
-    setPendingStage(null); setEditor(null); setView('stage'); setProfileOpen(true); journey.setError('');
+    setPendingStage(null); setCompletedMeeting(null); setEditor(null); setView('stage'); setProfileOpen(true); journey.setError('');
     const url = new URL(location.href);
     url.searchParams.set('applicationId', person.id); url.searchParams.set('pool', 'selected');
     if (selectedId) url.searchParams.set('stageId', selectedId);
@@ -75,7 +79,7 @@ export function CandidateStageWorkspace({ journey, person, source, entry, onChat
     history.replaceState(history.state, '', url);
   }, [person.id, allStages, person.archivedStageIds]);
   useEffect(() => {
-    const restore = () => { if (!callActive) { setSelectedId(visibleStage(queryStage()) || stages.at(-1)?.id || ''); setEditor(null); setView('stage'); setProfileOpen(new URLSearchParams(location.search).get('view') === 'profile'); } };
+    const restore = () => { if (!callActive) { setCompletedMeeting(null); setSelectedId(visibleStage(queryStage()) || stages.at(-1)?.id || ''); setEditor(null); setView('stage'); setProfileOpen(new URLSearchParams(location.search).get('view') === 'profile'); } };
     window.addEventListener('popstate', restore);
     return () => window.removeEventListener('popstate', restore);
   }, [allStages, person.archivedStageIds, callActive]);
@@ -87,8 +91,9 @@ export function CandidateStageWorkspace({ journey, person, source, entry, onChat
     if (next) { setPendingStage(null); selectStage(next.id, true); }
   }, [stages, pendingStage]);
 
-  // Completion arrives before the call overlay releases its navigation lock.
-  // Wait for the canonical completed state; historical meetings never auto-open this view.
+  // Remember calls opened here: Zoom may refresh the canonical state before its
+  // reconcile callback fires. Wait for completion and for the overlay to release
+  // navigation. Historical meetings never auto-open this view.
   useEffect(() => {
     if (!completedMeeting || callActive || locked) return;
     if (!stages.some(stage => stage.meetingId === completedMeeting && stage.status === 'completed')) return;
@@ -144,7 +149,7 @@ export function CandidateStageWorkspace({ journey, person, source, entry, onChat
     const historical = { ...person, meeting, feedback: stage.feedback };
     if (meeting.status === 'completed') return <div className="esc-interview esc-meeting-review" data-stage-id={stage.id}><Materials journey={journey} person={historical} appearance="candidate" enableComments/></div>;
     if (meeting.id !== person.meeting?.id || meeting.status === 'cancelled') return null;
-    return <MeetingPanel key={meeting.id} compact journey={journey} person={historical} onCallChange={onCallChange}
+    return <MeetingPanel key={meeting.id} compact journey={journey} person={historical} onCallChange={handleCallChange}
       onComplete={() => setCompletedMeeting(meeting.id)}
       onReschedule={() => openEditor('meeting', stage, true)}/>;
   }
@@ -196,6 +201,10 @@ export function CandidateStageWorkspace({ journey, person, source, entry, onChat
     headerActions={<DropdownMenu.Root><DropdownMenu.Trigger asChild><Button variant="ghost" size="icon" aria-label="Действия с кандидатом" disabled={journey.busy}><MoreHorizontal size={20}/></Button></DropdownMenu.Trigger>
       <DropdownMenu.Portal><DropdownMenu.Content className="esc-menu" align="end" sideOffset={8}>
         <DropdownMenu.Item className="esc-menu-item" onSelect={onChat}>Открыть чат</DropdownMenu.Item>
+        {!locked && selectedStage?.meetingId === person.meeting?.id && ['pending', 'confirmed'].includes(selectedStage?.status || '') && <>
+          <DropdownMenu.Item className="esc-menu-item" disabled={callActive} onSelect={() => openEditor('meeting', selectedStage, true)}>Перенести встречу</DropdownMenu.Item>
+          <DropdownMenu.Item className="esc-menu-item" disabled={callActive} onSelect={() => { void journey.act('meeting.cancel', person.id, { meetingId: person.meeting!.id, expectedRevision: person.workflowRevision || 0 }); }}>Отменить встречу</DropdownMenu.Item>
+        </>}
         {selectedStage?.kind === 'meeting' && selectedStage.status === 'completed' && <DropdownMenu.Item className="esc-menu-item" disabled={callActive} onSelect={() => { setEditor(null); setProfileOpen(false); setView('notes'); journey.setError(''); }}>Заметки и фидбек</DropdownMenu.Item>}
         {!locked && <DropdownMenu.Item className="esc-menu-item" disabled={callActive} onSelect={openRejection}>Отказать</DropdownMenu.Item>}
       </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>}
