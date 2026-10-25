@@ -1,7 +1,7 @@
 {
   "files": [
     {
-      "sha256": "e2275f845f34b2f1088f71e08294e89001a6449da70556d84319a0f3ebd0e98b",
+      "sha256": "2befc4e757dee287035cd7547c14430178527beec04b63ae7563ed46b11ed168",
       "source": "interface-lab/server/core_source_client.py",
       "target": "compat/core_source_client.py"
     },

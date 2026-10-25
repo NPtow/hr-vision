@@ -155,12 +155,21 @@ class CoreClient:
 
 
 class CoreMaterialsCatalog:
-    def __init__(self, core, source=None, outbox=None, *, connect=None):
+    def __init__(self, core, source=None, outbox=None, *, connect=None, collect=True):
         self.core, self.source, self.outbox = core, source, outbox
+        require(type(collect) is bool and (collect or outbox is None), 'invalid_material_catalog_configuration', 503)
+        self.collect_enabled = collect
         self.connect = outbox.connect if outbox else connect
         require(self.connect is not None, 'materials_database_required', 503)
 
     def register_owner(self, owner_kind, meeting, storage_policy=None):
+        if not self.collect_enabled:
+            require(owner_kind in ('interview', 'meeting') and isinstance(meeting.get('id'), str)
+                    and meeting['id'], 'invalid_material_owner', 400)
+            require(storage_policy in (None, 'owned'), 'Для загруженной записи доступно сохранение в нашем хранилище.', 400)
+            # The import has already bound and verified its immutable materials.
+            # A viewer does not schedule capture discovery or alter storage policy.
+            return None
         if self.outbox is None:
             return self.core.collect(owner_kind, meeting['id'], storage_policy)
         require((meeting.get('room') or {}).get('provider', 'daily') == 'daily',
@@ -303,19 +312,19 @@ def transcript_selection_identity(data):
 
 
 class ProviderMaterialsCatalog:
-    """Explicit transition: Daily source API and existing Zoom collector.
+    """Explicit routes for Daily, Zoom and imported owned recordings.
 
     The portal passes a meeting loaded from its authorized owner row. Provider
     identity is never accepted from an HTTP materials request or inferred from
     an adapter error. A missing provider cannot fall through to another source.
     """
-    def __init__(self, daily, zoom=None):
-        self.daily, self.zoom = daily, zoom
+    def __init__(self, daily, zoom=None, upload=None):
+        self.daily, self.zoom, self.upload = daily, zoom, upload
 
     def _catalog(self, meeting):
         provider = (meeting.get('room') or {}).get('provider', 'daily')
-        require(provider in ('daily', 'zoom'), 'Неизвестный источник материалов.', 409)
-        catalog = self.daily if provider == 'daily' else self.zoom
+        require(provider in ('daily', 'zoom', 'upload'), 'Неизвестный источник материалов.', 409)
+        catalog = {'daily': self.daily, 'zoom': self.zoom, 'upload': self.upload}[provider]
         require(catalog is not None, 'Источник материалов ещё не подключён.', 503)
         return catalog
 
