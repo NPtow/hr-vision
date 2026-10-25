@@ -275,6 +275,17 @@ class InterviewAssistantTest(unittest.TestCase):
             self.assertEqual(self.send(action='history')[1]['messages'], [])
         self.assertEqual(self.calls, [])
 
+    def test_background_assessment_refresh_preserves_session_but_source_changes_do_not(self):
+        principal = {'workspaceId': 'workspace', 'accountId': 'owner'}
+        context = {'vacancy': {'title': 'SDR'}, 'profile': {'summary': 'B2B'}, 'assessment': {'revisionId': 'one'}}
+        session = assistant.agent_session(principal, 'source-a', 'transcript', context)
+        self.assertEqual(session, assistant.agent_session(principal, 'source-a', 'transcript',
+            {**context, 'assessment': {'revisionId': 'two'}}))
+        self.assertNotEqual(session, assistant.agent_session(principal, 'source-b', 'transcript', context))
+        self.assertNotEqual(session, assistant.agent_session(principal, 'source-a', 'edited transcript', context))
+        self.assertNotEqual(session, assistant.agent_session(principal, 'source-a', 'transcript',
+            {**context, 'vacancy': {'title': 'Other role'}}))
+
     def test_agent_rechecks_access_before_delivery(self):
         def revoke(payload, *args):
             result = self.agent_answer(payload, *args)
