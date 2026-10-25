@@ -875,7 +875,7 @@ class Transport:
     def __init__(self, config, email_role='candidate'):
         self.config = config.for_email_role(email_role)
 
-    def send_email(self, recipient, subject, content, message_id):
+    def send_email(self, recipient, subject, content, message_id, *, html=None):
         config = self.config
         if not config.email_configured:
             raise DeliveryFailure('smtp_not_configured')
@@ -885,6 +885,8 @@ class Transport:
         message['Reply-To'] = config.smtp_from
         message['Message-ID'] = '<' + message_id + '@hr-vision.notifications>'
         message.set_content(content)
+        if html is not None:
+            message.add_alternative(html, subtype='html')
         context = ssl.create_default_context()
         try:
             if config.smtp_security == 'ssl':

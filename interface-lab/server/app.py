@@ -138,13 +138,14 @@ elif os.environ.get('HR_MATERIALS_ENABLED') == '1':
     CANDIDATE_PORTAL.materials_catalog = MaterialsService(MATERIALS_RUNTIME)
 
 if os.environ.get('HR_CORE_CATALOG_ENABLED') == '1':
-    # Daily remains the explicit existing reserve. Zoom materials belong to core;
-    # the portal only authorizes the person and renders the core response.
+    # Daily remains the explicit existing reserve. Zoom and imported owned files
+    # read Core; opening uploaded materials must never schedule provider capture.
     from core_source_client import CoreClient, CoreMaterialsCatalog, ProviderMaterialsCatalog, ServiceHTTP
     CORE_CLIENT = CoreClient(ServiceHTTP(os.environ['HR_MATERIALS_CORE_URL'],
         os.environ['HR_MATERIALS_CORE_KEY'], timeout=10))
     CANDIDATE_PORTAL.materials_catalog = ProviderMaterialsCatalog(
-        CANDIDATE_PORTAL.materials_catalog, CoreMaterialsCatalog(CORE_CLIENT, connect=connect))
+        CANDIDATE_PORTAL.materials_catalog, CoreMaterialsCatalog(CORE_CLIENT, connect=connect),
+        CoreMaterialsCatalog(CORE_CLIENT, connect=connect, collect=False))
 
 
 def read(db, scope='sfera'):

@@ -29,8 +29,6 @@ function CandidateProfile({ person, source, interview, resume, onRespond, decisi
   workflowRevision, busy, error, rejectQuestions }: EmployerCandidateProfileProps) {
   const headingId = useId();
   const hasResume = !!resume || !!source.cv;
-  const contacts = source.contacts?.map(contact => contact.value).filter(Boolean).join(' · ') || source.contact;
-  const score = typeof source.score === 'number' && Number.isFinite(source.score) ? source.score : null;
   const inPlayer = typeof interview === 'function';
   const identity = <div className="ecp-video-identity"><h2>{person.name}</h2>
     {hasResume && <EmployerResumeDialog resume={resume} text={source.cv} busy={busy} error={error}/>}
@@ -41,7 +39,7 @@ function CandidateProfile({ person, source, interview, resume, onRespond, decisi
     </header>}
     <div className="ecp-interview">{inPlayer ? interview(identity) : interview}</div>
     <div className="ecp-review-footer">
-      <div className="ecp-meta">{contacts && <p>{contacts}</p>}{score !== null && <p className="ecp-recruiter-score">Оценка рекрутера · {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(score)} / 5</p>}</div>
+      <div className="ecp-meta" aria-hidden="true"/>
       <EmployerCandidateResponse key={responseIdentity || person.id} onRespond={onRespond} decision={decision}
         workflowRevision={workflowRevision} busy={busy} rejectQuestions={rejectQuestions} meetingOptions={meetingOptions}/>
     </div>

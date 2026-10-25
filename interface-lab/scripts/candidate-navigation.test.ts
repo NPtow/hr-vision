@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { candidateLoginTarget, candidateNavigationURL, candidatePage } from '../src/scenes/candidate-portal/candidate-navigation.ts';
+import { candidateLoginTarget, candidateNavigationURL, candidatePage, candidateCompletionStep, candidateAfterProfile, candidateDestination } from '../src/scenes/candidate-portal/candidate-navigation.ts';
+import type { CandidateState } from '../src/scenes/candidate-portal/api.ts';
 
 for (const cp of ['home', 'interview', 'meeting'] as const) {
   test(`notification ${cp} survives login and reload with exact application/meeting`, () => {
@@ -27,4 +28,36 @@ test('unknown/external/capability/login return targets fall back to internal hom
 test('explicit logout and ordinary navigation clear previous return context', () => {
   const url = candidateNavigationURL('https://fixture.test/iframe.html?cp=meeting&returnCp=meeting&application=a&meeting=m', 'login');
   for (const key of ['returnCp', 'application', 'meeting']) assert.equal(url.searchParams.has(key), false);
+});
+
+const completedPerson = () => ({ interview: { status: 'completed' }, searching: true,
+  resume: { filename: 'existing.pdf' }, resumeReviewed: false, consentReuse: false,
+  onboarding: { missingFields: [] } }) as unknown as CandidateState;
+
+test('completed interview guides profile review then explicit consent, without booking again', () => {
+  const person = completedPerson();
+  assert.equal(candidateCompletionStep(person), 'preferences');
+  person.resumeReviewed = true;
+  assert.equal(candidateAfterProfile(person), 'home');
+  assert.equal(candidateCompletionStep(person), 'consent');
+  person.consentReuse = true;
+  assert.equal(candidateCompletionStep(person), null);
+  assert.equal(candidateAfterProfile({ ...person, interview: null }), 'booking');
+});
+
+test('missing CV/conditions and reload recover the next unfinished action', () => {
+  const person = completedPerson();
+  assert.equal(candidateCompletionStep({ ...person, resume: null }), 'resume');
+  assert.equal(candidateAfterProfile(person), 'preferences');
+  assert.equal(candidateCompletionStep({ ...person, resumeReviewed: true, onboarding: { step: 'complete', missingFields: ['salaryMin'] } }), 'preferences');
+  assert.equal(candidateCompletionStep({ ...person, searching: false }), null);
+});
+
+test('setup never hides a booked call or the employer meeting response', () => {
+  const person = completedPerson();
+  assert.equal(candidateDestination(person, 'meeting'), 'meeting');
+  assert.equal(candidateDestination(person, 'home'), 'home');
+  person.interview = { ...person.interview!, status: 'booked' };
+  assert.equal(candidateCompletionStep(person), null);
+  assert.equal(candidateDestination(person, 'interview'), 'interview');
 });

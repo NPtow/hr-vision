@@ -370,25 +370,41 @@ def activate_api(value):
 
 def check_origin(target, sha):
     host = 'hr-vision.158-160-179-53.sslip.io' if target == 'service' else 'hr-vision-lab.158-160-179-53.sslip.io'
-    last = None
-    for _ in range(10):
+    deadline = time.monotonic() + 90
+    first = last = None
+
+    def request_timeout():
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError('Origin readiness deadline expired')
+        return min(4, remaining)
+
+    while time.monotonic() < deadline:
         try:
             request = urllib.request.Request('http://127.0.0.1:8381/deployment.json', headers={'Host': host})
-            with urllib.request.urlopen(request, timeout=4) as response:
+            with urllib.request.urlopen(request, timeout=request_timeout()) as response:
                 data = json.load(response)
             require(data['sha'] == sha and data['target'] == target, 'Origin revision mismatch')
             story = 'hr-vision-product--start' if target == 'service' else 'hr-vision-employer-menu--gallery'
             entry = 'http://127.0.0.1:8381/iframe.html?id=' + story + '&viewMode=story'
-            with urllib.request.urlopen(urllib.request.Request(entry, headers={'Host': host}), timeout=4) as response:
+            with urllib.request.urlopen(urllib.request.Request(entry, headers={'Host': host}), timeout=request_timeout()) as response:
                 require(response.status == 200 and response.url == entry, 'Entry page was redirected to another site')
             if target == 'service':
-                with urllib.request.urlopen('http://127.0.0.1:8391/api/hr/health', timeout=4) as response:
+                with urllib.request.urlopen('http://127.0.0.1:8391/api/hr/health', timeout=request_timeout()) as response:
                     require(json.load(response).get('ok'), 'API health check failed')
             return
         except Exception as error:
+            if first is None:
+                first = error
             last = error
-            time.sleep(1)
-    raise RuntimeError('Origin verification failed') from last
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            time.sleep(min(1, remaining))
+    if first is None:
+        first = last = TimeoutError('Origin readiness deadline expired before the first check')
+    raise RuntimeError('Origin verification failed; first error: ' + type(first).__name__ + ': ' + str(first)
+                       + '; last error: ' + type(last).__name__ + ': ' + str(last)) from first
 
 
 def retain_replay_assets(previous, destination):
@@ -447,7 +463,7 @@ def activate(stage, manifest):
                 activate_api('releases/' + release)
             switch(base, 'current', 'releases/' + release)
             check_origin(target, manifest['sha'])
-        except Exception:
+        except Exception as failure:
             if attempted_api:
                 try:
                     # The new runtime may have committed lifecycle rows during its
@@ -456,7 +472,9 @@ def activate(stage, manifest):
                 except Exception as recovery:
                     safe_to_resume = False
                     raise RuntimeError('API rollback refused or failed; receiver will not restart an unsafe runtime. '
-                                       'Verify unit state and deploy a compatible forward recovery. ' + str(recovery)) from recovery
+                                       'Verify unit state and deploy a compatible forward recovery. '
+                                       'Original failure: ' + type(failure).__name__ + ': ' + str(failure)
+                                       + '; rollback failure: ' + type(recovery).__name__ + ': ' + str(recovery)) from failure
             switch(base, 'current', previous_ui)
             raise
         if previous_ui:

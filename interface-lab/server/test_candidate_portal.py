@@ -120,7 +120,10 @@ class CandidatePortalTest(unittest.TestCase):
         result, _ = self.call('candidate/resume', {'filename': 'resume.txt',
             'contentBase64': base64.b64encode(resume.encode()).decode()}, cookie)
         result, _ = self.call('candidate/profile', {'salaryMin': 100000, 'salaryMax': 150000,
-            'latestStartDate': (self.tick + dt.timedelta(days=14)).date().isoformat(), 'resumeReviewed': True}, cookie)
+            'latestStartDate': (self.tick + dt.timedelta(days=14)).date().isoformat(), 'resumeReviewed': True,
+            'employmentType': 'full-time', 'anyCompany': True, 'desiredRole': result['desiredRole'] or 'Менеджер', 'city': result['city'] or 'Москва'}, cookie)
+        if 'desiredRole' in changes or 'city' in changes:
+            result, _ = self.call('candidate/profile', {key: changes[key] for key in ('desiredRole', 'city') if key in changes}, cookie)
         return result, cookie
 
     def slot(self, minutes=0, recruiter='Рекрутер'):

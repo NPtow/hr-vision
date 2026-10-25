@@ -46,9 +46,26 @@ def imported_materials(saved, candidate_id, interview_id):
     identity = hashlib.sha256(json.dumps([candidate_id, interview_id, source_id,
         provenance['sha256']], separators=(',', ':')).encode()).hexdigest()[:32]
     video_id, transcript_id = 'import-video-' + identity, 'import-text-' + identity
+    # Topic chapters are separate from speech cues. Retain the authored source
+    # boundaries instead of turning every caption into a timeline segment.
+    topics = []
+    for item in profile.get('chapters') or []:
+        if not isinstance(item, dict):
+            continue
+        start, end = item.get('seconds'), item.get('endSeconds')
+        if (item.get('kind') == 'transcript' or type(start) not in (int, float) or
+                not math.isfinite(start) or not 0 <= start < duration or
+                end is not None and (type(end) not in (int, float) or not math.isfinite(end) or
+                                     not start < end <= duration) or
+                not isinstance(item.get('title'), str) or not item['title'].strip()):
+            continue
+        topics.append({**{field: item[field] if isinstance(item.get(field), str) else ''
+                          for field in ('title', 'detail', 'fragment', 'source')},
+                       'seconds': start, 'endSeconds': end, 'isQuote': item.get('isQuote') is True})
     return {'status': 'ready', 'recordings': [{'id': video_id, 'url': recording['publicUrl'],
                 'duration': duration, 'storage': 'remote', 'copyStatus': 'not_requested'}],
             'transcripts': [{'id': transcript_id, 'text': transcript, 'storage': 'imported'}],
+            'chapters': topics,
             'video': {'status': 'ready', 'ids': [video_id]},
             'transcription': {'status': 'ready', 'ids': [transcript_id]},
             'checkedAt': iso(now()), 'source': {'kind': 'dsa-panel', 'candidateId': source_id}}

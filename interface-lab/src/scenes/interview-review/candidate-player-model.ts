@@ -27,8 +27,16 @@ export function interviewTime(seconds: number) {
 }
 
 export function interviewTimeline(chapters: readonly RecordingChapter[], duration: number) {
-  const starts = [...new Set([0, ...chapters.map(c => c.seconds).filter((s): s is number => s !== null && Number.isFinite(s) && s >= 0 && s < duration)])].sort((a, b) => a - b);
+  const starts = [...new Set([0, ...chapters.filter(c => c.kind !== 'transcript').map(c => c.seconds).filter((s): s is number => s !== null && Number.isFinite(s) && s >= 0 && s < duration)])].sort((a, b) => a - b);
   return duration > 0 && Number.isFinite(duration) ? starts.map((start, i) => ({ start, end: starts[i + 1] ?? duration })) : [];
+}
+
+/** A result is a time span, not each paragraph it happens to overlap. */
+export function interviewSearchGroups(paragraphs: readonly InterviewParagraph[], matches: readonly { startMs: number; endMs: number }[]) {
+  return matches.map(match => paragraphs.flatMap((row, index) =>
+    (row.end === row.start ? row.start * 1000 >= match.startMs : row.end * 1000 > match.startMs)
+    && (match.endMs === match.startMs ? row.start * 1000 <= match.endMs : row.start * 1000 < match.endMs) ? [index] : []))
+    .filter(rows => rows.length > 0);
 }
 
 
