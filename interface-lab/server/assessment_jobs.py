@@ -53,6 +53,8 @@ def init(db):
       vacancy_id TEXT, workspace_id TEXT, status TEXT NOT NULL,
       source_revision TEXT, recording_id TEXT, job_id TEXT, assessment TEXT,
       error TEXT, next_check REAL NOT NULL DEFAULT 0, updated REAL NOT NULL)''')
+    if 'source_material' not in {r[1] for r in db.execute('PRAGMA table_info(as_bindings)')}:
+        db.execute('ALTER TABLE as_bindings ADD COLUMN source_material TEXT')
     db.execute('''CREATE TABLE IF NOT EXISTS as_matches (
       id TEXT PRIMARY KEY,binding_id TEXT NOT NULL REFERENCES as_bindings(id),
       vacancy_id TEXT NOT NULL,workspace_id TEXT,status TEXT NOT NULL,
@@ -88,18 +90,31 @@ def read(db, kind, owner_id, revision, recording_id=None):
 
 
 def read_candidate(db, candidate_id, recording_id=None, vacancy_id=None):
-    value = read(db, 'candidate', candidate_id, candidate_revision(db, candidate_id), recording_id)
+    revision = candidate_revision(db, candidate_id)
+    value = read(db, 'candidate', candidate_id, revision, recording_id)
+    if value is None and revision != candidate_revision(db, candidate_id, include_transcript=False):
+        value = {'assessment': None, 'status': 'pending'}
     return with_match(db, value, 'candidate:' + candidate_id, vacancy_id)
 
 
-def candidate_revision(db, candidate_id):
+def candidate_revision(db, candidate_id, *, include_transcript=True):
     row = db.execute('SELECT id,status,completed_at,room FROM cp_interviews WHERE candidate_id=?', (candidate_id,)).fetchone()
     if not row or row[1] != 'completed':
         return None
     room = json.loads(row[3]) if row[3] else None
     identity = {key: room.get(key) for key in ('provider', 'id', 'name', 'meetingNumber', 'meetingSessionId', 'connectionId')} if isinstance(room, dict) else room
     # Resume/contact/vacancy edits must not recharge the same interview.
-    return selection.digest([list(row[:3]), identity])
+    revision = selection.digest([list(row[:3]), identity])
+    if include_transcript and os.environ.get('HR_CORE_CATALOG_ENABLED') == '1':
+        from core_source_client import CoreClient, ServiceHTTP, transcript_selection_identity
+        client = CoreClient(ServiceHTTP(os.environ['HR_MATERIALS_CORE_URL'],
+            os.environ['HR_MATERIALS_CORE_KEY'], timeout=2))
+        # Read the authoritative selection, never the provider label or a local
+        # copy of Core tables. Failure is closed: no stale assessment fallback.
+        primary = client.primary_transcripts('interview', row[0])
+        if primary.get('status') != 'not_requested':
+            revision = selection.digest([revision, transcript_selection_identity(primary)])
+    return revision
 
 
 def read_intake(db, workspace_id, owner_id, fingerprint):
@@ -197,6 +212,7 @@ class Bridge:
                 candidate_name = person.get('name', '')
             else:
                 candidate_name = selection.person(db, row['owner_id']).get('name', '')
+        source_material = None
         if row['kind'] == 'candidate':
             cid = row['owner_id']
             def authorize(db):
@@ -207,8 +223,14 @@ class Bridge:
             if len(recordings) != 1 or len(transcripts) != 1 or not transcripts[0].get('text'):
                 raise Problem('waiting_for_transcript', 409)
             recording_id = recordings[0]['id']
+            if transcripts[0].get('recordingId') and transcripts[0]['recordingId'] != recording_id:
+                raise Problem('transcript_recording_mismatch', 409)
             transcript = transcripts[0]['text']
-            source_hash = selection.digest([revision, recording_id, hashlib.sha256(transcript.encode()).hexdigest()])
+            source_material = {'transcriptId': transcripts[0].get('id'), 'recordingId': recording_id,
+                'textSha256': hashlib.sha256(transcript.encode()).hexdigest(),
+                'origin': transcripts[0].get('origin'), 'model': transcripts[0].get('model'),
+                'selectionRevision': transcripts[0].get('selectionRevision')}
+            source_hash = selection.digest([revision, recording_id, source_material])
         # Use the same timing/parser as the existing source player. No CV/contacts
         # are sent; filenames and external source links never enter the model.
         chunks = assessment_chunks(transcript, candidate_name)
@@ -219,7 +241,7 @@ class Bridge:
             content, _ = scan(chunk['text'])
             clean.append({'id': chunk['id'], 'text': content, 'speaker': chunk['speakerName'],
                           'startMs': chunk['startMs'], 'endMs': chunk['endMs']})
-        return revision, recording_id, {'subject': row['id'], 'sourceHash': source_hash, 'chunks': clean}
+        return revision, recording_id, {'subject': row['id'], 'sourceHash': source_hash, 'chunks': clean}, source_material
 
     def tick(self):
         with self.connect() as db:
@@ -242,8 +264,9 @@ class Bridge:
             if row['job_id'] and row['source_revision'] == current and row['status'] in ('queued', 'running'):
                 result = self.request('GET', '/v1/jobs/' + row['job_id'])
                 revision, recording_id = current, row['recording_id']
+                source_material = json.loads(row['source_material']) if row.get('source_material') else None
             else:
-                revision, recording_id, payload = self.snapshot(row)
+                revision, recording_id, payload, source_material = self.snapshot(row)
                 result = self.request('POST', '/v1/jobs', payload)
             if not re.fullmatch('[a-f0-9]{64}', result.get('id', '')) or result.get('status') not in ('queued', 'running', 'completed', 'failed', 'cancelled', 'expired'):
                 raise Problem('invalid_assessment_response', 502)
@@ -252,6 +275,9 @@ class Bridge:
                 interview_assessment._checked_assessment({k: assessment[k] for k in ('revisionId', 'criteria', 'provenance')})
                 if assessment['revisionId'] != result['id']:
                     raise Problem('invalid_assessment_response', 502)
+                if source_material:
+                    assessment = {**assessment, 'provenance': {**assessment['provenance'],
+                                  'sourceTranscript': source_material}}
             with self.connect() as db:
                 db.execute('BEGIN IMMEDIATE')
                 if self.active(db, row) != revision:
@@ -262,9 +288,9 @@ class Bridge:
                     binding = interview_assessment.source_key('intake', {'vacancyId': row['vacancy_id'], 'id': row['owner_id'], 'index': 0})
                     interview_assessment.import_assessment(db, row['workspace_id'], binding, revision,
                         {k: assessment[k] for k in ('revisionId', 'criteria', 'provenance')})
-                db.execute('''UPDATE as_bindings SET status=?,source_revision=?,recording_id=?,job_id=?,assessment=?,error=?,next_check=?,updated=? WHERE id=?''',
+                db.execute('''UPDATE as_bindings SET status=?,source_revision=?,recording_id=?,job_id=?,assessment=?,error=?,next_check=?,updated=?,source_material=? WHERE id=?''',
                     (result['status'], revision, recording_id, result['id'], selection.dump(assessment) if assessment else None,
-                     result.get('error'), time.time() + (600 if result['status'] in ('completed', 'failed', 'cancelled', 'expired') else 10), time.time(), row['id']))
+                     result.get('error'), time.time() + (600 if result['status'] in ('completed', 'failed', 'cancelled', 'expired') else 10), time.time(), selection.dump(source_material) if source_material else None, row['id']))
         except Exception as error:
             # Do not log exceptions that may embed transcript/provider responses.
             code = error.message if isinstance(error, Problem) and re.fullmatch('[a-z_0-9]{1,80}', error.message) else 'assessment_sync_failed'

@@ -1,7 +1,7 @@
 {
   "files": [
     {
-      "sha256": "8e1959f43e2192f8313c568691efc4d3058aacd83aec4e10c2b8334add5e1319",
+      "sha256": "2befc4e757dee287035cd7547c14430178527beec04b63ae7563ed46b11ed168",
       "source": "interface-lab/server/core_source_client.py",
       "target": "compat/core_source_client.py"
     },
@@ -19,6 +19,11 @@
       "sha256": "1a99483a7a0d26e2c65ef12e3ed60418006076a7ece57df5139a5a4baaaa8895",
       "source": "interface-lab/server/feedback.py",
       "target": "compat/feedback.py"
+    },
+    {
+      "sha256": "7ca87c45009bcba0c2a9817f4fb36be4c8477b554264e6ee83537951bd2f824b",
+      "source": "interface-lab/server/materials_asr_dispatch.py",
+      "target": "compat/materials_asr_dispatch.py"
     },
     {
       "sha256": "3a0ba03d15074277714416fa3ffd5f8ec589dc3c181b079a1f2255c177d4e640",
@@ -41,12 +46,12 @@
       "target": "compat/materials_repository.py"
     },
     {
-      "sha256": "1a7dba0742bf19f8b6e1a677c23dff8757244ad296cfa9d9358a45f83fe10db9",
+      "sha256": "3650355636aa218cd0d63e57f184f04f74a3ca47a46ccd0da7ac3c413e6ec2de",
       "source": "interface-lab/server/materials_runtime.py",
       "target": "compat/materials_runtime.py"
     },
     {
-      "sha256": "01d04643ae228c733b9815aaec8363ef98d66b1c9e9d5150e87df01bb4de1afc",
+      "sha256": "f4ba1dd4fa6dade72c229d96f7670c2f8d82ca1b46d8811692faf45b83641d79",
       "source": "interface-lab/server/materials_service.py",
       "target": "compat/materials_service.py"
     },
@@ -111,7 +116,7 @@
       "target": "src/hr_materials_core/__main__.py"
     },
     {
-      "sha256": "97fa1624c8a798de719bf35fd9f65980337581498e3bd8238daf4cb5e1b5fa63",
+      "sha256": "186fae0fc948f0071d38e2de9ba611d8f8c7fd440095974a9cfc3f8872efe1d1",
       "source": "services/data-core/src/hr_materials_core/app.py",
       "target": "src/hr_materials_core/app.py"
     },
@@ -121,12 +126,12 @@
       "target": "src/hr_materials_core/auth.py"
     },
     {
-      "sha256": "587cafc35a79322657884da2919cf1c1af7731b173ed7037565fbbc910f98e33",
+      "sha256": "9941deb4de27d65f2fc4e97e7cfb8a0c661d9b12ee4f3cd95478c7d817152f1a",
       "source": "services/data-core/src/hr_materials_core/repository.py",
       "target": "src/hr_materials_core/repository.py"
     },
     {
-      "sha256": "464f33a0268a598d0d8208feb8951c8e37ef615f73c76fd8d1ebf4983f8519a4",
+      "sha256": "8bdf4baeef501695e977e85064888d73ed12aa51d06f04aa6b5a87065e38c3b1",
       "source": "services/data-core/src/hr_materials_core/schemas.py",
       "target": "src/hr_materials_core/schemas.py"
     },

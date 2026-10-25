@@ -99,7 +99,7 @@ def _safe_meeting(db, principal, portal, aid, meeting_id, saved):
     meeting = portal.meeting(db, aid, meeting_id)
     if meeting:
         meeting.update(portal.calls.describe(db, meeting['id'], meeting['room'],
-                                           'workspace:' + principal['workspaceId']))
+                                           'workspace:' + principal['workspaceId'], completed=meeting['status'] == 'completed'))
         meeting.pop('room', None)
         # A declined proposal is an ended appointment in the existing component.
         if meeting['status'] == 'declined':

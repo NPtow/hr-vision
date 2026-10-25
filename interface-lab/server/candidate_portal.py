@@ -527,7 +527,7 @@ class CandidatePortal:
         room = json.loads(row[2]) if row[2] else None
         return {'id': row[0], 'status': row[1], 'room': room,
                 'start': row[3], 'end': row[4], 'recruiterName': row[5], 'completedAt': row[6],
-                'recording': invites.recording(db, row[0]), **self.calls.describe(db, row[0], room)}
+                'recording': invites.recording(db, row[0]), **self.calls.describe(db, row[0], room, completed=row[1] == 'completed')}
 
     def meeting(self, db, app_id, meeting_id=None):
         row = db.execute('''SELECT id,start,end,status,room,completed_at,revision,confirmed_at,cancelled_at,cancellation_reason
@@ -537,7 +537,8 @@ class CandidatePortal:
                  'room': json.loads(row[4]) if row[4] else None, 'completedAt': row[5],
                  'revision': row[6], 'confirmedAt': row[7], 'cancelledAt': row[8],
                  'cancellationReason': row[9],
-                 **self.calls.describe(db, row[0], json.loads(row[4]) if row[4] else None)} if row else None)
+                 **self.calls.describe(db, row[0], json.loads(row[4]) if row[4] else None,
+                                      completed=row[3] == 'completed')} if row else None)
 
     def application(self, db, app_id, cid=None):
         from vacancy_import import candidate_vacancy
@@ -641,12 +642,12 @@ class CandidatePortal:
             if candidate.get('interview'):
                 current = self.interview(db, row[0])
                 candidate['interview'].update(self.calls.describe(db, current['id'], current['room'],
-                    principal['id'] if personal else 'recruiter'))
+                    principal['id'] if personal else 'recruiter', completed=current['status'] == 'completed'))
             for application in candidate['applications']:
                 if application.get('meeting'):
                     current = self.meeting(db, application['id'])
                     application['meeting'].update(self.calls.describe(db, current['id'], current['room'],
-                        principal['id'] if personal else 'recruiter'))
+                        principal['id'] if personal else 'recruiter', completed=current['status'] == 'completed'))
             from recruiter_sources import candidate_sources
             candidate.update(candidate_sources(db, row[0]))
             candidates.append(candidate)
@@ -1508,6 +1509,14 @@ class CandidatePortal:
             require(meeting and meeting['status'] == 'completed', 'Материалы доступны после встречи.', 409)
             require(meeting_id is None or meeting['id'] == meeting_id, 'Встреча изменилась. Обновите кабинет.', 409)
             mid = meeting['id']
+            if not application_id:
+                saved = db.execute('SELECT body FROM cp_internal_profiles WHERE candidate_id=?', (cid,)).fetchone()
+                imported = json.loads(saved[0]).get('importedInterview') if saved else None
+                if imported is not None:
+                    require(storage_policy in (None, 'remote'),
+                            'Исходная запись хранится в панели ДСА.', 409)
+                    from dsa_panel import imported_materials
+                    return imported_materials(imported, cid, mid)
             catalogue_meeting = meeting
             if self.materials_catalog and not application_id and (meeting.get('room') or {}).get('provider', 'daily') == 'daily':
                 control = db.execute('SELECT start_requested_at FROM cp_recording_control WHERE interview_id=?',

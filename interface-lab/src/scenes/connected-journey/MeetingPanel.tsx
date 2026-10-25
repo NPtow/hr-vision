@@ -22,10 +22,14 @@ export function MeetingPanel(props: MeetingPanelProps) {
   const compact = !!props.compact && journey.state?.actor === 'manager' && ['pending', 'confirmed', 'live'].includes(meeting.status);
   useEffect(() => { setPrejoinOpen(false); }, [meeting.id]);
   useEffect(() => { if (!compact || !['confirmed', 'live'].includes(meeting.status)) setPrejoinOpen(false); }, [compact, meeting.status]);
-  const providerSelector = journey.state?.mode === 'employer' && journey.state.actor === 'manager' && ['pending', 'confirmed', 'live'].includes(meeting.status) ? <CallProviderSelector
+  const providerSelector = meeting.callProvider !== null && journey.state?.mode === 'employer' && journey.state.actor === 'manager' && ['pending', 'confirmed', 'live'].includes(meeting.status) ? <CallProviderSelector
     value={meeting.callProvider || 'daily'} locked={meeting.callProviderLocked || meeting.status === 'live'} options={meeting.callProviderOptions}
     disabled={journey.busy} onChange={provider => { void journey.setCallProvider(person, provider); }}/> : undefined;
   const providerProps = { ...props, compact, prejoinOpen, onPrejoinOpenChange: setPrejoinOpen, providerSelector };
+  if (meeting.callProvider === null) return <section className="cj-meeting">
+    <div className="cj-section-heading"><div><h1>{dateTime(meeting.start)}</h1><p className="cj-meeting-meta">{meeting.status === 'completed' ? 'Встреча завершена' : 'Видеовстреча недоступна'}</p></div></div>
+    {meeting.status === 'completed' && journey.state?.actor === 'manager' && person.feedback && <Button onClick={props.onComplete}>Открыть разбор</Button>}
+  </section>;
   return <>
     {!compact && providerSelector}
     {meeting.callProvider === 'zoom' ? <ZoomMeetingPanel key={`${meeting.id}:zoom`} {...providerProps}/> : <DailyMeetingPanel key={`${meeting.id}:daily`} {...providerProps}/>}
