@@ -229,6 +229,112 @@ class CandidateAccessFlowTest(unittest.TestCase):
         self.assertEqual('HH-synthetic-resume-1.txt', person['resume']['filename'])
         self.assertEqual(1, len(self.smtp.email))
 
+    def completed_guest(self):
+        cid, iid, _ = self.booked()
+        issued, _ = self.request('invitations', {'candidateId': cid, 'scope': 'call'}, self.owner)
+        token = parse_qs(urlsplit(issued['url']).fragment)['invite'][0]
+        with self.connect() as db:
+            db.execute("UPDATE cp_interviews SET status='completed' WHERE id=?", (iid,))
+        return cid, iid, token
+
+    def test_postcall_mail_proves_inbox_before_activation_and_cannot_be_replayed(self):
+        cid, iid, token = self.completed_guest()
+        before = self.rows('SELECT profile FROM cp_candidates WHERE id=?', (cid,))
+        state, _ = self.call('candidate/guest/state', {'token': token})
+        self.assertTrue(state['continuation']['canSend'])
+        self.assertFalse(state['accountActive'])
+        self.assertEqual([], self.rows('SELECT * FROM cp_email_access'))
+        for _ in range(2):
+            receipt, headers = self.call('candidate/guest/continue', {'token': token})
+            self.assertEqual('queued', receipt['status'])
+            self.assertNotIn('Set-Cookie', headers)
+            self.assertNotIn('candidate@example.test', json.dumps(receipt))
+        self.assertEqual([(None, None)], self.rows('SELECT email,password_hash FROM cp_candidates WHERE id=?', (cid,)))
+        self.assertEqual('sent', self.access.dispatch_once()['status'])
+        self.assertEqual('candidate@example.test', self.smtp.email[0]['recipient'])
+        self.assertNotIn('Пароль:', self.smtp.email[0]['content'])
+        link_token = self.mail_token()
+        self.assertNotIn(link_token, str(self.rows('SELECT * FROM cp_email_access')))
+        with patch.object(self.portal.notifications, 'set_email') as verified:
+            result, headers = self.call('candidate/email-access/consume', {'token': link_token})
+            verified.assert_called_once_with(unittest.mock.ANY, cid, 'candidate@example.test', verified=True)
+        self.assertEqual(cid, result['id'])
+        self.assertIn('HttpOnly', headers['Set-Cookie'])
+        self.assertFalse(result['consentReuse'])
+        self.assertEqual(before, self.rows('SELECT profile FROM cp_candidates WHERE id=?', (cid,)))
+        self.assertEqual([], self.rows('SELECT * FROM cp_consent_log'))
+        with self.assertRaises(Problem) as error:
+            self.call('candidate/email-access/consume', {'token': link_token})
+        self.assertEqual(410, error.exception.status)
+
+    def mail_token(self):
+        url = self.smtp.email[-1]['content'].splitlines()[1]
+        self.assertNotIn('access=', urlsplit(url).query)
+        return parse_qs(urlsplit(url).fragment)['access'][0]
+
+    def test_postcall_cannot_change_known_recipient_or_candidate_or_send_early(self):
+        cid, iid, token = self.completed_guest()
+        for extra in ({'email':'other@example.test'}, {'candidateId':'someone-else'}, {'consentReuse':True}):
+            with self.assertRaises(Problem) as error:
+                self.call('candidate/guest/continue', {'token':token, **extra})
+            self.assertEqual(409 if 'email' in extra else 400,error.exception.status)
+        with self.connect() as db:
+            db.execute("UPDATE cp_interviews SET status='live' WHERE id=?", (iid,))
+        with self.assertRaises(Problem) as error:
+            self.call('candidate/guest/continue', {'token':token})
+        self.assertEqual(409,error.exception.status)
+        self.assertEqual([], self.rows('SELECT * FROM cp_email_access'))
+
+    def test_missing_email_accepts_new_address_but_never_unconsented_cv_address(self):
+        cid, iid, token = self.completed_guest()
+        with self.connect() as db:
+            db.execute('DELETE FROM cp_booking_profile_consents WHERE candidate_id=?',(cid,))
+        state, _ = self.call('candidate/guest/state', {'token':token})
+        self.assertTrue(state['continuation']['needsEmail'])
+        with self.assertRaises(Problem) as error:
+            self.call('candidate/guest/continue', {'token':token})
+        self.assertEqual(400,error.exception.status)
+        self.call('candidate/guest/continue', {'token':token, 'email':'confirmed@example.test'})
+        self.assertEqual('sent', self.access.dispatch_once()['status'])
+        self.assertEqual('confirmed@example.test', self.smtp.email[0]['recipient'])
+        self.assertEqual([(None,)],self.rows('SELECT email FROM cp_candidates WHERE id=?',(cid,)))
+
+    def test_completion_automatically_queues_only_once_without_activating(self):
+        cid, iid, token = self.completed_guest()
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            self.portal.event(db, cid, 'interview.completed', iid)
+            self.portal.event(db, cid, 'interview.completed', iid)
+        self.assertEqual(1,len(self.rows('SELECT * FROM cp_email_access')))
+        self.assertEqual([(None,)],self.rows('SELECT email FROM cp_candidates WHERE id=?',(cid,)))
+        self.assertEqual('sent', self.access.dispatch_once()['status'])
+        self.assertIsNone(self.access.dispatch_once())
+
+    def test_expired_or_replaced_link_cannot_activate(self):
+        cid, iid, token = self.completed_guest()
+        self.call('candidate/guest/continue', {'token':token})
+        self.access.dispatch_once()
+        old = self.mail_token()
+        with self.connect() as db:
+            db.execute('UPDATE cp_email_access SET expires=0 WHERE candidate_id=?',(cid,))
+        with self.assertRaises(Problem) as error:
+            self.call('candidate/email-access/consume', {'token':old})
+        self.assertEqual(410,error.exception.status)
+        self.call('candidate/guest/continue', {'token':token})
+        self.access.dispatch_once()
+        self.assertNotEqual(old,self.mail_token())
+        with self.assertRaises(Problem):
+            self.call('candidate/email-access/consume', {'token':old})
+
+    def test_postcall_revoked_links_never_issue_access(self):
+        cid, iid, token = self.completed_guest()
+        with self.connect() as db:
+            db.execute("UPDATE cp_invitations SET revoked_at='revoked' WHERE candidate_id=? AND scope='call'",(cid,))
+        with self.assertRaises(Problem) as error:
+            self.call('candidate/guest/continue', {'token':token})
+        self.assertEqual(410,error.exception.status)
+        self.assertEqual([], self.rows('SELECT * FROM cp_access_outbox'))
+
 
 if __name__ == '__main__':
     unittest.main()
