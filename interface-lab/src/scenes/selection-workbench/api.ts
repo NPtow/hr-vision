@@ -9,6 +9,7 @@ export type Assessment = {
 export type SelectionPerson = {
   id: string; name: string; desiredRole: string; city: string; about: string; email: string;
   revision: string; sourceRevision: string; accountActive: boolean; searching: boolean;
+  emailConnected: boolean; telegramConnected: boolean;
   consentReuse: boolean; interviewId: string | null; interviewStatus: string | null;
   resumeAvailable: boolean; inCohort: boolean; canAdd: boolean;
   assessment: Assessment | null; application: { id: string; status: string } | null;

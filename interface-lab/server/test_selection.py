@@ -69,6 +69,46 @@ class SelectionTest(fixture.EmployerStoreTest):
         with self.connect() as db:
             return selection.nominate(db, self.portal, {'candidateIds': [cid], 'vacancyId': self.vacancy['id'], 'requestId': key})
 
+    def test_booking_contacts_are_connected_before_cabinet_activation(self):
+        cid = self.person()
+        self.prepared(cid)
+        with self.connect() as db:
+            row = selection.person(db, cid)
+            self.assertFalse(row['accountActive'])
+            self.assertTrue(row['emailConnected'])
+            self.assertTrue(row['telegramConnected'])
+            self.assertEqual(row['email'], 'private@example.test')
+            self.assertEqual(row['interviewStatus'], 'completed')
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM cn_outbox').fetchone()[0], 0)
+
+    def test_cv_contacts_and_unverified_telegram_are_not_connected(self):
+        cid = self.person(completed=False)
+        with self.connect() as db:
+            db.execute('UPDATE cp_candidates SET email=NULL,password_hash=NULL WHERE id=?', (cid,))
+            db.execute('INSERT INTO cp_intake VALUES (?,\'manual\',NULL,\'cv-only@example.test\',\'now\')', (cid,))
+            notices.set_email(db, cid, 'cv-only@example.test')
+            db.execute('UPDATE cn_recipients SET telegram_chat_id=\'123456\' WHERE candidate_id=?', (cid,))
+            row = selection.person(db, cid)
+            self.assertEqual(row['email'], 'cv-only@example.test')
+            self.assertFalse(row['emailConnected'])
+            self.assertFalse(row['telegramConnected'])
+            self.assertIsNone(row['interviewStatus'])
+
+    def test_connected_telegram_requires_account_or_exact_consented_booking(self):
+        active, prepared = self.person(), self.person()
+        self.prepared(prepared)
+        with self.connect() as db:
+            notices.set_email(db, active, active + '@example.test')
+            db.execute('UPDATE cn_recipients SET telegram_chat_id=\'654321\',telegram_verified_at=0 WHERE candidate_id=?', (active,))
+            row = selection.person(db, active)
+            self.assertTrue(row['emailConnected'])
+            self.assertTrue(row['telegramConnected'])
+            db.execute('UPDATE cp_booking_profile_consents SET invitation_id=\'other-booking\' WHERE candidate_id=?', (prepared,))
+            self.assertFalse(selection.person(db, prepared)['telegramConnected'])
+            # An old generic binding cannot replace the prepared booking scope.
+            db.execute('UPDATE cp_candidates SET email=NULL WHERE id=?', (active,))
+            self.assertFalse(selection.person(db, active)['telegramConnected'])
+
     def test_unknown_never_becomes_a_score_or_a_recommendation(self):
         cid = self.person()
         self.core(cid, state='unknown')
