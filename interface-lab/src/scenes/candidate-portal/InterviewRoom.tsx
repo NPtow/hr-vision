@@ -9,8 +9,8 @@ import { CallDeviceAccess, useCallDeviceAccess } from '../../components/call-dev
 import { MediaPanel } from './MediaPanel';
 import { CandidateCallSurface, type CandidateRecordingState } from './CandidateCallSurface';
 import { callInputTracks } from './call-media';
-import { ZoomCallFrame } from '../../components/call/ZoomCallFrame';
-import type { CallProvider, ZoomCredentials } from '../../components/call/call-provider';
+import { ZoomMeeting } from '../../components/call/ZoomMeeting';
+import type { CallProvider } from '../../components/call/call-provider';
 
 type InterviewRoomProps = {
   title: string; start: string; completed: boolean; configured: boolean; callProvider?: CallProvider; applicationId?: string; meetingId?: string; guestToken?: string; onRefresh: () => Promise<void>; onBack: () => void; onExit?: () => void;
@@ -18,86 +18,26 @@ type InterviewRoomProps = {
 
 /** Choose the provider before mounting Daily's device or connection hooks. */
 export function InterviewRoom(props: InterviewRoomProps) {
-  return props.callProvider === 'zoom' ? <ZoomInterviewRoom {...props}/> : <DailyInterviewRoom {...props}/>;
+  return props.callProvider === 'zoom' ? <ZoomInterviewRoom key={`${props.guestToken || props.applicationId || "interview"}:${props.meetingId || props.start}`} {...props}/> : <DailyInterviewRoom {...props}/>;
 }
 
-function ZoomInterviewRoom({ title, start, completed, configured, applicationId, meetingId, guestToken, onRefresh, onBack, onExit = onBack }: InterviewRoomProps) {
-  const host = useRef<HTMLElement>(null);
-  const returnFocus = useRef<HTMLElement | null>(null);
-  const alive = useRef(true);
-  const attempt = useRef(0);
-  const [credentials, setCredentials] = useState<ZoomCredentials | null>(null);
+function ZoomInterviewRoom({ title, start, completed, configured, applicationId, meetingId, guestToken, onRefresh, onBack, onExit }: InterviewRoomProps) {
   const [opened, setOpened] = useState(false);
-  const [joining, setJoining] = useState(false);
-  const [consent, setConsent] = useState(false);
-  const [error, setError] = useState('');
-  const close = () => {
-    attempt.current++;
-    setCredentials(null); setOpened(false); setJoining(false);
-  };
-  useEffect(() => { alive.current = true; return () => { alive.current = false; attempt.current++; }; }, []);
-  useEffect(() => {
-    if (completed) {
-      close();
-      // Only a call already open in this tab exits automatically. Opening a
-      // completed interview from the cabinet must still show its materials.
-      if (opened) onExit();
-    }
-  }, [completed]);
-  useEffect(() => {
-    if (!opened) return;
-    const shell = host.current?.closest('.cp-root');
-    const previous = document.body.style.overflow;
-    shell?.setAttribute('inert', '');
-    document.body.style.overflow = 'hidden';
-    return () => { shell?.removeAttribute('inert'); document.body.style.overflow = previous; if (returnFocus.current?.isConnected) returnFocus.current.focus(); };
-  }, [opened]);
-  async function join() {
-    if (opened || joining || !configured || !consent) return;
-    const id = ++attempt.current;
-    returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    setError(''); setJoining(true); setOpened(true);
-    try {
-      const room = guestToken
-        ? await candidateRequest<RoomCredentials>('guest/join', { token: guestToken, consent })
-        : await candidateRequest<RoomCredentials>(applicationId ? 'meeting/join' : 'interview/join', { ...(applicationId ? { applicationId, meetingId } : {}), consent });
-      if (!alive.current || attempt.current !== id) return;
-      if (room.provider !== 'zoom') {
-        void onRefresh().catch(() => undefined);
-        throw new CallConnectionError('Сервис встречи изменился. Подключитесь ещё раз.');
-      }
-      setCredentials(room);
-    } catch (cause) {
-      if (alive.current && attempt.current === id) {
-        setError(cause instanceof CandidateApiError || cause instanceof CallConnectionError ? cause.message : 'Не удалось подключиться. Попробуйте ещё раз.');
-        close();
-      }
-    }
-  }
-  if (completed) return <section className="cp-content-page">
+  function leave() { void onRefresh().catch(() => undefined); (onExit || onBack)(); }
+  if (completed && !opened) return <section className="cp-content-page">
     {!guestToken && <Button className="cp-back" variant="ghost" onClick={onBack}><ArrowLeft size={16}/>В кабинет</Button>}
     <div className="cp-page-heading"><h1>Встреча завершена</h1><p>{title} · {dateTimeLabel(start)}</p></div>
     {guestToken ? <p>Спасибо за разговор. Рекрутер пришлёт дальнейшие шаги.</p>
       : applicationId && !meetingId ? <p className="cp-error" role="alert">Не удалось определить встречу. Откройте её заново из вакансии.</p>
         : <MediaPanel identity={applicationId ? `meeting:${applicationId}:${meetingId}` : `interview:${start}`} load={() => candidateRequest<CallMaterials>(applicationId ? 'meeting/materials' : 'interview/materials', applicationId ? { applicationId, meetingId } : {})}/>}
   </section>;
-  return <section className="cp-interview-page" ref={host}>
-    <div className="cp-call-settings">
-      <div className="cp-page-heading"><h1>{title}</h1><p>{dateTimeLabel(start)}</p></div>
-      <label className="cp-check"><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)}/><span>Согласен на запись встречи и сохранение видео в сервисе.</span></label>
-      {error && <p className="cp-error" role="alert">{error}</p>}
-      {!configured && <p className="cp-notice">Видеовстреча пока недоступна. Свяжитесь с рекрутером; выбранное время сохранено.</p>}
-      <Button className="cp-join-button" disabled={!consent || !configured || joining || opened} onClick={() => void join()}>{joining ? 'Подключаем…' : error ? 'Попробовать ещё раз' : 'Присоединиться'}</Button>
-    </div>
-    {opened && createPortal(<div className="agency-product agency-product-theme cp-call-overlay" role="dialog" aria-modal="true" aria-label={title}>
-      <div className="cp-call-stage">{credentials ? <ZoomCallFrame credentials={credentials}
-        onJoined={() => { setJoining(false); void onRefresh().catch(() => undefined); }}
-        onLeft={() => { close(); void onRefresh().catch(() => undefined); onExit(); }}
-        onError={message => { setJoining(false); setError(message); }}/>
-        : <div className="md-zoom-after-call"><p role="status">Подключаемся…</p><Button variant="secondary" onClick={close}>Отменить</Button></div>}</div>
-      {error && <div className="md-zoom-recovery"><Button variant="secondary" onClick={() => { close(); void onRefresh().catch(() => undefined); }}>Вернуться к подключению</Button></div>}
-    </div>, document.body)}
-  </section>;
+  return <ZoomMeeting title={title} subtitle={dateTimeLabel(start)} completed={completed}
+    unavailable={!configured ? 'Видеовстреча пока недоступна. Свяжитесь с рекрутером.' : undefined}
+    join={signal => guestToken
+      ? candidateRequest<RoomCredentials>('guest/join', { token: guestToken, consent: true }, signal)
+      : candidateRequest<RoomCredentials>(applicationId ? 'meeting/join' : 'interview/join', { ...(applicationId ? { applicationId, meetingId } : {}), consent: true }, signal)}
+    onOpenChange={setOpened}
+    onJoined={onRefresh} onLeft={leave} onBack={onBack}/>;
 }
 
 function DailyInterviewRoom({ title, start, completed, configured, applicationId, meetingId, guestToken, onRefresh, onBack }: InterviewRoomProps) {

@@ -18,6 +18,9 @@ class MaterialsService:
     def register_owner(self, owner_kind, meeting, storage_policy=None):
         room = meeting.get('room') or {}
         provider = room.get('provider', 'daily')
+        allowed = getattr(self.runtime, 'provider_allowlist', None)
+        require(allowed is None or provider in allowed,
+                'Этот источник обрабатывается отдельным сервисом.', 409)
         if provider == 'zoom' and storage_policy is not None:
             require(storage_policy == 'owned',
                     'Для записей Zoom требуется сохранение в нашем хранилище.', 400)
@@ -30,16 +33,25 @@ class MaterialsService:
         if storage_policy is not None:
             require(storage_policy in ('remote', 'owned'), 'Выберите способ хранения записи.', 400)
             sources = self.repository.list_sources(owner_kind, meeting['id'])
+            if allowed is not None:
+                sources = [source for source in sources if source['provider'] in allowed]
             if any(source['storage_policy'] != storage_policy for source in sources):
-                self.repository.update_owner_policy(owner_kind, meeting['id'], storage_policy)
-                for source in sources:
-                    self.runtime.enqueue_discovery(source['id'])
+                if allowed is None:
+                    self.repository.update_owner_policy(owner_kind, meeting['id'], storage_policy)
+                    for source in sources:
+                        self.runtime.enqueue_discovery(source['id'])
+                else:
+                    for source in sources:
+                        if source['storage_policy'] != storage_policy:
+                            self.runtime.upgrade_policy(source['id'], storage_policy)
         source = self.runtime.register_owner(owner_kind, meeting['id'], provider,
                                               connection, ref, storage_policy)
         # A reader can wake a settled or exhausted capture without doing provider
         # I/O in the request. Minute keys coalesce repeated portal refreshes.
         stamp = self.runtime.clock()
         for current in self.repository.list_sources(owner_kind, meeting['id']):
+            if allowed is not None and current['provider'] not in allowed:
+                continue
             if (not current['metadata'].get('capture_disabled') and current['state'] != 'ready'
                     and stamp - current['updated_at'] >= 60):
                 self.runtime.enqueue_discovery(current['id'], token='manual:' + str(int(stamp // 60)))

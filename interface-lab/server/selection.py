@@ -1,0 +1,475 @@
+"""Internal selection workbench over canonical people, vacancies and core results.
+
+This module does not score people. Immutable engine documents and their exact
+input bindings are stored separately from the editable candidate directory.
+Publication always uses employer_store's approval and notification path.
+"""
+import hashlib
+import json
+import re
+import secrets
+import time
+from urllib.parse import parse_qs, urlsplit
+
+from domain import Problem, iso, now, require, text
+import employer_store as employers
+
+PREFIX = '/api/hr/selection/'
+HEADERS = {'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer'}
+EDITABLE = {'name': 140, 'desiredRole': 200, 'city': 120, 'about': 12000}
+STATES = {'supported', 'unknown', 'not_applicable', 'conflict'}
+
+
+def dump(value):
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':'), allow_nan=False)
+
+
+def digest(value):
+    return hashlib.sha256(dump(value).encode()).hexdigest()
+
+
+def init(db):
+    for sql in (
+        '''CREATE TABLE IF NOT EXISTS sl_core_results (
+          id TEXT PRIMARY KEY, candidate_id TEXT NOT NULL REFERENCES cp_candidates(id),
+          interview_id TEXT NOT NULL REFERENCES cp_interviews(id),
+          engine_candidate_id TEXT NOT NULL, job_id TEXT NOT NULL,
+          request_hash TEXT NOT NULL, source_revision TEXT NOT NULL,
+          document_hash TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT NOT NULL,
+          UNIQUE(candidate_id,document_hash))''',
+        '''CREATE INDEX IF NOT EXISTS sl_result_person ON sl_core_results(candidate_id,created_at)''',
+        '''CREATE TABLE IF NOT EXISTS sl_core_matches (
+          id TEXT PRIMARY KEY, result_id TEXT NOT NULL REFERENCES sl_core_results(id),
+          vacancy_id TEXT NOT NULL REFERENCES cp_vacancies(id), vacancy_hash TEXT NOT NULL,
+          partition TEXT NOT NULL, rank INTEGER, reason TEXT NOT NULL,
+          body TEXT NOT NULL, created_at TEXT NOT NULL)''',
+        '''CREATE TABLE IF NOT EXISTS sl_requirements (
+          id TEXT PRIMARY KEY, vacancy_id TEXT NOT NULL REFERENCES cp_vacancies(id),
+          vacancy_hash TEXT NOT NULL, engine_vacancy_id TEXT NOT NULL,
+          body TEXT NOT NULL, created_at TEXT NOT NULL)''',
+        '''CREATE TABLE IF NOT EXISTS sl_cohort (
+          vacancy_id TEXT NOT NULL REFERENCES cp_vacancies(id),
+          candidate_id TEXT NOT NULL REFERENCES cp_candidates(id), created_at TEXT NOT NULL,
+          PRIMARY KEY(vacancy_id,candidate_id))''',
+        '''CREATE TABLE IF NOT EXISTS sl_edits (
+          id TEXT PRIMARY KEY, candidate_id TEXT NOT NULL REFERENCES cp_candidates(id),
+          before_body TEXT NOT NULL, after_body TEXT NOT NULL, created_at TEXT NOT NULL)''',
+        '''CREATE TABLE IF NOT EXISTS sl_nominations (
+          id TEXT PRIMARY KEY, candidate_id TEXT NOT NULL REFERENCES cp_candidates(id),
+          vacancy_id TEXT NOT NULL REFERENCES cp_vacancies(id),
+          result_id TEXT NOT NULL REFERENCES sl_core_results(id),
+          match_id TEXT NOT NULL REFERENCES sl_core_matches(id),
+          state TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+          UNIQUE(candidate_id,vacancy_id))''',
+        '''CREATE TABLE IF NOT EXISTS sl_commands (
+          request_id TEXT PRIMARY KEY, payload_hash TEXT NOT NULL, result TEXT NOT NULL)''',
+        '''CREATE TABLE IF NOT EXISTS sl_profile_links (
+          candidate_id TEXT PRIMARY KEY REFERENCES cp_candidates(id),
+          invitation_id TEXT NOT NULL REFERENCES cp_invitations(id), url TEXT NOT NULL)''',
+    ):
+        db.execute(sql)
+
+
+def person(db, cid):
+    row = db.execute('SELECT profile,updated_at,email,searching FROM cp_candidates WHERE id=?', (cid,)).fetchone()
+    require(row, 'Кандидат не найден.', 404)
+    profile = json.loads(row[0])
+    interview = db.execute('SELECT id,status,completed_at,room FROM cp_interviews WHERE candidate_id=?', (cid,)).fetchone()
+    resume = db.execute('SELECT uploaded_at FROM cp_resumes WHERE candidate_id=?', (cid,)).fetchone()
+    # Stable input metadata. Directory spelling changes do not replace evidence.
+    room = json.loads(interview[3]) if interview and interview[3] else None
+    room_identity = ({key: room.get(key) for key in ('provider', 'id', 'name', 'meetingNumber',
+                      'meetingSessionId', 'connectionId')} if isinstance(room, dict) else room)
+    source = digest({'interview': list(interview[:3]) if interview else None, 'room': room_identity,
+                     'resumeUploadedAt': resume[0] if resume else None})
+    contact = db.execute('SELECT contact_email FROM cp_intake WHERE candidate_id=?', (cid,)).fetchone()
+    return {'id': cid, **{key: profile.get(key, '') for key in EDITABLE},
+            'email': row[2] or (contact[0] if contact else ''), 'accountActive': bool(row[2]),
+            'searching': bool(row[3]), 'consentReuse': profile.get('consentReuse') is True,
+            'interviewId': interview[0] if interview else None,
+            'interviewStatus': interview[1] if interview else None, 'resumeAvailable': bool(resume),
+            'revision': digest([row[0], row[1]]), 'sourceRevision': source}
+
+
+def vacancy(db, vid):
+    row = db.execute('SELECT workspace_id FROM em_vacancies WHERE vacancy_id=? AND archived_at IS NULL', (vid,)).fetchone()
+    require(row, 'Вакансия не найдена.', 404)
+    value = employers.vacancy(db, row[0], vid)
+    substantive = {key: value.get(key) for key in ('id', 'title', 'company', 'description', 'details',
+                   'problem', 'expectations', 'salary', 'format', 'city', 'remote')}
+    return {**value, 'workspaceId': row[0], 'contentHash': digest(substantive)}
+
+
+def _seal(document, expected_format):
+    require(isinstance(document, dict) and document.get('engine_contract') == 'engine-v1'
+            and document.get('format') == expected_format and document.get('synthetic') is False,
+            'Нужен реальный результат ядра engine-v1.', 422)
+    claimed = document.get('document_sha256')
+    require(isinstance(claimed, str) and re.fullmatch('[a-f0-9]{64}', claimed)
+            and digest({**document, 'document_sha256': ''}) == claimed,
+            'Контрольная сумма результата ядра не совпадает.', 422)
+    require(len(dump(document).encode()) <= 2 * 1024 * 1024, 'Результат ядра слишком большой.', 413)
+    return claimed
+
+
+def import_result(db, body):
+    """Trusted operator/MCP boundary; identity comes from the exact saved request.
+
+    The input request itself is retained by the assessment service, not duplicated
+    here. No scalar score or positive verdict is inferred from a successful call.
+    """
+    require(set(body) == {'candidateId', 'interviewId', 'engineCandidateId', 'jobId',
+                         'requestHash', 'sourceRevision', 'document'}, 'Проверьте привязку результата.', 400)
+    current = person(db, body['candidateId'])
+    require(current['interviewId'] == body['interviewId'] and current['interviewStatus'] == 'completed'
+            and current['sourceRevision'] == body['sourceRevision'], 'Материалы кандидата изменились.', 409)
+    doc = body['document']
+    seal = _seal(doc, 'candidate_profile/1')
+    require(doc.get('body', {}).get('candidate_id') == body['engineCandidateId'],
+            'Результат принадлежит другому кандидату.', 422)
+    model = doc.get('model', {})
+    require(model.get('mode') == 'provider' and type(model.get('call_count')) is int
+            and model['call_count'] > 0, 'Нет подтверждения вызова настоящей модели.', 422)
+    require(isinstance(body['requestHash'], str) and re.fullmatch('[a-f0-9]{64}', body['requestHash']),
+            'Проверьте контрольную сумму запроса.', 422)
+    families = doc.get('body', {}).get('families')
+    require(isinstance(families, list) and 1 <= len(families) <= 20, 'Некорректные критерии ядра.', 422)
+    for family in families:
+        criteria = family.get('criteria') if isinstance(family, dict) else None
+        require(isinstance(criteria, list) and len(criteria) <= 100, 'Некорректные критерии ядра.', 422)
+        for item in criteria:
+            require(isinstance(item, dict) and item.get('state') in STATES and
+                    (type(item.get('level')) is int and 1 <= item['level'] <= 5
+                     if item['state'] == 'supported' else item.get('level') is None),
+                    'Некорректный уровень оценки.', 422)
+    old = db.execute('SELECT id,request_hash,engine_candidate_id FROM sl_core_results WHERE candidate_id=? AND document_hash=?',
+                     (current['id'], seal)).fetchone()
+    if old:
+        require(old[1] == body['requestHash'] and old[2] == body['engineCandidateId'], 'Привязка уже существует.', 409)
+        return {'id': old[0], 'existing': True}
+    identity = 'result_' + secrets.token_hex(12)
+    db.execute('''INSERT INTO sl_core_results
+      (id,candidate_id,interview_id,engine_candidate_id,job_id,request_hash,source_revision,document_hash,body,created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?)''',
+        (identity, current['id'], current['interviewId'], text(body['engineCandidateId'], 100),
+         text(body['jobId'], 100), body['requestHash'], body['sourceRevision'], seal, dump(doc), iso(now())))
+    return {'id': identity, 'existing': False}
+
+
+def result(db, candidate, vid=None):
+    row = db.execute('''SELECT id,source_revision,body,created_at,job_id FROM sl_core_results
+      WHERE candidate_id=? ORDER BY rowid DESC LIMIT 1''', (candidate['id'],)).fetchone()
+    if not row:
+        return None
+    doc = json.loads(row[2])
+    criteria = [item for family in doc['body']['families'] for item in family['criteria']]
+    counts = {state: sum(item['state'] == state for item in criteria) for state in STATES}
+    counts['failed'] = sum(item.get('failed_processing') is True for item in criteria)
+    match = None
+    if vid:
+        value = db.execute('''SELECT id,vacancy_hash,partition,rank,reason FROM sl_core_matches
+          WHERE result_id=? AND vacancy_id=? ORDER BY rowid DESC LIMIT 1''', (row[0], vid)).fetchone()
+        if value:
+            match = {'id': value[0], 'stale': value[1] != vacancy(db, vid)['contentHash'],
+                     'partition': value[2], 'rank': value[3], 'reason': value[4]}
+    stale = row[1] != candidate['sourceRevision']
+    recommendation = ('stale' if stale or match and match['stale'] else
+                      match['partition'] if match else 'not_matched')
+    return {'id': row[0], 'createdAt': row[3], 'jobId': row[4], 'model': doc.get('model', {}).get('model_id'),
+            'counts': counts, 'stale': stale, 'recommendation': recommendation,
+            'reason': match['reason'] if match else 'Сопоставление с требованиями вакансии ещё не выполнено.',
+            'match': match, 'criteria': criteria, 'limitations': doc.get('limitations', []),
+            'documentHash': doc['document_sha256']}
+
+
+def import_requirement(db, body):
+    require(set(body) == {'vacancyId', 'vacancyHash', 'engineVacancyId', 'document'},
+            'Проверьте привязку требований.', 400)
+    v = vacancy(db, body['vacancyId'])
+    require(v['contentHash'] == body['vacancyHash'], 'Вакансия изменилась.', 409)
+    doc = body['document']
+    seal = _seal(doc, 'requirement_profile/1')
+    requirement = doc.get('body', {})
+    require(requirement.get('vacancy_id') == body['engineVacancyId'] and requirement.get('state') == 'confirmed',
+            'Нужны подтверждённые требования этой вакансии.', 422)
+    old = db.execute('SELECT vacancy_id,vacancy_hash FROM sl_requirements WHERE id=?', (seal,)).fetchone()
+    if old:
+        require(old[0] == v['id'] and old[1] == v['contentHash'], 'Требования уже привязаны.', 409)
+    else:
+        db.execute('INSERT INTO sl_requirements VALUES (?,?,?,?,?,?)',
+                   (seal, v['id'], v['contentHash'], text(body['engineVacancyId'], 100), dump(doc), iso(now())))
+    return {'id': seal, 'existing': bool(old)}
+
+
+def import_match(db, body):
+    require(set(body) == {'resultId', 'requirementId', 'document', 'rank'}, 'Проверьте сопоставление.', 400)
+    r = db.execute('SELECT candidate_id,engine_candidate_id,document_hash,source_revision FROM sl_core_results WHERE id=?',
+                   (body['resultId'],)).fetchone()
+    q = db.execute('SELECT vacancy_id,vacancy_hash,engine_vacancy_id FROM sl_requirements WHERE id=?',
+                   (body['requirementId'],)).fetchone()
+    require(r and q, 'Сначала сохраните оценку и требования.', 409)
+    require(person(db, r[0])['sourceRevision'] == r[3] and vacancy(db, q[0])['contentHash'] == q[1],
+            'Исходные материалы изменились.', 409)
+    doc = body['document']
+    seal = _seal(doc, 'match/1')
+    match = doc.get('body', {}).get('match', {})
+    require(match.get('candidate_id') == r[1] and match.get('vacancy_id') == q[2]
+            and match.get('candidate_profile_revision_ref', {}).get('sha256') == r[2]
+            and match.get('requirement_profile_revision_ref', {}).get('sha256') == body['requirementId']
+            and match.get('requirement_state') == 'confirmed' and match.get('status') == 'current',
+            'Сопоставление относится к другим исходным данным.', 422)
+    partition, rank = match.get('partition'), body['rank']
+    require(partition in ('ranked', 'needs_assessment', 'non_matching', 'conflicting', 'failed_processing'),
+            'Неизвестный результат сопоставления.', 422)
+    require((type(rank) is int and 0 <= rank <= 1000000) if partition == 'ranked' else rank is None,
+            'Нужна позиция из ранжирования ядра.', 422)
+    reasons = match.get('partition_reasons', [])
+    require(isinstance(reasons, list) and len(reasons) <= 100 and all(isinstance(x, str) for x in reasons),
+            'Проверьте причины рекомендации.', 422)
+    reason = '; '.join(reasons) or ('Соответствует подтверждённым требованиям ядра.' if partition == 'ranked'
+                                  else 'Нужна дополнительная оценка.')
+    old = db.execute('SELECT result_id,vacancy_id,rank FROM sl_core_matches WHERE id=?', (seal,)).fetchone()
+    if old:
+        require(tuple(old) == (body['resultId'], q[0], rank), 'Сопоставление уже привязано.', 409)
+    else:
+        db.execute('INSERT INTO sl_core_matches VALUES (?,?,?,?,?,?,?,?,?)',
+                   (seal, body['resultId'], q[0], q[1], partition, rank, reason, dump(doc), iso(now())))
+    return {'id': seal, 'partition': partition, 'existing': bool(old)}
+
+
+def directory(db, vid=None):
+    if vid:
+        vacancy(db, vid)
+    people = []
+    cohort = {row[0] for row in db.execute('SELECT candidate_id FROM sl_cohort WHERE vacancy_id=?', (vid,))} if vid else set()
+    for (cid,) in db.execute('SELECT id FROM cp_candidates ORDER BY created_at DESC LIMIT 1000').fetchall():
+        item = person(db, cid)
+        item['assessment'] = result(db, item, vid)
+        item['inCohort'] = cid in cohort
+        row = db.execute('SELECT id,status FROM cp_applications WHERE candidate_id=? AND vacancy_id=? AND archived_at IS NULL',
+                         (cid, vid)).fetchone() if vid else None
+        item['application'] = {'id': row[0], 'status': row[1]} if row else None
+        nominated = db.execute('SELECT id,state FROM sl_nominations WHERE candidate_id=? AND vacancy_id=?',
+                                (cid, vid)).fetchone() if vid else None
+        item['nomination'] = {'id': nominated[0], 'state': nominated[1]} if nominated else None
+        event_keys = (['selection:' + nominated[0]] if nominated else []) + (['application.proposed:' + row[0]] if row else [])
+        item['deliveries'] = [dict(zip(('id', 'event', 'channel', 'status', 'error'), r)) for r in db.execute(
+            'SELECT id,event_type,channel,status,last_error FROM cn_outbox WHERE candidate_id=? AND event_key IN ('
+            + ','.join('?' for _ in event_keys) + ') ORDER BY created_at,rowid',
+            (cid, *event_keys))] if event_keys else []
+        item['canAdd'] = bool(item['searching'] and
+            item['interviewStatus'] == 'completed' and item['assessment'] and
+            item['assessment']['recommendation'] == 'ranked' and not item['application'] and not nominated)
+        people.append(item)
+    return {'candidates': people, 'count': len(people)}
+
+
+def edit(db, body):
+    require(set(body) == {'candidateId', 'revision', 'fields'}, 'Проверьте поля кандидата.', 400)
+    fields = body['fields']
+    require(isinstance(fields, dict) and 0 < len(fields) <= len(EDITABLE) and set(fields) <= set(EDITABLE),
+            'Это поле редактируется в кабинете кандидата.', 400)
+    values = {key: text(value, EDITABLE[key], required=key == 'name') for key, value in fields.items()}
+    with employers._atomic(db):
+        current = person(db, body['candidateId'])
+        require(current['revision'] == body['revision'], 'Карточка изменилась. Обновите таблицу.', 409)
+        before = json.loads(db.execute('SELECT profile FROM cp_candidates WHERE id=?', (current['id'],)).fetchone()[0])
+        after = {**before, **values}
+        db.execute('UPDATE cp_candidates SET profile=?,updated_at=? WHERE id=?', (dump(after), iso(now()), current['id']))
+        db.execute('INSERT INTO sl_edits VALUES (?,?,?,?,?)',
+                   (secrets.token_hex(16), current['id'], dump({k: before.get(k) for k in values}), dump(values), iso(now())))
+    return {'candidate': person(db, current['id'])}
+
+
+def invitation_target(db, cid, channel):
+    """Only established account or consented booking contacts; never scrape a CV."""
+    account = db.execute('SELECT email FROM cp_candidates WHERE id=?', (cid,)).fetchone()
+    if channel == 'email' and account and account[0]:
+        return account[0]
+    consent = db.execute('''SELECT contact_email,invitation_id FROM cp_booking_profile_consents
+                            WHERE candidate_id=?''', (cid,)).fetchone()
+    if channel == 'email':
+        return consent[0] if consent else None
+    import candidate_notifications as notices
+    recipient = notices._dict(db.execute('SELECT * FROM cn_recipients WHERE candidate_id=?', (cid,)))
+    if notices._telegram_identity_active(db, recipient):
+        return recipient['telegram_chat_id']
+    bound = db.execute('SELECT chat_id FROM cn_booking_telegram WHERE candidate_id=? AND invitation_id=?',
+                       (cid, consent[1])).fetchone() if consent else None
+    return bound[0] if bound else None
+
+
+def _profile_link(db, cid, origin):
+    import candidate_invites as invites
+    if person(db, cid)['accountActive']:
+        return origin + '/iframe.html?id=hr-vision-product--candidate&viewMode=story&cp=login', None
+    old = db.execute('''SELECT l.url,l.invitation_id FROM sl_profile_links l JOIN cp_invitations i
+      ON i.id=l.invitation_id WHERE l.candidate_id=? AND i.revoked_at IS NULL
+      AND i.consumed_at IS NULL AND i.expires>?''', (cid, int(time.time()))).fetchone()
+    if old:
+        return old[0], old[1]
+    issued = invites.issue(db, cid, 'claim', origin)
+    db.execute('INSERT INTO sl_profile_links VALUES (?,?,?) ON CONFLICT(candidate_id) DO UPDATE SET invitation_id=excluded.invitation_id,url=excluded.url',
+               (cid, issued['invitationId'], issued['url']))
+    return issued['url'], issued['invitationId']
+
+
+def enqueue_invitation(db, nomination_id, origin):
+    import candidate_notifications as notices
+    row = db.execute('SELECT candidate_id FROM sl_nominations WHERE id=?', (nomination_id,)).fetchone()
+    require(row, 'Приглашение не найдено.', 404)
+    cid, config, tick = row[0], notices.settings(), int(time.time())
+    link, invitation = _profile_link(db, cid, origin)
+    payload = dump({'nominationId': nomination_id, 'url': link, 'invitationId': invitation})
+    for channel in ('email', 'telegram'):
+        target = invitation_target(db, cid, channel)
+        configured = config.email_configured if channel == 'email' else config.telegram_configured
+        state = 'disabled' if not configured else 'pending' if target else 'unbound'
+        db.execute('''INSERT OR IGNORE INTO cn_outbox
+          (id,candidate_id,event_key,event_type,channel,recipient,created_at,status,next_attempt_at,payload_json)
+          VALUES (?,?,?,'selection.invitation',?,?,?,?,?,?)''',
+          (secrets.token_hex(16), cid, 'selection:' + nomination_id, channel, target, tick, state, tick, payload))
+
+
+def prepare_invitation(db, row, config, tick):
+    """Called under the normal outbox claim, before any provider request."""
+    payload = json.loads(row['payload_json'])
+    nomination = db.execute('SELECT candidate_id,state FROM sl_nominations WHERE id=?', (payload.get('nominationId'),)).fetchone()
+    if not nomination or nomination[0] != row['candidate_id'] or nomination[1] not in ('waiting_profile', 'waiting_consent'):
+        return 'error', 'invitation_no_longer_needed'
+    p = person(db, row['candidate_id'])
+    if not p['searching']:
+        return 'error', 'search_stopped'
+    if payload.get('invitationId'):
+        token = db.execute('SELECT revoked_at,consumed_at,expires,candidate_id FROM cp_invitations WHERE id=?',
+                            (payload['invitationId'],)).fetchone()
+        if not token or token[0] or token[1] or token[2] <= tick or token[3] != row['candidate_id']:
+            return 'error', 'invitation_expired'
+    target = invitation_target(db, row['candidate_id'], row['channel'])
+    if not target or target != row['recipient']:
+        return 'error', 'recipient_changed'
+    configured = config.email_configured if row['channel'] == 'email' else config.telegram_configured
+    return ('pending', None) if configured else ('disabled', 'channel_disabled')
+
+
+def invitation_message(row):
+    link = json.loads(row['payload_json'])['url']
+    # This first contact deliberately contains no CV, assessment or employer data.
+    subject = 'Приглашение в МашаДаша'
+    content = 'Для вас подготовлено предложение работы. Откройте свой профиль, проверьте данные и согласуйте участие.\n\n'
+    return subject, content + link, {'inline_keyboard': [[{'text': 'Открыть профиль', 'url': link}]]}
+
+
+def reconcile_nominations(db, portal, cid):
+    """Candidate consent/claim calls this in their existing transaction.
+
+    A withdrawn or replaced result never releases an old nomination. Only the
+    standard application path can make the employer projection visible.
+    """
+    if not db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='sl_nominations'").fetchone():
+        return
+    p = person(db, cid)
+    if not p['accountActive'] or not p['consentReuse'] or not p['searching']:
+        return
+    rows = db.execute("SELECT id,vacancy_id,result_id,match_id FROM sl_nominations WHERE candidate_id=? AND state IN ('waiting_profile','waiting_consent')",
+                      (cid,)).fetchall()
+    for nid, vid, rid, mid in rows:
+        try:
+            v = vacancy(db, vid)
+            employers.ensure_open(db, v['workspaceId'], vid)
+            assessment = result(db, p, vid)
+        except Problem as error:
+            if error.status not in (404, 409):
+                raise
+            db.execute("UPDATE sl_nominations SET state='blocked',updated_at=? WHERE id=?", (iso(now()), nid))
+            continue
+        if not assessment or assessment['id'] != rid or not assessment.get('match') or assessment['match']['id'] != mid or assessment['recommendation'] != 'ranked':
+            db.execute("UPDATE sl_nominations SET state='blocked',updated_at=? WHERE id=?", (iso(now()), nid))
+            continue
+        employers.import_batch(db, v['workspaceId'], vid, {
+            'source': 'core', 'version': 'assessment-engine-v1', 'externalBatchId': nid,
+            'candidates': [{'candidateId': cid, 'rank': assessment['match']['rank'], 'reason': assessment['reason']}]}, portal)
+        db.execute("UPDATE sl_nominations SET state='proposed',updated_at=? WHERE id=?", (iso(now()), nid))
+
+
+def nominate(db, portal, body):
+    require(set(body) == {'vacancyId', 'candidateIds', 'requestId'} and isinstance(body['candidateIds'], list)
+            and 1 <= len(body['candidateIds']) <= 100 and all(isinstance(x, str) for x in body['candidateIds'])
+            and len(set(body['candidateIds'])) == len(body['candidateIds']), 'Выберите кандидатов.', 400)
+    request_id = text(body['requestId'], 120)
+    hashed = digest({'vacancyId': body['vacancyId'], 'candidateIds': sorted(body['candidateIds'])})
+    with employers._atomic(db):
+        old = db.execute('SELECT payload_hash,result FROM sl_commands WHERE request_id=?', (request_id,)).fetchone()
+        if old:
+            require(old[0] == hashed, 'Запрос уже использован для другой подборки.', 409)
+            return json.loads(old[1])
+        v = vacancy(db, body['vacancyId'])
+        employers.ensure_open(db, v['workspaceId'], v['id'])
+        rows = {p['id']: p for p in directory(db, v['id'])['candidates']}
+        require(all(cid in rows and rows[cid]['canAdd'] for cid in body['candidateIds']),
+                'Нужны актуальная рекомендация ядра и завершённое интервью.', 409)
+        receipt = {'added': [], 'waitingProfile': [], 'proposed': []}
+        for cid in body['candidateIds']:
+            p = rows[cid]
+            state = 'waiting_consent' if p['accountActive'] else 'waiting_profile'
+            nid = 'nomination_' + secrets.token_hex(12)
+            db.execute('INSERT INTO sl_nominations VALUES (?,?,?,?,?,?,?,?)',
+                (nid, cid, v['id'], p['assessment']['id'], p['assessment']['match']['id'], state, iso(now()), iso(now())))
+            receipt['added'].append(cid)
+            reconcile_nominations(db, portal, cid)
+            latest = db.execute('SELECT state FROM sl_nominations WHERE id=?', (nid,)).fetchone()[0]
+            if latest == 'proposed':
+                receipt['proposed'].append(cid)
+            else:
+                enqueue_invitation(db, nid, portal.origin)
+                receipt['waitingProfile'].append(cid)
+        db.execute('INSERT INTO sl_commands VALUES (?,?,?)', (request_id, hashed, dump(receipt)))
+        return receipt
+
+
+class SelectionRoutes:
+    def __init__(self, connect, lock, portal):
+        self.connect, self.lock, self.portal = connect, lock, portal
+        with lock, connect() as db:
+            init(db)
+
+    @staticmethod
+    def handles(path):
+        return urlsplit(path).path.startswith(PREFIX)
+
+    def handle(self, method, raw_path, headers, body, actor):
+        parsed = urlsplit(raw_path)
+        query = parse_qs(parsed.query, keep_blank_values=True)
+        require(set(query) <= {'vacancyId'} and all(len(v) == 1 for v in query.values()), 'Проверьте фильтр.', 400)
+        require(next((v for k, v in headers.items() if k.lower() == 'sec-fetch-site'), '') != 'cross-site',
+                'Другой источник запроса.', 403)
+        action = parsed.path[len(PREFIX):].strip('/')
+        with self.lock, self.connect() as db:
+            require(actor(db) == 'manager', 'Доступ только для команды HR Vision.', 403)
+            if method == 'GET' and action == 'candidates':
+                result = directory(db, query.get('vacancyId', [None])[0])
+            elif method == 'GET' and action == 'vacancies':
+                result = {'vacancies': [vacancy(db, row[0]) for row in db.execute(
+                    'SELECT vacancy_id FROM em_vacancies WHERE archived_at IS NULL ORDER BY created_at DESC').fetchall()]}
+            elif method == 'POST' and action == 'candidates/update':
+                result = edit(db, body)
+            elif method == 'POST' and action == 'results':
+                with employers._atomic(db):
+                    result = import_result(db, body)
+            elif method == 'POST' and action in ('requirements', 'matches'):
+                with employers._atomic(db):
+                    result = (import_requirement if action == 'requirements' else import_match)(db, body)
+            elif method == 'POST' and action == 'cohort':
+                require(set(body) == {'vacancyId', 'candidateIds'} and isinstance(body['candidateIds'], list)
+                        and 1 <= len(body['candidateIds']) <= 100, 'Выберите кандидатов.', 400)
+                vacancy(db, body['vacancyId'])
+                with employers._atomic(db):
+                    for cid in body['candidateIds']:
+                        person(db, cid)
+                        db.execute('INSERT OR IGNORE INTO sl_cohort VALUES (?,?,?)', (body['vacancyId'], cid, iso(now())))
+                result = directory(db, body['vacancyId'])
+            elif method == 'POST' and action == 'publish':
+                result = nominate(db, self.portal, body)
+            else:
+                raise Problem('Действие не найдено.', 404)
+            return result, dict(HEADERS)

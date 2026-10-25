@@ -1,0 +1,22 @@
+.public-candidate-page,.public-candidate-page *{box-sizing:border-box}
+.public-candidate-page{min-height:100dvh;padding:32px clamp(18px,4vw,64px) 48px;background:#f4f3f7;color:#242229;font-family:'Inter Variable',Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased}
+.public-candidate-header{max-width:1680px;margin:0 auto 48px;display:flex;align-items:center;justify-content:space-between;gap:24px}
+.public-candidate-header>img{display:block;width:205px;height:auto}
+.public-candidate-header>a{display:flex;align-items:center;gap:10px;min-height:44px;padding:12px 18px;border-radius:24px;background:#fff;color:#242229;text-decoration:none;font-size:14px;box-shadow:0 3px 10px #29233606}
+.public-candidate-header>a:hover{background:#eae7f1}
+.public-candidate-header>a:focus-visible,.public-candidate-page button:focus-visible{outline:2px solid #6554e8;outline-offset:4px}
+.public-candidate-card{max-width:1680px;margin:auto;padding:28px;border-radius:28px;background:#fff;box-shadow:0 16px 36px -14px #29233624,0 3px 8px #29233605}
+.public-candidate-card .ecp-review-footer{display:none}
+.public-candidate-card .ecp-profile{gap:0}
+.public-candidate-card .iv-player-controls{pointer-events:none}
+.public-candidate-card .iv-player-controls :is(button,input,[data-iv-menu],.iv-volume,.iv-timeline){pointer-events:auto}
+.public-candidate-state{display:flex;min-height:260px;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center;padding:32px 16px}
+.public-candidate-state p,.public-candidate-state h1{margin:0;font-size:16px;line-height:1.5}
+.public-candidate-state h1{font-size:24px;font-weight:600}
+.public-candidate-state button,.public-candidate-recordings button{border:0;padding:12px 20px;border-radius:24px;background:#f0edf5;color:inherit;cursor:pointer;font:inherit;font-size:14px}
+.public-candidate-spinner{width:24px;height:24px;border:2px solid #e9e5ef;border-top-color:#777081;border-radius:50%;animation:public-profile-spin .8s linear infinite}
+.public-candidate-recordings{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap}
+.public-candidate-recordings button[aria-pressed=true]{background:#25222b;color:#fff}
+@keyframes public-profile-spin{to{transform:rotate(360deg)}}
+@media(max-width:700px){.public-candidate-page{padding:22px 12px 32px}.public-candidate-header{margin:0 6px 28px;gap:12px}.public-candidate-header>img{width:135px}.public-candidate-header>a{font-size:12px;padding:10px 12px;gap:5px}.public-candidate-header>a svg{width:15px}.public-candidate-card{padding:12px;border-radius:22px}.public-candidate-card .ecp-video-identity{align-items:flex-start}}
+@media(prefers-reduced-motion:reduce){.public-candidate-spinner{animation:none}}

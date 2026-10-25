@@ -39,7 +39,7 @@ before(async () => {
         const journey = useJourney('sfera', { employer: true });
         const person = journey.state?.candidates['candidate-1'];
         return <div className="cj-app">{journey.error && <p role="alert">{journey.error}</p>}
-          {person ? <MeetingPanel person={person} journey={journey} onCallChange={() => {}}
+          {person ? <MeetingPanel person={person} journey={journey} compact={mode === 'employer-compact'} onCallChange={() => {}}
             onComplete={() => { window.__completions++; }}/> : <p>Loading fixture</p>}</div>;
       }
       function Candidate() {
@@ -52,7 +52,7 @@ before(async () => {
           onRefresh={async () => { window.__refreshes++; }} onBack={() => {}}
           onExit={() => { window.__exits++; setExited(true); }}/></div>;
       }
-      createRoot(document.querySelector('#root')).render(mode === 'employer' ? <Employer/>
+      createRoot(document.querySelector('#root')).render(mode === 'employer' || mode === 'employer-compact' ? <Employer/>
         : mode === 'invitation' ? new URLSearchParams(location.search).get('cp') === 'home'
           ? <p>Cabinet session boundary fixture</p> : <InvitationPortal kind="guest"/>
         : <Candidate/>);`, resolveDir: fileURLToPath(new URL('../', import.meta.url)), loader: 'tsx' },
@@ -180,7 +180,7 @@ for (const alreadyCompleted of [false, true]) test(`invitation ${alreadyComplete
   });
   await page.goto(origin + '/?screen=invitation&cp=guest#invite=fixture-secret');
   if (!alreadyCompleted) {
-    await page.getByRole('button', { name: 'Подготовиться к встрече', exact: true }).click();
+    assert.equal(await page.getByRole('button', { name: 'Подготовиться к встрече', exact: true }).count(), 0);
     await enterCandidate(page);
     await page.frameLocator('iframe').getByRole('button', { name: 'Leave fixture' }).click();
   }
@@ -204,12 +204,16 @@ test('a late join response after local cancellation cannot remount the SDK or ca
   await page.getByRole('button', { name: 'Присоединиться', exact: true }).click();
   await captured;
   assert.equal(await page.getByRole('dialog').locator('iframe').count(), 0);
-  await page.getByRole('dialog').getByRole('status').getByText('Подключаемся…', { exact: true }).waitFor();
+  await page.getByRole('dialog').getByRole('status').getByText('Получаем доступ к встрече…', { exact: true }).waitFor();
+  const aborted = page.waitForEvent('requestfailed', request => request.url().endsWith('/interview/join'));
   await page.getByRole('button', { name: 'Отменить', exact: true }).click();
-  const finished = page.waitForResponse(response => response.url().endsWith('/interview/join'));
-  release(); await finished; await settle(page);
+  release(); await aborted; await settle(page);
   assert.equal(await page.locator('iframe').count(), 0);
   assert.equal(await page.getByRole('button', { name: 'Присоединиться', exact: true }).isEnabled(), true);
+  await page.route('**/api/hr/candidate/interview/materials', route => route.fulfill({ json: { recordings: [], transcripts: [] } }));
+  await page.evaluate(() => window.completeFixture());
+  await page.getByRole('heading', { name: 'Встреча завершена', exact: true }).waitFor();
+  assert.equal(await page.evaluate(() => window.__exits), 0);
   await assertNoLegacyMedia(page);
 });
 
@@ -221,6 +225,65 @@ function employerState(provider = 'daily', locked = false) {
       name: 'Fixture Candidate', meeting: { id: 'meeting-1', start: '2026-10-25T15:00:00Z', status: locked ? 'live' : 'confirmed',
         callProvider: provider, callProviderLocked: locked, videoConfigured: true, callProviderOptions: [{ id: 'daily', available: true }, { id: 'zoom', available: true }] } } } };
 }
+
+test('compact employer uses one consent and releases the prejoin dialog before the shared Zoom overlay', async t => {
+  const page = await pageFor(t);
+  let state = employerState('zoom'), joins = 0;
+  const commands = [];
+  await page.route('**/api/hr/employer/**', async route => {
+    const path = new URL(route.request().url()).pathname;
+    if (route.request().method() === 'POST') commands.push({ path, body: route.request().postDataJSON() });
+    if (path.endsWith('/session')) return route.fulfill({ json: { token: 'fixture-employer-token', state } });
+    if (path.endsWith('/room')) { joins++; state = employerState('zoom', true); return route.fulfill({ json: credentials(1, 1) }); }
+    if (path.endsWith('/call-reconcile')) return route.fulfill({ json: { completed: false, status: 'live' } });
+    return route.fulfill({ json: state });
+  });
+  await page.goto(origin + '/?screen=employer-compact');
+  await page.getByRole('heading', { name: 'Предстоящая встреча', exact: true }).waitFor();
+  assert.equal(await page.getByRole('checkbox').count(), 0);
+  assert.equal(await page.getByRole('button', { name: 'Присоединиться', exact: true }).count(), 0);
+  await page.getByRole('button', { name: 'Подключиться', exact: true }).click();
+  const prejoin = page.getByRole('dialog', { name: 'Подключение к встрече', exact: true });
+  assert.equal(await prejoin.getByRole('checkbox').count(), 1);
+  assert.equal(await prejoin.getByRole('button', { name: 'Продолжить', exact: true }).isDisabled(), true);
+  assert.equal(joins, 0);
+  await prejoin.getByRole('checkbox').check();
+  await prejoin.getByRole('button', { name: 'Продолжить', exact: true }).click();
+  await waitJoined(page);
+  assert.equal(await page.locator('.cj-meeting-prejoin').count(), 0);
+  assert.equal(await page.locator('.cj-meeting-prejoin-overlay').count(), 0);
+  await assertNativeOnlyOverlay(page);
+  assert.equal(await page.locator('.cj-app').evaluate(element => element.inert), true);
+  assert.notEqual(await page.locator('body').evaluate(element => getComputedStyle(element).pointerEvents), 'none');
+  assert.deepEqual(commands.find(command => command.path.endsWith('/room')).body,
+    { vacancyId: 'vacancy-1', candidate: 'candidate-1', meetingId: 'meeting-1', generation: 'fixture-generation', consent: true });
+  await page.frameLocator('iframe').getByRole('button', { name: 'Leave fixture' }).click();
+  await page.locator('iframe').waitFor({ state: 'detached' });
+  await settle(page);
+  assert.equal(await page.locator('.cj-app').evaluate(element => element.inert), false);
+  assert.equal(await page.getByRole('button', { name: 'Вернуться во встречу', exact: true }).isEnabled(), true);
+  assert.equal(joins, 1);
+  assert.equal(commands.some(command => command.body?.action === 'meeting.finish'), false);
+  await assertNoLegacyMedia(page);
+});
+
+test('compact pending meeting cannot request Zoom access before candidate confirmation', async t => {
+  const page = await pageFor(t), commands = [];
+  const state = employerState('zoom');
+  state.candidates['candidate-1'].meeting.status = 'pending';
+  await page.route('**/api/hr/employer/**', route => {
+    const path = new URL(route.request().url()).pathname;
+    commands.push(path);
+    return route.fulfill({ json: path.endsWith('/session') ? { token: 'fixture-employer-token', state } : state });
+  });
+  await page.goto(origin + '/?screen=employer-compact');
+  const join = page.getByRole('button', { name: 'Подключиться', exact: true });
+  await join.waitFor();
+  assert.equal(await join.isDisabled(), true);
+  assert.equal(await page.getByRole('dialog').count(), 0);
+  assert.equal(commands.some(path => path.endsWith('/room')), false);
+  await assertNoLegacyMedia(page);
+});
 
 test('employer selector saves exact meeting; bookkeeping errors stay outside the native Zoom overlay and live reconciliation cannot complete it', async t => {
   const page = await pageFor(t);
@@ -246,9 +309,9 @@ test('employer selector saves exact meeting; bookkeeping errors stay outside the
   assert.deepEqual(command, { vacancyId: 'vacancy-1', applicationId: 'application-1', candidate: 'candidate-1',
     meetingId: 'meeting-1', generation: 'fixture-generation', provider: 'zoom' });
   await page.getByRole('checkbox').check();
-  await page.getByRole('button', { name: 'Войти в видеовстречу', exact: true }).click();
+  await page.getByRole('button', { name: 'Присоединиться', exact: true }).click();
   await waitJoined(page);
-  await page.locator('.cj-meeting').getByText('Не удалось обновить статус встречи. Разговор продолжается.', { exact: true }).waitFor();
+  await page.locator('.cj-meeting').getByText('Обновляем статус встречи. Звонок продолжается.', { exact: true }).waitFor();
   await assertNativeOnlyOverlay(page);
   await page.waitForFunction(() => document.querySelector('select')?.disabled === true);
   // A native host leave/end report reconciles the exact meeting, never ends it.
@@ -281,9 +344,9 @@ test('employer retries only session receipt after temporary failure and keeps th
   });
   await page.goto(origin + '/?screen=employer');
   await page.getByRole('checkbox').check();
-  await page.getByRole('button', { name: 'Войти в видеовстречу', exact: true }).click();
+  await page.getByRole('button', { name: 'Присоединиться', exact: true }).click();
   await waitJoined(page);
-  const pending = page.locator('.cj-meeting').getByText('Не удалось обновить статус встречи. Разговор продолжается.', { exact: true });
+  const pending = page.locator('.cj-meeting').getByText('Обновляем статус встречи. Звонок продолжается.', { exact: true });
   await pending.waitFor();
   await assertNativeOnlyOverlay(page);
   await page.evaluate(() => { window.__joinedFrame = document.querySelector('iframe'); });
@@ -308,7 +371,7 @@ test('an employer joining with guest credentials never pins or completes the hos
   });
   await page.goto(origin + '/?screen=employer');
   await page.getByRole('checkbox').check();
-  await page.getByRole('button', { name: 'Войти в видеовстречу', exact: true }).click();
+  await page.getByRole('button', { name: 'Присоединиться', exact: true }).click();
   await waitJoined(page);
   await assertNativeOnlyOverlay(page);
   assert.equal(await page.getByRole('button', { name: 'Завершить встречу', exact: true }).count(), 0);
@@ -339,7 +402,7 @@ test('native host leave polls the exact meeting and completes only after server 
   });
   await page.goto(origin + '/?screen=employer');
   await page.getByRole('checkbox').check();
-  await page.getByRole('button', { name: 'Войти в видеовстречу', exact: true }).click();
+  await page.getByRole('button', { name: 'Присоединиться', exact: true }).click();
   await waitJoined(page);
   await assertNativeOnlyOverlay(page);
   const firstReconciliation = page.waitForResponse(response => response.url().endsWith('/call-reconcile'));

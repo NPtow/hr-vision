@@ -74,6 +74,18 @@ def _policy(value):
     return value
 
 
+def _provider_scope(provider_allowlist, column='s.provider'):
+    """Optional worker ownership scope; None preserves legacy all-provider jobs."""
+    if provider_allowlist is None:
+        return '', []
+    _require(isinstance(provider_allowlist, (tuple, list, set, frozenset)) and len(provider_allowlist) <= 100,
+             'invalid_provider_scope', 400)
+    providers = sorted({_identifier(value) for value in provider_allowlist})
+    if not providers:
+        return ' AND 0', []
+    return ' AND ' + column + ' IN (' + ','.join('?' for _ in providers) + ')', providers
+
+
 ASSET_STATES = ('pending', 'processing', 'ready', 'error', 'missing', 'unsupported', 'not_recorded')
 SOURCE_STATES = ('pending', 'processing', 'ready', 'partial', 'error', 'missing', 'awaiting_provider', 'unsupported', 'not_recorded')
 
@@ -501,45 +513,55 @@ class MaterialsRepository:
         with self._db() as db:
             return [self._decode(row) for row in db.execute('SELECT * FROM media_jobs WHERE source_id=? ORDER BY created_at,id', (source_id,))]
 
-    def list_pending_jobs(self, limit=100):
+    def list_pending_jobs(self, limit=100, *, provider_allowlist=None):
         """Due job IDs can be delivered repeatedly; claim_job is authoritative."""
         _require(type(limit) is int and 1 <= limit <= 1000, 'invalid_limit', 400)
+        scope, providers = _provider_scope(provider_allowlist)
         with self._db() as db:
             return [self._decode(row) for row in db.execute('''SELECT j.* FROM media_jobs j
                 JOIN media_sources s ON s.id=j.source_id WHERE j.generation=s.generation
                 AND COALESCE(json_extract(s.metadata,'$.capture_disabled'),0)<>1
                 AND j.attempts<j.max_attempts AND ((j.status IN ('pending','retry') AND j.next_attempt<=?)
-                OR (j.status='running' AND j.lease_until<=?)) ORDER BY j.next_attempt,j.created_at,j.id LIMIT ?''',
-                (self.clock(), self.clock(), limit))]
+                OR (j.status='running' AND j.lease_until<=?))''' + scope +
+                ' ORDER BY j.next_attempt,j.created_at,j.id LIMIT ?',
+                (self.clock(), self.clock(), *providers, limit))]
 
-    def _reconcile(self, db):
+    def _reconcile(self, db, *, provider_allowlist=None):
         stamp = self.clock()
-        expired = list(db.execute("SELECT id,lease_token,attempts,max_attempts FROM media_jobs WHERE status='running' AND lease_until<=?", (stamp,)))
+        scope, providers = _provider_scope(provider_allowlist)
+        expired = list(db.execute("SELECT j.id,j.lease_token,j.attempts,j.max_attempts FROM media_jobs j "
+            "JOIN media_sources s ON s.id=j.source_id WHERE j.status='running' AND j.lease_until<=?" + scope,
+            (stamp, *providers)))
         for row in expired:
             db.execute("UPDATE media_attempts SET status='expired',finished_at=? WHERE lease_token=? AND status='running'", (stamp, row['lease_token']))
             db.execute('''UPDATE media_jobs SET status=?,lease_token=NULL,lease_until=NULL,worker_id=NULL,updated_at=?
                 WHERE id=?''', ('failed' if row['attempts'] >= row['max_attempts'] else 'retry', stamp, row['id']))
         # A generation is authoritative even after a restart or manual migration.
         db.execute('''UPDATE media_attempts SET status='cancelled',finished_at=? WHERE status='running' AND job_id IN
-            (SELECT j.id FROM media_jobs j JOIN media_sources s ON s.id=j.source_id WHERE j.generation<>s.generation)''', (stamp,))
+            (SELECT j.id FROM media_jobs j JOIN media_sources s ON s.id=j.source_id WHERE j.generation<>s.generation''' +
+            scope + ')', (stamp, *providers))
         db.execute('''UPDATE media_jobs SET status='cancelled',lease_token=NULL,lease_until=NULL,updated_at=?
             WHERE status IN ('pending','retry','running') AND EXISTS
-            (SELECT 1 FROM media_sources s WHERE s.id=media_jobs.source_id AND s.generation<>media_jobs.generation)''', (stamp,))
+            (SELECT 1 FROM media_sources s WHERE s.id=media_jobs.source_id AND s.generation<>media_jobs.generation''' +
+            scope + ')', (stamp, *providers))
         return len(expired)
 
-    def reconcile_jobs(self):
+    def reconcile_jobs(self, *, provider_allowlist=None):
         with self._db(write=True) as db:
-            return self._reconcile(db)
+            return self._reconcile(db, provider_allowlist=provider_allowlist)
 
-    def claim_job(self, worker_id, lease_seconds=60, job_id=None):
+    def claim_job(self, worker_id, lease_seconds=60, job_id=None, *, provider_allowlist=None):
         _identifier(worker_id)
         _require(type(lease_seconds) in (int, float) and 0 < lease_seconds <= 86400, 'invalid_lease', 400)
         with self._db(write=True) as db:
-            self._reconcile(db)
+            self._reconcile(db, provider_allowlist=provider_allowlist)
             query = '''SELECT j.* FROM media_jobs j JOIN media_sources s ON s.id=j.source_id
                 WHERE j.status IN ('pending','retry') AND j.next_attempt<=? AND j.attempts<j.max_attempts
                 AND j.generation=s.generation AND COALESCE(json_extract(s.metadata,'$.capture_disabled'),0)<>1'''
             params = [self.clock()]
+            scope, providers = _provider_scope(provider_allowlist)
+            query += scope
+            params.extend(providers)
             if job_id is not None:
                 query += ' AND j.id=?'
                 params.append(job_id)

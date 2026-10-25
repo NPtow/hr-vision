@@ -1,0 +1,76 @@
+{
+  "files": [
+    {
+      "sha256": "ca98b1761b7769fb72437ccffb6cbd860324c8264151c66bd53db060c6431184",
+      "source": "services/deploy/simple/run.py",
+      "target": "run.py"
+    },
+    {
+      "sha256": "557ff46f5275cef6b098963eb3db99c98a8324bd99c41bca6678aa4433c21447",
+      "source": "services/transcription/pyproject.toml",
+      "target": "pyproject.toml"
+    },
+    {
+      "sha256": "8eb76b0438694c83a62ad0996549221cb980af03ff173e20570a723806c36790",
+      "source": "services/transcription/requirements.lock",
+      "target": "runtime.lock"
+    },
+    {
+      "sha256": "b648913f1af7cd60130bc1c16e91f219065d486e55b9cb170bd076fcd3923a56",
+      "source": "services/transcription/src/md_transcription/__init__.py",
+      "target": "src/md_transcription/__init__.py"
+    },
+    {
+      "sha256": "0fe8dfd19c3ebf2f4b0e3166d69e42a28d3e108326e54e309770b6fa1e9372a7",
+      "source": "services/transcription/src/md_transcription/__main__.py",
+      "target": "src/md_transcription/__main__.py"
+    },
+    {
+      "sha256": "dad4b0d0057535ff83504c791a2a8b2e1444707a5a5eba7ae4a61271b72f6f00",
+      "source": "services/transcription/src/md_transcription/api.py",
+      "target": "src/md_transcription/api.py"
+    },
+    {
+      "sha256": "321c477f6b9caccedc789a318fb5079f1dd14e45db6c788ba935415a26aa88c3",
+      "source": "services/transcription/src/md_transcription/backends.py",
+      "target": "src/md_transcription/backends.py"
+    },
+    {
+      "sha256": "838af5ccefedf47da4a0c049511c2e3258b02dacb5de10658d03304dd3793af0",
+      "source": "services/transcription/src/md_transcription/contracts.py",
+      "target": "src/md_transcription/contracts.py"
+    },
+    {
+      "sha256": "59d85cdb2c82dd292f59ced8d21a3b571339d72a3b81a30cabcebe09e0cdb77a",
+      "source": "services/transcription/src/md_transcription/normalization.py",
+      "target": "src/md_transcription/normalization.py"
+    },
+    {
+      "sha256": "6599b926d1b61bf766e31cc7cee575b2db48e7a5a179493dbe3e7c780b8df19e",
+      "source": "services/transcription/src/md_transcription/queue.py",
+      "target": "src/md_transcription/queue.py"
+    },
+    {
+      "sha256": "9507bc4354a4aa1c9e99b07c19dbee7553b2db4917c5c688825b0a9ea878f838",
+      "source": "services/transcription/src/md_transcription/repository.py",
+      "target": "src/md_transcription/repository.py"
+    },
+    {
+      "sha256": "972cfceeceedd13adf7616fdf24bbe185d6b2261667121d89fd7e5e614861baa",
+      "source": "services/transcription/src/md_transcription/settings.py",
+      "target": "src/md_transcription/settings.py"
+    },
+    {
+      "sha256": "763a09ddb4cb80edd688f8c215abfc67dad96ba8f570c3482771e9f415001abd",
+      "source": "services/transcription/src/md_transcription/storage.py",
+      "target": "src/md_transcription/storage.py"
+    },
+    {
+      "sha256": "d04008868744668965d267c8ac0bae074f5c24c464f69473068a68cbdbea9964",
+      "source": "services/transcription/src/md_transcription/worker.py",
+      "target": "src/md_transcription/worker.py"
+    }
+  ],
+  "schema_version": 1,
+  "service": "normalizer"
+}
