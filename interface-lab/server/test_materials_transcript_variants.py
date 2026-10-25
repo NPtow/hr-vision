@@ -78,5 +78,48 @@ class TranscriptVariantProjectionTests(unittest.TestCase):
                 self.assertEqual([v['id'] for v in result['transcriptVariants']],['latest'])
                 self.assertEqual(result['transcriptVariants'][0]['revision'],2)
 
+class PrimaryTranscriptProjectionTests(unittest.TestCase):
+    def data(self, status='ready', tid='chosen'):
+        return {'sources':[{'id':'binding','generation':1,'revoked':False}],
+            'assets':[asset('capture','zoom-vtt',core=True),asset('asr','asr:any',core=True)],
+            'transcripts':[version('original','capture','Zoom words'),
+                version('chosen','asr','Chosen words',origin='replaceable-asr'),
+                version('later','asr','Later unselected words',revision=2,origin='replaceable-asr')],
+            'transcript_selection_required_recording_ids':['video'],
+            'transcript_selections':[{'binding_id':'binding','generation':1,'recording_id':'video',
+                'request_id':'job','revision':1,'status':status,'transcript_id':tid}],
+            'channels':[{'video_status':'not_recorded','transcript_status':'ready'}]}
+
+    def project(self, data, current=None):
+        api=Mock()
+        api.materials.side_effect=[data,current if current is not None else data]
+        return CoreMaterialsCatalog(api,connect=Mock()).legacy_materials('interview',{'id':'owner','room':{'provider':'zoom'}})
+
+    def test_explicit_selection_is_exact_version_not_latest_or_provider_name(self):
+        result=self.project(self.data())
+        self.assertEqual([t['id'] for t in result['transcripts']],['chosen'])
+        self.assertEqual(result['transcripts'][0]['text'],'Chosen words')
+        self.assertEqual(result['transcripts'][0]['recordingId'],'video')
+        self.assertEqual(result['transcription']['status'],'ready')
+        self.assertEqual({t['id'] for t in result['transcriptVariants']},{'original','later'})
+
+    def test_pending_failed_missing_and_stale_never_fall_back_to_zoom(self):
+        for status,tid,expected in [('pending',None,'processing'),('failed',None,'error'),
+                                    ('uncertain',None,'error'),('ready','missing','error')]:
+            with self.subTest(status=status):
+                result=self.project(self.data(status,tid))
+                self.assertEqual(result['transcripts'],[])
+                self.assertEqual(result['transcription']['status'],expected)
+        data=self.data();data['transcript_selections']=[]
+        self.assertEqual(self.project(data)['transcripts'],[])
+        self.assertEqual(self.project(data)['transcription']['status'],'processing')
+
+    def test_same_generation_selection_change_during_access_is_rejected(self):
+        from domain import Problem
+        data=self.data();current=copy.deepcopy(data)
+        current['transcript_selections'][0].update(request_id='new-job',revision=2,status='pending',transcript_id=None)
+        with self.assertRaises(Problem) as raised:self.project(data,current)
+        self.assertEqual(raised.exception.status,409)
+
 if __name__=='__main__':
     unittest.main()
