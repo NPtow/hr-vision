@@ -16,7 +16,8 @@ import employer_store as store
 import employer_notifications as notifications
 import employer_workflow as workflow
 import vacancy_import
-from interview_assistant import InterviewAssistant
+from interview_assistant import InterviewAssistant, agent_enabled
+from structured_model import scan
 import interview_assessment
 
 
@@ -325,6 +326,8 @@ class EmployerRoutes:
                         'Расшифровка пока не сопоставлена с этой частью записи.', 422)
                 transcript = profile.get('transcriptText', '')
                 fingerprint = hashlib.sha256(_dump(profile).encode()).hexdigest()
+                context = self._assistant_context(db, principal, scope, profile) if agent_enabled() else None
+                context_hash = hashlib.sha256(_dump(context).encode()).hexdigest()
             def authorize(db):
                 latest = access.authenticate(db, headers)
                 require(latest['accountId'] == principal['accountId'] and latest['workspaceId'] == principal['workspaceId'], 'Нет доступа.', 403)
@@ -332,6 +335,10 @@ class EmployerRoutes:
                 current, _ = self.intake._review_person(db, latest['workspaceId'], scope['vacancyId'], scope)
                 require(hashlib.sha256(_dump(current.get('preparedProfile') or {}).encode()).hexdigest() == fingerprint,
                         'Материалы интервью изменились. Обновите страницу.', 409)
+                if context is not None:
+                    fresh = self._assistant_context(db, latest, scope, current.get('preparedProfile') or {})
+                    require(hashlib.sha256(_dump(fresh).encode()).hexdigest() == context_hash,
+                            'Вакансия или оценка изменились. Обновите страницу.', 409)
             source_id = _dump(['intake', scope['vacancyId'], scope['id'], scope['index']])
         else:
             scope = {key: body[key] for key in ('candidate', 'applicationId', 'vacancyId', 'generation', 'meetingId') if key in body}
@@ -341,6 +348,8 @@ class EmployerRoutes:
                 meeting = self.portal.interview(db, app['candidateId']) if screening else self._meeting(db, app, scope)
                 require(meeting and meeting['status'] == 'completed', 'Материалы доступны после встречи.', 409)
                 meeting_id, room = meeting['id'], meeting['room']
+                context = self._assistant_context(db, principal, scope, {}) if agent_enabled() else None
+                context_hash = hashlib.sha256(_dump(context).encode()).hexdigest()
             materials = self._materials(headers, scope, screening=screening)
             recordings = materials.get('recordings', [])
             require(len(recordings) == 1 and recordings[0]['id'] == body.get('recordingId'),
@@ -352,8 +361,35 @@ class EmployerRoutes:
                 checked = self.portal.interview(db, current['candidateId']) if screening else self._meeting(db, current, scope)
                 require(checked and checked['id'] == meeting_id and checked['status'] == 'completed' and checked['room'] == room,
                         'Встреча изменилась. Обновите страницу.', 409)
+                if context is not None:
+                    require(hashlib.sha256(_dump(self._assistant_context(db, latest, scope, {})).encode()).hexdigest() == context_hash,
+                            'Вакансия изменилась. Обновите страницу.', 409)
             source_id = _dump([body['source'], app['applicationId'], meeting_id, body['recordingId']])
-        return self.assistant.run(principal, source_id, transcript, body, authorize)
+        return self.assistant.run(principal, source_id, transcript, body, authorize, context)
+
+    def _assistant_context(self, db, principal, scope, profile):
+        """Only authorized job/profile fields enter the agent's immutable read tools."""
+        vacancy = store.vacancy(db, principal['workspaceId'], scope['vacancyId'], include_archived=True)
+        assessment = {}
+        if scope.get('id'):
+            binding, fingerprint, _ = interview_assessment.intake_binding(db, principal['workspaceId'],
+                {'source': 'intake', **scope}, allow_missing_transcript=True)
+            saved = interview_assessment.read(db, principal, binding, fingerprint)['assessment'] if fingerprint else None
+            if saved:
+                assessment = {'revisionId': saved['revisionId'], 'limitation': 'Предварительная оценка модели, не подтверждённый результат работы.',
+                    'criteria': [{k: row[k] for k in ('label', 'state', 'level', 'summary', 'limitation') if k in row}
+                                 for row in saved['criteria']]}
+        def clean(value):
+            if isinstance(value, str):
+                sanitized, removed = scan(value)
+                return '[[REDACTED_INJECTION]]' if removed else sanitized
+            if isinstance(value, list): return [clean(v) for v in value]
+            if isinstance(value, dict): return {k: clean(v) for k, v in value.items()}
+            return value
+        context = clean({'vacancy': {k: vacancy[k] for k in ('title', 'role', 'company', 'description', 'expectations', 'problem', 'city', 'format') if k in vacancy},
+            'profile': {k: profile[k] for k in ('summary', 'cvText', 'profile') if k in profile}, 'assessment': assessment})
+        require(len(_dump(context).encode()) <= 90000, 'Контекст вакансии и резюме слишком большой для помощника.', 413)
+        return context
 
     def _intake_recording(self, headers, body):
         with self.lock, self.connect() as db:
