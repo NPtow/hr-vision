@@ -30,7 +30,7 @@ class ServiceHTTP:
                 or not isinstance(key, str) or not key or any(ord(c) < 32 for c in key)):
             raise ValueError('Invalid materials service configuration')
         self.base_url, self.key, self.timeout = base_url.rstrip('/'), key, timeout
-        self.opener = opener or urllib.request.build_opener(_NoRedirect())
+        self.opener = opener or urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())
 
     def call(self, method, path, body=None):
         raw = None if body is None else json.dumps(body, ensure_ascii=False, allow_nan=False).encode()
@@ -141,6 +141,10 @@ class CoreClient:
         require(owner_kind in ('interview', 'meeting'), 'invalid_material_owner', 400)
         return self.http.call('GET', '/v1/owners/' + owner_kind + '/' + _part(owner_id) + '/materials')
 
+    def primary_transcripts(self, owner_kind, owner_id):
+        require(owner_kind in ('interview', 'meeting'), 'invalid_material_owner', 400)
+        return self.http.call('GET', '/v1/owners/' + owner_kind + '/' + _part(owner_id) + '/primary-transcripts')
+
     def access(self, asset_id):
         return self.http.call('GET', '/v1/assets/' + _part(asset_id) + '/access')
 
@@ -212,10 +216,20 @@ class CoreMaterialsCatalog:
                     raise
                 video_errors.append('Не удалось получить доступ к записи. Повторите попытку.')
         latest = {}
-        for version in data.get('transcripts', []):
+        versions = {v['id']: v for v in data.get('transcripts', [])}
+        selections = data.get('transcript_selections', [])
+        required = set(data.get('transcript_selection_required_recording_ids', []))
+        required.update(s['recording_id'] for s in selections)
+        selected = {s['transcript_id']: s for s in selections
+                    if s['status'] == 'ready' and s.get('transcript_id')}
+        # Enrolled recordings use only the exact immutable selected version.
+        # No capture fallback when selection is pending, failed or stale.
+        for version in versions.values():
             if version['version'] > latest.get(version['asset_id'], {}).get('version', 0):
                 latest[version['asset_id']] = version
-        for version in latest.values():
+        projected = {v['id']: v for v in latest.values()}
+        projected.update({tid: versions[tid] for tid in selected if tid in versions})
+        for version in projected.values():
             normalized = version.get('metadata', {}).get('normalized', {})
             projection = {'id': version['id'], 'assetId': version['asset_id'], 'revision': version['version'],
                 'text': normalized.get('vtt') or normalized.get('full_text', ''),
@@ -223,10 +237,17 @@ class CoreMaterialsCatalog:
                 'warnings': normalized.get('warnings', []), 'storage': 'owned'}
             asset = assets.get(version['asset_id'], {})
             external_id = asset.get('external_id') or asset.get('provider_asset_id', '')
-            # Source-created ASR assets are alternatives until an explicit
-            # application selection contract chooses one for assessment.
-            if external_id.startswith('asr:'):
-                metadata = version.get('metadata', {})
+            metadata = version.get('metadata', {})
+            if required:
+                projection.update(origin=metadata.get('origin'), model=metadata.get('model_version'))
+                if version['id'] in selected:
+                    choice = selected[version['id']]
+                    projection.update(recordingId=choice['recording_id'], selectionRevision=choice['revision'],
+                                      generation=choice['generation'], sha256=version.get('content_sha256'))
+                    transcripts.append(projection)
+                else:
+                    transcript_variants.append(projection)
+            elif external_id.startswith('asr:'):
                 transcript_variants.append({**projection, 'origin': metadata.get('origin'),
                     'model': metadata.get('model_version')})
             else:
@@ -238,6 +259,20 @@ class CoreMaterialsCatalog:
                      'not_recorded' if all(s == 'not_recorded' for s in statuses) else 'processing')
             return {'status': state, 'ids': [item['id'] for item in values]}
         video, transcription = channel('video_status', recordings), channel('transcript_status', transcripts)
+        if required:
+            ready_recordings = {s['recording_id'] for s in selections
+                                if s['status'] == 'ready' and s.get('transcript_id') in versions}
+            if any(s['status'] in ('failed', 'uncertain') or
+                   (s['status'] == 'ready' and s.get('transcript_id') not in versions) for s in selections):
+                state = 'error'
+            else:
+                state = 'ready' if required <= ready_recordings else 'processing'
+            transcription.update(status=state)
+            # An incomplete multi-recording interview is not assessment-ready.
+            if state != 'ready':
+                transcript_variants.extend(transcripts)
+                transcripts = []
+                transcription['ids'] = []
         if video_errors:
             video.update(status='ready' if recordings else 'error', error=video_errors[0])
         self._check(access_check)
@@ -246,7 +281,8 @@ class CoreMaterialsCatalog:
             current = self.core.materials(owner_kind, meeting['id'])
             old = {(s.get('binding_id', s.get('id')), s['generation']) for s in active_sources}
             fresh = {(s.get('binding_id', s.get('id')), s['generation']) for s in current.get('sources', []) if not s.get('revoked')}
-            require(old <= fresh, 'Доступ к материалам изменился.', 409)
+            require(old <= fresh and transcript_selection_identity(data) == transcript_selection_identity(current),
+                    'Доступ к материалам изменился.', 409)
         self._check(access_check)
         states = (video['status'], transcription['status'])
         return {'recordings': recordings, 'transcripts': transcripts,
@@ -255,6 +291,15 @@ class CoreMaterialsCatalog:
             'status': 'ready' if 'ready' in states else 'error' if 'error' in states else
                       'processing' if 'processing' in states else 'not_recorded',
             'catalogVersion': 1, 'checkedAt': dt.datetime.now(dt.timezone.utc).isoformat()}
+
+
+def transcript_selection_identity(data):
+    """Provider-neutral identity; timestamps do not invalidate assessments."""
+    fields = ('binding_id', 'generation', 'recording_id', 'request_id', 'revision', 'status', 'transcript_id', 'error_code')
+    rows = data.get('transcript_selections', data.get('selections', []))
+    return {'required': sorted(data.get('transcript_selection_required_recording_ids', [])),
+            'selections': sorted([[row.get(key) for key in fields] for row in rows], key=lambda row: str(row[:3])),
+            'status': data.get('status') if 'selections' in data else None}
 
 
 class ProviderMaterialsCatalog:

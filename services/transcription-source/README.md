@@ -183,3 +183,43 @@ versions visible in the correct candidate dossier. Other cases cover duplicate
 events, ASR/receipt ack loss, restart with known job, S3 retry, corrupt input,
 foreign candidate/binding, generation change/revocation and lease fencing.
 These do not make a paid SpeechKit request or claim recognition quality.
+
+## Opt-in primary transcript selection
+
+`TRANSCRIPTION_SOURCE_SELECT_PRIMARY=1` enables the Core CAS selection contract;
+the default is disabled. This flag does **not** change ASR configuration identity,
+provider revision, source stable key, or paid job ID. Repeating the authenticated
+`POST /v1/recordings` for a previously completed job enables selection on that
+same job: stored result, raw S3 object and exact immutable receipt are reused.
+The job DB migration adds `selection_requested`, `selection_revision`,
+`selection_status`, and `selection_outcome` without changing existing payloads.
+
+The source reads the current recording revision marker
+(`materials.transcript_selection_revisions`, with a valid-selection fallback for
+older Core versions) once and durably stores its base revision **before** its first Core selection PUT. A stable `source:JOB_ID`
+request registers pending before ASR submission. Completion uses the same
+request, generation and original base revision; retries never adopt a newer
+base. A Core 409 ends as `selection_status=conflict`, preserving the newer choice
+and preventing another ASR submission. The revision namespace is per binding,
+generation and recording; a new generation starts at zero.
+
+After the existing transcript receipt and its readback, the source publishes
+ready with the exact returned transcript ID and verifies it through the owner's
+`primary-transcripts` API using the portal credential. New receipts add generic
+`input_asset_id` and `input_sha256` provenance. Already persisted receipts are
+never rewritten; Core's legacy linkage rule requires a single unambiguous
+recording for those historical transcripts.
+
+ASR failed/uncertain states publish the corresponding terminal selection and
+stop automatic recognition. A definitive input/delivery rejection also fails
+an already registered selection rather than leaving it pending. Terminal
+selection intent is checkpointed before its PUT, so a lost acknowledgment cannot
+change failed into ready after a restart. Core/S3 outages retry delivery or
+selection only; successful paid recognition is preserved. The flag controls new
+opt-in requests; a durable selection already requested continues to its outcome
+even if the environment flag is later disabled.
+
+The earlier alternatives-only projection describes installations with primary
+selection disabled. With selection enabled, Core and its consumers determine
+which immutable transcript is primary; this coordinator performs no assessment
+and assigns no human roles to provider speaker labels.

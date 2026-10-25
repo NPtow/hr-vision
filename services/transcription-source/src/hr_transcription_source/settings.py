@@ -21,6 +21,7 @@ class Settings:
     source_tokens: dict[tuple[str, str], str] = field(repr=False)
     revision: str = 'speechkit-v1'
     asr_provider: str = 'yandex_speechkit'
+    select_primary: bool = False
     download_hosts: frozenset[str] = frozenset()
     max_input_bytes: int = 1024 ** 3
     max_result_bytes: int = 24 * 1024 ** 2
@@ -69,6 +70,7 @@ class Settings:
             asr_token=env['TRANSCRIPTION_SOURCE_ASR_TOKEN'], callers=callers, source_tokens=source_tokens,
             revision=env.get('TRANSCRIPTION_SOURCE_CONFIG_REVISION', 'speechkit-v1'),
             asr_provider=env.get('TRANSCRIPTION_SOURCE_ASR_PROVIDER', 'yandex_speechkit'),
+            select_primary=env.get('TRANSCRIPTION_SOURCE_SELECT_PRIMARY', '0') == '1',
             download_hosts=frozenset(filter(None, env.get('TRANSCRIPTION_SOURCE_DOWNLOAD_HOSTS', '').split(','))),
             max_input_bytes=int(env.get('TRANSCRIPTION_SOURCE_MAX_INPUT_BYTES', str(1024**3))),
             max_result_bytes=int(env.get('TRANSCRIPTION_SOURCE_MAX_RESULT_BYTES', str(24*1024**2))),

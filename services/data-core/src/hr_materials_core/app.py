@@ -10,7 +10,7 @@ from materials_repository import RepositoryError
 
 from .auth import Tokens
 from .repository import CoreRepository
-from .schemas import BindingInput, CollectInput, OwnerKind, Receipt
+from .schemas import BindingInput, CollectInput, OwnerKind, Receipt, TranscriptSelectionInput
 from .service import CoreService
 
 
@@ -110,6 +110,14 @@ def create_app(settings=None, *, service=None, tokens=None):
     @app.post("/v1/bindings/{binding_id}/receipts")
     def receipt(binding_id: str, body: Receipt, caller=Depends(principal)):
         return service.receive(caller, binding_id, body)
+
+    @app.put("/v1/bindings/{binding_id}/recordings/{recording_id}/transcript-selection")
+    def select_transcript(binding_id: str, recording_id: str, body: TranscriptSelectionInput, caller=Depends(principal)):
+        return service.repository.select_transcript(caller, binding_id, recording_id, body)
+
+    @app.get("/v1/owners/{kind}/{identity}/primary-transcripts")
+    def primary_transcripts(kind: OwnerKind, identity: str, caller=Depends(principal)):
+        return service.repository.read_primary_transcripts(caller, kind, identity)
 
     @app.get("/v1/owners/{kind}/{identity}/materials")
     def materials(kind: OwnerKind, identity: str, caller=Depends(principal)):
