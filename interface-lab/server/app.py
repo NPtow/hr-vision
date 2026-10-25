@@ -33,6 +33,7 @@ from hh_outreach_routes import HHOutreachRoutes
 from hh_outreach_worker import OutreachBrowserService
 from employer_routes import EmployerRoutes
 from meeting_lab import MeetingLab
+from public_profiles import PublicProfiles
 import employer_access
 import observability
 
@@ -96,6 +97,7 @@ CANDIDATE_PORTAL = CandidatePortal(connect, LOCK, MEDIA, ORIGIN, candidate_notif
                                   origins=ORIGINS, recruiter_origin=os.environ.get('HR_RECRUITER_ORIGIN', ORIGIN),
                                   zoom=zoom_from_env())
 CANDIDATE_BOT = CandidateBot(CANDIDATE_PORTAL, candidate_notifications)
+PUBLIC_PROFILES = PublicProfiles(CANDIDATE_PORTAL)
 HH_ROUTES = HHRecruiterRoutes(connect, CANDIDATE_PORTAL)
 CANDIDATE_PORTAL.invitation_lookup = HH_ROUTES.existing_invitation
 BOOKING = CandidateBooking(CANDIDATE_PORTAL)
@@ -471,6 +473,10 @@ class Handler(BaseHTTPRequestHandler):
     @observability.http_request
     def do_GET(self):
         try:
+            if PUBLIC_PROFILES.handles(self.path):
+                result, headers = PUBLIC_PROFILES.handle('GET', self.path, self.headers, None,
+                    client_identity(self.client_address[0], self.headers))
+                return self.answer(200, result, headers)
             if MEETING_LAB.handles(self.path):
                 result, headers = MEETING_LAB.handle('GET', self.path, self.headers)
                 return self.answer(200, result, headers)
@@ -594,6 +600,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self.answer(200, result)
             body = json.loads(raw_body)
             require(isinstance(body, dict), 'Некорректный запрос.', 400)
+            if PUBLIC_PROFILES.handles(self.path):
+                result, headers = PUBLIC_PROFILES.handle('POST', self.path, self.headers, body,
+                    client_identity(self.client_address[0], self.headers))
+                return self.answer(200, result, headers)
             if MEETING_LAB.handles(self.path):
                 result, headers = MEETING_LAB.handle('POST', self.path, self.headers, body)
                 return self.answer(200, result, headers)

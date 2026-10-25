@@ -60,6 +60,8 @@ export type RecordingReviewProps = {
   commentTimestamps?: { seconds: number; count: number }[];
   comments?: { id: string; seconds: number; text: string; createdAt: string }[];
   canComment?: boolean;
+  /** Public capabilities expose playback and transcript, without account tools. */
+  readOnly?: boolean;
   assistant?: InterviewAssistantRequest;
   /** Only an authenticated adapter may supply a ready assessment and persistence. */
   assessment?: AssessmentPresentation;

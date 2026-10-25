@@ -164,7 +164,9 @@ class ReceiverTest(unittest.TestCase):
         self.assertEqual(r.ZOOM_ONLY_RUNTIME - r.PRE_ZOOM_RUNTIME, r.ZOOM_RUNTIME)
         self.assertEqual(r.PRE_ASSESSMENT_RUNTIME, r.SERVICES_ONLY_RUNTIME | r.ZOOM_ONLY_RUNTIME)
         self.assertEqual(r.ASSESSMENT_ONLY_RUNTIME - r.ZOOM_ONLY_RUNTIME, {'interview_assessment.py'})
-        self.assertEqual(r.RUNTIME - r.PRE_ASSESSMENT_RUNTIME, {'interview_assessment.py'})
+        self.assertEqual(r.PRE_PUBLIC_PROFILE_RUNTIME - r.PRE_ASSESSMENT_RUNTIME, {'interview_assessment.py'})
+        self.assertEqual(r.RUNTIME - r.PRE_PUBLIC_PROFILE_RUNTIME, {'public_profiles.py'})
+        self.assertIn(frozenset(r.PRE_PUBLIC_PROFILE_RUNTIME), r.RUNTIME_LAYOUTS)
         self.assertEqual(r.ZOOM_RUNTIME, {'call_providers.py', 'zoom_media.py', 'materials_zoom.py', 'zoom_recording_retention.py'})
         self.assertEqual(len(r.MATERIALS_RUNTIME), 9)
         for runtime in (r.LEGACY_RUNTIME, r.BOT_RUNTIME, r.PRE_IMPORT_RUNTIME, r.PRE_OUTREACH_RUNTIME,

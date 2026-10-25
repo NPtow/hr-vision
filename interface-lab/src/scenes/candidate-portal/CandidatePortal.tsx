@@ -16,6 +16,7 @@ import { TelegramHandoff } from './TelegramHandoff';
 import { CandidateSearch } from './CandidateSearch';
 import { CandidateSchedule } from './CandidateSchedule';
 import { CandidateProfile } from './CandidateProfile';
+import { PublicCandidateProfile } from './PublicCandidateProfile';
 import { applicationGroup, currentApplicationMeeting } from './workspace-model';
 import { candidatePage, candidateLoginTarget, candidateNavigationURL, authenticatedCandidatePage as authenticatedPage, type CandidatePage as Page } from './candidate-navigation';
 import '@fontsource-variable/inter';
@@ -43,6 +44,7 @@ const safeSupportEmail = (channels?: Channels) => channels?.supportEmail && /^[^
 
 export function CandidatePortal() {
   const invitation = new URLSearchParams(location.search).get('cp');
+  if (invitation === 'public') return <PublicCandidateProfile/>;
   if (invitation === 'invite-booking') return <BookingPortal/>;
   return invitation === 'guest' || invitation === 'claim' ? <InvitationPortal kind={invitation}/> : <AuthenticatedCandidatePortal/>;
 }
