@@ -1,5 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import type { CallMaterials } from '../candidate-portal/api';
+import type { RecordingReviewProps } from '../interview-review/InterviewReview';
+import { evidenceRecording, orderedRecordings, selectedTranscript, transcriptStatusMessage } from '../interview-review/recording-transcript';
 import { SourceScreeningReview } from '../interview-review/InterviewReview';
 import { EmployerTimecodeComment } from '../employer-workspace/EmployerCandidateProfile';
 import { parseMeetingTranscript } from './transcript';
@@ -16,28 +18,39 @@ export function EmployerScreening(props: ScreeningProps) {
 function Screening({ journey, person, source, appearance = 'panel', header, enableComments = false }: ScreeningProps) {
   const [materials, setMaterials] = useState<CallMaterials | null>(null);
   const [error, setError] = useState('');
+  const [selectedId, setSelectedId] = useState('');
+  const [evidenceRequest, setEvidenceRequest] = useState<RecordingReviewProps['evidenceRequest']>();
   const vacancyId = person.vacancyId || journey.state!.vacancy.id;
   const generation = journey.state!.generation;
   const available = journey.state!.videoConfigured;
   useEffect(() => {
-    if (!available) return;
     let mounted = true;
-    void request<CallMaterials>('employer/screening/materials', journey.token, {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const load = () => void request<CallMaterials>('employer/screening/materials', journey.token, {
       candidate: person.id, applicationId: person.applicationId || person.id, vacancyId, generation,
-    }).then(result => { if (mounted) setMaterials(result); }).catch(cause => { if (mounted) setError((cause as Error).message); });
-    return () => { mounted = false; };
-  }, [available, journey.token, person.id, person.applicationId, vacancyId, generation, source.interviewId]);
+    }).then(result => {
+      if (!mounted) return;
+      setMaterials(result); setError('');
+      timer = setTimeout(load, result.transcription.status === 'processing' ? 8_000 : 60_000);
+    }).catch(cause => { if (mounted) { setMaterials(null); setError((cause as Error).message); timer = setTimeout(load, 15_000); } });
+    load();
+    return () => { mounted = false; clearTimeout(timer); };
+  }, [journey.token, person.id, person.applicationId, vacancyId, generation, source.interviewId]);
 
-  const transcript = materials?.transcripts.map(item => item.text).join('\n\n') || '';
-  const recordings = materials?.recordings || (source.video ? [{ id: source.id, url: source.video }] : []);
-  const assessment = useInterviewAssessment(journey.token, vacancyId && recordings.length === 1 && transcript ? {
+  const recordings = orderedRecordings(materials?.recordings || []);
+  const recording = recordings.find(item => item.id === selectedId) || recordings[0];
+  const transcript = selectedTranscript(materials, recording?.id)?.text || '';
+  const assessment = useInterviewAssessment(journey.token, vacancyId && recordings[0] && materials?.transcription.status === 'ready' ? {
     source: 'screening', candidate: person.id, applicationId: person.applicationId || person.id,
     vacancyId, generation, recordingId: recordings[0].id,
-  } : null, transcript);
-  const transcriptChapters = recordings.length <= 1 ? parseMeetingTranscript(transcript) : [];
-  const materialChapters = materials?.chapters?.length ? materials.chapters : transcriptChapters;
-  const chapters = source.shortChapters.length ? source.shortChapters : materialChapters;
-  const fullChapters = source.fullChapters.length ? source.fullChapters : materialChapters;
+  } : null, JSON.stringify([materials?.transcription.status, materials?.transcripts.map(item =>
+    [item.id, item.recordingId, item.selectionRevision, item.text])]));
+  const transcriptChapters = parseMeetingTranscript(transcript);
+  // Historical chapter DTOs have no recording link: retain them for a single
+  // source; multipart uses only the selected part's local transcript chapters.
+  const materialChapters = recordings.length === 1 && materials?.chapters?.length ? materials.chapters : transcriptChapters;
+  const chapters = recordings.length === 1 && source.shortChapters.length ? source.shortChapters : materialChapters;
+  const fullChapters = recordings.length === 1 && source.fullChapters.length ? source.fullChapters : materialChapters;
   const emptyMessage = error || (!available ? 'Видеосервис ещё не подключён.'
     : materials?.video.status === 'not_recorded' ? 'Запись первичного интервью отсутствует.'
     : materials?.video.status === 'error' ? 'Сейчас не удалось получить запись первичного интервью.'
@@ -65,27 +78,38 @@ function Screening({ journey, person, source, appearance = 'panel', header, enab
         interviewId: source.interviewId, recordingId, seconds, chapterTitle, text, expectedRevision, requestId,
       }) : undefined}/>;
   }
-  return <>{(recordings.length ? recordings : [null]).map((recording, index) => <SourceScreeningReview
-    key={recording?.id || 'pending'} appearance={appearance} sourceId={`${source.id}:${recording?.id || 'pending'}`}
-    name={person.name} header={header} chapters={recordings.length <= 1 ? chapters : []} fullChapters={recordings.length <= 1 ? fullChapters : []}
-    shortPlaylist={source.shortChapters.length > 0} media={recording ? { src: recording.url } : undefined}
-    assessment={recordings.length === 1 ? assessment.assessment : undefined}
-    hideFeedbackQuestions
-    transcriptText={index === 0 ? transcript : undefined} transcriptSeekable={recordings.length <= 1} summary={index === 0 ? source.shortSummary : undefined}
-    assistant={recording && recordings.length === 1 && transcript ? interviewAssistant(journey.token, {
+  return <>
+    {recordings.length > 1 && <label>Часть интервью <select aria-label="Часть интервью" value={recording?.id || ''} onChange={event => { setSelectedId(event.target.value); setEvidenceRequest(undefined); }}>
+      {recordings.map((item, part) => <option key={item.id} value={item.id}>Запись {part + 1}</option>)}
+    </select></label>}
+    {!transcript && materials && <p role="status">{transcriptStatusMessage(materials.transcription.status)}</p>}
+    <SourceScreeningReview
+    appearance={appearance} sourceId={`${source.id}:${recording?.id || 'pending'}`}
+    recordingId={recording?.id} evidenceRequest={evidenceRequest}
+    onEvidenceNavigate={(evidence, criterionId) => {
+      const target = evidenceRecording(materials, evidence);
+      if (!target || evidence.seconds === null) return false;
+      setSelectedId(target); setEvidenceRequest({ recordingId: target, seconds: evidence.seconds,
+        requestId: crypto.randomUUID(), evidence, criterionId }); return true;
+    }}
+    name={person.name} header={header} chapters={chapters} fullChapters={fullChapters}
+    shortPlaylist={recordings.length === 1 && source.shortChapters.length > 0} media={recording ? { src: recording.url } : undefined}
+    assessment={assessment.assessment}
+    hideFeedbackQuestions transcriptText={transcript} transcriptSeekable={!!transcript} summary={source.shortSummary}
+    assistant={recording && transcript ? interviewAssistant(journey.token, {
       source: 'screening', candidate: person.id, applicationId: person.applicationId || person.id,
       vacancyId, generation, recordingId: recording.id,
     }) : undefined}
     renderChapterComment={showComments ? chapter => chapter.seconds === null ? null : comment(chapter.seconds, recording?.id || null, chapter.title) : undefined}
     renderTimeComment={showComments ? (seconds, onClose, openRequest) => comment(seconds, recording?.id || null, '', onClose, openRequest) : undefined}
     commentTimestamps={enableComments ? commentTimestamps(recording?.id || null) : undefined}
-    canComment={canComment} comments={showComments ? (person.screeningComments || []).filter(item => item.interviewId === source.interviewId
+    canComment={canComment && !!recording} comments={showComments ? (person.screeningComments || []).filter(item => item.interviewId === source.interviewId
       && (item.recordingId === (recording?.id || null) || (recordings.length <= 1 && item.recordingId === null))) : []}
-    emptyMessage={emptyMessage} recruiterContent={index === 0 && (source.conclusion.length || source.questions.length) ? <>
+    emptyMessage={emptyMessage} recruiterContent={(source.conclusion.length || source.questions.length) ? <>
       <span className="ir-eyebrow">Мнение рекрутера{source.score !== null ? ` · ${source.score} / 5` : ''}</span>
       {source.conclusion.map((text, item) => <p key={item}>{text}</p>)}
       {source.questions.map((question, item) => <p key={item}>{question}</p>)}
-    </> : undefined}/>) }
+    </> : undefined}/>
     {recordings.length > 1 && (person.screeningComments || []).some(item => item.interviewId === source.interviewId && item.recordingId === null) && <section className="ew-detail-card">
       <h3>Комментарии к интервью</h3>
       {(person.screeningComments || []).filter(item => item.interviewId === source.interviewId && item.recordingId === null).map(item => <p key={item.id}>

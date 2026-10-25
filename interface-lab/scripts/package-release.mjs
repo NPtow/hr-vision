@@ -62,7 +62,7 @@ if (target === 'service') for (const name of [
   'call_providers.py', 'zoom_media.py', 'materials_zoom.py', 'zoom_recording_retention.py', 'domain.py', 'dsa_panel.py', 'feedback.py', 'meeting_lab.py', 'interview_assistant.py', 'interview_assessment.py',
   'materials_capture.py', 'materials_daily.py', 'materials_repository.py', 'materials_http.py',
   'materials_storage.py', 'materials_transcripts.py', 'materials_worker.py', 'materials_runtime.py', 'materials_service.py',
-  'materials_asr_dispatch.py',
+  'materials_asr_dispatch.py', 'recording_uploads.py', 'canonical_materials.py', 'transcript_bundle.py',
   'core_source_client.py', 'core_source_outbox.py', 'zoom_api_client.py', 'public_profiles.py', 'assessment_jobs.py',
   'assessment_corpus.py', 'assessment_core_bridge.py',
 ]) add(`server/${name}`, `api/${name}`);

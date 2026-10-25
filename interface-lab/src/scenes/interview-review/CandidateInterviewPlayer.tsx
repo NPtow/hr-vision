@@ -26,7 +26,7 @@ function IconButton({ label, children, onClick, className = '', pressed, expande
 
 /** Candidate materials are supplied by the authorised caller. No fixtures or local comment store. */
 export function CandidateInterviewPlayer({ sourceId, name, header, media, chapters, fullChapters, transcriptText = '', emptyMessage,
-  initialEvidenceIndex, renderTimeComment, comments = [], canComment = false, transcriptSeekable = true, assistant, assessment, assessmentStatus, hideFeedbackQuestions = false }: RecordingReviewProps) {
+  initialEvidenceIndex, renderTimeComment, comments = [], canComment = false, transcriptSeekable = true, assistant, assessment, assessmentStatus, hideFeedbackQuestions = false, recordingId, onEvidenceNavigate, evidenceRequest }: RecordingReviewProps) {
   const id = useId();
   const hasAssessmentTab = !!assessment || !!assessmentStatus;
   const root = useRef<HTMLDivElement>(null);
@@ -47,7 +47,7 @@ export function CandidateInterviewPlayer({ sourceId, name, header, media, chapte
   const [playing, setPlaying] = useState(false);
   const [current, setCurrent] = useState(0);
   const [duration, setDuration] = useState(0);
-  const assessmentFlow = useInterviewAssessment(assessment, current, playing);
+  const assessmentFlow = useInterviewAssessment(assessment, current, playing, recordingId);
   useEffect(() => { if (hasAssessmentTab && !explicitTabSelection.current) setTab('comments'); }, [hasAssessmentTab, assessment?.revisionId]);
   const [volume, setVolume] = useState(0.8);
   const [muted, setMuted] = useState(false);
@@ -143,6 +143,12 @@ export function CandidateInterviewPlayer({ sourceId, name, header, media, chapte
     player.currentTime = value; setCurrent(value); setFollow(true); pendingSeek.current = null; assessmentFlow.seek(value);
     return true;
   }, [notify, assessmentFlow.seek]);
+  useEffect(() => {
+    if (!evidenceRequest || evidenceRequest.recordingId !== recordingId) return;
+    if (seek(evidenceRequest.seconds) && evidenceRequest.evidence && evidenceRequest.criterionId) {
+      assessmentFlow.source(evidenceRequest.evidence, evidenceRequest.criterionId);
+    }
+  }, [evidenceRequest?.requestId, recordingId]);
   const togglePlay = useCallback(() => {
     const player = video.current;
     if (!player) return;
@@ -311,7 +317,11 @@ export function CandidateInterviewPlayer({ sourceId, name, header, media, chapte
         </div>}
         {hasAssessmentTab && <div hidden={tab !== 'comments' || commentHistory} className="iv-panel iv-assessment-panel" id={commentHistory ? undefined : `${id}-comments`} role="tabpanel" aria-labelledby={`${id}-comments-tab`}>
           {assessment ? <OrbitGraph key={assessment.revisionId} criteria={assessment.criteria} selectedId={assessmentFlow.selectedId} onSelect={assessmentFlow.selectCriterion}
-            onEvidence={(evidence, criterionId) => { if (evidence.seconds !== null && seek(evidence.seconds)) assessmentFlow.source(evidence, criterionId); }}/>
+            onEvidence={(evidence, criterionId) => {
+              if (onEvidenceNavigate) { if (!onEvidenceNavigate(evidence, criterionId)) notify('Источник фрагмента изменился. Обновите материалы.'); return; }
+              if (evidence.recordingId && evidence.recordingId !== recordingId) { notify('Фрагмент относится к другой записи.'); return; }
+              if (evidence.seconds !== null && seek(evidence.seconds)) assessmentFlow.source(evidence, criterionId);
+            }}/>
             : <div className="ia-orbit ia-orbit--empty"><p role="status">{assessmentStatus === 'loading' ? 'Готовим разбор…' : 'Разбор интервью ещё не подготовлен.'}</p></div>}
           {assessment?.vacancyMatch && <details className="iv-vacancy-match">
             <summary>Соответствие вакансии</summary>

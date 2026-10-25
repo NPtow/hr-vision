@@ -2,7 +2,7 @@
 from contextlib import asynccontextmanager
 import sqlite3
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, Request, Query
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer
@@ -130,6 +130,11 @@ def create_app(settings=None, *, service=None, tokens=None):
     @app.get("/v1/candidates/{candidate_id}/dossier")
     def dossier(candidate_id: str, caller=Depends(principal)):
         return service.repository.dossier(caller, candidate_id)
+
+    @app.get("/v1/assets")
+    def catalogue(created_since: float = Query(ge=0), cursor: str | None = Query(default=None, max_length=2000),
+                  limit: int = Query(default=50, ge=1, le=100), caller=Depends(principal)):
+        return service.repository.catalogue_assets(caller, created_since, cursor, limit)
 
     @app.get("/v1/assets/{asset_id}/access")
     def access(asset_id: str, caller=Depends(principal)):

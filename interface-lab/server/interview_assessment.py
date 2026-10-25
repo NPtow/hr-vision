@@ -7,10 +7,11 @@ that source never moves an old assessment or feedback onto the new recording.
 import hashlib
 import json
 import math
+import os
 import re
 import secrets
 
-from domain import iso, now, require, text
+from domain import Problem, iso, now, require, text
 import employer_store as store
 
 
@@ -104,6 +105,23 @@ def intake_binding(db, workspace_id, body, *, allow_missing_transcript=False):
             'Кандидат не найден.', 404)
     require(type(body['index']) is int and 0 <= body['index'] < 10, 'Выберите запись.', 400)
     person, _ = intake._review_person(db, workspace_id, body['vacancyId'], body)
+    if os.environ.get('HR_CORE_CATALOG_ENABLED') == '1':
+        from canonical_materials import read_intake_db
+        import transcript_bundle
+        materials = read_intake_db(db, workspace_id, body['vacancyId'], body['id'])
+        recordings = materials.get('recordings', [])
+        require(body['index'] < len(recordings), 'Запись не найдена.', 404)
+        recording = recordings[body['index']]
+        # One assessment and feedback namespace for the complete interview.
+        key = source_key('intake', {**body, 'index': 0})
+        try:
+            value = transcript_bundle.bundle(materials)
+        except Problem as error:
+            if allow_missing_transcript and error.status == 409:
+                return key, None, recording
+            raise
+        return key, transcript_bundle.fingerprint(value), {**recording, '_transcriptBundle': value,
+                                                          '_candidateName': person.get('name', '')}
     recording = intake._stored_recording(person, body['index'])
     vacancy = store.vacancy(db, workspace_id, body['vacancyId'])
     profile = person.get('preparedProfile') or {}
@@ -194,7 +212,11 @@ def import_assessment(db, workspace_id, binding_key, fingerprint, assessment):
     actual_key, actual_fingerprint, recording = intake_binding(db, workspace_id, body)
     require(actual_key == binding_key and actual_fingerprint == fingerprint,
             'Материалы интервью или вакансия изменились.', 409)
-    duration = recording.get('duration', recording.get('durationSeconds'))
+    core_bundle = recording.get('_transcriptBundle')
+    if core_bundle:
+        import transcript_bundle
+        transcript_bundle.check_evidence(assessment, {'inputChunks': transcript_bundle.chunks(core_bundle, recording['_candidateName'])})
+    duration = None if core_bundle else recording.get('duration', recording.get('durationSeconds'))
     if type(duration) not in (int, float) or not math.isfinite(duration) or duration < 0:
         duration = None
     encoded = _checked_assessment(assessment, duration)

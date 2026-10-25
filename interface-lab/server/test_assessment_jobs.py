@@ -87,6 +87,14 @@ class AssessmentJobsTest(unittest.TestCase):
             self.assertEqual(db.execute('SELECT count(*) FROM as_bindings').fetchone()[0], 1)
             self.assertEqual(db.execute('SELECT count(*) FROM as_matches').fetchone()[0], 2)
 
+    def test_invalid_active_bundle_before_snapshot_is_terminal_without_unbound_revision(self):
+        with patch.object(self.bridge, 'active', side_effect=Problem('transcript_format_unsupported', 422)):
+            self.assertTrue(self.bridge.tick())
+        self.assertEqual(self.requests, [])
+        with self.flow.connect() as db:
+            row = db.execute('SELECT status,error FROM as_bindings').fetchone()
+            self.assertEqual(tuple(row), ('failed', 'transcript_format_unsupported'))
+
     def test_invalid_transcript_is_terminal_instead_of_infinite_loading(self):
         with patch.object(self.bridge, 'snapshot', side_effect=Problem('transcript_format_unsupported', 422)):
             self.bridge.tick()
@@ -100,7 +108,7 @@ class AssessmentJobsTest(unittest.TestCase):
         env={'HR_CORE_CATALOG_ENABLED':'1','HR_MATERIALS_CORE_URL':'http://127.0.0.1:8093','HR_MATERIALS_CORE_KEY':'test-key'}
         ready={'status':'ready','selections':[{'recording_id':'recording','generation':1,
             'revision':1,'request_id':'one','transcript_id':'transcript-one','status':'ready'}]}
-        with patch.dict('os.environ',env), patch('core_source_client.CoreClient.primary_transcripts',return_value=ready) as primary:
+        with patch.dict('os.environ',env), patch('core_source_client.CoreClient.materials', return_value={'assets': []}), patch('core_source_client.CoreClient.primary_transcripts',return_value=ready) as primary:
             with self.flow.connect() as db:
                 revision=jobs.candidate_revision(db,self.person['id'])
                 db.execute("UPDATE as_bindings SET status='completed',source_revision=?,assessment=?",
@@ -124,6 +132,63 @@ class AssessmentJobsTest(unittest.TestCase):
         self.assertEqual(source['transcriptId'],'transcript-exact')
         self.assertEqual(source['selectionRevision'],2)
         self.assertEqual(len(source['textSha256']),64)
+
+    def test_multipart_snapshot_polls_pinned_parts_and_projects_recording_evidence(self):
+        import test_transcript_bundle
+        def selected(cid, *, access_check):
+            with self.flow.connect() as db: access_check(db)
+            return test_transcript_bundle.materials()
+        with patch.object(self.flow.portal, 'materials', side_effect=selected): self.bridge.tick()
+        submitted = self.requests[0][2]
+        self.assertEqual([c['startMs'] for c in submitted['chunks']], [0, 0])
+        self.assertEqual([c['recordingId'] for c in submitted['chunks']], ['part-a', 'part-b'])
+        chunk = submitted['chunks'][1]
+        evidence = {key: chunk[key] for key in ('id', 'text', 'speaker', 'recordingId', 'transcriptId')}
+        evidence.update(seconds=0, endSeconds=2, time='00:00')
+        result = {'id': 'a' * 64, 'status': 'completed', 'error': None,
+            'assessment': {'revisionId': 'a' * 64, 'provenance': {'sourceHash': submitted['sourceHash']}, 'criteria': [
+                {'id': 'skill', 'label': 'Навык', 'state': 'supported', 'level': 2, 'target': None,
+                 'basis': 'narrated', 'evidence': [evidence]}]}}
+        self.bridge.request = lambda *args: result
+        with self.flow.connect() as db: db.execute('UPDATE as_bindings SET next_check=0')
+        with patch.object(self.flow.portal, 'materials', side_effect=AssertionError('poll must use pinned input')):
+            self.bridge.tick()
+        with self.flow.connect() as db:
+            value = jobs.read_candidate(db, self.person['id'], 'part-b')
+            self.assertEqual(value['recordingIds'], ['part-a', 'part-b'])
+            self.assertEqual(value['assessment']['criteria'][0]['evidence'][0]['recordingId'], 'part-b')
+            self.assertEqual(len(value['assessment']['provenance']['sourceTranscripts']), 2)
+            self.assertNotIn('sourceTranscript', value['assessment']['provenance'])
+            self.assertIsNone(jobs.read_candidate(db, self.person['id'], 'foreign')['assessment'])
+
+    def test_partial_multipart_never_submits_assessment(self):
+        import test_transcript_bundle
+        data = test_transcript_bundle.materials(); data['transcripts'].pop()
+        with patch.object(self.flow.portal, 'materials', return_value=data): self.bridge.tick()
+        self.assertEqual(self.requests, [])
+        with self.flow.connect() as db:
+            row = db.execute('SELECT error,assessment FROM as_bindings').fetchone()
+            self.assertEqual(row[0], 'waiting_for_transcript')
+            self.assertIsNone(row[1])
+
+    def test_new_unselected_recording_invalidates_assessment_before_selection_exists(self):
+        env = {'HR_CORE_CATALOG_ENABLED': '1', 'HR_MATERIALS_CORE_URL': 'http://127.0.0.1:8093',
+               'HR_MATERIALS_CORE_KEY': 'test-key'}
+        inventory = {'assets': [{'id': 'one', 'kind': 'video', 'state': 'ready'}]}
+        primary = {'status': 'ready', 'selections': [{'recording_id': 'one', 'transcript_id': 'text-one',
+                   'revision': 1, 'status': 'ready'}]}
+        with patch.dict('os.environ', env), patch('core_source_client.CoreClient.primary_transcripts', return_value=primary), patch('core_source_client.CoreClient.materials', return_value=inventory):
+            with self.flow.connect() as db:
+                revision = jobs.candidate_revision(db, self.person['id'])
+                db.execute("UPDATE as_bindings SET source_revision=?,status='completed',assessment=?",
+                           (revision, json.dumps({'revisionId': 'saved', 'criteria': []})))
+                self.assertIsNotNone(jobs.read_candidate(db, self.person['id'])['assessment'])
+                inventory['assets'].append({'id': 'two', 'kind': 'video', 'state': 'pending'})
+                self.assertIsNone(jobs.read_candidate(db, self.person['id'])['assessment'])
+                inventory['assets'].reverse()
+                next_revision = jobs.candidate_revision(db, self.person['id'])
+                inventory['assets'].reverse()
+                self.assertEqual(jobs.candidate_revision(db, self.person['id']), next_revision)
 
     def test_provider_inline_speaker_is_preserved_and_uniquely_bound(self):
         transcript = 'WEBVTT\n\n00:00:01.000 --> 00:00:05.000\nNikita: Что вы сделали?\n\n00:00:05.000 --> 00:00:12.000\nElena: Я уточнила задачу.\n'

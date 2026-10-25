@@ -37,6 +37,8 @@ class Runtime:
     def __init__(self, settings, *, repository=None, core=None, asr=None, download=None, storage=None, publish=None):
         self.settings = settings
         self.repository = repository or Repository(settings.data_dir / 'source.sqlite3')
+        if settings.auto_enabled:
+            self.repository.catalogue(settings.auto_caller,settings.auto_activated_at)
         self.core = core or httpx.Client(base_url=settings.core_url.rstrip('/'), timeout=60, follow_redirects=False)
         self.asr = asr or httpx.Client(base_url=settings.asr_url.rstrip('/'), timeout=300, follow_redirects=False)
         self.download = download or httpx.Client(timeout=300, follow_redirects=False)
@@ -78,7 +80,7 @@ class Runtime:
         except (httpx.HTTPError, OSError, json.JSONDecodeError):
             raise Retryable('upstream_unavailable') from None
 
-    def authorize(self, caller_name, event):
+    def authorize_binding(self, caller_name, event):
         caller = self.settings.callers[caller_name]
         path = '/v1/bindings/' + part(event['binding_id'])
         binding, _ = self._json(self.core, 'GET', path, caller.core_read_token)
@@ -93,6 +95,11 @@ class Runtime:
         active, _ = self._json(self.core, 'GET', path, write_token)
         if active != binding:
             raise Rejected('binding_changed')
+        return binding, write_token
+
+    def authorize(self, caller_name, event):
+        caller = self.settings.callers[caller_name]
+        binding, write_token = self.authorize_binding(caller_name, event)
         materials, _ = self._json(self.core, 'GET', '/v1/owners/'+part(event['owner_kind'])+'/'+part(event['owner_id'])+'/materials', caller.core_read_token)
         if (materials.get('owner_kind'),materials.get('owner_id')) != (event['owner_kind'],event['owner_id']):
             raise Rejected('owner_response_mismatch')
@@ -127,10 +134,17 @@ class Runtime:
             pass
 
     def reconcile(self):
+        from .uploads import Uploads
+        uploads = Uploads(self).reconcile()
         due = self.repository.due()
         for identity in due:
             self.enqueue(identity)
-        return {'pending':len(due)}
+        from .catalogue import Catalogue
+        try:
+            automatic = Catalogue(self).sweep()
+        except Exception:
+            automatic = {'enabled':self.settings.auto_enabled,'error_code':'catalogue_unavailable'}
+        return {'pending':len(due),'uploads':uploads,'automatic':automatic}
 
     def _clean_staging(self):
         cutoff=time.time()-2*self.settings.lease_seconds
@@ -422,11 +436,17 @@ class Runtime:
         if not job:
             return {'claimed':False}
         try:
-            if job['revision']!=self.settings.config_identity:
+            saved_selection_only = (job['selection_requested'] and job['delivery_status']=='succeeded' and
+                job['result'] is not None and job['receipt'] is not None and job['raw_ref'] is not None and job['transcript_ids'])
+            if job['revision']!=self.settings.config_identity and not saved_selection_only:
                 raise Rejected('configuration_revision_changed')
             binding,asset,materials,write_token=self.authorize(job['caller'],job['event'])
             if job['selection_requested']:
                 job=self._selection_pending(job,token,materials,write_token)
+            if saved_selection_only:
+                job=self._selection_finish(job,token,'ready')
+                job=self.repository.update(identity,token,lease_token=None,lease_until=None)
+                return self.public(job)
             if job['selection_requested'] and job['selection_outcome'] in ('failed','uncertain'):
                 job=self._selection_finish(job,token,job['selection_outcome'])
                 job=self.repository.update(identity,token,delivery_status='rejected',lease_token=None,lease_until=None)

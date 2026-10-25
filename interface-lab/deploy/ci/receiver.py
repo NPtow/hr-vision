@@ -70,10 +70,11 @@ PRE_JEV_RUNTIME = PRE_SELECTION_RUNTIME | {'selection.py'}
 PRE_ASR_DISPATCH_RUNTIME = PRE_JEV_RUNTIME | {'assessment_jobs.py'}
 PRE_SELECTION_STATUS_RUNTIME = PRE_ASR_DISPATCH_RUNTIME | {'materials_asr_dispatch.py'}
 PRE_FULL_CORPUS_RUNTIME = PRE_SELECTION_STATUS_RUNTIME | {'selection_status.py'}
-RUNTIME = PRE_FULL_CORPUS_RUNTIME | {'assessment_corpus.py', 'assessment_core_bridge.py'}
+PRE_PRODUCT_RECORDINGS_RUNTIME = PRE_FULL_CORPUS_RUNTIME | {'assessment_corpus.py', 'assessment_core_bridge.py'}
+RUNTIME = PRE_PRODUCT_RECORDINGS_RUNTIME | {'recording_uploads.py', 'canonical_materials.py', 'transcript_bundle.py'}
 BOT_RUNTIME = PRE_IMPORT_RUNTIME - {'recruiter_access.py', 'recruiter_sources.py', 'recruiter_notifications.py'}
 LEGACY_RUNTIME = BOT_RUNTIME - {'candidate_bot.py'}
-RUNTIME_LAYOUTS = {frozenset(PRE_FULL_CORPUS_RUNTIME), frozenset(PRE_SELECTION_STATUS_RUNTIME), frozenset(PRE_JEV_RUNTIME), frozenset(LEGACY_RUNTIME), frozenset(BOT_RUNTIME), frozenset(PRE_IMPORT_RUNTIME),
+RUNTIME_LAYOUTS = {frozenset(PRE_PRODUCT_RECORDINGS_RUNTIME), frozenset(PRE_FULL_CORPUS_RUNTIME), frozenset(PRE_SELECTION_STATUS_RUNTIME), frozenset(PRE_JEV_RUNTIME), frozenset(LEGACY_RUNTIME), frozenset(BOT_RUNTIME), frozenset(PRE_IMPORT_RUNTIME),
                    frozenset(PRE_SERVICES_RUNTIME), frozenset(SERVICES_ONLY_RUNTIME), frozenset(ZOOM_ONLY_RUNTIME),
                    frozenset(ASSESSMENT_ONLY_RUNTIME), frozenset(PRE_ASSESSMENT_RUNTIME), frozenset(PRE_PUBLIC_PROFILE_RUNTIME), frozenset(PRE_SELECTION_RUNTIME), frozenset(PRE_ASR_DISPATCH_RUNTIME),
                    frozenset(PRE_OUTREACH_RUNTIME), frozenset(PRE_ACCESS_RUNTIME), frozenset(PRE_CV_RUNTIME),

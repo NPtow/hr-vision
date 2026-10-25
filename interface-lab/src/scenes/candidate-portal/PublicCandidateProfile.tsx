@@ -3,6 +3,8 @@ import { ArrowUpRight } from 'lucide-react';
 import logo from '../employer-workspace/assets/hr-vision-logo.svg';
 import { EmployerCandidateProfile } from '../employer-workspace/EmployerCandidateProfile';
 import type { EmployerCandidateResume } from '../employer-workspace/employer-candidate-profile-types';
+import type { RecordingReviewProps } from '../interview-review/InterviewReview';
+import { evidenceRecording, orderedRecordings, selectedTranscript, transcriptStatusMessage, type MaterialRecording, type MaterialTranscript } from '../interview-review/recording-transcript';
 import { SourceScreeningReview } from '../interview-review/InterviewReview';
 import { parseMeetingTranscript } from '../connected-journey/transcript';
 import type { AssessmentPresentation } from '../interview-assessment/types';
@@ -11,8 +13,8 @@ import './public-candidate-profile.css';
 
 type Profile = { id: string; name: string; role: string; resume: { name: string; mime: string; size: number } | null };
 type Materials = {
-  recordings: { id: string; url: string; expires?: number }[];
-  transcripts: { id: string; assetId?: string; text: string }[];
+  recordings: MaterialRecording[];
+  transcripts: MaterialTranscript[];
   videoStatus: string; transcriptStatus: string;
 };
 class ShareError extends Error {
@@ -72,14 +74,17 @@ function PublicProfileCard({ token }: { token: string }) {
   const materialsRef = useRef<Materials | null>(null);
   const card = useRef<HTMLElement>(null);
   const [recordingId, setRecordingId] = useState('');
-  const [assessment, setAssessment] = useState<AssessmentPresentation>();
+  const [evidenceRequest, setEvidenceRequest] = useState<RecordingReviewProps['evidenceRequest']>();
+  const assessmentContext = JSON.stringify([materials?.transcriptStatus, materials?.transcripts.map(item => [item.recordingId, item.id, item.selectionRevision])]);
+  const [assessmentResult, setAssessmentResult] = useState<{ context: string; value?: AssessmentPresentation }>();
+  const assessment = assessmentResult?.context === assessmentContext ? assessmentResult.value : undefined;
   const [assessmentError, setAssessmentError] = useState('');
   const [assessmentLoaded, setAssessmentLoaded] = useState(false);
   const assistant = useMemo<InterviewAssistantRequest>(() => async (action, query, requestId, signal) => {
-    const result = await request<InterviewAnswer | InterviewSearch>(token, '/assistant', signal, { action, query, requestId }, 150_000);
+    const result = await request<InterviewAnswer | InterviewSearch>(token, '/assistant', signal, { action, query, requestId, ...((recordingId || orderedRecordings(materialsRef.current?.recordings || [])[0]?.id) ? { recordingId: recordingId || orderedRecordings(materialsRef.current?.recordings || [])[0]?.id } : {}) }, 150_000);
     if (result.mode !== action || (result.mode === 'chat' ? !Array.isArray(result.evidence) : !Array.isArray(result.matches))) throw new Error('Не удалось прочитать ответ. Попробуйте ещё раз.');
     return result;
-  }, [token]);
+  }, [token, recordingId]);
   useEffect(() => {
     if (!/^[A-Za-z0-9_-]{43}$/.test(token)) return;
     const controller = new AbortController();
@@ -88,7 +93,7 @@ function PublicProfileCard({ token }: { token: string }) {
       .then(result => {
         if (controller.signal.aborted) return;
         setAssessmentError('');
-        setAssessment(result.assessment ? { ...result.assessment, saveFeedback: async () => { throw new Error('Ответы по фрагментам в публичном просмотре отключены.'); } } : undefined);
+        setAssessmentResult({ context: assessmentContext, value: result.assessment ? { ...result.assessment, saveFeedback: async () => { throw new Error('Ответы по фрагментам в публичном просмотре отключены.'); } } : undefined });
         const pending = ['pending', 'waiting', 'queued', 'running'].includes(result.status ?? '');
         setAssessmentLoaded(!pending);
         if (pending) timer = setTimeout(load, 8_000);
@@ -96,29 +101,29 @@ function PublicProfileCard({ token }: { token: string }) {
       }).catch(cause => { if (!controller.signal.aborted) { setAssessmentError((cause as Error).message); setAssessmentLoaded(true); } });
     load();
     return () => { controller.abort(); clearTimeout(timer); };
-  }, [token, attempt]);
+  }, [token, attempt, assessmentContext]);
   useEffect(() => {
     if (!/^[A-Za-z0-9_-]{43}$/.test(token)) { setClosed(true); setError('Ссылка недействительна.'); return; }
     const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
     let pending = false;
     let revoked = false;
     function fail(cause: unknown, media = false) {
       if (controller.signal.aborted) return;
       if (cause instanceof ShareError && [404, 410].includes(cause.status)) {
         revoked = true; setClosed(true); setProfile(null); setMaterials(null); materialsRef.current = null; setError('Ссылка закрыта.');
-      } else if (media) setMaterialError((cause as Error).message);
+      } else if (media) { setMaterialError((cause as Error).message); setMaterials(null); materialsRef.current = null; }
       else setError((cause as Error).message);
     }
     async function refresh() {
       if (pending || revoked || controller.signal.aborted) return;
-      pending = true;
+      pending = true; clearTimeout(timer);
       try {
         const next = await request<Profile>(token, '', controller.signal);
         if (controller.signal.aborted) return;
         setProfile(next); setError('');
         const current = materialsRef.current;
-        const needsRefresh = !current || !current.recordings.length || !current.transcripts.length || current.recordings.some(item => item.expires && item.expires * 1000 < Date.now() + 120_000);
-        if (needsRefresh) {
+        {
           try {
             const loaded = await request<Materials>(token, '/materials', controller.signal);
             if (!controller.signal.aborted) {
@@ -138,13 +143,12 @@ function PublicProfileCard({ token }: { token: string }) {
           } catch (cause) { fail(cause, true); }
         }
       } catch (cause) { fail(cause); }
-      finally { pending = false; }
+      finally { pending = false; if (!controller.signal.aborted && !revoked) timer = setTimeout(() => { void refresh(); }, materialsRef.current?.transcriptStatus === 'processing' ? 8_000 : 60_000); }
     }
     void refresh();
-    const interval = setInterval(() => { if (document.visibilityState === 'visible') void refresh(); }, 60_000);
     const focus = () => { void refresh(); };
     window.addEventListener('focus', focus);
-    return () => { controller.abort(); clearInterval(interval); window.removeEventListener('focus', focus); };
+    return () => { controller.abort(); clearTimeout(timer); window.removeEventListener('focus', focus); };
   }, [token, attempt]);
   const resume = useMemo<EmployerCandidateResume | undefined>(() => profile?.resume ? {
     id: profile.id, name: profile.resume.name,
@@ -153,8 +157,9 @@ function PublicProfileCard({ token }: { token: string }) {
       return new Blob([Uint8Array.from(atob(result.contentBase64), char => char.charCodeAt(0))], { type: result.mime });
     },
   } : undefined, [token, profile?.id, profile?.resume?.name]);
-  const recording = materials?.recordings.find(item => item.id === recordingId) || materials?.recordings[0];
-  const transcript = materials?.transcripts[0]?.text || '';
+  const recordings = orderedRecordings(materials?.recordings || []);
+  const recording = recordings.find(item => item.id === recordingId) || recordings[0];
+  const transcript = selectedTranscript(materials, recording?.id)?.text || '';
   const chapters = useMemo(() => parseMeetingTranscript(transcript), [transcript]);
   const retry = () => { materialsRef.current = null; setError(''); setMaterialError(''); setAttempt(value => value + 1); };
   if (!profile) return <section className="public-candidate-state" aria-live="polite">
@@ -162,14 +167,22 @@ function PublicProfileCard({ token }: { token: string }) {
   </section>;
   return <section ref={card} className="public-candidate-card" aria-label="Профиль кандидата">
     {materials ? <>
-      {materials.recordings.length > 1 && <div className="public-candidate-recordings">{materials.recordings.map((item, index) =>
-        <button type="button" key={item.id} aria-pressed={recording?.id === item.id} onClick={() => setRecordingId(item.id)}>Запись {index + 1}</button>)}</div>}
+      {recordings.length > 1 && <div className="public-candidate-recordings">{recordings.map((item, index) =>
+        <button type="button" key={item.id} aria-pressed={recording?.id === item.id} onClick={() => { setRecordingId(item.id); setEvidenceRequest(undefined); }}>Запись {index + 1}</button>)}</div>}
+      {!transcript && <p role="status">{transcriptStatusMessage(materials.transcriptStatus)}</p>}
       <EmployerCandidateProfile person={profile} source={{}} resume={resume} workflowRevision={0}
         interview={header => <SourceScreeningReview sourceId={`${profile.id}:${recording?.id || 'transcript'}`} name={profile.name} header={header}
-          appearance="candidate" hideFeedbackQuestions assessment={assessment}
+          appearance="candidate" hideFeedbackQuestions assessment={materials.transcriptStatus === 'ready' ? assessment : undefined}
+          recordingId={recording?.id} evidenceRequest={evidenceRequest}
+          onEvidenceNavigate={(evidence, criterionId) => {
+            const target = evidenceRecording(materials, evidence);
+            if (!target || evidence.seconds === null) return false;
+            setRecordingId(target); setEvidenceRequest({ recordingId: target, seconds: evidence.seconds,
+              requestId: crypto.randomUUID(), evidence, criterionId }); return true;
+          }}
           assessmentStatus={!assessmentLoaded ? 'loading' : !assessment ? 'unavailable' : undefined}
           assistant={transcript ? assistant : undefined} chapters={[]} fullChapters={chapters} transcriptText={transcript}
-          transcriptSeekable={materials.recordings.length === 1 && materials.transcripts.length === 1}
+          transcriptSeekable={!!transcript}
           media={recording ? { src: recording.url, label: 'Интервью' } : undefined}
           emptyMessage="Запись пока недоступна."/>}/>
     </> : <div className="public-candidate-state"><h1>{profile.name}</h1>{!materialError && <><span className="public-candidate-spinner" aria-hidden="true"/><p>Открываем интервью…</p></>}</div>}

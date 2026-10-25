@@ -190,7 +190,10 @@ class ReceiverTest(unittest.TestCase):
         self.assertEqual(r.PRE_ASR_DISPATCH_RUNTIME - r.PRE_JEV_RUNTIME, {'assessment_jobs.py'})
         self.assertEqual(r.PRE_SELECTION_STATUS_RUNTIME - r.PRE_ASR_DISPATCH_RUNTIME, {'materials_asr_dispatch.py'})
         self.assertEqual(r.PRE_FULL_CORPUS_RUNTIME - r.PRE_SELECTION_STATUS_RUNTIME, {'selection_status.py'})
-        self.assertEqual(r.RUNTIME - r.PRE_FULL_CORPUS_RUNTIME, {'assessment_corpus.py', 'assessment_core_bridge.py'})
+        self.assertEqual(r.PRE_PRODUCT_RECORDINGS_RUNTIME - r.PRE_FULL_CORPUS_RUNTIME, {'assessment_corpus.py', 'assessment_core_bridge.py'})
+        self.assertEqual(r.RUNTIME - r.PRE_PRODUCT_RECORDINGS_RUNTIME,
+                         {'recording_uploads.py', 'canonical_materials.py', 'transcript_bundle.py'})
+        self.assertIn(frozenset(r.PRE_PRODUCT_RECORDINGS_RUNTIME), r.RUNTIME_LAYOUTS)
         self.assertIn(frozenset(r.PRE_FULL_CORPUS_RUNTIME), r.RUNTIME_LAYOUTS)
         self.assertIn(frozenset(r.PRE_SELECTION_STATUS_RUNTIME), r.RUNTIME_LAYOUTS)
         self.assertIn(frozenset(r.PRE_ASR_DISPATCH_RUNTIME), r.RUNTIME_LAYOUTS)

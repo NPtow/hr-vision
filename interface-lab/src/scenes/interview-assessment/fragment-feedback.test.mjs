@@ -116,3 +116,10 @@ test('only genuine valid 1–5 values draw a score; absence is not zero', () => 
   assert.equal(graphValue(criterion('a', [], { modelEstimate: { value: 6 } })), null);
   assert.equal(graphValue(criterion('a', [], { state: 'supported', level: Infinity })), null);
 });
+
+test('multipart zero-time feedback stays within active recording and never shares speaker clocks', () => {
+  const rows = [criterion('a', [evidence('part-a', 0, 5, { recordingId: 'a' }), evidence('part-b', 0, 5, { recordingId: 'b' })])];
+  assert.deepEqual(blocksAtTime(feedbackBlocks(rows, 'a'), 0).map(b => b.evidenceId), ['part-a']);
+  assert.deepEqual(blocksAtTime(feedbackBlocks(rows, 'b'), 0).map(b => b.evidenceId), ['part-b']);
+  assert.deepEqual(feedbackBlocks(rows, 'foreign'), []);
+});

@@ -170,6 +170,53 @@ class InterviewAssessmentTest(unittest.TestCase):
                 assessment.intake_binding(db, self.owner['workspace']['id'], self.scope)
             self.assertEqual(caught.exception.status, 422)
 
+    def test_core_multipart_uses_one_bundle_binding_without_legacy_text_fallback(self):
+        import sys
+        import types
+        import test_transcript_bundle
+        import transcript_bundle
+        data = test_transcript_bundle.materials()
+        module = types.SimpleNamespace(read_intake_db=lambda *args: data)
+        with patch.dict('os.environ', {'HR_CORE_CATALOG_ENABLED': '1'}), patch.dict(sys.modules, {'canonical_materials': module}):
+            with self.app.connect() as db:
+                bindings = [assessment.intake_binding(db, self.owner['workspace']['id'], {**self.scope, 'index': i})
+                            for i in (0, 1)]
+                self.assertEqual(bindings[0][0:2], bindings[1][0:2])
+                self.assertEqual(bindings[0][1], transcript_bundle.fingerprint(transcript_bundle.bundle(data)))
+                self.assertEqual(bindings[1][2]['id'], 'part-b')
+                data['transcription']['status'] = 'processing'
+                _, fingerprint, _ = assessment.intake_binding(db, self.owner['workspace']['id'], self.scope,
+                                                              allow_missing_transcript=True)
+                self.assertIsNone(fingerprint)
+                with self.assertRaises(Problem): assessment.intake_binding(db, self.owner['workspace']['id'], self.scope)
+
+    def test_core_import_checks_exact_part_quote_and_each_local_duration(self):
+        import sys
+        import types
+        import test_transcript_bundle
+        import transcript_bundle
+        data = test_transcript_bundle.materials()
+        data['recordings'][0]['duration'] = 1
+        data['transcripts'][0]['segments'][0]['end_ms'] = 1000
+        data['recordings'][1]['duration'] = 20
+        data['transcripts'][1]['segments'][0].update(start_ms=10000, end_ms=15000)
+        module = types.SimpleNamespace(read_intake_db=lambda *args: data)
+        with patch.dict('os.environ', {'HR_CORE_CATALOG_ENABLED': '1'}), patch.dict(sys.modules, {'canonical_materials': module}):
+            with self.app.connect() as db:
+                binding, fingerprint, recording = assessment.intake_binding(db, self.owner['workspace']['id'], self.scope)
+                row = transcript_bundle.chunks(recording['_transcriptBundle'])[1]
+                value = projection('core-multipart-revision')
+                evidence = {key: row[key] for key in ('id', 'text', 'speaker', 'recordingId', 'transcriptId')}
+                evidence.update(seconds=10, endSeconds=15, time='00:10')
+                for criterion in value['criteria']:
+                    criterion['evidence'] = [evidence] if criterion['state'] == 'supported' else []
+                self.assertFalse(assessment.import_assessment(db, self.owner['workspace']['id'], binding, fingerprint, value)['replayed'])
+                # Part B's time is allowed even though A lasts one second; wrong
+                # recording identity can never be imported with the same quote.
+                evidence['recordingId'] = 'part-a'
+                with self.assertRaises(Problem):
+                    assessment.import_assessment(db, self.owner['workspace']['id'], binding, fingerprint, value)
+
     def test_simultaneous_first_saves_cannot_overwrite_each_other(self):
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
             results = list(executor.map(lambda _: self.feedback(), range(2)))

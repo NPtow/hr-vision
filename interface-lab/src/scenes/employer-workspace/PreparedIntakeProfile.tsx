@@ -1,7 +1,11 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Button } from '../../components/ui/button';
 import { request } from '../connected-journey/api';
 import { parseMeetingTranscript } from '../connected-journey/transcript';
+import type { CallMaterials } from '../candidate-portal/api';
+import type { RecordingReviewProps } from '../interview-review/InterviewReview';
+import { evidenceRecording, orderedRecordings, selectedTranscript, transcriptStatusMessage } from '../interview-review/recording-transcript';
+import { RecordingUpload } from '../interview-review/RecordingUpload';
 import { SourceScreeningReview } from '../interview-review/InterviewReview';
 import { interviewAssistant } from '../interview-review/interview-assistant-api';
 import { downloadResume, loadResumeFile, type IntakePerson, type PreparedProfile } from './intake';
@@ -19,58 +23,86 @@ function webUrl(value: string) {
 }
 
 type CommentValues = { recordingIndex: number; seconds: number; chapterTitle: string; text: string; expectedRevision: number; requestId: string };
-function PreparedInterview({ person, profile, index, token, vacancyId, busy, onComment, header }: {
+function PreparedInterview({ person, profile, index, token, vacancyId, busy, onComment, header, onUploaded }: {
   person: IntakePerson; profile: PreparedProfile; index: number; token: string; vacancyId?: string; busy: boolean;
-  onComment: (values: CommentValues) => Promise<boolean>; header?: ReactNode;
+  onComment: (values: CommentValues) => Promise<boolean>; header?: ReactNode; onUploaded?: () => void;
 }) {
-  const source = profile.recordings[index];
-  const assessment = useInterviewAssessment(token, vacancyId && source ? { source: 'intake', id: person.id, index, vacancyId } : null,
-    JSON.stringify([source, profile.transcriptText]));
-  const [media, setMedia] = useState<{ url: string; mime: string } | null>(null);
-  const [loading, setLoading] = useState(Boolean(source));
+  const [materials, setMaterials] = useState<CallMaterials | null>(null);
+  const [selectedId, setSelectedId] = useState('');
+  const [evidenceRequest, setEvidenceRequest] = useState<RecordingReviewProps['evidenceRequest']>();
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [attempt, setAttempt] = useState(0);
+  const context = JSON.stringify([person.id, token, vacancyId, profile.recordings]);
+  const activeContext = useRef(context);
+  activeContext.current = context;
+  const sequence = useRef(0);
+  const refresh = useCallback(async () => {
+    if (!vacancyId) { setLoading(false); return; }
+    const serial = ++sequence.current;
+    setLoading(true); setError('');
+    try {
+      const result = await request<CallMaterials>('employer/intake/materials', token, { id: person.id, vacancyId });
+      if (activeContext.current === context && serial === sequence.current) setMaterials(result);
+    } catch (cause) {
+      if (activeContext.current === context && serial === sequence.current) {
+        setMaterials(null); setError(cause instanceof Error ? cause.message : 'Не удалось загрузить материалы.');
+      }
+    } finally { if (activeContext.current === context && serial === sequence.current) setLoading(false); }
+  }, [context, person.id, token, vacancyId]);
   useEffect(() => {
-    let current = true;
-    setMedia(null); setError(''); setLoading(Boolean(source));
-    if (!source) return;
-    void request<{ url: string; mime: string }>('employer/intake/recording', token, { id: person.id, index, vacancyId })
-      .then(result => {
-        if (!current) return;
-        const url = webUrl(result.url);
-        if (!url) throw new Error('Не удалось получить ссылку на запись.');
-        setMedia({ ...result, url });
-      })
-      .catch(cause => { if (current) setError(cause instanceof Error ? cause.message : 'Не удалось загрузить запись.'); })
-      .finally(() => { if (current) setLoading(false); });
-    return () => { current = false; };
-  }, [person.id, index, token, vacancyId, source?.publicUrl, attempt]);
-  const transcript = profile.recordings.length <= 1 ? profile.transcriptText || '' : '';
-  const chapters = profile.recordings.length <= 1 ? profile.chapters || parseMeetingTranscript(transcript) : [];
+    setMaterials(null); void refresh();
+    return () => { sequence.current++; };
+  }, [refresh]);
+  useEffect(() => {
+    if (!materials) return;
+    const timer = setTimeout(() => { void refresh(); }, materials.transcription.status === 'processing' ? 8_000 : 60_000);
+    return () => clearTimeout(timer);
+  }, [materials, refresh]);
+  const recordings = orderedRecordings(materials?.recordings || []);
+  const source = recordings.find(item => item.id === selectedId) || recordings[index] || recordings[0];
+  const selectedIndex = source ? recordings.findIndex(item => item.id === source.id) : 0;
+  const transcript = selectedTranscript(materials, source?.id)?.text || '';
+  const materialIdentity = JSON.stringify([materials?.transcription.status,
+    materials?.transcripts.map(item => [item.recordingId, item.id, item.selectionRevision, item.text])]);
+  const assessment = useInterviewAssessment(token, vacancyId && source && materials?.transcription.status === 'ready' ?
+    { source: 'intake', id: person.id, index: 0, vacancyId } : null, materialIdentity);
+  const chapters = parseMeetingTranscript(transcript);
   const canComment = !!vacancyId && !!source && !person.archived;
   const commentCounts = new Map<number, number>();
   for (const item of person.screeningComments || []) {
-    if (item.recordingIndex === index) commentCounts.set(item.seconds, (commentCounts.get(item.seconds) || 0) + 1);
+    if (item.recordingId === source?.id || !item.recordingId && item.recordingIndex === selectedIndex) commentCounts.set(item.seconds, (commentCounts.get(item.seconds) || 0) + 1);
   }
   function comment(seconds: number, chapterTitle = '', onClose?: () => void, openRequest?: number) {
-    return <EmployerTimecodeComment key={`${person.id}:${index}:${seconds}`} seconds={seconds}
+    return <EmployerTimecodeComment key={`${person.id}:${source?.id}:${seconds}`} seconds={seconds}
       appearance="player" openRequest={openRequest}
-      comments={(person.screeningComments || []).filter(item => item.recordingIndex === index && Math.abs(item.seconds - seconds) < 0.001)}
+      comments={(person.screeningComments || []).filter(item => (item.recordingId === source?.id || !item.recordingId && item.recordingIndex === selectedIndex) && Math.abs(item.seconds - seconds) < 0.001)}
       workflowRevision={person.reviewRevision || 0} busy={busy} initiallyOpen={!!onClose} onClose={onClose}
-      onSave={canComment ? (text, expectedRevision, requestId) => onComment({ recordingIndex: index, seconds, chapterTitle, text, expectedRevision, requestId }) : undefined}/>;
+      onSave={canComment ? (text, expectedRevision, requestId) => onComment({ recordingIndex: selectedIndex, seconds, chapterTitle, text, expectedRevision, requestId }) : undefined}/>;
   }
   return <>
     {assessment.error && <div className="ew-inline-error" role="alert"><p>{assessment.error}</p><Button type="button" variant="ghost" onClick={assessment.retry}>Повторить загрузку оценки</Button></div>}
-    {error && <div className="ew-inline-error" role="alert"><p>{error}</p><Button type="button" variant="ghost" onClick={() => setAttempt(value => value + 1)}>Повторить загрузку</Button></div>}
-    <SourceScreeningReview appearance="candidate" sourceId={`${person.id}:prepared:${index}:${source?.publicUrl || 'none'}`}
+    {error && <div className="ew-inline-error" role="alert"><p>{error}</p><Button type="button" variant="ghost" onClick={() => { void refresh(); }}>Повторить загрузку</Button></div>}
+    {vacancyId && !person.archived && <RecordingUpload token={token} scope={{ source: 'intake', vacancyId, id: person.id }} onUploaded={() => { void refresh(); onUploaded?.(); }}/>}
+    {recordings.length > 1 && <label>Часть интервью <select aria-label="Часть интервью" value={source?.id || ''} onChange={event => { setSelectedId(event.target.value); setEvidenceRequest(undefined); }}>
+      {recordings.map((recording, part) => <option key={recording.id} value={recording.id}>Запись {part + 1}</option>)}
+    </select></label>}
+    {!transcript && materials && <p role="status">{transcriptStatusMessage(materials.transcription.status)}</p>}
+    <SourceScreeningReview appearance="candidate" sourceId={`${person.id}:prepared:${source?.id || 'none'}`}
+      recordingId={source?.id} evidenceRequest={evidenceRequest}
+      onEvidenceNavigate={(evidence, criterionId) => {
+        const target = evidenceRecording(materials, evidence);
+        if (!target || evidence.seconds === null) return false;
+        setSelectedId(target); setEvidenceRequest({ recordingId: target, seconds: evidence.seconds,
+          requestId: crypto.randomUUID(), evidence, criterionId }); return true;
+      }}
       name={person.name} header={header} chapters={chapters} fullChapters={chapters} transcriptText={transcript}
       assessment={assessment.assessment}
-      assistant={vacancyId && transcript ? interviewAssistant(token, { source: 'intake', id: person.id, index, vacancyId }) : undefined}
-      media={media ? { src: media.url, label: source?.name } : undefined}
+      assistant={vacancyId && transcript ? interviewAssistant(token, { source: 'intake', id: person.id, index: selectedIndex, vacancyId }) : undefined}
+      media={source && webUrl(source.url) ? { src: webUrl(source.url), label: source.name || 'Интервью' } : undefined}
       renderChapterComment={chapter => chapter.seconds === null ? null : comment(chapter.seconds, chapter.title)}
       renderTimeComment={(seconds, onClose, openRequest) => comment(seconds, '', onClose, openRequest)}
       commentTimestamps={[...commentCounts].sort(([a], [b]) => a - b).map(([seconds, count]) => ({ seconds, count }))}
-      canComment={canComment} comments={(person.screeningComments || []).filter(item => item.recordingIndex === index)}
+      canComment={canComment} comments={(person.screeningComments || []).filter(item => item.recordingId === source?.id || !item.recordingId && item.recordingIndex === selectedIndex)}
       emptyMessage={loading ? 'Загружаем запись…' : error || 'Запись интервью не добавлена.'}/>
   </>;
 }
@@ -86,8 +118,7 @@ export function PreparedIntakeProfile({ person, token, vacancyId, onUpdated, onR
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => setCurrent(person), [person]);
-  const profile = current.preparedProfile;
-  if (!profile) return null;
+  const profile: PreparedProfile = current.preparedProfile || { cvText: '', evaluationText: '', recordings: [], sourceLabel: '' };
   const resumeUrl = webUrl(current.link);
   const firstFile = current.files[0];
   async function mutate(path: string, values: Record<string, unknown>) {
@@ -136,7 +167,7 @@ export function PreparedIntakeProfile({ person, token, vacancyId, onUpdated, onR
       }, onDownload: () => { window.open(resumeUrl, '_blank', 'noopener,noreferrer'); } } : undefined}
     interview={header => <>
       {current.files.slice(1).map(file => <button key={file.id} type="button" className="ew-file-row" onClick={() => download(file)}>{file.name}</button>)}
-      <PreparedInterview key={`${current.id}:${token}`} person={current} profile={profile} index={0} token={token} vacancyId={vacancyId} busy={busy} header={header} onComment={values => mutate('comment', values)}/>
+      <PreparedInterview key={`${current.id}:${vacancyId}:${token}`} person={current} profile={profile} index={0} token={token} vacancyId={vacancyId} busy={busy} header={header} onUploaded={onUpdated} onComment={values => mutate('comment', values)}/>
     </>}
     onRespond={vacancyId && !current.archived ? respond : undefined}
     meetingOptions={{ mode: 'proposal' }}

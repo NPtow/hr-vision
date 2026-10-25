@@ -54,8 +54,17 @@ def intake(body):
     rows = body['chunks']
     check(isinstance(rows, list) and 1 <= len(rows) <= 600)
     ids, clean, redacted = set(), [], 0
+    linked = 'recordingId' in rows[0] if isinstance(rows[0], dict) else False
+    associations = {}
     for row in rows:
-        check(isinstance(row, dict) and set(row) == {'id', 'text', 'speaker', 'startMs', 'endMs'})
+        check(isinstance(row, dict) and set(row) in ({'id', 'text', 'speaker', 'startMs', 'endMs'},
+            {'id', 'text', 'speaker', 'startMs', 'endMs', 'recordingId', 'transcriptId'}))
+        check(('recordingId' in row) == linked)
+        for key in ('recordingId', 'transcriptId'):
+            if key in row:
+                check(isinstance(row[key], str) and 1 <= len(row[key]) <= 180)
+        if linked:
+            check(associations.setdefault(row['transcriptId'], row['recordingId']) == row['recordingId'])
         check(isinstance(row['id'], str) and re.fullmatch(r'[a-zA-Z0-9_.-]{1,80}', row['id']) and row['id'] not in ids)
         ids.add(row['id'])
         check(isinstance(row['text'], str) and 1 <= len(row['text']) <= 1200)
@@ -173,6 +182,14 @@ class JevBoundary:
         raise Failure('invalid_model_output')
 
 
+def neighbors(chunks, index):
+    """Context belongs to the same immutable recording/transcript pair."""
+    row = chunks[index]
+    identity = (row.get('recordingId'), row.get('transcriptId'))
+    return [i for i in range(max(0, index - 1), min(len(chunks), index + 2))
+            if (chunks[i].get('recordingId'), chunks[i].get('transcriptId')) == identity]
+
+
 def retrieve(chunks, criterion):
     # Bounded, deterministic first pass; retained coverage is recorded. No source
     # supplies a URL, path or executable action. Short stems allow Russian inflection.
@@ -180,10 +197,7 @@ def retrieve(chunks, criterion):
     ranked = sorted(enumerate(chunks), key=lambda pair: (-sum(w in pair[1]['text'].lower() for w in words), pair[0]))
     indexes = {i for i, _ in ranked[:10]}
     for i in list(indexes):
-        if i > 0:
-            indexes.add(i - 1)
-        if i + 1 < len(chunks):
-            indexes.add(i + 1)
+        indexes.update(neighbors(chunks, i))
     return [chunks[i] for i in sorted(indexes)]
 
 
@@ -214,7 +228,7 @@ def assess(body, job_id, boundary):
             # source against NONE, then use the independent basis and judge gates.
             if chosen != 'NONE' and answer['probabilities'][chosen] > answer['probabilities']['NONE']:
                 index = next(i for i, r in enumerate(chunks) if r['id'] == chosen)
-                selected[cid] = chunks[max(0, index - 1):index + 2]
+                selected[cid] = [chunks[i] for i in neighbors(chunks, index)]
     scores, judged = {}, {}
     if selected:
         questions = {cid: {'type': 'choice', 'instructions': PACK['basis'] + '\nКритерий ' + next(c['name_ru'] for c in criteria if c['criterion_id'] == cid) + '; state.' + cid,
@@ -253,7 +267,8 @@ def assess(body, job_id, boundary):
             for row in selected[cid]:
                 evidence.append({'id': row['id'], 'text': row['text'], 'seconds': row['startMs'] / 1000,
                                  'endSeconds': row['endMs'] / 1000, 'speaker': row['speaker'],
-                                 'time': str(int(row['startMs'] // 60000)).zfill(2) + ':' + str(int(row['startMs'] // 1000) % 60).zfill(2)})
+                                 'time': str(int(row['startMs'] // 60000)).zfill(2) + ':' + str(int(row['startMs'] // 1000) % 60).zfill(2),
+                                 **{key: row[key] for key in ('recordingId', 'transcriptId') if key in row}})
         level = scores[cid]['displayLevel'] if supported else None
         result.append({'id': cid, 'label': c['name_ru'], 'state': 'supported' if supported else 'unknown',
             'level': level, 'target': None, 'basis': bases.get(cid) if supported else None,

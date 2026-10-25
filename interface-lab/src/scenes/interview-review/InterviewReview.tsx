@@ -52,6 +52,10 @@ export type RecordingReviewProps = {
   transcriptText?: string;
   /** False when transcript timestamps have not been mapped to this recording. */
   transcriptSeekable?: boolean;
+  recordingId?: string;
+  onEvidenceNavigate?: (evidence: import('../interview-assessment/types').AssessmentEvidence, criterionId: string) => boolean;
+  evidenceRequest?: { recordingId: string; seconds: number; requestId: string;
+    evidence?: import('../interview-assessment/types').AssessmentEvidence; criterionId?: string };
   emptyMessage?: string;
   fullChapters?: RecordingChapter[];
   shortPlaylist?: boolean;

@@ -184,6 +184,8 @@ def _recordings(person):
 def _recording_fingerprint(recording):
     # The identity is derived only from persisted source metadata. A filename or
     # a chapter title can be edited without moving comments to another source.
+    if recording.get('source') == 'core':
+        return recording['id']
     source = {key: recording.get(key) for key in
               ('publicUrl', 'mime', 'size', 'id', 'sha256', 'checksum', 'version')}
     if recording.get('source') == 'dsa-panel':
@@ -197,7 +199,11 @@ def _stored_recording(person, index):
     require(index < len(recordings) and isinstance(recordings[index], dict), 'Запись не найдена.', 404)
     recording = recordings[index]
     url, mime = recording.get('publicUrl', ''), recording.get('mime', '')
-    if recording.get('source') == 'dsa-panel':
+    if recording.get('source') == 'core':
+        require(isinstance(recording.get('id'), str) and re.fullmatch(r'[a-f0-9]{32}', recording['id']) and
+                isinstance(recording.get('sha256'), str) and re.fullmatch(r'[a-f0-9]{64}', recording['sha256']),
+                'Запись ещё не сохранена.', 422)
+    elif recording.get('source') == 'dsa-panel':
         source_id = recording.get('sourceCandidateId')
         source = (person.get('preparedProfile') or {}).get('source') or {}
         require(isinstance(source, dict) and source.get('kind') == 'dsa-panel' and
