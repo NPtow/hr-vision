@@ -34,7 +34,7 @@ class FakeTransport:
         self.updates = []
         self.requests = []
 
-    def send_email(self, recipient, subject, content, message_id):
+    def send_email(self, recipient, subject, content, message_id, *, html=None):
         self.email.append({'recipient': recipient, 'subject': subject, 'content': content, 'id': message_id})
         if self.email_failure:
             raise self.email_failure

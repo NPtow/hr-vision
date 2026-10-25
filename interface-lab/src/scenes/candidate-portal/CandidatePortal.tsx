@@ -14,11 +14,14 @@ import { PooledBookingCalendar } from './PooledBookingCalendar';
 import type { BookingSlot } from './pooled-booking-model';
 import { TelegramHandoff } from './TelegramHandoff';
 import { CandidateSearch } from './CandidateSearch';
+import { EmailAccess, EmailLinkForm } from './EmailAccess';
+import { OnboardingResume } from './OnboardingResume';
+import { CandidateCompletion } from './CandidateCompletion';
 import { CandidateSchedule } from './CandidateSchedule';
 import { CandidateProfile } from './CandidateProfile';
 import { PublicCandidateProfile } from './PublicCandidateProfile';
 import { applicationGroup, currentApplicationMeeting } from './workspace-model';
-import { candidatePage, candidateLoginTarget, candidateNavigationURL, authenticatedCandidatePage as authenticatedPage, type CandidatePage as Page } from './candidate-navigation';
+import { candidatePage, candidateLoginTarget, candidateNavigationURL, authenticatedCandidatePage as authenticatedPage, candidateSetupPage as setupPage, candidateDestination as destination, candidateAfterProfile, candidateCompletionStep, type CandidatePage as Page } from './candidate-navigation';
 import '@fontsource-variable/inter';
 import '../agency-product/theme.css';
 import './candidate-portal.css';
@@ -27,23 +30,12 @@ import './candidate-surfaces.css';
 
 const readPage = (): Page => candidatePage(new URLSearchParams(location.search));
 const loginTarget = (): Page => candidateLoginTarget(new URLSearchParams(location.search));
-function setupPage(candidate: CandidateState, newBooking = false): 'resume' | 'preferences' | null {
-  if (candidate.interview && !newBooking) return null;
-  if (!candidate.resume) return 'resume';
-  if (!candidate.resumeReviewed || candidate.onboarding.missingFields.length) return 'preferences';
-  return null;
-}
-function destination(candidate: CandidateState, wanted: Page = 'home'): Page {
-  const pending = setupPage(candidate, wanted === 'booking' && candidate.interview?.status === 'completed');
-  if (pending) return pending;
-  if (['resume', 'preferences'].includes(wanted) && candidate.resume && candidate.resumeReviewed && !candidate.onboarding.missingFields.length) return candidate.interview ? 'home' : 'booking';
-  return ['welcome', 'login', 'register'].includes(wanted) ? 'home' : wanted;
-}
 const initials = (name: string) => name.split(' ').filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase();
 const safeSupportEmail = (channels?: Channels) => channels?.supportEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(channels.supportEmail) ? channels.supportEmail : null;
 
 export function CandidatePortal() {
   const invitation = new URLSearchParams(location.search).get('cp');
+  if (invitation === 'email-access') return <EmailAccess/>;
   if (invitation === 'public') return <PublicCandidateProfile/>;
   if (invitation === 'invite-booking') return <BookingPortal/>;
   return invitation === 'guest' || invitation === 'claim' ? <InvitationPortal kind={invitation}/> : <AuthenticatedCandidatePortal/>;
@@ -63,6 +55,7 @@ function AuthenticatedCandidatePortal() {
   const menuToggle = useRef<HTMLButtonElement>(null);
   const [telegramEntry, setTelegramEntry] = useState(() => new URLSearchParams(location.search).get('telegram') === 'connect');
   const [credentials, setCredentials] = useState({ email: '', password: '' });
+  const [emailLogin, setEmailLogin] = useState(true);
   const [registrationConsent, setRegistrationConsent] = useState(false);
   const [meetingApplicationId, setMeetingApplicationId] = useState(() => new URLSearchParams(location.search).get('application') || '');
   const [meetingId, setMeetingId] = useState(() => new URLSearchParams(location.search).get('meeting') || '');
@@ -244,25 +237,25 @@ function AuthenticatedCandidatePortal() {
           {notice && <div className="cp-message cp-success" role="status"><Check size={17}/>{notice}<button aria-label="Закрыть сообщение" onClick={() => setNotice('')}><X size={16}/></button></div>}
           {candidate && telegramEntry && !telegramChannel?.linked && !['interview', 'meeting'].includes(page) && <TelegramHandoff key={candidate.id} available={telegramChannel?.canLink === true || channels.telegramBindingAvailable === true}/>}
           {!candidate && page === 'welcome' && <Welcome onStart={() => go('register')}/>}
-          {!candidate && (page === 'login' || authenticatedPage(page)) && <section className="cp-auth-card"><h1>С возвращением</h1><p className="cp-muted">Войдите в свой кабинет HR Vision.</p><form className="cp-auth-form" onSubmit={async event => { event.preventDefault(); const next = await mutate('login', { email: credentials.email.trim(), password: credentials.password }); if (next) { setCredentials(value => ({ ...value, password: '' })); const query = new URLSearchParams(location.search); go(destination(next, loginTarget()), true, query.get('application') || undefined, query.get('meeting') || undefined); } }}>
+          {!candidate && (page === 'login' || authenticatedPage(page)) && <section className="cp-auth-card"><h1>С возвращением</h1><p className="cp-muted">Войдите в свой кабинет HR Vision.</p>{emailLogin ? <EmailLinkForm/> : <form className="cp-auth-form" onSubmit={async event => { event.preventDefault(); const next = await mutate('login', { email: credentials.email.trim(), password: credentials.password }); if (next) { setCredentials(value => ({ ...value, password: '' })); const query = new URLSearchParams(location.search); go(destination(next, loginTarget()), true, query.get('application') || undefined, query.get('meeting') || undefined); } }}>
             <label htmlFor="cp-login-email">Почта<Input id="cp-login-email" type="email" autoComplete="username" required value={credentials.email} onChange={event => setCredentials(value => ({ ...value, email: event.target.value }))}/></label>
             <label htmlFor="cp-login-password">Пароль<Input id="cp-login-password" type="password" autoComplete="current-password" required value={credentials.password} onChange={event => setCredentials(value => ({ ...value, password: event.target.value }))}/></label>
             <Button disabled={busy}>{busy ? 'Входим…' : 'Войти'}</Button>
-          </form><p className="cp-auth-foot">Первый раз здесь? <button onClick={() => go('register')}>Создать кабинет</button></p></section>}
+          </form>}<button type="button" className="cp-email-login-switch" onClick={() => setEmailLogin(value => !value)}>{emailLogin ? 'Войти по паролю' : 'Войти по ссылке из письма'}</button><p className="cp-auth-foot">Первый раз здесь? <button onClick={() => go('register')}>Создать кабинет</button></p></section>}
           {!candidate && page === 'register' && <section className="cp-auth-card"><Button className="cp-back" variant="ghost" onClick={() => go('welcome')}><ArrowLeft size={16}/>Назад</Button><h1>Создайте кабинет</h1><p className="cp-muted">Затем загрузите резюме и выберите время интервью.</p><form className="cp-auth-form" onSubmit={async event => { event.preventDefault(); const next = await mutate('register', { email: credentials.email.trim(), password: credentials.password, consentReuse: registrationConsent, autoApprove: false }); if (next) { setCredentials(value => ({ ...value, password: '' })); go(destination(next), true); } }}>
             <label htmlFor="cp-register-email">Почта<Input id="cp-register-email" type="email" autoComplete="username" required value={credentials.email} onChange={event => setCredentials(value => ({ ...value, email: event.target.value }))}/></label>
             <label htmlFor="cp-register-password">Пароль<Input id="cp-register-password" type="password" autoComplete="new-password" minLength={10} maxLength={128} required placeholder="Не менее 10 символов" value={credentials.password} onChange={event => setCredentials(value => ({ ...value, password: event.target.value }))}/></label>
             <label className="cp-check cp-registration-consent"><input type="checkbox" required checked={registrationConsent} onChange={event => setRegistrationConsent(event.target.checked)}/><span>Согласен на запись интервью и использование его материалов для участия в подходящих вакансиях.</span></label>
             <Button disabled={busy}>{busy ? 'Создаём кабинет…' : 'Создать кабинет'}<ArrowRight size={17}/></Button>
           </form><p className="cp-auth-foot">Уже есть кабинет? <button onClick={() => go('login')}>Войти</button></p></section>}
-          {candidate && page === 'resume' && <section className="cp-form-page"><div className="cp-page-heading"><h1>Загрузите резюме</h1><p>Заполним профиль из файла. Вы проверите данные и дополните недостающие.</p></div><ResumeUpload resume={candidate.resume} busy={busy} onUpload={async payload => { const next = await mutate('resume', payload); if (!next) return false; go(setupPage(next, true) || 'booking', true); return true; }}/></section>}
-          {candidate && page === 'preferences' && <section className="cp-form-page"><div className="cp-page-heading"><h1>Проверьте данные</h1><p>{candidate.resume?.extractedFields.some(field => ['about', 'city', 'residence', 'employmentType', 'salaryMin', 'salaryMax', 'latestStartDate'].includes(field)) ? 'Проверьте данные из резюме и дополните недостающие.' : 'Резюме сохранено. Заполнить поля автоматически не удалось.'}</p></div><PreferencesForm key={candidate.id} initial={candidate} missingFields={candidate.onboarding.missingFields} busy={busy} onSubmit={async profile => { const next = await mutate('profile', profile); if (next) go(setupPage(next, true) || 'booking', true); }}/></section>}
-          {candidate && ['welcome', 'login', 'register', 'home', 'vacancies'].includes(page) && <CandidateSearch candidate={candidate} busy={busy} selectedId={selectedId} onSelect={setSelectedId} onDecision={decide} onMeetingReply={replyToMeeting} onWorkflow={workflow} onJoin={(applicationId, targetMeetingId) => go('meeting', false, applicationId, targetMeetingId)} onBookInterview={() => go('booking')} onInterview={() => go('interview')} onResumeSearch={() => changeSearch(true)}/>}
+          {candidate && page === 'resume' && <section className="cp-form-page"><div className="cp-page-heading"><h1>Загрузите резюме</h1><p>Заполним профиль из файла. Вы проверите данные и дополните недостающие.</p></div><ResumeUpload resume={candidate.resume} busy={busy} onUpload={async payload => { const next = await mutate('resume', payload); if (!next) return false; go(candidateAfterProfile(next), true); return true; }}/></section>}
+          {candidate && page === 'preferences' && <section className="cp-form-page cp-onboarding-profile"><div className="cp-page-heading"><h1>Ваш профиль</h1></div><OnboardingResume candidate={candidate} onReplace={() => go('resume')}/><PreferencesForm key={candidate.id + String(candidate.resume?.uploadedAt)} initial={candidate} missingFields={candidate.onboarding.missingFields} busy={busy} onSubmit={async profile => { const next = await mutate('profile', profile); if (next) go(candidateAfterProfile(next), true); }}/></section>}
+          {candidate && ['welcome', 'login', 'register', 'home', 'vacancies'].includes(page) && (!selectedId && candidateCompletionStep(candidate) ? <CandidateCompletion candidate={candidate} busy={busy} onOpen={go} onConsent={() => mutate('profile', { consentReuse: true })}/> : <CandidateSearch candidate={candidate} busy={busy} selectedId={selectedId} onSelect={setSelectedId} onDecision={decide} onMeetingReply={replyToMeeting} onWorkflow={workflow} onJoin={(applicationId, targetMeetingId) => go('meeting', false, applicationId, targetMeetingId)} onBookInterview={() => go('booking')} onInterview={() => go('interview')} onResumeSearch={() => changeSearch(true)}/>)}
           {candidate && page === 'calendar' && <CandidateSchedule candidate={candidate} busy={busy} onTimezone={async timezone => !!await mutate('profile', { timezone })} onAvailability={async availabilitySchedule => !!await mutate('profile', { availabilitySchedule })} onMeetingReply={replyToMeeting} onOpenVacancy={openVacancy} onJoin={(applicationId, targetMeetingId) => go('meeting', false, applicationId, targetMeetingId)} onInterview={() => go('interview')} onBookInterview={() => go('booking')}/>}
           {candidate && page === 'booking' && <RecruiterCalendar candidate={candidate} busy={busy} onBack={() => go('calendar')} onBook={async slotId => { const booked = await mutate('book', { slotId }); if (booked) go('home'); return Boolean(booked); }}/>}
           {candidate && page === 'profile' && <CandidateProfile candidate={candidate} busy={busy} onSave={async profile => !!await mutate('profile', profile, 'Изменения сохранены.')} onUpload={async payload => !!await mutate('resume', payload, 'Резюме сохранено.')} onSearchChange={changeSearch} contacts={<ContactSettings candidate={candidate} channels={channels} onRefresh={refresh}/>} onBack={() => go('home')}/>}
           {candidate && page === 'interview' && (candidate.interview ? <InterviewRoom key={candidate.interview.id} title="Интервью с рекрутером" start={candidate.interview.start} completed={candidate.interview.status === 'completed'} configured={candidate.interview.videoConfigured ?? candidate.videoConfigured} callProvider={candidate.interview.callProvider} onRefresh={refresh} onBack={() => go('home')}/> : <RecruiterCalendar candidate={candidate} busy={busy} onBack={() => go('home')} onBook={async slotId => { const booked = await mutate('book', { slotId }); if (booked) go('home'); return Boolean(booked); }}/>) }
-          {candidate && page === 'meeting' && (currentMeeting && ['confirmed', 'live', 'completed'].includes(currentMeeting.status) && (!currentApplication?.archivedAt || currentMeeting.status === 'completed') ? <InterviewRoom key={currentMeeting.id} title={`Встреча · ${currentApplication?.vacancy.company}`} start={currentMeeting.start} completed={currentMeeting.status === 'completed'} configured={currentMeeting.videoConfigured ?? candidate.videoConfigured} callProvider={currentMeeting.callProvider} applicationId={currentApplication!.id} meetingId={currentMeeting.id} onRefresh={refresh} onBack={() => openVacancy(currentApplication!.id)} onExit={() => go('home')}/> : <section className="cp-narrow cp-empty"><h1>Встреча недоступна</h1><p>Откройте вакансию, чтобы посмотреть актуальное время и историю встреч.</p><Button onClick={() => currentApplication ? openVacancy(currentApplication.id) : go('home')}>К поиску</Button></section>)}
+          {candidate && page === 'meeting' && (currentMeeting && ['confirmed', 'live', 'completed'].includes(currentMeeting.status) && (!currentApplication?.archivedAt || currentMeeting.status === 'completed') ? <InterviewRoom key={currentMeeting.id} title={`Встреча · ${currentApplication?.vacancy.company}`} start={currentMeeting.start} completed={currentMeeting.status === 'completed'} configured={currentMeeting.videoConfigured ?? candidate.videoConfigured} callProvider={currentMeeting.callProvider} applicationId={currentApplication!.id} meetingId={currentMeeting.id} onRefresh={refresh} onBack={() => openVacancy(currentApplication!.id)} onExit={() => openVacancy(currentApplication!.id)}/> : <section className="cp-narrow cp-empty"><h1>Встреча недоступна</h1><p>Откройте вакансию, чтобы посмотреть актуальное время и историю встреч.</p><Button onClick={() => currentApplication ? openVacancy(currentApplication.id) : go('home')}>К поиску</Button></section>)}
         </>}
       </main>
     </div>

@@ -24,9 +24,11 @@ export type CandidateProfile = {
   residence: string;
   employmentType: '' | 'full-time' | 'part-time' | 'project' | 'internship';
   resumeReviewed: boolean;
+  preferredCompanies?: string[];
+  anyCompany?: boolean;
 };
-export type MissingPreference = 'salaryMin' | 'salaryMax' | 'latestStartDate';
-export type CandidatePreferences = Pick<CandidateProfile, MissingPreference | 'consentReuse' | 'autoApprove' | 'about' | 'city' | 'residence' | 'employmentType' | 'resumeReviewed'>;
+export type MissingPreference = 'salaryMin' | 'desiredRole' | 'city' | 'employmentType' | 'workMode' | 'preferredCompanies';
+export type CandidatePreferences = Pick<CandidateProfile, MissingPreference | 'salaryMax' | 'anyCompany' | 'consentReuse' | 'autoApprove' | 'about' | 'city' | 'residence' | 'employmentType' | 'resumeReviewed'>;
 export type CandidateResume = { filename: string; mime: string; size: number; uploadedAt: string | number; extractedFields: string[] };
 export type RecruiterSlot = { id: string; start: string; end: string; recruiterName: string };
 export type InterviewRecording = { consentReceived: boolean; consentSource: 'recruiter_oral' | null; startRequested: boolean; recordingRequested: boolean; transcriptionRequested: boolean };
@@ -108,7 +110,8 @@ export type CandidateState = CandidateProfile & {
   onboarding: { step: 'resume' | 'preferences' | 'complete'; missingFields: MissingPreference[] };
 };
 export type CandidateSession = { authenticated: boolean; candidate?: CandidateState; videoConfigured: boolean; channels?: Channels };
-export type GuestState = { name: string; interview: CandidateInterview; videoConfigured: boolean };
+export type GuestContinuation = { status: 'not_requested' | 'queued' | 'sending' | 'sent' | 'failed' | 'unknown'; canSend: boolean; blockedReason: string | null; needsEmail?: boolean; emailHint?: string | null };
+export type GuestState = { name: string; interview: CandidateInterview; videoConfigured: boolean; accountActive?: boolean; continuation?: GuestContinuation | null };
 export type ClaimState = { candidate: Partial<CandidateProfile> & { name: string; resume: CandidateResume | null; interview?: CandidateInterview | null } | null; claimed: boolean };
 export type RoomCredentials = CallCredentials;
 export type MediaStatus = 'ready' | 'processing' | 'not_recorded' | 'error';

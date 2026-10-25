@@ -146,7 +146,7 @@ class CandidateHTTPTest(unittest.TestCase):
             'contentBase64': base64.b64encode(resume.encode()).decode()}, cookie=self.cookie)
         self.assertEqual(code, 200, body)
         code, body, _ = self.request('candidate/profile', {'salaryMin': 150000, 'salaryMax': 200000,
-            'latestStartDate': (now() + dt.timedelta(days=30)).date().isoformat(), 'resumeReviewed': True}, cookie=self.cookie)
+            'latestStartDate': (now() + dt.timedelta(days=30)).date().isoformat(), 'resumeReviewed': True, 'employmentType': 'full-time', 'anyCompany': True}, cookie=self.cookie)
         self.assertEqual(code, 200, body)
         status, state, _ = self.request('recruiter/slots', {'start': iso(self.start), 'recruiterName': self.person['id']}, token=self.manager)
         self.assertEqual(status, 200, state)
@@ -290,14 +290,14 @@ class CandidateHTTPTest(unittest.TestCase):
         payload = {'filename': 'anna.txt', 'contentBase64': base64.b64encode(resume.encode()).decode()}
         status, uploaded, _ = self.request('candidate/resume', payload, cookie=cookie)
         self.assertEqual(status, 200, uploaded)
-        self.assertEqual(uploaded['onboarding'], {'step': 'preferences', 'missingFields': []})
+        self.assertEqual(uploaded['onboarding'], {'step': 'preferences', 'missingFields': ['employmentType', 'preferredCompanies']})
         self.assertNotIn('contentBase64', json.dumps(uploaded))
         self.assertEqual(self.request('candidate/resume', cookie=cookie)[1],
             {**payload, 'mime': 'text/plain'})
         self.assertEqual(self.request('candidate/resume', cookie=self.cookie)[0], 404)
         self.assertEqual(self.request('candidate/resume', token=self.manager)[0], 401)
         changes = {'city': 'Санкт-Петербург', 'residence': 'Петроградский район',
-            'employmentType': 'full-time', 'about': 'Работала с клиентами пять лет.', 'resumeReviewed': True}
+            'employmentType': 'full-time', 'about': 'Работала с клиентами пять лет.', 'resumeReviewed': True, 'anyCompany': True}
         status, reviewed, _ = self.request('candidate/profile', changes, cookie=cookie)
         self.assertEqual(status, 200, reviewed)
         persisted = self.request('candidate/state', cookie=cookie)[1]
