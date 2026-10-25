@@ -5,6 +5,7 @@ import json
 import os
 import unittest
 import uuid
+from types import SimpleNamespace
 from unittest.mock import patch
 import interview_assistant as assistant
 import structured_model
@@ -339,5 +340,75 @@ class JevBoundaryTest(unittest.TestCase):
         chunks = assistant.search_chunks(rows)
         self.assertEqual(len(chunks), 1); self.assertEqual(chunks[0]['startMs'], 1000)
         self.assertEqual(chunks[0]['endMs'], 2000); self.assertEqual(chunks[0]['text'], 'Клиент согласился.')
+
+
+class JevProxyTest(unittest.TestCase):
+    row = JevBoundaryTest.row
+    valid = JevBoundaryTest.valid
+    def proxy_evaluate(self, raw, code=0, error=None):
+        self.command = self.options = None
+        def curl(command, **options):
+            self.command, self.options = command, options
+            if error is not None: raise error
+            options['stdout'].write(raw)
+            return SimpleNamespace(returncode=code)
+        config = assistant.JevConfig(assistant.JEV_BASE_URL, 'jev-latest', 'private-unit-key',
+            timeout=8, proxy_url='socks5h://127.0.0.1:10808')
+        with patch.object(assistant.subprocess, 'run', side_effect=curl) as run, patch.object(assistant.urllib.request, 'build_opener') as direct:
+            self.run, self.direct = run, direct
+            return assistant.evaluate_jev(config, 'Что обсуждали о цене?', [self.row], 'scoped-batch-key',
+                assistant.time.monotonic() + 10, lambda: None, lambda cost: None)
+
+    def test_only_explicit_existing_loopback_socks5h_is_accepted(self):
+        invalid = ('http://127.0.0.1:10808', 'socks5://127.0.0.1:10808', 'socks5h://proxy.example:10808',
+            'socks5h://localhost:10808', 'socks5h://user:secret@127.0.0.1:10808', 'socks5h://127.0.0.1:10808/',
+            'socks5h://127.0.0.1:10808?q=1', 'socks5h://127.0.0.1:10808#debug', 'socks5h://127.0.0.1:0',
+            'socks5h://127.0.0.1:65536', 'socks5h://127.0.0.1:10808\n')
+        for proxy in invalid:
+            with self.subTest(proxy=proxy), patch.dict(os.environ, {'HR_JEV_API_KEY': 'unit', 'HR_JEV_PROXY_URL': proxy}, clear=True):
+                with self.assertRaises(Problem): assistant.jev_config()
+        with patch.dict(os.environ, {'HR_JEV_API_KEY': 'unit', 'HTTPS_PROXY': 'http://foreign.invalid',
+                                    'HR_TELEGRAM_PROXY_URL': 'socks5h://127.0.0.1:10808'}, clear=True):
+            self.assertEqual(assistant.jev_config().proxy_url, '')
+        with patch.dict(os.environ, {'HR_JEV_API_KEY': 'unit', 'HR_JEV_PROXY_URL': 'socks5h://[::1]:10808'}, clear=True):
+            self.assertEqual(assistant.jev_config().proxy_url, 'socks5h://[::1]:10808')
+
+    def test_proxy_sends_secret_and_payload_only_on_stdin_with_bounded_verified_https(self):
+        self.row = {**self.row, 'text': 'Цена "со скидкой".\nurl = "https://foreign.invalid"'}
+        raw = json.dumps(self.valid()).encode() + b'\n200'
+        ranked, metadata = self.proxy_evaluate(raw)
+        self.assertEqual(ranked, [{**self.row, 'score': 2.8}])
+        self.assertEqual(metadata['transport'], 'loopback-socks5h')
+        self.assertEqual(self.run.call_count, 1); self.direct.assert_not_called()
+        self.assertEqual(self.command[:4], ['/usr/bin/curl', '--disable', '--config', '-'])
+        self.assertNotIn('private-unit-key', str(self.command))
+        self.assertNotIn(self.row['text'], str(self.command))
+        for flag in ('--insecure', '--location', '--retry', '--trace', '--verbose'):
+            self.assertNotIn(flag, self.command)
+        self.assertEqual(self.command[self.command.index('--proto') + 1], '=https')
+        self.assertEqual(self.command[self.command.index('--max-redirs') + 1], '0')
+        self.assertEqual(self.command[self.command.index('--max-filesize') + 1], '128000')
+        self.assertLessEqual(self.options['timeout'], 10)
+        self.assertEqual(self.options['env'], {'PATH': '/usr/bin:/bin', 'LANG': 'C', 'LC_ALL': 'C'})
+        config = self.options['input'].decode()
+        self.assertIn('Authorization: Bearer private-unit-key', config)
+        self.assertIn('url = "https://api.typesafe.ai/v1/systemone"', config)
+        self.assertIn('proxy = "socks5h://127.0.0.1:10808"', config)
+        self.assertEqual(sum(line.startswith('url = ') for line in config.splitlines()), 1)
+        self.assertEqual(sum(line.startswith('header = "Authorization:') for line in config.splitlines()), 1)
+        self.assertNotIn('private-unit-key', json.dumps(metadata))
+
+    def test_proxy_failures_do_not_retry_fall_back_or_echo_response(self):
+        cases = [(b'PRIVATE_PROVIDER_BODY\n451', 22, 503), (b'x' * 128001 + b'\n200', 0, 502),
+            (b'not-framed', 0, 502), (b'{}\n200', 63, 502), (b'\n000', 28, 503)]
+        for raw, curl_code, status in cases:
+            with self.subTest(status=status, curl_code=curl_code):
+                with self.assertRaises(Problem) as error: self.proxy_evaluate(raw, curl_code)
+                self.assertEqual(error.exception.status, status)
+                self.assertNotIn('PRIVATE_PROVIDER_BODY', error.exception.message)
+                self.assertNotIn('private-unit-key', error.exception.message)
+                self.assertEqual(self.run.call_count, 1); self.direct.assert_not_called()
+        with self.assertRaises(Problem): self.proxy_evaluate(b'', error=assistant.subprocess.TimeoutExpired('curl', 8))
+        self.assertEqual(self.run.call_count, 1); self.direct.assert_not_called()
 
 if __name__ == '__main__': unittest.main()
