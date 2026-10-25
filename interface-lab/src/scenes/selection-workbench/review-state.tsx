@@ -2,6 +2,7 @@ import type { SelectionPerson, Workflow, WorkflowState, Readiness } from './api'
 import { FullCorpusAssessment, fullCorpusStatusLabels } from '../interview-assessment/FullCorpusAssessment';
 
 export const assessmentLabels: Record<string, string> = {
+  dispatch_unknown: 'Проверить запуск', outcome_unknown: 'Исход расчёта неизвестен',
   not_started: 'Не рассчитано', waiting_sources: 'Ждёт материалы', queued: 'В очереди',
   processing: 'Считается', saved: 'Расчёт сохранён', ready: 'Готово',
   insufficient_data: 'Недостаточно данных', stale: 'Результат устарел', error: 'Ошибка расчёта',

@@ -10,7 +10,9 @@ export type Readiness = {
     items: { id: string; kind: string; recordings: number; transcripts: number; transcriptState: string }[] };
   assessment: { state: string; result: Omit<AssessmentPresentation, 'saveFeedback'> | null; match?: WorkflowState;
     /** Reserved for the authorised new-core adapter; never a browser service-token call. */
-    coreRun?: FullCorpusRun };
+    coreRun?: FullCorpusRun; canRun?: boolean;
+    rubric?: { id: string; version: string; parameterCount: number };
+    corpus?: { sources: number; units: number; characters: number } };
 };
 
 export type Criterion = { criterion_id: string; state: string; level: number | null; failed_processing: boolean; missing_reason?: string | null; reason_codes?: string[]; citations?: unknown[] };

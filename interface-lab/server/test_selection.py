@@ -386,6 +386,27 @@ class SelectionHTTPTest(unittest.TestCase):
     ok = http_fixture.EmployerAcceptanceTest.ok
     employer = http_fixture.EmployerAcceptanceTest.employer
     vacancy = http_fixture.EmployerAcceptanceTest.vacancy
+    candidate = http_fixture.EmployerAcceptanceTest.candidate
+
+    def test_core_start_requires_manager_and_current_revision(self):
+        candidate = self.candidate('Core route')
+        cid = candidate['id']
+        with self.app.connect() as db:
+            revision = selection.person(db, cid)['revision']
+        route = 'selection/candidates/' + cid + '/assessment'
+        with patch('assessment_core_bridge.configured') as configured:
+            self.assertEqual(self.request(route, {'revision': revision})[0], 401)
+            self.assertEqual(self.request(route, {'revision': revision}, cookie=candidate['cookie'])[0], 401)
+            employer = self.employer()
+            self.assertEqual(self.request(route, {'revision': revision}, token=employer['token'])[0], 401)
+            self.assertEqual(self.request(route, {'revision': 'old'}, token=self.manager)[0], 409)
+            self.assertEqual(self.request(route, {'revision': revision}, token=self.manager,
+                headers={'Origin': 'https://foreign.invalid'})[0], 403)
+            configured.assert_not_called()
+            configured.return_value.start.return_value = {'state': 'queued', 'result': None}
+            result = self.ok(route, {'revision': revision}, token=self.manager)
+            self.assertEqual(result['candidateId'], cid)
+            configured.return_value.start.assert_called_once_with(cid)
 
     def test_real_handler_rejects_employer_and_anonymous_and_lists_actual_vacancies(self):
         employer = self.employer()

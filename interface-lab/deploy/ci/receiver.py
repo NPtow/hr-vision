@@ -69,10 +69,11 @@ PRE_SELECTION_RUNTIME = PRE_PUBLIC_PROFILE_RUNTIME | {'public_profiles.py'}
 PRE_JEV_RUNTIME = PRE_SELECTION_RUNTIME | {'selection.py'}
 PRE_ASR_DISPATCH_RUNTIME = PRE_JEV_RUNTIME | {'assessment_jobs.py'}
 PRE_SELECTION_STATUS_RUNTIME = PRE_ASR_DISPATCH_RUNTIME | {'materials_asr_dispatch.py'}
-RUNTIME = PRE_SELECTION_STATUS_RUNTIME | {'selection_status.py'}
+PRE_FULL_CORPUS_RUNTIME = PRE_SELECTION_STATUS_RUNTIME | {'selection_status.py'}
+RUNTIME = PRE_FULL_CORPUS_RUNTIME | {'assessment_corpus.py', 'assessment_core_bridge.py'}
 BOT_RUNTIME = PRE_IMPORT_RUNTIME - {'recruiter_access.py', 'recruiter_sources.py', 'recruiter_notifications.py'}
 LEGACY_RUNTIME = BOT_RUNTIME - {'candidate_bot.py'}
-RUNTIME_LAYOUTS = {frozenset(PRE_SELECTION_STATUS_RUNTIME), frozenset(PRE_JEV_RUNTIME), frozenset(LEGACY_RUNTIME), frozenset(BOT_RUNTIME), frozenset(PRE_IMPORT_RUNTIME),
+RUNTIME_LAYOUTS = {frozenset(PRE_FULL_CORPUS_RUNTIME), frozenset(PRE_SELECTION_STATUS_RUNTIME), frozenset(PRE_JEV_RUNTIME), frozenset(LEGACY_RUNTIME), frozenset(BOT_RUNTIME), frozenset(PRE_IMPORT_RUNTIME),
                    frozenset(PRE_SERVICES_RUNTIME), frozenset(SERVICES_ONLY_RUNTIME), frozenset(ZOOM_ONLY_RUNTIME),
                    frozenset(ASSESSMENT_ONLY_RUNTIME), frozenset(PRE_ASSESSMENT_RUNTIME), frozenset(PRE_PUBLIC_PROFILE_RUNTIME), frozenset(PRE_SELECTION_RUNTIME), frozenset(PRE_ASR_DISPATCH_RUNTIME),
                    frozenset(PRE_OUTREACH_RUNTIME), frozenset(PRE_ACCESS_RUNTIME), frozenset(PRE_CV_RUNTIME),
@@ -268,6 +269,12 @@ def resume_materials(active):
 def guard_outbox_runtime(db, source):
     runtime = frozenset(path.relative_to(source).as_posix() for path in source.rglob('*') if path.is_file())
     require(runtime in RUNTIME_LAYOUTS, 'Incomplete recovery API')
+    if 'assessment_core_bridge.py' not in runtime:
+        schema = db.execute("SELECT type FROM sqlite_master WHERE name='ac_bindings'").fetchall()
+        if schema:
+            require(schema == [('table',)], 'Cannot verify full-corpus assessment schema')
+            require(not db.execute('SELECT 1 FROM ac_bindings LIMIT 1').fetchone(),
+                    'Full-corpus results require assessment_core_bridge.py; use a compatible forward recovery')
     if 'assessment_jobs.py' not in runtime:
         for table in ('as_bindings', 'as_matches'):
             schema = db.execute('SELECT type FROM sqlite_master WHERE name=?', (table,)).fetchall()

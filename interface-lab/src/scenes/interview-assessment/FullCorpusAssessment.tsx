@@ -18,7 +18,7 @@ export type FullCorpusAssessmentResult = {
 export type FullCorpusRun = {
   run_id: string;
   status: 'queued' | 'sent' | 'response_saved' | 'completed' | 'failed' | 'outcome_unknown';
-  assessment: FullCorpusAssessmentResult | null; error: string | null;
+  assessment: FullCorpusAssessmentResult | null; error: { code: string; status?: number | null } | null;
   corpus_revision: string; rubric_version: string; model: string;
 };
 export const fullCorpusStatusLabels: Record<FullCorpusRun['status'], string> = {

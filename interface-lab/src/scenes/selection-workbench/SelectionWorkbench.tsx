@@ -196,6 +196,8 @@ function Detail({ person: p, token, vacancyId, expire, busy, onClose, onSave }: 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState('');
   useEffect(() => {
     let active = true;
     setLoading(true); setError(''); setReadiness(null);
@@ -205,6 +207,26 @@ function Detail({ person: p, token, vacancyId, expire, busy, onClose, onSave }: 
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [p.id, p.sourceRevision, vacancyId, token, retry, expire]);
+  const coreStatus = readiness?.assessment.coreRun?.status;
+  useEffect(() => {
+    if (!coreStatus || !['queued', 'sent', 'response_saved'].includes(coreStatus)) return;
+    const timer = window.setTimeout(() => setRetry(value => value + 1), 3000);
+    return () => window.clearTimeout(timer);
+  }, [coreStatus, readiness]);
+  async function startAssessment() {
+    if (starting) return;
+    setStarting(true); setStartError('');
+    try {
+      const value = await selectionRequest<{ candidateId: string; assessment: Readiness['assessment'] }>(
+        'candidates/' + encodeURIComponent(p.id) + '/assessment', token, { revision: p.revision });
+      if (value.candidateId !== p.id) throw new Error('Получена карточка другого кандидата.');
+      setReadiness(current => current ? { ...current, assessment: value.assessment } : current);
+      setRetry(value => value + 1);
+    } catch (cause) {
+      if (cause instanceof OutreachError && [401, 403].includes(cause.status)) expire();
+      else setStartError((cause as Error).message || 'Не удалось запустить оценку.');
+    } finally { setStarting(false); }
+  }
   const workflow = workflowFor(p);
   const match = loading ? { state: 'checking' } : error || readiness?.assessment.state === 'unavailable'
     ? { state: 'unavailable' } : readiness?.assessment.match ?? (readiness?.assessment.coreRun ? { state: 'not_compared' } : workflow.match);
@@ -215,6 +237,10 @@ function Detail({ person: p, token, vacancyId, expire, busy, onClose, onSave }: 
       <div className="sl-detail-fields"><label>Имя<InlineCell value={p.name} label="Имя" disabled={busy} onSave={name => onSave({ name })}/></label><label>Город<InlineCell value={p.city} label="Город" disabled={busy} onSave={city => onSave({ city })}/></label></div>
       {p.about && <p className="sl-about">{p.about}</p>}
       <ReviewState person={p} readiness={readiness} loading={loading} error={error}/>
+      {readiness?.assessment.canRun && <button className="sl-open" disabled={loading || starting || busy}
+        onClick={() => void startAssessment()}>{starting ? 'Собираем CV и интервью…' : readiness.assessment.coreRun ? 'Обновить оценку по материалам' : 'Оценить CV и интервью'}</button>}
+      {startError && <p role="alert">{startError}</p>}
+      {readiness?.assessment.rubric && <p className="sl-muted">Шкала: {readiness.assessment.rubric.version} · параметров: {readiness.assessment.rubric.parameterCount}</p>}
       <button className="sl-open" disabled={loading} onClick={() => setRetry(value => value + 1)}>Проверить актуальность</button>
       <h3>По выбранной вакансии</h3><StateBadge state={match} labels={matchLabels}/>
       {match.state === 'not_compared' && <p className="sl-muted">Сравнение ещё не выполнено. Оценка навыков сама по себе не означает рекомендацию на вакансию.</p>}

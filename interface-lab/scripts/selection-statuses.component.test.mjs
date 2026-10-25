@@ -69,10 +69,11 @@ before(async () => {
 });
 after(async () => { await browser?.close(); if (server) await new Promise(resolve => server.close(resolve)); });
 
-async function pageFor(t, viewport = { width: 1280, height: 800 }) {
+async function pageFor(t, viewport = { width: 1280, height: 800 }, startable = false) {
   const page = await browser.newPage({ viewport });
   page.setDefaultTimeout(5000);
   const unexpected = [], errors = [];
+  let started = false;
   page.on('pageerror', error => errors.push(error.message));
   await page.route('**/*', route => {
     const req = route.request(), url = new URL(req.url());
@@ -97,6 +98,17 @@ async function pageFor(t, viewport = { width: 1280, height: 800 }) {
     responses['/api/hr/selection/candidates/v/readiness'].assessment = {
       state: 'ready', result: null, coreRun,
     };
+    if (startable) {
+      responses['/api/hr/selection/candidates/v/readiness'].assessment = started
+        ? { state: 'ready', result: null, coreRun, canRun: true }
+        : { state: 'not_started', result: null, canRun: true };
+      if (url.pathname === '/api/hr/selection/candidates/v/assessment' && req.method() === 'POST') {
+        assert.equal(url.origin, origin);
+        assert.deepEqual(req.postDataJSON(), { revision: 'v' });
+        started = true;
+        return route.fulfill({ json: { candidateId: 'v', assessment: { state: 'ready', result: null, coreRun, canRun: true } } });
+      }
+    }
     if (url.origin !== origin || (req.method() !== 'GET' && url.pathname !== '/api/hr/session')) {
       unexpected.push(req.method() + ' ' + url.pathname); return route.abort();
     }
@@ -112,6 +124,19 @@ async function pageFor(t, viewport = { width: 1280, height: 800 }) {
 const names = page => page.locator('tbody .sl-person').allTextContents();
 const openFilters = page => page.getByRole('button', { name: /^Фильтры/ }).click();
 const choose = (page, name, value) => page.getByRole('group', { name: 'Статусы кандидатов' }).getByLabel(name, { exact: true }).selectOption(value);
+
+test('explicit assessment button uses the existing authenticated route and renders the core response', async t => {
+  const page = await pageFor(t, undefined, true);
+  const posts = [];
+  page.on('request', request => { if (request.method() === 'POST' && request.url().endsWith('/assessment')) posts.push(request.url()); });
+  await page.getByRole('button', { name: 'Вера', exact: true }).click();
+  await page.getByRole('button', { name: 'Оценить CV и интервью', exact: true }).waitFor();
+  assert.equal(posts.length, 0);
+  await page.getByRole('button', { name: 'Оценить CV и интервью', exact: true }).click();
+  await page.getByRole('heading', { name: 'Работа с возражениями', exact: true }).waitFor();
+  assert.equal(posts.length, 1);
+  assert.equal(await page.locator('.fc-level').filter({ hasText: /^Недостаточно данных$/ }).count(), 1);
+});
 
 test('closed room is distinct from a conducted interview and linked channels are independent', async t => {
   const page = await pageFor(t);

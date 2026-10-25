@@ -7,6 +7,7 @@ import os
 from urllib.parse import quote
 
 from domain import Problem
+import assessment_core_bridge
 
 
 def tables(db):
@@ -51,6 +52,9 @@ def overview(db, candidate, vacancy_id=None):
                      'running': 'processing', 'completed': 'comparison_saved', 'failed': 'failed_processing',
                      'cancelled': 'cancelled', 'expired': 'stale'}.get(comparison[0], 'unknown'),
                      'origin': 'assessment-service'}
+    if assessment_core_bridge.enabled():
+        assessment = assessment_core_bridge.overview(db, candidate['id'])
+        match = {'state': 'not_compared' if vacancy_id else 'no_vacancy'}
     return {'interview': {'state': {None: 'not_scheduled', 'booked': 'scheduled',
                 'live': 'open', 'completed': 'closed'}.get(candidate['interviewStatus'], 'unknown')},
             'resume': {'state': 'available' if candidate['resumeAvailable'] else 'missing'},
