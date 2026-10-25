@@ -477,6 +477,8 @@ class SelectionRoutes:
                     for cid in body['candidateIds']:
                         person(db, cid)
                         db.execute('INSERT OR IGNORE INTO sl_cohort VALUES (?,?,?)', (body['vacancyId'], cid, iso(now())))
+                        import assessment_jobs
+                        assessment_jobs.enqueue(db, 'candidate', cid, body['vacancyId'])
                 result = directory(db, body['vacancyId'])
             elif method == 'POST' and action == 'publish':
                 result = nominate(db, self.portal, body)

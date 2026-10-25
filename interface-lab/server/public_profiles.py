@@ -58,6 +58,8 @@ class PublicProfiles:
         db.execute('INSERT INTO cp_public_profiles VALUES (?,?,?,?,?,?,?,NULL)',
                    (share_id, hashlib.sha256(token.encode()).hexdigest(), candidate_id, meeting['id'],
                     self._fingerprint(meeting.get('room')), issuer, iso(now())))
+        import assessment_jobs
+        assessment_jobs.enqueue(db, 'candidate', candidate_id)
         return {'id': share_id, 'url': origin + '/iframe.html?id=hr-vision-product--candidate&viewMode=story&cp=public#profile=' + token}
 
     @staticmethod
@@ -86,6 +88,10 @@ class PublicProfiles:
 
     def assessment(self, db, share):
         """Project the exact saved core result; never synthesize missing scores."""
+        import assessment_jobs
+        production = assessment_jobs.read_candidate(db, share['candidateId'])
+        if production is not None:
+            return production
         if not db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='sl_core_results'").fetchone():
             return {'assessment': None}
         row = db.execute('''SELECT id,interview_id,source_revision,body,engine_candidate_id FROM sl_core_results
@@ -96,6 +102,7 @@ class PublicProfiles:
         selection._seal(doc, 'candidate_profile/1')
         require(doc['body']['candidate_id'] == row[4], 'Материалы аналитики изменились.', 409)
         labels = {'A01': 'Диалог и слушание', 'A03': 'Квалификация', 'A04': 'Понимание задачи',
+                  'A05': 'Презентация ценности', 'A06.2': 'Переговоры об условиях',
                   'A06.1': 'Работа с возражениями', 'A07': 'Следующий шаг', 'A08': 'CRM и сопровождение',
                   'A10': 'Продукт и обещания', 'A11.1': 'Гибкость в разговоре', 'NEW-01': 'Передача лида'}
         reasons = {'task_not_given': 'На интервью не было задания, по которому можно оценить этот навык.',

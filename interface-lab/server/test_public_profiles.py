@@ -158,6 +158,9 @@ class PublicProfileTest(unittest.TestCase):
     def test_public_analytics_are_source_bound_without_inventing_scores(self):
         self.core_result()
         token = self.issue()
+        # Compatibility with links issued before the production queue existed.
+        with self.flow.connect() as db:
+            db.execute('DELETE FROM as_bindings')
         value = self.call(PUBLIC + '/assessment', {'token': token})[0]['assessment']
         self.assertEqual(value['revisionId'], 'synthetic-result')
         self.assertEqual(value['feedback'], [])
