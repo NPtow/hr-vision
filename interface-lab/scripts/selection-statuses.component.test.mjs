@@ -22,6 +22,29 @@ const people = [
   person('g', 'Глеб', null, false, false),
   person('e', 'Елена', null, true, true, true),
 ];
+people[1].workflow = { interview: { state: 'closed' }, resume: { state: 'available' },
+  assessment: { state: 'saved' }, match: { state: 'comparison_saved' } };
+const coreRun = {
+  run_id: 'fixture-new-core', status: 'completed', error: null,
+  corpus_revision: 'fixture-corpus', rubric_version: 'demo-v1', model: 'jev-1.14.0',
+  assessment: { run_id: 'fixture-new-core', candidate_id: 'v', contract_version: 'full-corpus-level-choice-v1',
+    corpus_sha256: 'fixture-corpus', rubric_id: 'demo', rubric_version: 'demo-v1', rubric_sha256: 'fixture-rubric',
+    model: 'jev-1.14.0', chunk_count: 3, usage: {}, sources: [
+      { source_id: 'cv', version: '1', kind: 'cv', sha256: 'cv-hash' },
+      { source_id: 'interview-part-1', version: '1', kind: 'interview', sha256: 'part-1-hash' },
+      { source_id: 'interview-part-2', version: '1', kind: 'interview', sha256: 'part-2-hash' },
+    ], parameters: [
+      { parameter_id: 'objection', title: 'Работа с возражениями', status: 'assessed', selected_level_id: 'L3',
+        levels: [{ level_id: 'L1', label: 'Ответ без уточнения', description: 'Описание первого уровня', probability: .1 },
+          { level_id: 'L2', label: 'Уточнение и ответ', description: 'Описание второго уровня', probability: .2 },
+          { level_id: 'L3', label: 'Проверка результата', description: 'Описание третьего уровня', probability: .6 }],
+        insufficient_data_probability: .1, model_confidence: .47 },
+      { parameter_id: 'coaching', title: 'Развитие сотрудников', status: 'insufficient_data', selected_level_id: null,
+        levels: [{ level_id: 'L1', label: 'Общий совет', description: 'Описание первого уровня', probability: .1 },
+          { level_id: 'L2', label: 'Разбор затруднений', description: 'Описание второго уровня', probability: .2 }],
+        insufficient_data_probability: .7, model_confidence: .6 },
+    ] },
+};
 let browser, server, origin;
 before(async () => {
   const bundle = await build({
@@ -58,6 +81,22 @@ async function pageFor(t, viewport = { width: 1280, height: 800 }) {
       '/api/hr/selection/vacancies': { vacancies: [{ id: 'vac-1', title: 'Продажи', company: 'Тест', city: 'Москва', salary: '' }] },
       '/api/hr/selection/candidates': { candidates: people, count: people.length },
     };
+    for (const p of people) responses['/api/hr/selection/candidates/' + p.id + '/readiness'] = {
+      candidateId: p.id,
+      materials: { state: p.id === 'a' ? 'processing' : 'unavailable', recordings: p.id === 'a' ? 2 : null, transcripts: p.id === 'a' ? 0 : null, items: [] },
+      assessment: { state: p.id === 'a' ? 'waiting_sources' : p.id === 'b' ? 'stale' : 'not_started', result: null,
+        match: { state: p.id === 'b' ? 'stale' : 'not_compared' } },
+    };
+    responses['/api/hr/selection/candidates/e/readiness'].assessment = {
+      state: 'insufficient_data', match: { state: 'compared' },
+      result: { revisionId: 'fixture-profile', feedback: [], criteria: [{ id: 'discovery', label: 'Диагностика',
+        state: 'unknown', level: null, target: null, summary: '', evidence: [], missingReason: 'Нет примера из интервью' }],
+        vacancyMatch: { revisionId: 'fixture-comparison', requiresReview: true,
+          criteria: [{ id: 'complex-sales', label: 'Сложные продажи', status: 'clarify' }] } },
+    };
+    responses['/api/hr/selection/candidates/v/readiness'].assessment = {
+      state: 'ready', result: null, coreRun,
+    };
     if (url.origin !== origin || (req.method() !== 'GET' && url.pathname !== '/api/hr/session')) {
       unexpected.push(req.method() + ' ' + url.pathname); return route.abort();
     }
@@ -74,16 +113,91 @@ const names = page => page.locator('tbody .sl-person').allTextContents();
 const openFilters = page => page.getByRole('button', { name: /^Фильтры/ }).click();
 const choose = (page, name, value) => page.getByRole('group', { name: 'Статусы кандидатов' }).getByLabel(name, { exact: true }).selectOption(value);
 
-test('channel columns remain independent from cabinet activation and scheduled is not completed', async t => {
+test('closed room is distinct from a conducted interview and linked channels are independent', async t => {
   const page = await pageFor(t);
   for (const name of ['Интервью', 'Telegram', 'Почта']) assert.equal(await page.getByRole('columnheader', { name, exact: true }).count(), 1);
   assert.equal(await page.getByText('Не активирован', { exact: true }).count(), 0);
   const anna = page.getByRole('row').filter({ has: page.getByRole('button', { name: 'Анна', exact: true }) });
-  assert.match(await anna.innerText(), /Проведено\s+Подключён\s+Подключена/);
+  assert.match(await anna.innerText(), /Встреча закрыта\s+Подключён\s+Подключена/);
+  assert.equal(await page.getByText('Проведено', { exact: true }).count(), 0);
   await openFilters(page); await choose(page, 'Интервью', 'yes');
   assert.deepEqual(await names(page), ['Анна', 'Борис']);
   await choose(page, 'Интервью', 'no');
   assert.deepEqual(await names(page), ['Вера', 'Глеб', 'Елена']);
+});
+
+test('selection is the same people, with assessment and vacancy comparison kept separate', async t => {
+  const page = await pageFor(t);
+  await page.getByRole('button', { name: /^Подборка/ }).click();
+  assert.deepEqual(await names(page), people.map(p => p.name));
+  assert.equal(await page.getByRole('columnheader', { name: 'Оценка навыков', exact: true }).count(), 1);
+  assert.equal(await page.getByRole('columnheader', { name: 'По вакансии', exact: true }).count(), 1);
+  assert.equal(await page.getByText('Не сравнивали', { exact: true }).count(), 4);
+  assert.equal(await page.getByText('Сравнение сохранено', { exact: true }).count(), 1);
+  assert.equal(await page.getByText('Нет рекомендации', { exact: true }).count(), 0);
+  await openFilters(page);
+  await choose(page, 'Оценка навыков', 'not_started');
+  assert.deepEqual(await names(page), ['Анна', 'Вера', 'Глеб', 'Елена']);
+});
+
+test('opening details verifies metadata only; source failure is never zero and stale scores are hidden', async t => {
+  const page = await pageFor(t);
+  await page.getByRole('button', { name: 'Анна', exact: true }).click();
+  const drawer = page.getByRole('dialog');
+  await drawer.getByText('Обрабатываются', { exact: true }).waitFor();
+  assert.match(await drawer.innerText(), /Записей в каталоге: 2 · основных текстов: 0/);
+  assert.match(await drawer.innerText(), /Это не подтверждает участие/);
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Борис', exact: true }).click();
+  await drawer.getByText('Результат устарел', { exact: true }).waitFor();
+  assert.equal(await drawer.getByText('Сравнение устарело', { exact: true }).count(), 1);
+  assert.equal(await drawer.getByText('Сравнение сохранено', { exact: true }).count(), 0);
+  assert.equal(await drawer.getByText('Не удалось проверить', { exact: true }).count(), 1);
+  assert.doesNotMatch(await drawer.innerText(), /Записей в каталоге: 0/);
+  assert.equal(await drawer.getByRole('region', { name: 'Сохранённая оценка навыков' }).count(), 0);
+  await drawer.getByRole('button', { name: 'Проверить актуальность', exact: true }).click();
+  await drawer.getByText('Результат устарел', { exact: true }).waitFor();
+  // pageFor rejects every mutation except the local test session.
+});
+
+test('insufficient evidence stays unscored and vacancy requirements are shown separately', async t => {
+  const page = await pageFor(t);
+  await page.getByRole('button', { name: 'Елена', exact: true }).click();
+  const drawer = page.getByRole('dialog');
+  await drawer.getByText('Недостаточно данных', { exact: true }).waitFor();
+  assert.match(await drawer.innerText(), /Это не нулевой балл/);
+  const criterion = drawer.getByRole('row').filter({ hasText: 'Диагностика' });
+  assert.deepEqual(await criterion.getByRole('cell').allTextContents(), ['Диагностика', '—', 'Нет примера из интервью']);
+  assert.equal(await drawer.getByText('Сравнение готово', { exact: true }).count(), 1);
+  assert.match(await drawer.innerText(), /Сложные продажи\s+Нужно уточнить/);
+});
+
+test('new-core choices retain own levels and every probability without a derived score', async t => {
+  const page = await pageFor(t);
+  await page.getByRole('button', { name: 'Вера', exact: true }).click();
+  const view = page.getByRole('region', { name: 'Оценка по параметрам', exact: true });
+  await view.getByRole('heading', { name: 'Работа с возражениями' }).waitFor();
+  assert.equal(await view.locator('.fc-level').allTextContents().then(JSON.stringify), JSON.stringify(['Проверка результата', 'Недостаточно данных']));
+  await view.locator('summary').filter({ hasText: 'Вероятности уровней' }).first().click();
+  assert.deepEqual(await view.locator('.fc-parameter').first().locator('dd').allTextContents(), ['10 %', '20 %', '60 %', '10 %']);
+  assert.equal(await page.getByRole('region', { name: 'Сохранённая оценка навыков' }).count(), 0);
+  await view.locator('summary').filter({ hasText: 'Версия и состав материалов' }).click();
+  assert.match(await view.innerText(), /Резюме: 1 · частей интервью: 2/);
+  assert.doesNotMatch(await view.innerText(), /Итоговый балл|Оценка: 0/);
+});
+
+test('new-core view rejects mismatched candidate identity and corpus revision', async t => {
+  const page = await pageFor(t);
+  for (const patch of [{ candidate_id: 'another-person' }, { corpus_sha256: 'another-corpus' }]) {
+    await page.route('**/api/hr/selection/candidates/v/readiness*', route => route.fulfill({ json: {
+      candidateId: 'v', materials: { state: 'ready', recordings: 2, transcripts: 2, items: [] },
+      assessment: { state: 'ready', result: null, coreRun: { ...coreRun, assessment: { ...coreRun.assessment, ...patch } } },
+    } }));
+    await page.getByRole('button', { name: 'Вера', exact: true }).click();
+    await page.getByRole('alert').filter({ hasText: 'Не удалось подтвердить версию оценки' }).waitFor();
+    assert.equal(await page.getByRole('region', { name: 'Оценка по параметрам' }).count(), 0);
+    await page.keyboard.press('Escape');
+  }
 });
 
 test('filters combine, clear hidden selection and reset the empty state', async t => {

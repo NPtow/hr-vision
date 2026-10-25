@@ -13,6 +13,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from domain import Problem, iso, now, require, text
 import employer_store as employers
+import selection_status
 
 PREFIX = '/api/hr/selection/'
 HEADERS = {'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer'}
@@ -265,6 +266,10 @@ def directory(db, vid=None):
         item['canAdd'] = bool(item['searching'] and
             item['interviewStatus'] == 'completed' and item['assessment'] and
             item['assessment']['recommendation'] == 'ranked' and not item['application'] and not nominated)
+        item['workflow'] = selection_status.overview(db, item, vid)
+        # A newer assessment pipeline supersedes an engine-v1 recommendation.
+        # Until its matching adapter is connected, it cannot authorize sending.
+        item['canAdd'] = item['canAdd'] and item['workflow']['match']['state'] == 'ranked'
         people.append(item)
     return {'candidates': people, 'count': len(people)}
 
@@ -454,6 +459,25 @@ class SelectionRoutes:
         require(next((v for k, v in headers.items() if k.lower() == 'sec-fetch-site'), '') != 'cross-site',
                 'Другой источник запроса.', 403)
         action = parsed.path[len(PREFIX):].strip('/')
+        if method == 'GET' and action.startswith('candidates/') and action.endswith('/readiness'):
+            parts = action.split('/')
+            require(len(parts) == 3, 'Действие не найдено.', 404)
+            cid, vid = parts[1], query.get('vacancyId', [None])[0]
+            with self.lock, self.connect() as db:
+                require(actor(db) == 'manager', 'Доступ только для команды HR Vision.', 403)
+                initial = person(db, cid)
+                if vid:
+                    vacancy(db, vid)
+            # External reads cannot hold the shared application lock. Opening a
+            # drawer must never collect materials, run a model or send invites.
+            sources = selection_status.materials(cid)
+            with self.connect() as db:
+                assessment = selection_status.verified_assessment(db, cid, vid)
+            with self.lock, self.connect() as db:
+                require(actor(db) == 'manager', 'Доступ только для команды HR Vision.', 403)
+                require(person(db, cid)['sourceRevision'] == initial['sourceRevision'],
+                        'Материалы кандидата изменились. Обновите карточку.', 409)
+            return {'candidateId': cid, 'materials': sources, 'assessment': assessment}, dict(HEADERS)
         with self.lock, self.connect() as db:
             require(actor(db) == 'manager', 'Доступ только для команды HR Vision.', 403)
             if method == 'GET' and action == 'candidates':
