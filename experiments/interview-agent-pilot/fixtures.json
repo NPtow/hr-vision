@@ -1,0 +1,106 @@
+{
+  "schema_version": 1,
+  "purpose": "Compare the current HR Vision assistant and a managed BYOM agent on the same model and inputs.",
+  "status": "prepared_not_executed",
+  "synthetic": true,
+  "fixtures": {
+    "vacancy": {
+      "id": "pilot_vacancy_sdr",
+      "title": "SDR технических B2B-продаж",
+      "requirements": [
+        "Исходящие холодные звонки промышленным компаниям",
+        "Выявление задачи клиента до отправки предложения",
+        "Согласование конкретного следующего шага",
+        "Ведение CRM"
+      ],
+      "initial_priority": "Не задана; уточнить у работодателя, если от неё зависит сравнение."
+    },
+    "candidates": [
+      {
+        "id": "pilot_candidate_alpha",
+        "name": "Кандидат Альфа",
+        "profile": {"experience": "Год исходящих B2B-звонков", "crm": "Таблица вместо CRM"},
+        "transcript": [
+          {"sourceId": "alpha_01", "startMs": 10000, "endMs": 17000, "speaker": "candidate", "text": "Последний год делаю холодные звонки. Сначала выясняю, где используют оборудование и что хотят изменить."},
+          {"sourceId": "alpha_02", "startMs": 20000, "endMs": 26000, "speaker": "interviewer", "text": "Клиент говорит, что уже работает с другим поставщиком. Что вы делаете?"},
+          {"sourceId": "alpha_03", "startMs": 27000, "endMs": 35000, "speaker": "candidate", "text": "Спросил бы, чем текущий вариант устраивает и что хотелось бы улучшить. Но конкретного примера из работы сейчас не вспомню."},
+          {"sourceId": "alpha_04", "startMs": 40000, "endMs": 46000, "speaker": "candidate", "text": "Предлагаю созвон в понедельник в десять, чтобы вместе с инженером уточнить нагрузку. Это пример того, как я бы действовал."}
+        ],
+        "assessment": {"revision": "synthetic_1", "limitations": ["Высказывания о кейсе описывают намерение, а не подтверждённый результат."]}
+      },
+      {
+        "id": "pilot_candidate_beta",
+        "name": "Кандидат Бета",
+        "profile": {"experience": "Два года обработки входящих заявок", "crm": "Ежедневно ведёт CRM"},
+        "transcript": [
+          {"sourceId": "beta_01", "startMs": 10000, "endMs": 18000, "speaker": "candidate", "text": "Работал только с входящими заявками. Холодных звонков не делал. Каждую заявку и следующую задачу заносил в CRM."},
+          {"sourceId": "beta_02", "startMs": 23000, "endMs": 31000, "speaker": "candidate", "text": "Если клиент говорит про другого поставщика, отправлю прайс. Срок повторного звонка обычно не назначаю."}
+        ],
+        "assessment": {"revision": "synthetic_1", "limitations": ["Нет подтверждений опыта исходящих холодных звонков."]}
+      }
+    ]
+  },
+  "tool_contract": {
+    "scope": "Server-authorized workspace, account, vacancy, candidate, recording and source revision. The model cannot choose arbitrary candidate identifiers.",
+    "tools": [
+      "get_vacancy",
+      "get_candidate_profile",
+      "get_assessment",
+      "search_transcript",
+      "read_transcript_window"
+    ],
+    "citations": "The model emits sourceIds. The backend resolves and validates all video timestamps and excerpts."
+  },
+  "cases": [
+    {
+      "id": "context_and_evidence",
+      "candidate": "pilot_candidate_alpha",
+      "turns": ["Как работает с возражениями?", "Почему ты так решил?", "Покажи момент и проверь, что это говорил именно кандидат."],
+      "acceptance": [
+        "Follow-up questions remain about objection handling.",
+        "The answer grounds its conclusion in alpha_03 and reads surrounding context when needed.",
+        "The answer distinguishes a hypothetical plan from demonstrated past performance.",
+        "The cited source opens at 27 seconds, not at the interviewer question."
+      ]
+    },
+    {
+      "id": "vacancy_and_correction",
+      "candidate": "pilot_candidate_alpha",
+      "turns": ["Насколько подходит под нашу вакансию?", "Для нас холодные звонки важнее CRM. Учти это в следующем выводе.", "Пересмотри вывод с учётом моего приоритета."],
+      "acceptance": [
+        "The agent reads the vacancy and relevant candidate material.",
+        "The employer priority is preserved and labelled as a requirement preference, not candidate evidence.",
+        "The CRM limitation and hypothetical nature of role-play answers remain visible."
+      ]
+    },
+    {
+      "id": "durable_session",
+      "candidate": "pilot_candidate_alpha",
+      "setup": "Continue vacancy_and_correction in the same conversation, reload the UI, then reconnect to the persisted session.",
+      "turns": ["Кратко напомни мой приоритет и итог нашего обсуждения. Дай источник."],
+      "acceptance": [
+        "The UI restores prior messages and the correct conversation.",
+        "The answer retains the cold-calling priority after reload.",
+        "Citations still resolve against the same recording revision."
+      ]
+    },
+    {
+      "id": "candidate_isolation_and_control",
+      "candidate": "pilot_candidate_beta",
+      "setup": "Switch from Alpha to Beta through the UI. Start a new candidate conversation. Separately exercise Stop, duplicate requestId, and access revocation.",
+      "turns": ["Есть ли у него опыт холодных звонков? Покажи подтверждение."],
+      "acceptance": [
+        "The agent answers from beta_01 and does not reuse Alpha's experience or sources.",
+        "Stop reaches the server and terminates or bounds ongoing vendor execution; a disconnected browser alone is insufficient.",
+        "A duplicate requestId does not create another model run.",
+        "Revoked access prevents further tool reads and answer delivery."
+      ]
+    }
+  ],
+  "comparison_protocol": {
+    "same_for_both": ["model endpoint and model id", "candidate and vacancy fixtures", "user turns", "generation settings where supported"],
+    "record": ["actual model calls", "tool calls and failures", "source correctness", "context retention", "time to first meaningful event", "total latency", "token usage", "vendor and model cost"],
+    "separate_results": ["provider protocol compatibility", "agent answer quality", "UI and session behavior"],
+    "not_quality_proof": ["JSON validation", "mocked responses", "successful HTTP status alone"]
+  }
+}
