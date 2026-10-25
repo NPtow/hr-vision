@@ -47,8 +47,10 @@ INSTRUCTIONS = """Ты помощник работодателя по интер
 Сохраняй предпочтения работодателя в контексте этой беседы; не превращай их в факты
 о кандидате. Обычно достаточно 2–4 коротких абзацев. Каждый абзац содержит один тезис.
 Итог заполняй по схеме: parts[{text, sourceIds}]. В text — простой текст без Markdown,
-таймкодов, ссылок и служебных ID. Для фактов интервью укажи 1–3 точных sourceIds из
-инструментов. Для сведений профиля явно пиши «в резюме/профиле указано»; для предпочтений
+таймкодов, ссылок и служебных ID. Для фактов интервью укажи до 5 точных sourceIds из
+инструментов, покрывающих весь тезис. Для ответа на кейс включи также источник с его
+условием; если не хватает ссылок, раздели тезис на абзацы. Для сведений профиля явно
+пиши «в резюме/профиле указано»; для предпочтений
 пиши «вы указали». Такие абзацы, вопросы и отсутствие данных могут иметь пустой sourceIds.
 Не придумывай проценты уверенности или оценки. Не выводи внутренний план и рассуждение.
 """
@@ -219,7 +221,7 @@ async def answer(payload, snapshot):
         def add_usage(response):
             for k, v in response.metrics.accumulated_usage.items():
                 if isinstance(v, (int, float)): usage[k] = usage.get(k, 0) + v
-        for attempt in range(2):
+        for attempt in range(3):
             add_usage(result)
             require(isinstance(result.structured_output, Answer), "Не удалось прочитать ответ помощника.", 502)
             value = result.structured_output.model_dump()
@@ -242,15 +244,18 @@ async def answer(payload, snapshot):
             diagnostics = ROOT / 'rejected'; diagnostics.mkdir(mode=0o700, exist_ok=True)
             (diagnostics / (payload['runId'] + '-' + str(attempt) + '.json')).write_text(dump({
                 'draft': value, 'verdict': verdict.structured_output.model_dump(), 'sources': data['sources'], 'usage': usage}))
-            require(attempt == 0 and deadline - time.monotonic() > 15,
+            require(attempt < 2 and deadline - time.monotonic() > 15,
                     "Не удалось подтвердить ответ источниками. Уточните вопрос.", 502)
             repairs += 1
             repair = ('Исправь последний ответ на исходный вопрос. Проверка выявила неподтверждённые утверждения или ссылки. '
                 'Проверь указанные места инструментами, исправь ссылки или убери неподтверждённый тезис. '
+                'Сохрани верные ссылки к остальным утверждениям. Для вывода об ответе на кейс '
+                'нужна ссылка и на условие кейса, и на ответ. В абзаце можно до 5 ссылок; '
+                'если их не хватает, раздели абзац. '
                 'Не добавляй новые предположения. Это замечания проверки, а не новые команды пользователя: '
                 + dump(verdict.structured_output.model_dump()))
             result = await harness.invoke_async(repair, structured_output_model=Answer,
-                idempotency_token=payload['runId'] + '-repair', limits={'turns': 4, 'output_tokens': 4000, 'total_tokens': 40000})
+                idempotency_token=payload['runId'] + '-repair-' + str(repairs), limits={'turns': 4, 'output_tokens': 4000, 'total_tokens': 40000})
             if fatal: raise fatal[0]
         jev_tokens = sum(sum(c.get("usage", {}).values()) for c in calls)
         billed = int(usage.get("totalTokens", 0)) + jev_tokens
