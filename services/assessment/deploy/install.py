@@ -29,7 +29,7 @@ assert os.geteuid() == 0, 'Root required'
 release = Path(sys.argv[1]).resolve()
 assert release.parent == Path('/opt/hr-vision-assessment/releases')
 assert re.fullmatch('[a-f0-9]{40}', release.name), 'Commit SHA required'
-assert all((release / name).is_file() for name in ('app.py', 'engine.py', 'prompts/2026-10-25.2.json'))
+assert all((release / name).is_file() for name in ('app.py', 'engine.py', 'prompts/2026-10-25.3.json'))
 state = Path('/var/lib/hr-vision-assessment/jobs.sqlite3')
 if state.exists():
     with sqlite3.connect('file:' + str(state) + '?mode=ro', uri=True) as db:
