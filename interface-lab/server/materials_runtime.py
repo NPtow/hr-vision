@@ -256,9 +256,12 @@ def create_celery_app(environ=None):
     if not broker or (broker.startswith('memory:') and env.get('HR_MATERIALS_TEST_MODE') != '1'):
         raise ValueError('A durable materials broker is required')
     app = Celery('materials', broker=broker)
+    # RabbitMQ 4.3 rejects Celery's transient, non-exclusive pidbox queue.
+    # This worker uses the durable jobs table for coordination, not remote control.
     app.conf.update(task_default_queue='materials', task_serializer='json', accept_content=['json'],
         result_serializer='json', task_ignore_result=True, worker_prefetch_multiplier=1,
         task_acks_late=True, task_reject_on_worker_lost=True,
+        worker_enable_remote_control=False, worker_send_task_events=False,
         broker_connection_timeout=3, task_publish_retry=False,
         beat_schedule={'materials-reconcile': {'task': 'materials.reconcile',
                        'schedule': int(env.get('HR_MATERIALS_RECONCILE_SECONDS', '10'))}})

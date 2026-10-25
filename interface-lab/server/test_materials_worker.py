@@ -5,6 +5,7 @@ from pathlib import Path
 import json
 import sqlite3
 import tempfile
+from types import SimpleNamespace
 import unittest
 
 from materials_capture import Artifact, Discovery, HttpSource, Source
@@ -189,6 +190,14 @@ class WorkerTests(unittest.TestCase):
         app = create_celery_app({'CELERY_BROKER_URL': 'memory://', 'HR_MATERIALS_TEST_MODE': '1',
                                  'HR_MATERIALS_ENABLED': '0'})
         self.assertEqual(app.tasks['materials.run_job'].run('untrusted-id'), {'enabled': False})
+
+    def test_celery_worker_excludes_remote_control_pidbox(self):
+        from celery.worker.consumer.control import Control
+        app = create_celery_app({'CELERY_BROKER_URL': 'memory://', 'HR_MATERIALS_TEST_MODE': '1'})
+        consumer = SimpleNamespace(app=app, conninfo=SimpleNamespace(
+            supports_exchange_type=lambda exchange: exchange == 'fanout'))
+        self.assertFalse(Control.include_if(None, consumer))
+        self.assertFalse(app.conf.worker_send_task_events)
 
     def test_reconcile_republishes_committed_job_after_broker_failure(self):
         source = self.register()

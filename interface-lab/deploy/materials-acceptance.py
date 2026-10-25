@@ -251,6 +251,7 @@ def main():
         elif args.phase == 'assert-remote':
             data, _, texts = wait_ready(db, 'remote')
             video, text = check_http(materials(candidate_id, session()), 'remote')
+            verify_range(video['url'])
             need(any(row['id'] == text['id'] for row in texts), 'transcript_revision_mismatch')
             from materials_runtime import build_runtime
             verify_raw_text(next(row for row in texts if row['id'] == text['id']), data, build_runtime().storage)
