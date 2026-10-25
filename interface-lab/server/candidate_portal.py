@@ -263,6 +263,8 @@ class CandidatePortal:
         self.booking_invitation_lookup = None
         self.booking_invitation_store = None
         self.candidate_access = None
+        # Attached after portal schema initialization; independent of call state.
+        self.materials_catalog = None
         self._media_guard = threading.Lock()
         self._media_locks = {}
         self.dummy_hash = password_hash(secrets.token_urlsafe(24))
@@ -1220,12 +1222,23 @@ class CandidatePortal:
             if access_check:
                 access_check(db)
             table = 'cp_meetings' if application_id else 'cp_interviews'
-            changed = db.execute(f"UPDATE {table} SET status='completed',completed_at=? WHERE id=? AND status='live'",
-                                 (iso(now()), mid)).rowcount
+            changed = db.execute(f"UPDATE {table} SET status='completed',completed_at=?,room=? WHERE id=? AND status='live'",
+                                 (iso(now()), dump(room), mid)).rowcount
             if changed:
                 self.event(db, cid, 'meeting.completed' if application_id else 'interview.completed', mid)
+        if changed and self.materials_catalog:
+            with self.connect() as db:
+                completed = self.meeting(db, application_id, mid) if application_id else self.interview(db, cid)
+            try:
+                self.materials_catalog.register_owner('meeting' if application_id else 'interview', completed)
+            except Exception as error:
+                # Completion is committed. An authorized materials read can retry registration.
+                import observability
+                observability.capture_exception(error, 'materials.register_completed')
 
-    def materials(self, cid, application_id=None, meeting_id=None, *, access_check=None):
+    def materials(self, cid, application_id=None, meeting_id=None, *, access_check=None, storage_policy=None):
+        require(storage_policy is None or self.materials_catalog is not None,
+                'Каталог материалов ещё не подключён.', 503)
         kind = 'meeting' if application_id else 'interview'
         with self.connect() as db:
             if access_check:
@@ -1239,6 +1252,27 @@ class CandidatePortal:
             require(meeting and meeting['status'] == 'completed', 'Материалы доступны после встречи.', 409)
             require(meeting_id is None or meeting['id'] == meeting_id, 'Встреча изменилась. Обновите кабинет.', 409)
             mid = meeting['id']
+            catalogue_meeting = meeting
+            if self.materials_catalog and not application_id:
+                control = db.execute('SELECT start_requested_at FROM cp_recording_control WHERE interview_id=?',
+                                     (mid,)).fetchone()
+                if control is not None and control[0] is None and invites.intake(db, cid) is not None:
+                    catalogue_meeting = {**meeting, 'room': {**(meeting.get('room') or {}),
+                                                           'captureNeverStarted': True}}
+        if self.materials_catalog:
+            def catalogue_access(db):
+                if access_check:
+                    access_check(db)
+                self.person(db, cid)
+                if application_id:
+                    self.application(db, application_id, cid)
+                current = self.meeting(db, application_id, mid) if application_id else self.interview(db, cid)
+                require(current and current['id'] == mid and current['status'] == 'completed'
+                        and current['room'] == meeting['room'], 'Встреча изменилась. Обновите кабинет.', 409)
+            with self.connect() as db:
+                catalogue_access(db)
+            self.materials_catalog.register_owner(kind, catalogue_meeting, storage_policy)
+            return self.materials_catalog.legacy_materials(kind, catalogue_meeting, access_check=catalogue_access)
         with self.media_operation(mid):
             with self.connect() as db:
                 if access_check:
@@ -1564,8 +1598,11 @@ class CandidatePortal:
                              owner_id=principal['id'] if principal and not principal['legacy'] else 'recruiter',
                              access_check=provider_access), {}
         if path.endswith('/materials'):
+            require('storagePolicy' not in body or is_recruiter,
+                    'Способ хранения меняет рекрутер.', 403)
             return self.materials(cid, body.get('applicationId') if '/meeting/' in path else None,
-                                  body.get('meetingId'), access_check=provider_access), {}
+                                  body.get('meetingId'), access_check=provider_access,
+                                  storage_policy=body.get('storagePolicy')), {}
         if path.endswith('/start'):
             self.start_interview(cid, body.get('oralConsent'), retry_recording=body.get('retryRecording', False),
                                  retry_transcription=body.get('retryTranscription', False), access_check=provider_access)

@@ -138,9 +138,11 @@ class ReceiverTest(unittest.TestCase):
         self.assertEqual(r.PRE_OBSERVABILITY_RUNTIME - r.PRE_CALL_CLEANUP_RUNTIME, {'call_cleanup.py', 'media_runtime.py'})
         self.assertEqual(r.PRE_CANDIDATE_CALENDAR_RUNTIME - r.PRE_OBSERVABILITY_RUNTIME, {'observability.py'})
         self.assertEqual(r.PRE_INTERVIEW_ASSISTANT_RUNTIME - r.PRE_CANDIDATE_CALENDAR_RUNTIME, {'candidate_availability.py'})
-        self.assertEqual(r.RUNTIME - r.PRE_INTERVIEW_ASSISTANT_RUNTIME, {'interview_assistant.py'})
+        self.assertEqual(r.PRE_MATERIALS_RUNTIME - r.PRE_INTERVIEW_ASSISTANT_RUNTIME, {'interview_assistant.py'})
+        self.assertEqual(r.RUNTIME - r.PRE_MATERIALS_RUNTIME, r.MATERIALS_RUNTIME)
+        self.assertEqual(len(r.MATERIALS_RUNTIME), 9)
         for runtime in (r.LEGACY_RUNTIME, r.BOT_RUNTIME, r.PRE_IMPORT_RUNTIME, r.PRE_OUTREACH_RUNTIME,
-                        r.PRE_ACCESS_RUNTIME, r.PRE_CV_RUNTIME, r.PRE_POOLED_RUNTIME, r.PRE_EMPLOYER_TELEGRAM_RUNTIME, r.PRE_REMINDERS_RUNTIME, r.PRE_MEETING_NOTICES_RUNTIME, r.PRE_MEETING_LAB_RUNTIME, r.PRE_RECRUITER_COACH_RUNTIME, r.PRE_CALL_CLEANUP_RUNTIME, r.PRE_OBSERVABILITY_RUNTIME, r.PRE_CANDIDATE_CALENDAR_RUNTIME, r.PRE_INTERVIEW_ASSISTANT_RUNTIME, r.RUNTIME):
+                        r.PRE_ACCESS_RUNTIME, r.PRE_CV_RUNTIME, r.PRE_POOLED_RUNTIME, r.PRE_EMPLOYER_TELEGRAM_RUNTIME, r.PRE_REMINDERS_RUNTIME, r.PRE_MEETING_NOTICES_RUNTIME, r.PRE_MEETING_LAB_RUNTIME, r.PRE_RECRUITER_COACH_RUNTIME, r.PRE_CALL_CLEANUP_RUNTIME, r.PRE_OBSERVABILITY_RUNTIME, r.PRE_CANDIDATE_CALENDAR_RUNTIME, r.PRE_INTERVIEW_ASSISTANT_RUNTIME, r.PRE_MATERIALS_RUNTIME, r.RUNTIME):
             with self.subTest(count=len(runtime)):
                 a, s, m = self.bundle('service', runtime=runtime)
                 self.assertEqual(r.unpack(a, s, 'service'), m)
@@ -156,6 +158,13 @@ class ReceiverTest(unittest.TestCase):
             a, s, _ = self.bundle('service', runtime=r.RUNTIME - {module})
             with self.assertRaisesRegex(ValueError, 'Incomplete API'):
                 r.unpack(a, s, 'service')
+
+    def test_partial_materials_runtime_is_rejected(self):
+        for module in r.MATERIALS_RUNTIME:
+            with self.subTest(module=module):
+                a, stage, _ = self.bundle('service', runtime=r.RUNTIME - {module})
+                with self.assertRaisesRegex(ValueError, 'Incomplete API'):
+                    r.unpack(a, stage, 'service')
 
     def test_partial_legacy_layout_is_rejected(self):
         a, s, _ = self.bundle('service', runtime=r.LEGACY_RUNTIME - {'candidate_notifications.py'})
@@ -234,7 +243,8 @@ class ReceiverTest(unittest.TestCase):
                 patch.object(r, 'current_branch_sha', return_value=m['sha']), \
                 patch.object(r, 'guard_and_backup') as backup, \
                 patch.object(r, 'restart_api') as restart, \
-                patch.object(r, 'check_origin', side_effect=RuntimeError('unhealthy')) as health:
+                patch.object(r, 'check_origin', side_effect=RuntimeError('unhealthy')) as health, \
+                patch.object(r, 'pause_materials', return_value=[]):
             with self.assertRaisesRegex(RuntimeError, 'unhealthy'):
                 r.activate(s, m)
             backup.assert_called_once_with(m['release'])
@@ -294,6 +304,17 @@ class ReceiverTest(unittest.TestCase):
         a, s, _ = self.bundle('service', mutate=mutate)
         with self.assertRaisesRegex(ValueError, 'Unexpected API file'):
             r.unpack(a, s, 'service')
+
+    def test_materials_locks_docs_and_tests_are_not_runtime(self):
+        for name in ('requirements-materials.lock', 'requirements-api-extras.lock',
+                     'MATERIALS.md', 'test_materials_worker.py', 'materials.env'):
+            def mutate(manifest, files):
+                files['api/' + name] = b'not runtime'
+                manifest['files']['api/' + name] = r.digest(files['api/' + name])
+            with self.subTest(name=name):
+                archive, stage, _ = self.bundle('service', mutate=mutate)
+                with self.assertRaisesRegex(ValueError, 'Unexpected API file'):
+                    r.unpack(archive, stage, 'service')
 
     def test_actual_packager_and_receiver_agree_on_complete_api(self):
         # Exercise the JS release producer against the Python receiver rather than
@@ -398,13 +419,35 @@ class ReceiverTest(unittest.TestCase):
             db.execute('UPDATE scenario_variants SET body=?', (json.dumps({'candidates': {}}),))
             r.guard_live_interviews(db)
 
+    def test_material_units_drain_and_resume_in_order(self):
+        states = iter(('loaded', 'active', 'inactive', 'loaded', 'active', 'inactive'))
+        def systemctl(argv, **kwargs):
+            if argv[1] in ('show', 'is-active'):
+                return subprocess.CompletedProcess(argv, 0, stdout=next(states))
+            return subprocess.CompletedProcess(argv, 0)
+        with patch.object(r.subprocess, 'run', side_effect=systemctl) as run:
+            active = r.pause_materials()
+            self.assertEqual(active, list(r.MATERIALS_UNITS))
+            r.resume_materials(active)
+        commands = [call.args[0][1:] for call in run.call_args_list]
+        self.assertEqual([item for item in commands if item[0] == 'stop'],
+                         [['stop', unit] for unit in r.MATERIALS_UNITS])
+        self.assertEqual([item for item in commands if item[0] == 'start'],
+                         [['start', unit] for unit in reversed(r.MATERIALS_UNITS)])
+
+    def test_uninstalled_material_units_need_no_mutation(self):
+        with patch.object(r.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, stdout='not-found')) as run:
+            self.assertEqual(r.pause_materials(), [])
+            r.resume_materials([])
+        self.assertEqual([call.args[0][1] for call in run.call_args_list], ['show', 'show'])
+
     def test_failed_service_health_restores_both_pointers(self):
         a, s, m = self.bundle('service'); r.unpack(a, s, 'service')
         base = self.root / 'site'; base.mkdir(); (base / 'current').symlink_to('releases/old-ui')
         api = self.root / 'api'; api.mkdir(); (api / 'current').symlink_to('releases/old-api')
         self.runtime(api / 'releases' / 'old-api', r.PRE_MEETING_NOTICES_RUNTIME)
         database = self.outbox()
-        with patch.dict(r.BASES, service=base), patch.object(r, 'API', api), patch.object(r, 'DATABASE', database), patch.object(r, 'stop_api'), patch.object(r, 'current_branch_sha', return_value=m['sha']), patch.object(r, 'guard_and_backup') as backup, patch.object(r, 'restart_api') as restart, patch.object(r, 'check_origin', side_effect=RuntimeError('unhealthy')):
+        with patch.dict(r.BASES, service=base), patch.object(r, 'API', api), patch.object(r, 'DATABASE', database), patch.object(r, 'stop_api'), patch.object(r, 'current_branch_sha', return_value=m['sha']), patch.object(r, 'guard_and_backup') as backup, patch.object(r, 'restart_api') as restart, patch.object(r, 'check_origin', side_effect=RuntimeError('unhealthy')), patch.object(r, 'pause_materials', return_value=[]):
             with self.assertRaisesRegex(RuntimeError, 'unhealthy'): r.activate(s, m)
             backup.assert_called_once_with(m['release'])
             self.assertEqual(restart.call_count, 2)
@@ -444,6 +487,7 @@ class ReceiverTest(unittest.TestCase):
                 stack.enter_context(patch.object(r, key, value))
             stack.enter_context(patch.object(r, 'current_branch_sha', return_value=manifest['sha']))
             stack.enter_context(patch.object(r, 'guard_and_backup'))
+            stack.enter_context(patch.object(r, 'pause_materials', return_value=[]))
             stop = stack.enter_context(patch.object(r, 'stop_api'))
             restart = stack.enter_context(patch.object(r, 'restart_api'))
             health = stack.enter_context(patch.object(r, 'check_origin'))
@@ -513,6 +557,43 @@ class ReceiverTest(unittest.TestCase):
                 with self.subTest(state=state), self.assertRaisesRegex(ValueError, 'Call cleanup schema'):
                     r.guard_outbox_runtime(db, prior)
                 r.guard_outbox_runtime(db, current)
+
+    def test_materials_sources_block_old_runtime_even_when_terminal(self):
+        prior = self.runtime(self.root / 'before-materials', r.PRE_MATERIALS_RUNTIME)
+        current = self.runtime(self.root / 'with-materials', r.RUNTIME)
+        with sqlite3.connect(':memory:') as db:
+            r.guard_outbox_runtime(db, prior)
+            db.execute('CREATE TABLE media_sources (id TEXT, state TEXT)')
+            r.guard_outbox_runtime(db, prior)
+            for state in ('pending', 'ready', 'unsupported'):
+                db.execute('DELETE FROM media_sources')
+                db.execute('INSERT INTO media_sources VALUES (?,?)', ('source', state))
+                with self.subTest(state=state), self.assertRaisesRegex(ValueError, 'Materials catalog.*forward recovery'):
+                    r.guard_outbox_runtime(db, prior)
+                r.guard_outbox_runtime(db, current)
+
+    def test_materials_view_does_not_bypass_old_runtime_guard(self):
+        prior = self.runtime(self.root / 'before-materials', r.PRE_MATERIALS_RUNTIME)
+        with sqlite3.connect(':memory:') as db:
+            db.execute('CREATE VIEW media_sources AS SELECT 1 WHERE 0')
+            with self.assertRaisesRegex(ValueError, 'Cannot verify materials catalog schema'):
+                r.guard_outbox_runtime(db, prior)
+
+    def test_unsafe_materials_fallback_keeps_worker_stopped(self):
+        with self.service_activation(installed=r.PRE_MATERIALS_RUNTIME) as (stage, manifest, base, api, database, stop, restart, health):
+            health.side_effect = RuntimeError('unhealthy')
+            def stopped():
+                if stop.call_count == 2:
+                    with sqlite3.connect(database) as db:
+                        db.execute('CREATE TABLE media_sources (id TEXT)')
+                        db.execute("INSERT INTO media_sources VALUES ('last-commit')")
+            stop.side_effect = stopped
+            with patch.object(r, 'pause_materials', return_value=['hr-vision-materials-worker']), \
+                    patch.object(r, 'resume_materials') as resume:
+                with self.assertRaisesRegex(RuntimeError, 'rollback refused.*Materials catalog'):
+                    r.activate(stage, manifest)
+                resume.assert_not_called()
+            self.assertEqual(r.pointer(api), 'releases/' + manifest['release'])
 
     def test_malformed_outbox_fails_closed_for_old_runtime(self):
         old = self.runtime(self.root / 'old', r.PRE_MEETING_NOTICES_RUNTIME)

@@ -103,6 +103,13 @@ OUTREACH_ROUTES = HHOutreachRoutes(OUTREACH, worker_secret=os.environ.get('HR_HH
 OUTREACH_BROWSER = OutreachBrowserService.from_env(OUTREACH, CANDIDATE_PORTAL)
 EMPLOYER_ROUTES = EmployerRoutes(connect, LOCK, CANDIDATE_PORTAL, MEDIA, ORIGIN)
 MEETING_LAB = MeetingLab(connect, LOCK, MEDIA)
+MATERIALS_RUNTIME = None
+if os.environ.get('HR_MATERIALS_ENABLED') == '1':
+    from materials_runtime import build_runtime
+    from materials_service import MaterialsService
+    # HTTP requests commit intent locally; the separate scheduler dispatches it.
+    MATERIALS_RUNTIME = build_runtime(connect=connect, media=MEDIA, publish=lambda _job_id: None)
+    CANDIDATE_PORTAL.materials_catalog = MaterialsService(MATERIALS_RUNTIME)
 
 
 def read(db, scope='sfera'):
@@ -534,13 +541,20 @@ class Handler(BaseHTTPRequestHandler):
             outreach_discovery = bool(re.fullmatch(r'/api/hr/outreach/campaigns/[A-Za-z0-9_-]+/discover', path))
             if outreach_discovery:
                 OUTREACH_ROUTES.authorize(self.actor)
-            limit = (12 * 1024 * 1024 if path in ('/api/hr/intake', '/api/hr/employer/intake') else
+            limit = (256 * 1024 if path == '/api/hr/materials/webhooks/daily' else
+                     12 * 1024 * 1024 if path in ('/api/hr/intake', '/api/hr/employer/intake') else
                      7 * 1024 * 1024 if path in ('/api/hr/candidate/resume', '/api/hr/recruiter/candidates', '/api/hr/employer/vacancies/import') else
                      256 * 1024 if coach_notes else
                      256 * 1024 if outreach_discovery else
                      128 * 1024 if path in ('/api/hr/employer/vacancies', '/api/hr/employer/vacancies/update') or MEETING_LAB.handles(path) else 32768)
             require(0 < size <= limit, 'Слишком большой запрос.', 413)
-            body = json.loads(self.rfile.read(size))
+            raw_body = self.rfile.read(size)
+            require(len(raw_body) == size, 'Неполный запрос.', 400)
+            if path == '/api/hr/materials/webhooks/daily':
+                require(MATERIALS_RUNTIME is not None, 'Каталог материалов ещё не подключён.', 503)
+                result = MATERIALS_RUNTIME.handle_event('daily', self.headers, raw_body)
+                return self.answer(200, result)
+            body = json.loads(raw_body)
             require(isinstance(body, dict), 'Некорректный запрос.', 400)
             if MEETING_LAB.handles(self.path):
                 result, headers = MEETING_LAB.handle('POST', self.path, self.headers, body)

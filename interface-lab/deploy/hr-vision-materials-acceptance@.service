@@ -1,0 +1,25 @@
+[Unit]
+Description=HR Vision single interview materials acceptance (%i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=hr-vision
+Group=hr-vision
+WorkingDirectory=/opt/hr-vision-api/current
+EnvironmentFile=/etc/hr-vision/api.env
+EnvironmentFile=/etc/hr-vision/materials.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/opt/hr-vision-materials/venv/bin/python /usr/local/libexec/hr-vision-materials/acceptance.py %i --interview-id interview_75123c5506a524094e5c0c21
+TimeoutStartSec=900
+MemoryMax=256M
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/hr-vision-api
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+StandardOutput=journal
+StandardError=journal
