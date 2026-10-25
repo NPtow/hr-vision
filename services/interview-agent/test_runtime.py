@@ -62,8 +62,8 @@ class RuntimeTest(unittest.TestCase):
         with patch.object(runtime, 'answer', side_effect=isolated):
             runtime.execute({**self.payload, 'runId': 'd' * 64, 'sessionId': 'e' * 64})
 
-    def grounding_run(self, final_grounded):
-        prompts, judgements = [], iter([False, final_grounded])
+    def grounding_run(self, outcomes):
+        prompts, judgements = [], iter(outcomes)
         def response(value):
             return SimpleNamespace(structured_output=value,
                 metrics=SimpleNamespace(accumulated_usage={'inputTokens': 10, 'outputTokens': 2, 'totalTokens': 12}))
@@ -88,7 +88,7 @@ class RuntimeTest(unittest.TestCase):
         return result, prompts
 
     def test_rejected_answer_is_repaired_and_validated_before_delivery(self):
-        result, prompts = self.grounding_run(True)
+        result, prompts = self.grounding_run([False, True])
         self.assertEqual(len(prompts), 2)
         self.assertIn('неподтвержденный вывод', prompts[1])
         self.assertEqual(result['metadata']['repairs'], 1)
@@ -96,11 +96,18 @@ class RuntimeTest(unittest.TestCase):
         self.assertTrue(result['metadata']['grounded'])
         self.assertEqual(len(list((runtime.ROOT / 'rejected').glob('*.json'))), 1)
 
-    def test_a_second_grounding_failure_is_never_delivered_as_success(self):
+    def test_new_citation_issue_can_be_repaired_without_widening_scope(self):
+        result, prompts = self.grounding_run([False, False, True])
+        self.assertEqual(len(prompts), 3)
+        self.assertEqual(result['metadata']['repairs'], 2)
+        self.assertEqual(result['metadata']['budgetUnits'], 72)
+        self.assertTrue(result['metadata']['grounded'])
+
+    def test_exhausted_grounding_repairs_are_never_delivered_as_success(self):
         with self.assertRaises(Problem) as error:
-            self.grounding_run(False)
+            self.grounding_run([False, False, False])
         self.assertEqual(error.exception.status, 502)
-        self.assertEqual(len(list((runtime.ROOT / 'rejected').glob('*.json'))), 2)
+        self.assertEqual(len(list((runtime.ROOT / 'rejected').glob('*.json'))), 3)
 
 
 if __name__ == '__main__': unittest.main()
