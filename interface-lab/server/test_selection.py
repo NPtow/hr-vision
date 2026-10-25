@@ -419,6 +419,14 @@ class SelectionHTTPTest(unittest.TestCase):
         self.assertEqual(self.request('selection/cohort', {'vacancyId': job['id'], 'candidateIds': []},
             token=self.manager, headers={'Origin': 'https://foreign.invalid'})[0], 403)
 
+    def test_full_corpus_cohort_membership_never_enqueues_the_legacy_evaluator(self):
+        candidate = self.candidate('Core cohort')
+        job = self.vacancy(self.employer())
+        with patch('assessment_core_bridge.enabled', return_value=True), patch('assessment_jobs.enqueue') as enqueue:
+            result = self.ok('selection/cohort', {'vacancyId': job['id'], 'candidateIds': [candidate['id']]}, token=self.manager)
+        self.assertTrue(next(p for p in result['candidates'] if p['id'] == candidate['id'])['inCohort'])
+        enqueue.assert_not_called()
+
 
 if __name__ == '__main__':
     unittest.main()

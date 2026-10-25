@@ -14,6 +14,7 @@ from .corpus import build_corpus, canonical_json
 from .providers.jev import validate_response
 
 VERSION = "full-corpus-level-choice-v1"
+REQUEST_FORMAT = "compact-provenance-v1"
 UNKNOWN = "insufficient_data"
 BASE = (
     "Оцени только указанный профессиональный параметр кандидата по всему корпусу state.chunks: "
@@ -80,10 +81,28 @@ def build_rubric(value):
     return {**result, "sha256": digest(result)}
 
 
-def prepare(corpus, rubric, model="jev-1.14.0"):
+def model_state(corpus):
+    """All content with short lossless references; hashes stay in the private plan.
+
+    sources/chunks retain canonical order, so sN/cN resolve to the original
+    source/chunk in corpus without repeating long UUIDs and hashes per utterance.
+    Text, speaker, role and both timestamps are copied exactly, including nulls.
+    """
+    aliases = {s['source_id']: 's' + str(i + 1) for i, s in enumerate(corpus['sources'])}
+    return {
+        'sources': [{'source_id': aliases[s['source_id']], 'kind': s['kind']} for s in corpus['sources']],
+        'chunks': [{'chunk_id': 'c' + str(i + 1), 'source_id': aliases[c['source_id']],
+                    **{k: c[k] for k in ('text', 'role', 'speaker', 'start_ms', 'end_ms')}}
+                   for i, c in enumerate(corpus['chunks'])],
+    }
+
+
+def prepare(corpus, rubric, model="jev-1.14.0", *, request_format=REQUEST_FORMAT):
     """Build an inspectable, versioned request without credentials or network I/O."""
     if type(model) is not str or not re.fullmatch(r"jev-\d+\.\d+\.\d+", model):
         raise ValueError("pin an explicit Jev model version")
+    if request_format not in (REQUEST_FORMAT, 'expanded-provenance-v1'):
+        raise ValueError('unsupported request format')
     corpus, rubric = build_corpus(corpus), build_rubric(rubric)
     questions = {}
     for p in rubric["parameters"]:
@@ -102,9 +121,12 @@ def prepare(corpus, rubric, model="jev-1.14.0"):
         }
     # The same unchanged state is visible to EVERY question. No criterion tags,
     # retrieval, selected fragments, hidden summaries or truncation exist here.
-    state = {"sources": corpus["sources"], "chunks": corpus["chunks"]}
+    state = model_state(corpus) if request_format == REQUEST_FORMAT else {
+        "sources": corpus["sources"], "chunks": corpus["chunks"]}
     request = {"model": model, "state": state, "questions": questions}
     plan = {"contract_version": VERSION, "corpus": corpus, "rubric": rubric, "request": request}
+    if request_format == REQUEST_FORMAT:
+        plan['request_format'] = request_format
     return {**plan, "run_id": digest(plan)}
 
 
@@ -122,7 +144,8 @@ def validate_plan(plan):
             sources.append({**{key: source[key] for key in ("source_id", "version", "kind")}, "units": units})
         rubric = {key: plan["rubric"][key] for key in ("rubric_id", "version", "parameters")}
         rebuilt = prepare({"candidate_id": corpus["candidate_id"], "sources": sources},
-                          rubric, plan["request"]["model"])
+                          rubric, plan["request"]["model"],
+                          request_format=plan.get('request_format', 'expanded-provenance-v1'))
         if canonical_json(rebuilt) != canonical_json(plan):
             raise ValueError("saved corpus, rubric and request do not agree")
     except (KeyError, TypeError, AttributeError, IndexError):

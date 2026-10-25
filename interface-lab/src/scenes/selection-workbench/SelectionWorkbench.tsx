@@ -31,7 +31,7 @@ function Workbench({ token, expire }: { token: string; expire: () => void }) {
   const [vid, setVid] = useState(query.get('vacancyId') || '');
   const [people, setPeople] = useState<SelectionPerson[]>([]);
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState<'all' | 'cohort' | 'ready'>('cohort');
+  const [filter, setFilter] = useState<'all' | 'cohort' | 'ready'>(query.get('tab') === 'assessments' ? 'cohort' : 'all');
   const [statusFilters, setStatusFilters] = useState<StatusFilters>(emptyStatusFilters);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -67,14 +67,13 @@ function Workbench({ token, expire }: { token: string; expire: () => void }) {
   }, [tab, vid]);
   useEffect(() => { setSelected(new Set()); setDetail(''); setConfirm(false); command.current = null; }, [vid, tab]);
   const vacancy = vacancies.find(v => v.id === vid);
-  const hasCohort = people.some(p => p.inCohort);
   const statusFilterCount = Object.values(statusFilters).filter(value => value !== 'all').length;
-  const rows = useMemo(() => people.filter(p => (filter !== 'cohort' || !hasCohort || p.inCohort) && (filter !== 'ready' || p.canAdd)
+  const rows = useMemo(() => people.filter(p => (filter !== 'cohort' || p.inCohort) && (filter !== 'ready' || p.canAdd)
     && (statusFilters.interview === 'all' || (p.interviewStatus === 'completed') === (statusFilters.interview === 'yes'))
     && (statusFilters.telegram === 'all' || p.telegramConnected === (statusFilters.telegram === 'yes'))
     && (statusFilters.email === 'all' || p.emailConnected === (statusFilters.email === 'yes'))
     && (statusFilters.assessment === 'all' || workflowFor(p).assessment.state === statusFilters.assessment)
-    && [p.name, p.desiredRole, p.city, p.email].join(' ').toLocaleLowerCase('ru').includes(search.toLocaleLowerCase('ru'))), [people, tab, search, filter, hasCohort, statusFilters]);
+    && [p.name, p.desiredRole, p.city, p.email].join(' ').toLocaleLowerCase('ru').includes(search.toLocaleLowerCase('ru'))), [people, search, filter, statusFilters]);
   const checked = rows.filter(p => selected.has(p.id));
   const canPublish = !loading && !error && checked.length > 0 && checked.every(p => p.canAdd);
   const person = people.find(p => p.id === detail);
@@ -113,7 +112,7 @@ function Workbench({ token, expire }: { token: string; expire: () => void }) {
   const checkedIds = rows.map(p => p.id);
   return <div className="sl-workspace">
     <div className="sl-heading"><h1>База подбора</h1><label className="sl-vacancy-picker"><span className="sl-sr">Вакансия для подборки</span><select value={vid} disabled={!!busy || loading} onChange={e => setVid(e.target.value)}>{vacancies.length === 0 && <option value="">Нет вакансий</option>}{vacancies.map(v => <option key={v.id} value={v.id}>{v.company} · {v.title}</option>)}</select></label></div>
-    <nav className="sl-tabs" aria-label="Таблицы подбора">{(Object.keys(caption) as Tab[]).map(key => <button disabled={!!busy} key={key} aria-current={key === tab ? 'page' : undefined} onClick={() => { setTab(key); setSearch(''); }}>{caption[key]}<span>{key === 'vacancies' ? vacancies.length : people.length}</span></button>)}</nav>
+    <nav className="sl-tabs" aria-label="Таблицы подбора">{(Object.keys(caption) as Tab[]).map(key => <button disabled={!!busy} key={key} aria-current={key === tab ? 'page' : undefined} onClick={() => { setTab(key); setFilter(key === 'assessments' ? 'cohort' : 'all'); setSearch(''); }}>{caption[key]}<span>{key === 'vacancies' ? vacancies.length : key === 'assessments' ? people.filter(p => p.inCohort).length : people.length}</span></button>)}</nav>
     <section className="sl-surface" aria-label={caption[tab]} aria-busy={loading || !!busy}>
       <div className="sl-toolbar"><label className="sl-search"><Search size={17}/><span className="sl-sr">Поиск</span><input placeholder={tab === 'vacancies' ? 'Найти вакансию' : 'Найти кандидата'} value={search} onChange={e => setSearch(e.target.value)}/></label>
         {tab !== 'vacancies' && <><label className="sl-filter"><span className="sl-sr">Группа кандидатов</span><select value={filter} onChange={e => { setFilter(e.target.value as typeof filter); setSelected(new Set()); }}><option value="cohort">Текущая группа</option><option value="all">Все кандидаты</option><option value="ready">Готовы к добавлению</option></select></label>

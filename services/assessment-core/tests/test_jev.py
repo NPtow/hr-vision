@@ -388,6 +388,20 @@ class TransportTests(unittest.TestCase):
             with self.subTest(proxy=proxy), self.assertRaises(JevError):
                 JevConfig(api_key='key', proxy_url=proxy)
 
+    def test_context_rejection_preserves_only_the_safe_machine_code_and_never_retries(self):
+        client = JevClient(JevConfig(api_key='private-key', proxy_url='socks5h://127.0.0.1:10808'))
+        def invoke(command, **kwargs):
+            kwargs['stdout'].write(b'{"detail":{"error_type":"max_tokens_exceeded","input":"PRIVATE SOURCE"}}\n400')
+            return subprocess.CompletedProcess(command, 0)
+        with patch('assessment_core.providers.jev.subprocess.run', side_effect=invoke) as run:
+            with self.assertRaises(JevError) as error:
+                client.evaluate(request_fixture())
+            self.assertEqual(error.exception.code, 'context_limit')
+            self.assertEqual(error.exception.status, 400)
+            self.assertFalse(error.exception.outcome_unknown)
+            self.assertNotIn('PRIVATE', str(error.exception))
+            run.assert_called_once()
+
     def test_malformed_json_duplicate_keys_and_nonfinite_numbers_are_rejected(self):
         valid = json.dumps(response_fixture())
         examples = [b"not JSON PRIVATE", b"\xff", b"[]", b'{"model":1,"model":2}',

@@ -31,6 +31,7 @@ export function FullCorpusAssessment({ run, candidateId }: { run: FullCorpusRun;
   const result = run.assessment;
   if (run.status !== 'completed') return <section className="fc-assessment" aria-label="Оценка по параметрам">
     <p role="status">{fullCorpusStatusLabels[run.status] ?? 'Статус неизвестен'}</p>
+    {run.error?.code === 'context_limit' && <p>Полный объём материалов превышает лимит модели. Материалы не сокращались; оценка не получена.</p>}
     {run.status === 'outcome_unknown' && <p>Ответ расчёта не подтверждён. Автоматический повтор не запускается.</p>}
   </section>;
   if (!result || result.candidate_id !== candidateId || result.run_id !== run.run_id ||

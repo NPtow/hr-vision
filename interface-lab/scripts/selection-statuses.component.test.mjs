@@ -69,7 +69,7 @@ before(async () => {
 });
 after(async () => { await browser?.close(); if (server) await new Promise(resolve => server.close(resolve)); });
 
-async function pageFor(t, viewport = { width: 1280, height: 800 }, startable = false) {
+async function pageFor(t, viewport = { width: 1280, height: 800 }, startable = false, hasCohort = true) {
   const page = await browser.newPage({ viewport });
   page.setDefaultTimeout(5000);
   const unexpected = [], errors = [];
@@ -80,7 +80,7 @@ async function pageFor(t, viewport = { width: 1280, height: 800 }, startable = f
     const responses = {
       '/api/hr/access': { ready: true }, '/api/hr/session': { token: 'local-fixture-only' },
       '/api/hr/selection/vacancies': { vacancies: [{ id: 'vac-1', title: 'Продажи', company: 'Тест', city: 'Москва', salary: '' }] },
-      '/api/hr/selection/candidates': { candidates: people, count: people.length },
+      '/api/hr/selection/candidates': { candidates: people.map(p => ({ ...p, inCohort: hasCohort })), count: people.length },
     };
     for (const p of people) responses['/api/hr/selection/candidates/' + p.id + '/readiness'] = {
       candidateId: p.id,
@@ -124,6 +124,16 @@ async function pageFor(t, viewport = { width: 1280, height: 800 }, startable = f
 const names = page => page.locator('tbody .sl-person').allTextContents();
 const openFilters = page => page.getByRole('button', { name: /^Фильтры/ }).click();
 const choose = (page, name, value) => page.getByRole('group', { name: 'Статусы кандидатов' }).getByLabel(name, { exact: true }).selectOption(value);
+
+test('empty current group stays empty instead of silently showing the entire database', async t => {
+  const page = await pageFor(t, undefined, false, false);
+  assert.equal((await names(page)).length, 5);
+  await page.getByRole('button', { name: /^Подборка/ }).click();
+  await page.getByRole('heading', { name: 'Ничего не найдено', exact: true }).waitFor();
+  assert.equal((await names(page)).length, 0);
+  await page.getByLabel('Группа кандидатов').selectOption('all');
+  assert.equal((await names(page)).length, 5);
+});
 
 test('explicit assessment button uses the existing authenticated route and renders the core response', async t => {
   const page = await pageFor(t, undefined, true);
