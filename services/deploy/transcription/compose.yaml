@@ -12,7 +12,7 @@ x-base: &base
   cpus: 0.5
   mem_limit: 192m
   memswap_limit: 192m
-  tmpfs: [/tmp:size=32m,mode=1777]
+  tmpfs: ['/tmp:size=32m,mode=1777']
   logging:
     driver: json-file
     options: {max-size: 5m, max-file: '2'}
