@@ -6,7 +6,7 @@ import { InterviewChatAnswer } from './InterviewChatAnswer';
 import { UnifiedInterviewTranscript } from './UnifiedInterviewTranscript';
 import { parseMeetingTranscript } from '../connected-journey/transcript';
 import type { RecordingReviewProps } from './InterviewReview';
-import { interviewTranscriptSections, interviewTime as time, interviewTimeline } from './candidate-player-model';
+import { interviewTranscriptSections, interviewTime as time, interviewTimeline, interviewSearchGroups } from './candidate-player-model';
 import { OrbitGraph } from '../interview-assessment/OrbitGraph';
 import { FragmentQuestion } from '../interview-assessment/FragmentQuestion';
 import { useInterviewAssessment } from '../interview-assessment/useInterviewAssessment';
@@ -77,16 +77,16 @@ export function CandidateInterviewPlayer({ sourceId, name, header, media, chapte
   const activeIndex = paragraphs.reduce((found, row, index) => row.start <= current ? index : found, 0);
   const active = transcriptSeekable ? paragraphs[activeIndex] : undefined;
   const activeChapter = topics.reduce((found, row, index) => row.seconds !== null && row.seconds <= current ? index : found, -1);
-  const matchedRows = useMemo(() => paragraphs.flatMap((row, index) => assist.search?.matches.some(match =>
-    (row.end === row.start ? row.start * 1000 >= match.startMs : row.end * 1000 > match.startMs)
-    && (match.endMs === match.startMs ? row.start * 1000 <= match.endMs : row.start * 1000 < match.endMs)) ? [index] : []), [paragraphs, assist.search]);
+  const searchGroups = useMemo(() => interviewSearchGroups(paragraphs, assist.search?.matches || []), [paragraphs, assist.search]);
+  const matchedRows = useMemo(() => searchGroups.flat(), [searchGroups]);
+  const currentSearchRows = searchGroups[hit] || [];
   useEffect(() => { setHit(0); }, [assist.search]);
   useEffect(() => {
     if (!assist.search || tab !== 'transcript') return;
     const list = transcriptList.current;
-    const row = list?.querySelector<HTMLElement>(`[data-line-index="${matchedRows[hit]}"]`);
+    const row = list?.querySelector<HTMLElement>(`[data-line-index="${searchGroups[hit]?.[0]}"]`);
     if (list && row) list.scrollTo({ top: Math.max(0, row.getBoundingClientRect().top - list.getBoundingClientRect().top + list.scrollTop - list.clientHeight * .32), behavior: 'instant' });
-  }, [assist.search, hit, tab, matchedRows]);
+  }, [assist.search, hit, tab, searchGroups]);
   async function submitSearch() { setFollow(false); await assist.submit('search', query); }
   async function submitChat(value = chatQuery) {
     if (assist.busy || !value.trim()) return;
@@ -290,7 +290,7 @@ export function CandidateInterviewPlayer({ sourceId, name, header, media, chapte
 
         {tab === 'transcript' && <div className="iv-panel iv-transcript-panel" id={`${id}-transcript`} role="tabpanel" aria-labelledby={`${id}-transcript-tab`}>
           <UnifiedInterviewTranscript list={transcriptList} sections={sections} seekable={transcriptSeekable} seek={seek} pauseFollow={() => setFollow(false)}
-            renderRow={(row, index) => <div key={`${row.start}:${index}`} className="iv-line" data-line-index={index} data-match={matchedRows.includes(index)} data-search-current={matchedRows[hit] === index} data-active={transcriptSeekable && index === activeIndex}>
+            renderRow={(row, index) => <div key={`${row.start}:${index}`} className="iv-line" data-line-index={index} data-match={matchedRows.includes(index)} data-search-current={currentSearchRows.includes(index)} data-active={transcriptSeekable && index === activeIndex}>
               <button type="button" className="iv-line-content" disabled={!transcriptSeekable} onClick={() => seek(row.start)} aria-label={`${time(row.start)} ${row.text}`} aria-current={transcriptSeekable && index === activeIndex ? 'true' : undefined}><time>{time(row.start)}</time><span>{row.text}</span></button>
               {transcriptSeekable && <div className="iv-line-tools"><IconButton label={`Ссылка на ${time(row.start)}`} onClick={() => { void copyMoment(row.start); }}><LinkIcon/></IconButton>{canComment && <IconButton label={`Комментарий к ${time(row.start)}`} onClick={() => openComment(row.start)}><MessageSquare/></IconButton>}</div>}
             </div>}
@@ -334,8 +334,8 @@ export function CandidateInterviewPlayer({ sourceId, name, header, media, chapte
         {(tab === 'transcript' || tab === 'assistant') && <div className="iv-side-input">
           {tab === 'transcript' && <>
             {assist.searchError && <p className="iv-assistant-error" role="alert">{assist.searchError}</p>}
-            {assist.search && <div className="iv-search-state" role="status"><span>{matchedRows.length ? `${hit + 1} / ${matchedRows.length}` : 'Подходящих фрагментов не найдено'}</span>
-              {!!matchedRows.length && <><IconButton label="Предыдущее совпадение" onClick={() => setHit(value => (value + matchedRows.length - 1) % matchedRows.length)}><ChevronUp/></IconButton><IconButton label="Следующее совпадение" onClick={() => setHit(value => (value + 1) % matchedRows.length)}><ChevronDown/></IconButton></>}
+            {assist.search && <div className="iv-search-state" role="status"><span>{searchGroups.length ? `${hit + 1} / ${searchGroups.length}` : 'Подходящих фрагментов не найдено'}</span>
+              {!!searchGroups.length && <><IconButton label="Предыдущее совпадение" onClick={() => setHit(value => (value + searchGroups.length - 1) % searchGroups.length)}><ChevronUp/></IconButton><IconButton label="Следующее совпадение" onClick={() => setHit(value => (value + 1) % searchGroups.length)}><ChevronDown/></IconButton></>}
               <button type="button" onClick={() => { assist.clearSearch(); setQuery(''); setFollow(true); }}>Сбросить</button>
             </div>}
           </>}
@@ -343,7 +343,7 @@ export function CandidateInterviewPlayer({ sourceId, name, header, media, chapte
             {tab === 'assistant' ? <Sparkles size={19}/> : <Search size={19}/>}
             <input aria-label={tab === 'assistant' ? 'Спросить ИИ об интервью' : 'Поиск по смыслу в расшифровке'} maxLength={tab === 'assistant' ? 2000 : 300}
               placeholder={tab === 'assistant' ? 'Спросите ИИ об интервью…' : 'Найти по смыслу в расшифровке…'}
-              title={tab === 'assistant' ? 'ИИ ответит по записи и покажет цитаты' : 'Jev выделит подходящие фрагменты расшифровки'}
+              title={tab === 'assistant' ? 'ИИ ответит по записи и покажет цитаты' : 'Найти до пяти подходящих отрезков интервью'}
               value={tab === 'assistant' ? chatQuery : query} onChange={event => tab === 'assistant' ? setChatQuery(event.target.value) : setQuery(event.target.value)}/>
             <button type="submit" aria-label={tab === 'assistant' ? 'Отправить вопрос ИИ' : 'Выделить фрагменты'} disabled={!!assist.busy || !assistant || (tab === 'assistant' ? chatQuery : query).trim().length < 2}>
               {(tab === 'assistant' && assist.busy === 'chat') || (tab === 'transcript' && assist.busy === 'search') ? <span className="iv-assistant-spinner"/> : <ArrowUp size={19}/>}

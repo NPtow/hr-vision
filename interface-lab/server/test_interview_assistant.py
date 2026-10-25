@@ -35,6 +35,10 @@ class InterviewAssistantTest(unittest.TestCase):
     def answer(self, config, payload, key, timeout):
         schema = payload['response_format']['json_schema']; self.calls.append(schema['name'])
         self.last_payload = payload
+        if schema['name'] == 'interview_search':
+            ids = schema['schema']['properties']['ranges']['items']['properties']['startId']['enum']
+            value = {'ranges': [] if self.no_evidence else [{'startId': ids[-1], 'endId': ids[-1]}]}
+            return {'choices': [{'finish_reason': 'stop', 'message': {'content': json.dumps(value)}}]}
         ids = schema['schema']['properties']['parts']['items']['properties']['sourceIds']['items']['enum']
         refs = [] if self.no_evidence else ['s999999'] if self.bad_quote else [ids[0]]
         value = {'parts': [{'text': 'Свободный пересказ, а не дословная цитата.', 'sourceIds': refs}]}
@@ -101,23 +105,52 @@ class InterviewAssistantTest(unittest.TestCase):
         self.assertEqual(self.send(transcript='FAKE_TRANSCRIPT')[0], 400)
         self.assertEqual(self.send(recordingId='another-candidate')[0], 422)
         self.assertEqual(self.calls, [])
-    def test_search_uses_only_jev_and_exact_source(self):
-        def score(config, query, chunks, *args):
-            self.assertEqual(config.model, 'jev-latest')
-            self.assertEqual(config.base_url, 'https://api.typesafe.ai/v1')
-            return [{**chunks[-1], 'score': 3}], {'model': 'jev-1.14.0', 'usage': {'input_tokens': 500, 'output_tokens': 40}}
-        with patch.object(assistant, 'evaluate_jev', side_effect=score) as jev:
+    def test_search_uses_configured_model_and_exact_source(self):
+        with patch.object(assistant, 'evaluate_jev', side_effect=AssertionError('legacy provider')):
             status, result, _ = self.send(action='search')
-        self.assertEqual(status, 200, result); self.assertEqual(jev.call_count, 1)
+        self.assertEqual(status, 200, result)
         self.assertIn('ONLY_OWNER_RESULT', result['matches'][0]['text'])
-        self.assertEqual(result['matches'][0]['startMs'], 40000); self.assertEqual(self.calls, [])
-        self.assertEqual(result['model'], 'jev-1.14.0')
+        self.assertEqual(result['matches'][0]['startMs'], 40000)
+        self.assertEqual(self.calls, ['interview_search'])
+        self.assertEqual(result['model'], 'unit-chat')
+        self.assertEqual(self.send(action='search')[1], result)
+        self.assertEqual(len(self.calls), 1)
         other = self.employer('Other search')
         self.assertEqual(self.request('employer/interview-assistant', {**self.body, 'action': 'search'}, token=other['token'])[0], 404)
-    def test_jev_unavailable_never_uses_chat(self):
-        with patch.object(assistant, 'evaluate_jev', side_effect=Problem('Jev недоступен', 503)):
+
+    def test_search_gateway_error_does_not_fall_back_or_retry_automatically(self):
+        with patch.object(structured_model, 'provider', side_effect=Problem('Шлюз недоступен', 503)) as provider:
             status, result, _ = self.send(action='search')
-        self.assertEqual(status, 503, result); self.assertEqual(self.calls, [])
+        self.assertEqual(status, 503, result)
+        self.assertNotIn('резюме', result['error'])
+        self.assertEqual(provider.call_count, 1)
+
+    def test_search_model_override_is_separate_from_chat_and_records_actual_model(self):
+        def answer(config, payload, key, timeout):
+            self.assertEqual(config.model, 'gemini-search-alias')
+            response = self.answer(config, payload, key, timeout)
+            return {**response, 'model': 'gemini-search-resolved'}
+        with patch.dict(os.environ, {'HR_INTERVIEW_SEARCH_MODEL': 'gemini-search-alias'}), \
+                patch.object(structured_model, 'provider', side_effect=answer):
+            status, result, _ = self.send(action='search')
+        self.assertEqual(status, 200, result)
+        self.assertEqual(result['model'], 'gemini-search-resolved')
+        self.assertEqual(assistant.model_config().model, 'unit-chat')
+
+    def test_search_can_return_no_matches(self):
+        self.no_evidence = True
+        status, result, _ = self.send(action='search')
+        self.assertEqual(status, 200, result)
+        self.assertEqual(result['matches'], [])
+        self.assertEqual(result['totalMatches'], 0)
+
+    def test_search_rejects_unknown_ids_and_invalid_json_after_one_retry(self):
+        for raw in ('{', '{"ranges":[{"startId":"foreign","endId":"foreign"}]}',
+                    '{"ranges":[],"url":"https://foreign.invalid"}'):
+            with patch.object(structured_model, 'provider', return_value={'choices': [{'finish_reason': 'stop', 'message': {'content': raw}}]}) as provider:
+                self.assertEqual(self.send(action='search', requestId=uuid.uuid4().hex)[0], 502)
+                self.assertEqual(provider.call_count, 2)
+
     def test_intake_uses_stored_source_blocks_foreign_vacancy(self):
         person = self.imported(self.owner, self.job)
         with self.app.connect() as db:
@@ -177,38 +210,34 @@ class InterviewAssistantTest(unittest.TestCase):
         options = self.last_payload['response_format']['json_schema']['schema']['properties']['parts']['items']['properties']['sourceIds']['items']['enum']
         self.assertEqual(len(options), 120); self.assertEqual(result['coverage']['omitted'], 0)
 
-    def test_search_retries_only_explicitly_and_reuses_completed_scoped_batches(self):
+    def test_search_reads_all_sources_once_and_caches_the_whole_selection(self):
         body, _ = self.long_recording(); body['action'] = 'search'
-        batches = []
-        def score(config, query, chunks, *args):
-            batches.append([row['id'] for row in chunks])
-            if len(batches) == 2:
-                raise Problem('TypeSafe временно недоступен.', 503)
-            return [{**chunks[-1], 'score': 3}], {'model': 'jev-1.14.0', 'usage': {'input_tokens': 500, 'output_tokens': 40}}
-        with patch.object(assistant, 'evaluate_jev', side_effect=score):
-            self.assertEqual(self.request('employer/interview-assistant', body, token=self.owner['token'])[0], 503)
-            self.assertEqual(len(batches), 2)
+        calls = []
+        def select(config, payload, *args):
+            data = json.loads('\n'.join(payload['messages'][1]['content'].splitlines()[1:-1]))
+            calls.append(data)
+            self.assertEqual(len(data['fragments']), 120)
+            value = {'ranges': [{'startId': f'fragment-{i}', 'endId': f'fragment-{i}'} for i in (0,30,60,90,119)]}
+            return {'choices': [{'finish_reason': 'stop', 'message': {'content': json.dumps(value)}}]}
+        with patch.object(structured_model, 'provider', side_effect=select):
             status, result, _ = self.request('employer/interview-assistant', body, token=self.owner['token'])
             self.assertEqual(status, 200, result)
             self.assertEqual(self.request('employer/interview-assistant', body, token=self.owner['token'])[1], result)
-        self.assertEqual(len(batches), 9)  # 8 distinct batches; only failed batch retried by the human.
-        self.assertEqual(batches[0], [f'fragment-{i}' for i in range(16)])
-        self.assertEqual(batches[1], batches[2])
-        self.assertEqual(batches[-1], [f'fragment-{i}' for i in range(112, 120)])
+        self.assertEqual(len(calls), 1)
         self.assertEqual(result['coverage'], 'entire_transcript')
-        self.assertEqual(result['totalMatches'], 8)
-        self.assertEqual({row['startMs'] for row in result['matches']}, {i * 30000 for i in (15, 31, 47, 63, 79, 95, 111, 119)})
-        self.assertEqual(self.calls, [])
+        self.assertEqual(result['totalMatches'], 5)
+        self.assertEqual({row['startMs'] for row in result['matches']}, {i * 30000 for i in (0,30,60,90,119)})
 
     def test_search_revocation_stops_result_after_provider(self):
-        def score(config, query, chunks, *args):
+        def select(*args):
+            result = self.answer(*args)
             with self.app.connect() as db:
                 db.execute('DELETE FROM em_sessions WHERE token_hash=?',
                            (hashlib.sha256(self.owner['token'].encode()).hexdigest(),))
-            return [{**chunks[-1], 'score': 3}], {'model': 'jev-1.14.0'}
-        with patch.object(assistant, 'evaluate_jev', side_effect=score):
+            return result
+        with patch.object(structured_model, 'provider', side_effect=select):
             self.assertEqual(self.send(action='search')[0], 401)
-        self.assertEqual(self.calls, [])
+        self.assertEqual(self.calls, ['interview_search'])
 
     def test_failed_provider_can_retry_same_snapshot_then_cache_the_answer(self):
         with patch.object(structured_model, 'provider', side_effect=Problem('Шлюз недоступен.', 503)):
@@ -303,13 +332,33 @@ class InterviewAssistantTest(unittest.TestCase):
             status, result, _ = self.send(); self.assertEqual(status, 200, result)
         self.assertEqual(remote.call_count, 1)
 
-    def test_agent_search_remains_jev_only(self):
-        def score(config, query, chunks, *args):
-            return [{**chunks[0], 'score': 3}], {'model': 'jev-1.14.0'}
-        with self.agent_env(), patch.object(assistant, 'evaluate_jev', side_effect=score), patch.object(assistant, 'agent_completion') as remote:
+    def test_search_is_independent_of_agent_chat_and_does_not_call_jev(self):
+        with self.agent_env(), patch.object(assistant, 'evaluate_jev', side_effect=AssertionError('legacy provider')), patch.object(assistant, 'agent_completion') as remote:
             self.assertEqual(self.send(action='search')[0], 200)
             remote.assert_not_called()
-        self.assertEqual(self.calls, [])
+        self.assertEqual(self.calls, ['interview_search'])
+
+class SearchRangeTest(unittest.TestCase):
+    def rows(self):
+        return [{'id': f'f{i}', 'startMs': start, 'endMs': start + 10000,
+                 'speakerName': 'Кандидат', 'text': f'Точная реплика {i}'}
+                for i, start in enumerate((0, 10000, 40000, 120000, 300000))]
+
+    def test_nearby_ranges_merge_before_counting_and_keep_all_source_text(self):
+        rows = self.rows()
+        matches = assistant.search_ranges(rows, [{'startId':'f3','endId':'f3'},
+            {'startId':'f0','endId':'f1'}, {'startId':'f2','endId':'f2'}, {'startId':'f1','endId':'f1'}])
+        self.assertEqual(len(matches), 2)
+        self.assertEqual(matches[0]['startMs'], 120000)
+        self.assertEqual(matches[1]['startMs'], 0)
+        self.assertEqual(matches[1]['endMs'], 50000)
+        self.assertEqual(matches[1]['text'], '\n'.join(row['text'] for row in rows[:3]))
+
+    def test_reversed_and_excessively_broad_ranges_are_rejected(self):
+        for start, end in (('f2','f1'),('f0','f4')):
+            with self.assertRaises(ValueError):
+                assistant.search_ranges(self.rows(), [{'startId':start,'endId':end}])
+
 
 class JevBoundaryTest(unittest.TestCase):
     row = {'id': 'fragment-17', 'text': 'Обсудили цену.', 'startMs': 42000, 'endMs': 45000, 'speakerName': 'Кандидат'}
