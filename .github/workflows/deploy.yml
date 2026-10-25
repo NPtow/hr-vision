@@ -85,6 +85,11 @@ jobs:
         run: python3 -m unittest -v test_receiver
       - name: Check isolated Jev assessment worker
         run: python3 -m unittest discover -s services/assessment/tests -v
+      - name: Check full-corpus assessment core
+        env:
+          PYTHONPATH: services/assessment-core
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python3 -m unittest discover -s services/assessment-core/tests -q
       - name: Check core and private Zoom service
         env:
           PYTHONPATH: interface-lab/server:services/data-core/src:services/transcription/src

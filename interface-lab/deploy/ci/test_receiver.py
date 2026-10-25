@@ -188,7 +188,11 @@ class ReceiverTest(unittest.TestCase):
         self.assertEqual(r.PRE_SELECTION_RUNTIME - r.PRE_PUBLIC_PROFILE_RUNTIME, {'public_profiles.py'})
         self.assertEqual(r.PRE_JEV_RUNTIME - r.PRE_SELECTION_RUNTIME, {'selection.py'})
         self.assertEqual(r.PRE_ASR_DISPATCH_RUNTIME - r.PRE_JEV_RUNTIME, {'assessment_jobs.py'})
-        self.assertEqual(r.RUNTIME - r.PRE_ASR_DISPATCH_RUNTIME, {'materials_asr_dispatch.py'})
+        self.assertEqual(r.PRE_SELECTION_STATUS_RUNTIME - r.PRE_ASR_DISPATCH_RUNTIME, {'materials_asr_dispatch.py'})
+        self.assertEqual(r.PRE_FULL_CORPUS_RUNTIME - r.PRE_SELECTION_STATUS_RUNTIME, {'selection_status.py'})
+        self.assertEqual(r.RUNTIME - r.PRE_FULL_CORPUS_RUNTIME, {'assessment_corpus.py', 'assessment_core_bridge.py'})
+        self.assertIn(frozenset(r.PRE_FULL_CORPUS_RUNTIME), r.RUNTIME_LAYOUTS)
+        self.assertIn(frozenset(r.PRE_SELECTION_STATUS_RUNTIME), r.RUNTIME_LAYOUTS)
         self.assertIn(frozenset(r.PRE_ASR_DISPATCH_RUNTIME), r.RUNTIME_LAYOUTS)
         self.assertIn(frozenset(r.PRE_JEV_RUNTIME), r.RUNTIME_LAYOUTS)
         self.assertIn(frozenset(r.PRE_PUBLIC_PROFILE_RUNTIME), r.RUNTIME_LAYOUTS)
@@ -820,6 +824,18 @@ class ReceiverTest(unittest.TestCase):
                     self.assertEqual(db.execute('SELECT * FROM ' + table).fetchall(), [('preserved-assessment-row',)])
                     r.guard_outbox_runtime(db, current)
                     db.execute('DROP TABLE ' + table)
+
+    def test_full_corpus_results_prevent_incompatible_fallback(self):
+        prior = self.runtime(self.root / 'before-full-corpus', r.PRE_FULL_CORPUS_RUNTIME)
+        current = self.runtime(self.root / 'with-full-corpus', r.RUNTIME)
+        with sqlite3.connect(':memory:') as db:
+            db.execute('CREATE TABLE ac_bindings (id TEXT)')
+            r.guard_outbox_runtime(db, prior)
+            db.execute("INSERT INTO ac_bindings VALUES ('retained-run')")
+            with self.assertRaisesRegex(ValueError, 'Full-corpus results'):
+                r.guard_outbox_runtime(db, prior)
+            r.guard_outbox_runtime(db, current)
+            self.assertEqual(db.execute('SELECT id FROM ac_bindings').fetchall(), [('retained-run',)])
 
     def test_jev_queue_requires_runtime_and_cannot_be_hidden_by_view(self):
         prior = self.runtime(self.root / 'before-jev', r.PRE_JEV_RUNTIME)

@@ -1,0 +1,37 @@
+[Unit]
+Description=HR Vision full-corpus JEV assessment core
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=120
+StartLimitBurst=3
+
+[Service]
+DynamicUser=yes
+StateDirectory=hr-vision-assessment-core
+StateDirectoryMode=0700
+WorkingDirectory=/opt/hr-vision-assessment-core/current
+EnvironmentFile=/etc/hr-vision/assessment-core.env
+Environment=PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 -m assessment_core.api
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=75
+MemoryMax=256M
+MemorySwapMax=0
+CPUQuota=50%
+TasksMax=32
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+CapabilityBoundingSet=
+LogRateLimitIntervalSec=30s
+LogRateLimitBurst=60
+
+[Install]
+WantedBy=multi-user.target
