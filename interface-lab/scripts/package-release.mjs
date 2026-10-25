@@ -63,7 +63,7 @@ if (target === 'service') for (const name of [
   'materials_capture.py', 'materials_daily.py', 'materials_repository.py', 'materials_http.py',
   'materials_storage.py', 'materials_transcripts.py', 'materials_worker.py', 'materials_runtime.py', 'materials_service.py',
   'materials_asr_dispatch.py',
-  'core_source_client.py', 'core_source_outbox.py', 'zoom_api_client.py', 'public_profiles.py',
+  'core_source_client.py', 'core_source_outbox.py', 'zoom_api_client.py', 'public_profiles.py', 'assessment_jobs.py',
 ]) add(`server/${name}`, `api/${name}`);
 writeFileSync(`${stage}/release.json`, JSON.stringify(manifest) + '\n');
 execFileSync('tar', ['-czf', 'release.tgz', '-C', stage, 'release.json', 'ui', ...(target === 'service' ? ['api'] : [])], {

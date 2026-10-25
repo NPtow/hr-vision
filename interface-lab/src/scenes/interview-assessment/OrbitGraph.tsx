@@ -14,6 +14,7 @@ const wheelLabels: Record<string, string> = {
   A01: 'Диалог', A03: 'Квалификация', A04: 'Задача', A07: 'Следующий шаг',
   A08: 'CRM', A10: 'Продукт', 'NEW-01': 'Передача',
   'A06.1': 'Возражения', 'A11.1': 'Адаптация',
+  A05: 'Ценность', 'A06.2': 'Условия',
 };
 
 function point(angle: number, radius: number) {

@@ -1,0 +1,19 @@
+[Unit]
+Description=HR Vision private interview agent (Strands Harness)
+After=network-online.target docker.service
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/hr-vision/agent-image.env
+ExecStart=/usr/bin/docker run --rm --name hr-vision-agent --memory=512m --memory-swap=512m --cpus=0.7 --pids-limit=128 --network=host --read-only --cap-drop=ALL --security-opt=no-new-privileges --tmpfs /tmp:rw,nosuid,noexec,size=32m --log-opt max-size=5m --log-opt max-file=2 --env-file /etc/hr-vision/agent.env -v /var/lib/hr-vision-agent:/state:rw ${HR_AGENT_IMAGE}
+ExecStop=/usr/bin/docker stop -t 20 hr-vision-agent
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=25
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

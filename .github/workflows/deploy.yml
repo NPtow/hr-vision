@@ -83,6 +83,8 @@ jobs:
       - name: Check deployment safety
         working-directory: interface-lab/deploy/ci
         run: python3 -m unittest -v test_receiver
+      - name: Check isolated Jev assessment worker
+        run: python3 -m unittest discover -s services/assessment/tests -v
       - name: Check core and private Zoom service
         env:
           PYTHONPATH: interface-lab/server:services/data-core/src:services/transcription/src
@@ -91,6 +93,12 @@ jobs:
           python3 -m pip install --require-hashes --only-binary=:all: -r services/deploy/requirements-tests.lock
           python3 -m pip check
           python3 -m pytest services/data-core/tests services/zoom-api/test_zoom_api.py services/deploy/simple/tests services/tests/test_zoom_core_http_integration.py -q
+      - name: Check private interview agent without provider access
+        run: |
+          docker build -f services/interview-agent/Dockerfile -t hr-interview-agent-test .
+          docker run --rm --network=none --read-only --memory=512m --tmpfs /tmp:rw,nosuid,size=32m \
+            -v "$PWD/services/interview-agent:/tests:ro" --entrypoint python hr-interview-agent-test \
+            -m unittest discover -s /tests -p test_runtime.py -v
       - name: Build and package only this destination
         working-directory: interface-lab
         run: |

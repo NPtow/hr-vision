@@ -299,6 +299,7 @@ export function CandidateInterviewPlayer({ sourceId, name, header, media, chapte
         {tab === 'transcript' && !assist.search && !follow && transcriptSeekable && <button type="button" className="iv-follow" onClick={() => { setFollow(true); followMoment(true); }}><AlignLeft size={14}/>К текущему моменту<ChevronDown size={13}/></button>}
         {tab === 'assistant' && <div className="iv-panel iv-chat" id={`${id}-assistant`} role="tabpanel" aria-labelledby={`${id}-assistant-tab`}>
           <div ref={chatList} className="iv-chat-scroll" role="log" aria-label="Диалог об интервью" aria-live="polite">
+            {assist.historyError && <div className="iv-assistant-error" role="alert"><p>{assist.historyError}</p><button type="button" disabled={!!assist.busy} onClick={assist.retryHistory}>Повторить загрузку</button></div>}
             {!assist.messages.length && <div className="iv-chat-suggestions">{['Кратко расскажи об опыте', 'Как работает с возражениями?', 'Что стоит уточнить на встрече?'].map(value => <button type="button" key={value} disabled={!!assist.busy || !assistant} onClick={() => { void submitChat(value); }}>{value}</button>)}</div>}
             {assist.messages.map(message => <div className="iv-chat-turn" key={message.id}>
               <p className="iv-chat-question">{message.query}</p>
@@ -311,7 +312,14 @@ export function CandidateInterviewPlayer({ sourceId, name, header, media, chapte
         {hasAssessmentTab && <div hidden={tab !== 'comments' || commentHistory} className="iv-panel iv-assessment-panel" id={commentHistory ? undefined : `${id}-comments`} role="tabpanel" aria-labelledby={`${id}-comments-tab`}>
           {assessment ? <OrbitGraph key={assessment.revisionId} criteria={assessment.criteria} selectedId={assessmentFlow.selectedId} onSelect={assessmentFlow.selectCriterion}
             onEvidence={(evidence, criterionId) => { if (evidence.seconds !== null && seek(evidence.seconds)) assessmentFlow.source(evidence, criterionId); }}/>
-            : <div className="ia-orbit ia-orbit--empty"><p role="status">{assessmentStatus === 'loading' ? 'Загружаем разбор…' : 'Разбор интервью ещё не подготовлен.'}</p></div>}
+            : <div className="ia-orbit ia-orbit--empty"><p role="status">{assessmentStatus === 'loading' ? 'Готовим разбор…' : 'Разбор интервью ещё не подготовлен.'}</p></div>}
+          {assessment?.vacancyMatch && <details className="iv-vacancy-match">
+            <summary>Соответствие вакансии</summary>
+            <ul>{assessment.vacancyMatch.criteria.map(item => <li key={item.id}>
+              <span>{item.label}</span><span>{item.status === 'evidenced' ? 'Есть подтверждение в интервью' : 'Нужно уточнить'}</span>
+            </li>)}</ul>
+            {!assessment.vacancyMatch.criteria.length && <p>В вакансии нет явных требований к оценённым навыкам.</p>}
+          </details>}
         </div>}
         {<div hidden={tab !== 'comments' || (hasAssessmentTab && !commentHistory)} className="iv-panel iv-comments" id={hasAssessmentTab && !commentHistory ? undefined : `${id}-comments`} role="tabpanel" aria-labelledby={`${id}-comments-tab`}>
           {assessment && <button type="button" className="iv-comments-return" onClick={() => setCommentHistory(false)}><ChevronLeft size={14}/>К оценке навыков</button>}

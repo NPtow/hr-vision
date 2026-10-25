@@ -17,6 +17,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+import urllib.parse
 import structured_model
 
 from domain import Problem, require
@@ -24,6 +25,7 @@ from structured_model import BASE, ModelConfig, NoRedirect, digest, dump, scan, 
 from meeting_lab import obj, string, provider_turns, model_config
 
 VERSION = '2026-10-25.1'
+AGENT_VERSION = '2026-10-25.agent1'
 SEARCH_VERSION = '2026-10-25.direct2'
 CHAT_MAX_INPUT = 180000
 CHAT_PROMPT = '''Ты помощник по записанному интервью. Ответь по-русски именно на последний вопрос пользователя после расшифровки. Не заменяй ответ общим пересказом интервью, если об этом не спрашивали.
@@ -352,6 +354,58 @@ def evaluate_jev(config, query, chunks, key, deadline, check, charge):
         raise Problem('Не удалось проверить результат поиска. Попробуйте уточнить запрос.', 502) from None
 
 
+def agent_enabled():
+    return bool(os.getenv('HR_INTERVIEW_AGENT_URL', ''))
+
+
+def agent_session(principal, source_id, transcript, context):
+    return digest(dump([AGENT_VERSION, principal['workspaceId'], principal['accountId'],
+                        source_id, digest(transcript), context]))
+
+
+def agent_completion(payload, deadline, check):
+    """Fixed private service only; no browser-supplied URLs, provider keys or retries."""
+    endpoint = os.getenv('HR_INTERVIEW_AGENT_URL', '').rstrip('/')
+    token = os.getenv('HR_AGENT_INTERNAL_TOKEN', '')
+    require(re.fullmatch(r'http://127\.0\.0\.1:[0-9]{2,5}', endpoint) and len(token) >= 32,
+            'Агент помощника ещё не настроен.', 503)
+    check()
+    request = urllib.request.Request(endpoint + '/answer', data=dump(payload).encode(), headers={
+        'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token})
+    try:
+        with urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect()).open(
+                request, timeout=max(1, min(125, deadline - time.monotonic()))) as response:
+            raw = response.read(150001)
+    except urllib.error.HTTPError as error:
+        code = error.code; error.close()
+        message = {429: 'Помощник занят или достигнут лимит. Попробуйте через минуту.',
+                   502: 'Не удалось подтвердить ответ источниками. Уточните вопрос.',
+                   504: 'Помощник не успел ответить. Попробуйте позже.'}.get(code,
+                    'Агент помощника временно недоступен. Попробуйте позже.')
+        raise Problem(message, code if code in (429, 502, 504) else 503) from None
+    except (urllib.error.URLError, TimeoutError, OSError):
+        raise Problem('Не удалось дождаться агента помощника. Попробуйте позже.', 503) from None
+    check()
+    try:
+        require(len(raw) <= 150000, 'Некорректный ответ агента.', 502)
+        result = json.loads(raw, object_pairs_hook=unique_object)
+        parts, metadata = result['answer']['parts'], result['metadata']
+        valid = {r['chunkId'] for r in payload['chunks']}
+        require(isinstance(parts, list) and 1 <= len(parts) <= 8, 'Некорректный ответ агента.', 502)
+        for part in parts:
+            require(isinstance(part, dict) and set(part) == {'text', 'sourceIds'} and
+                    isinstance(part['text'], str) and 0 < len(part['text']) <= 2500 and not scan(part['text'])[1] and
+                    isinstance(part['sourceIds'], list) and len(part['sourceIds']) <= 5 and
+                    all(isinstance(ref, str) and ref in valid for ref in part['sourceIds']),
+                    'Ответ содержит непроверенный источник.', 502)
+        require(metadata['version'] == AGENT_VERSION and metadata['grounded'] is True and
+                isinstance(metadata['model'], str) and type(metadata['budgetUnits']) is int and
+                0 <= metadata['budgetUnits'] <= RUN_BUDGET, 'Некорректные метрики агента.', 502)
+        return {'parts': parts}, metadata
+    except (ValueError, KeyError, TypeError):
+        raise Problem('Не удалось прочитать ответ агента.', 502) from None
+
+
 class InterviewAssistant:
     def __init__(self, connect, lock):
         self.connect, self.lock = connect, lock
@@ -368,8 +422,25 @@ class InterviewAssistant:
                 account_id TEXT NOT NULL, day TEXT NOT NULL, tokens INTEGER NOT NULL,
                 PRIMARY KEY(account_id,day))''')
 
-    def run(self, principal, source_id, transcript, body, authorize):
+    def history(self, principal, source_id, session_id, authorize):
+        with self.connect() as db:
+            authorize(db)
+            rows = db.execute('''SELECT snapshot,result FROM ia_runs WHERE workspace_id=? AND
+                account_id=? AND source_id=? AND action='chat' AND status='ready'
+                ORDER BY started DESC LIMIT 100''',
+                (principal['workspaceId'], principal['accountId'], source_id)).fetchall()
+        messages = []
+        for snapshot, result in reversed(rows):
+            saved = json.loads(snapshot)
+            if saved.get('sessionId') == session_id:
+                messages.append({'id': saved['requestId'], 'query': saved['query'], 'answer': json.loads(result)})
+        return {'mode': 'history', 'messages': messages[-40:]}
+
+    def run(self, principal, source_id, transcript, body, authorize, context=None):
         action, query, request_id = body.get('action'), body.get('query'), body.get('requestId')
+        context = context or {'vacancy': {}, 'profile': {}, 'assessment': {}}
+        if action == 'history':
+            return self.history(principal, source_id, agent_session(principal, source_id, transcript, context), authorize)
         require(action in ('chat', 'search'), 'Выберите режим помощника.', 400)
         require(isinstance(query, str) and 2 <= len(query.strip()) <= 2000, 'Введите вопрос короче 2000 символов.', 400)
         require(isinstance(request_id, str) and re.fullmatch(r'[A-Za-z0-9_-]{8,100}', request_id), 'Проверьте запрос.', 400)
@@ -377,15 +448,18 @@ class InterviewAssistant:
         require(not scan(query)[1], 'Сформулируйте вопрос об интервью без посторонних инструкций.', 422)
         require(CAPACITY.acquire(blocking=False), 'Помощник занят. Попробуйте немного позже.', 429)
         try:
-            return self._run(principal, source_id, transcript, action, query, request_id, authorize)
+            return self._run(principal, source_id, transcript, action, query, request_id, authorize, context)
         finally:
             CAPACITY.release()
 
-    def _run(self, principal, source_id, transcript, action, query, request_id, authorize):
+    def _run(self, principal, source_id, transcript, action, query, request_id, authorize, context):
         run_id = 'ia_' + digest(principal['workspaceId'] + ':' + principal['accountId'] + ':' + request_id)
         config = jev_config() if action == 'search' else model_config()
-        version = SEARCH_VERSION if action == 'search' else VERSION
-        identity_hash = digest(dump([source_id, transcript, action, query, version, config.model]))
+        agent = action == 'chat' and agent_enabled()
+        version = SEARCH_VERSION if action == 'search' else AGENT_VERSION if agent else VERSION
+        session_id = agent_session(principal, source_id, transcript, context)
+        model = os.getenv('HR_AGENT_MODEL', config.model) if agent else config.model
+        identity_hash = digest(dump([source_id, transcript, action, query, version, model, context if agent else None]))
         lease = secrets.token_hex(16)
         tick = time.time()
         with self.lock, self.connect() as db:
@@ -406,10 +480,22 @@ class InterviewAssistant:
                 require(turns, 'Расшифровка ещё не готова. Попробуйте позже.', 422)
                 if action == 'search':
                     chunks, dropped = search_chunks(turns), 0
+                elif agent:
+                    chunks = [{'chunkId': r['id'], **{k: r[k] for k in ('text', 'speakerName', 'startMs', 'endMs')}}
+                              for r in search_chunks(turns)]
+                    dropped = 0
                 else:
                     chunks, dropped = chat_chunks(turns), 0
                 require(chunks, 'В расшифровке пока нет доступных фрагментов.', 422)
-                snapshot = {'query': query, 'chunks': chunks, 'dropped': dropped, 'model': config.model, 'version': version}
+                snapshot = {'query': query, 'chunks': chunks, 'dropped': dropped, 'model': model, 'version': version}
+                if agent:
+                    snapshot.update(sessionId=session_id, requestId=request_id, context=context)
+            if agent:
+                running = db.execute('''SELECT snapshot FROM ia_runs WHERE workspace_id=? AND account_id=?
+                    AND source_id=? AND action='chat' AND status='running' AND started>? AND id<>?''',
+                    (principal['workspaceId'], principal['accountId'], source_id, tick - RUN_SECONDS - 10, run_id)).fetchall()
+                require(not any(json.loads(r[0]).get('sessionId') == session_id for r in running),
+                        'Дождитесь предыдущего ответа в этой беседе.', 409)
             db.execute('''INSERT INTO ia_runs(id,workspace_id,account_id,source_id,input_hash,action,started,status,lease,snapshot)
                 VALUES (?,?,?,?,?,?,?,'running',?,?) ON CONFLICT(id) DO UPDATE SET
                 status='running',started=excluded.started,lease=excluded.lease''',
@@ -427,7 +513,8 @@ class InterviewAssistant:
                 db.execute('BEGIN IMMEDIATE'); check_in(db)
                 used = db.execute('SELECT tokens FROM ia_usage WHERE account_id=? AND day=?', (principal['accountId'], day)).fetchone()
                 reserved = db.execute('SELECT tokens FROM ia_runs WHERE id=?', (run_id,)).fetchone()[0]
-                require((used[0] if used else 0) + tokens <= DAILY_BUDGET and reserved + tokens <= RUN_BUDGET,
+                daily = int(os.getenv('HR_ASSISTANT_DAILY_BUDGET', str(DAILY_BUDGET)))
+                require((used[0] if used else 0) + tokens <= daily and reserved + tokens <= RUN_BUDGET,
                         'Лимит помощника исчерпан. Попробуйте позже.', 429)
                 db.execute('INSERT INTO ia_usage VALUES (?,?,?) ON CONFLICT(account_id,day) DO UPDATE SET tokens=tokens+excluded.tokens', (principal['accountId'], day, tokens))
                 db.execute('UPDATE ia_runs SET tokens=tokens+? WHERE id=?', (tokens, run_id))
@@ -459,7 +546,25 @@ class InterviewAssistant:
                     cached = db.execute("SELECT result FROM ia_calls WHERE run_id=? AND stage='answer'", (run_id,)).fetchone()
                 answer = json.loads(cached[0]) if cached else None
                 if answer is None:
-                    answer, metadata = chat_completion(config, query, chunks, digest(run_id + 'answer'), deadline, check, charge)
+                    if agent:
+                        with self.connect() as db:
+                            reserved = db.execute('SELECT tokens FROM ia_runs WHERE id=?', (run_id,)).fetchone()[0]
+                        if reserved == 0:
+                            charge(RUN_BUDGET)
+                        history = self.history(principal, source_id, session_id, authorize)['messages']
+                        payload = {'version': AGENT_VERSION, 'runId': digest(run_id), 'sessionId': session_id,
+                            'query': query, 'chunks': chunks, 'context': snapshot['context'],
+                            'history': [{'query': row['query'], 'answer': row['answer']['text']} for row in history]}
+                        answer, metadata = agent_completion(payload, deadline, check)
+                        with self.lock, self.connect() as db:
+                            db.execute('BEGIN IMMEDIATE'); check_in(db)
+                            reserved = db.execute('SELECT tokens FROM ia_runs WHERE id=?', (run_id,)).fetchone()[0]
+                            refund = max(0, reserved - metadata['budgetUnits'])
+                            db.execute('UPDATE ia_runs SET tokens=tokens-? WHERE id=?', (refund, run_id))
+                            db.execute('UPDATE ia_usage SET tokens=max(0,tokens-?) WHERE account_id=? AND day=?',
+                                (refund, principal['accountId'], time.strftime('%Y-%m-%d', time.gmtime(tick))))
+                    else:
+                        answer, metadata = chat_completion(config, query, chunks, digest(run_id + 'answer'), deadline, check, charge)
                     with self.lock, self.connect() as db:
                         db.execute('BEGIN IMMEDIATE'); check_in(db)
                         db.execute('INSERT INTO ia_calls VALUES (?,?,?,?)', (run_id, 'answer', dump(answer), dump(metadata)))
@@ -470,6 +575,8 @@ class InterviewAssistant:
                 result = {'mode': 'chat', 'text': '\n\n'.join(part['text'] for part in answer['parts']),
                     'parts': answer['parts'], 'evidence': evidence, 'supported': bool(evidence),
                     'coverage': {'selected': len(chunks), 'omitted': snapshot['dropped']}}
+                if agent:
+                    result['model'] = model
             result.setdefault('model', config.model)
             result['version'] = version
             with self.lock, self.connect() as db:
