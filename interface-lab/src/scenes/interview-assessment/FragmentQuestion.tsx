@@ -31,6 +31,8 @@ export function FragmentQuestion({ assessment, block, overlapping, playing, comm
   const busy = draft.status === 'saving';
   const dirty = !sameOpinion(draft.opinion, draft.saved);
   const activeOptions = overlapping.some(item => sameTarget(block, item)) ? overlapping : [block, ...overlapping];
+  const skillOptions = activeOptions.filter((item, index) => activeOptions.findIndex(option => option.criterionId === item.criterionId) === index)
+    .map(item => item.criterionId === block.criterionId ? block : item);
   const pulsing = playing && !commentOpen && draft.opinion.answer === undefined && overlapping.some(item => sameTarget(block, item));
 
   return <section className="iv-fragment-question" aria-labelledby={`${id}-question`} data-pulsing={pulsing}>
@@ -45,6 +47,11 @@ export function FragmentQuestion({ assessment, block, overlapping, playing, comm
         <span aria-hidden="true">{activeOptions.length}<ChevronDown size={12}/></span>
       </label>}
     </div>
+    {skillOptions.length > 1 && !commentOpen && <div className="iv-fragment-context" role="group" aria-label="Навыки в этом фрагменте">
+      <span>В этом фрагменте:</span>
+      {skillOptions.map(item => <button type="button" key={item.criterionId} aria-pressed={item.criterionId === block.criterionId}
+        onClick={() => onChoose(item)}>{skillName(item.criterion)}</button>)}
+    </div>}
     <div className="iv-fragment-actions">
       <div className="iv-fragment-answers" role="group" aria-label="Ваш ответ на вопрос">
         {answers.map(answer => <button type="button" key={answer.value} data-answer={answer.value} aria-pressed={draft.opinion.answer === answer.value}
