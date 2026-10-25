@@ -46,6 +46,7 @@ class UploadedCatalogTests(unittest.TestCase):
         with self.connect() as db:
             self.owner_id = db.execute('SELECT id FROM cp_interviews WHERE candidate_id=?', (self.person['id'],)).fetchone()[0]
             db.execute('UPDATE cp_interviews SET room=? WHERE id=?', (json.dumps(self.room), self.owner_id))
+            db.execute('DELETE FROM cp_call_provider_choices WHERE meeting_id=?', (self.owner_id,))
         self.core = Mock()
         self.core.materials.return_value = imported_data()
         self.core.access.return_value = {'storage': 'owned', 'url': 'https://private.example/owned-temporary', 'expires': 123}
@@ -75,6 +76,66 @@ class UploadedCatalogTests(unittest.TestCase):
         self.daily.legacy_materials.assert_not_called()
         self.zoom.register_owner.assert_not_called()
         self.zoom.legacy_materials.assert_not_called()
+
+    def test_actual_recruiter_materials_route_and_both_state_serializations_without_call_choice(self):
+        with self.connect() as db:
+            self.assertIsNone(self.portal.calls.choice(db, self.owner_id))
+        def no_daily(): raise AssertionError('Imported DTOs must not resolve Daily')
+        with patch.object(self.portal.calls, '_daily', no_daily):
+            materials, _ = self.fixture.call('recruiter/interview/materials',
+                {'candidateId': self.person['id'], 'interviewId': self.owner_id}, manager=True)
+            candidate, _ = self.fixture.call('candidate/state', cookie=self.cookie)
+            recruiter, _ = self.fixture.call('recruiter/state', manager=True)
+        self.assertEqual(materials['transcripts'][0]['id'], 'selected-version')
+        for state in (candidate['interview'], recruiter['candidates'][0]['interview']):
+            self.assertIsNone(state['callProvider'])
+            self.assertTrue(state['callProviderLocked'])
+            self.assertFalse(state['videoConfigured'])
+            self.assertEqual(state['callProviderOptions'], [])
+            self.assertNotIn('room', state)
+        self.core.collect.assert_not_called()
+        with self.connect() as db:
+            self.assertIsNone(self.portal.calls.choice(db, self.owner_id))
+
+    def test_completed_upload_ignores_stale_daily_choice_without_mutating_it(self):
+        with self.connect() as db:
+            db.execute("INSERT INTO cp_call_provider_choices VALUES (?,'daily',NULL,'recruiter','ready',NULL,'old-choice')", (self.owner_id,))
+            previous = self.portal.calls.choice(db, self.owner_id)
+        with patch.object(self.portal.calls, '_daily', side_effect=AssertionError('No Daily descriptor fallback')):
+            candidate, _ = self.fixture.call('candidate/state', cookie=self.cookie)
+            self.assertIsNone(candidate['interview']['callProvider'])
+            self.portal.materials(self.person['id'])
+        with self.connect() as db:
+            self.assertEqual(self.portal.calls.choice(db, self.owner_id), previous)
+            with self.assertRaises(Problem): self.portal.calls.prepare_default(db, self.owner_id, self.room, 'recruiter')
+            with self.assertRaises(Problem): self.portal.calls.select(db, self.owner_id, 'daily', 'recruiter', self.room)
+            self.assertEqual(self.portal.calls.choice(db, self.owner_id), previous)
+
+    def test_import_is_not_a_selectable_or_callable_provider_even_if_status_is_tampered(self):
+        for operation in (lambda: self.portal.calls.for_room(self.room),
+                          lambda: self.portal.calls.finish(self.room),
+                          lambda: self.portal.calls.materials(self.room)):
+            with self.assertRaises(Problem) as raised: operation()
+            self.assertEqual(raised.exception.status, 409)
+        with self.connect() as db:
+            for provider, status in (('upload', 400), ('daily', 409), ('zoom', 409)):
+                with self.assertRaises(Problem) as raised:
+                    self.portal.calls.select(db, self.owner_id, provider, 'recruiter', self.room)
+                self.assertEqual(raised.exception.status, status)
+            with self.assertRaises(Problem): self.portal.calls.prepare_default(db, self.owner_id, self.room, 'recruiter')
+            self.assertIsNone(self.portal.calls.choice(db, self.owner_id))
+        for path in ('recruiter/interview/join', 'recruiter/interview/start'):
+            with self.assertRaises(Problem) as raised:
+                self.fixture.call(path, {'candidateId': self.person['id'], 'consent': True, 'oralConsent': True}, manager=True)
+            self.assertEqual(raised.exception.status, 409)
+        with self.connect() as db:
+            db.execute("UPDATE cp_interviews SET status='booked' WHERE id=?", (self.owner_id,))
+        for operation in (lambda: self.portal.materials(self.person['id']),
+                          lambda: self.fixture.call('candidate/state', cookie=self.cookie)):
+            with self.assertRaises(Problem) as raised: operation()
+            self.assertEqual(raised.exception.status, 409)
+        self.core.collect.assert_not_called()
+        self.assertEqual(self.core.mock_calls, [])
 
     def test_read_only_registration_validates_without_any_service_io(self):
         meeting = {'id': self.owner_id, 'room': self.room}
@@ -133,6 +194,42 @@ class UploadedCatalogTests(unittest.TestCase):
             self.assertIs(self.router._catalog({'room': {'provider': provider}}), expected)
         self.daily.register_owner.assert_not_called()
         self.zoom.register_owner.assert_not_called()
+
+
+class UploadedEmployerProjectionTests(unittest.TestCase):
+    def test_actual_employer_http_state_keeps_completed_upload_noncallable_and_private(self):
+        import test_employer_call_providers as helpers
+        cls = helpers.EmployerCallProvidersTest
+        with patch.dict(os.environ, {'HR_CORE_CATALOG_ENABLED': '0', 'HR_MATERIALS_SERVICES_ENABLED': '0'}):
+            cls.setUpClass()
+            self.addCleanup(cls.doClassCleanups)
+            self.addCleanup(cls.tearDownClass)
+            fixture = cls()
+            self.addCleanup(fixture.doCleanups)
+            fixture.setUp()
+            room = {'provider': 'upload', 'connectionId': 'upload', 'id': 'private-upload-id',
+                'name': 'private-upload-name', 'captureInstanceId': 'private-upload-instance'}
+            with fixture.app.connect() as db:
+                db.execute("UPDATE cp_meetings SET status='completed',room=?,completed_at=? WHERE id=?",
+                           (json.dumps(room), fixture.meeting['end'], fixture.meeting['id']))
+                db.execute('DELETE FROM cp_call_provider_choices WHERE meeting_id=?', (fixture.meeting['id'],))
+            before = len(fixture.media.tokens), len(fixture.media.rooms), len(fixture.zoom.created)
+            with patch.object(fixture.zoom, 'host_for', side_effect=AssertionError('Upload has no Zoom host mapping')):
+                status, state, _ = fixture.request('employer/state?vacancyId=' + fixture.job['id'], token=fixture.owner['token'])
+            self.assertEqual(status, 200, state)
+            meeting = state['candidates'][fixture.aid]['meeting']
+            self.assertEqual(meeting['status'], 'completed')
+            self.assertIsNone(meeting['callProvider'])
+            self.assertEqual(meeting['callProviderOptions'], [])
+            self.assertFalse(meeting['videoConfigured'])
+            self.assertTrue(meeting['callProviderLocked'])
+            self.assertNotIn('room', meeting)
+            for secret in room.values():
+                if secret != 'upload': self.assertNotIn(secret, json.dumps(state))
+            self.assertEqual((len(fixture.media.tokens), len(fixture.media.rooms), len(fixture.zoom.created)), before)
+            foreign = fixture.employer('other-upload-workspace')
+            status, _, _ = fixture.request('employer/state?vacancyId=' + fixture.job['id'], token=foreign['token'])
+            self.assertEqual(status, 404)
 
 
 class UploadedStartupTests(unittest.TestCase):

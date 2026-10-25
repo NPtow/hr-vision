@@ -519,7 +519,7 @@ class CandidatePortal:
         room = json.loads(row[2]) if row[2] else None
         return {'id': row[0], 'status': row[1], 'room': room,
                 'start': row[3], 'end': row[4], 'recruiterName': row[5], 'completedAt': row[6],
-                'recording': invites.recording(db, row[0]), **self.calls.describe(db, row[0], room)}
+                'recording': invites.recording(db, row[0]), **self.calls.describe(db, row[0], room, completed=row[1] == 'completed')}
 
     def meeting(self, db, app_id, meeting_id=None):
         row = db.execute('''SELECT id,start,end,status,room,completed_at,revision,confirmed_at,cancelled_at,cancellation_reason
@@ -529,7 +529,8 @@ class CandidatePortal:
                  'room': json.loads(row[4]) if row[4] else None, 'completedAt': row[5],
                  'revision': row[6], 'confirmedAt': row[7], 'cancelledAt': row[8],
                  'cancellationReason': row[9],
-                 **self.calls.describe(db, row[0], json.loads(row[4]) if row[4] else None)} if row else None)
+                 **self.calls.describe(db, row[0], json.loads(row[4]) if row[4] else None,
+                                      completed=row[3] == 'completed')} if row else None)
 
     def application(self, db, app_id, cid=None):
         from vacancy_import import candidate_vacancy
@@ -633,12 +634,12 @@ class CandidatePortal:
             if candidate.get('interview'):
                 current = self.interview(db, row[0])
                 candidate['interview'].update(self.calls.describe(db, current['id'], current['room'],
-                    principal['id'] if personal else 'recruiter'))
+                    principal['id'] if personal else 'recruiter', completed=current['status'] == 'completed'))
             for application in candidate['applications']:
                 if application.get('meeting'):
                     current = self.meeting(db, application['id'])
                     application['meeting'].update(self.calls.describe(db, current['id'], current['room'],
-                        principal['id'] if personal else 'recruiter'))
+                        principal['id'] if personal else 'recruiter', completed=current['status'] == 'completed'))
             from recruiter_sources import candidate_sources
             candidate.update(candidate_sources(db, row[0]))
             candidates.append(candidate)

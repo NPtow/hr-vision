@@ -17,13 +17,14 @@ import { RecruiterCoachNotesAdapter, RecruiterOriginalResume } from './Recruiter
 import './interview-coach.css';
 import './recruiter-coach-live.css';
 
-export type ActiveCall = { callProvider?: CallProvider; kind: 'interview' | 'meeting'; preview?: boolean; recordingConsent?: boolean; candidateId: string; interviewId?: string; candidate?: RecruiterCandidate; applicationId?: string; meetingId?: string; title: string; accountActive?: boolean; recording?: InterviewRecording };
+export type ActiveCall = { callProvider?: CallProvider | null; kind: 'interview' | 'meeting'; preview?: boolean; recordingConsent?: boolean; candidateId: string; interviewId?: string; candidate?: RecruiterCandidate; applicationId?: string; meetingId?: string; title: string; accountActive?: boolean; recording?: InterviewRecording };
 type CaptureStatus = 'unknown' | 'active' | 'stopped' | 'error';
 
 export type RecruiterCallProps = {
   active: ActiveCall; token: string; onClose: () => void; onJoined: () => void; onCompleted: () => void; onZoomHostLeft?: () => void;
 };
 export function RecruiterCall(props: RecruiterCallProps) {
+  if (props.active.callProvider === null) return <section className="cp-content-page"><p>Для этой записи видеозвонок недоступен.</p><Button onClick={props.onClose}>Закрыть</Button></section>;
   return props.active.callProvider === 'zoom' ? <RecruiterZoomCall {...props}/> : <DailyRecruiterCall {...props}/>;
 }
 function DailyRecruiterCall({ active, token, onClose, onJoined, onCompleted }: RecruiterCallProps) {

@@ -30,7 +30,14 @@ class CallProviders:
                          'FROM cp_call_provider_choices WHERE meeting_id=?', (meeting_id,)).fetchone()
         return dict(zip(('provider', 'host_id', 'actor_id', 'state', 'room', 'request_id'), row)) if row else None
 
-    def describe(self, db, meeting_id, room=None, actor_id=None):
+    def describe(self, db, meeting_id, room=None, actor_id=None, *, completed=False):
+        if (room or {}).get('provider') == 'upload':
+            require(completed is True, 'Загруженная запись доступна только после завершения встречи.', 409)
+            # An imported recording has no callable provider. Its persisted room
+            # is a materials identity, even if a historical Daily choice remains.
+            # Do not resolve adapters, host mappings, or call capabilities here.
+            return {'callProvider': None, 'callProviderLocked': True,
+                    'videoConfigured': False, 'callProviderOptions': []}
         choice = self.choice(db, meeting_id)
         provider = choice['provider'] if choice else room.get('provider', 'daily') if room else self.default_provider
         require(provider in ('daily', 'zoom'), 'Неизвестный видеосервис встречи.', 409)
@@ -45,6 +52,8 @@ class CallProviders:
 
     def select(self, db, meeting_id, provider, actor_id, room=None):
         require(provider in ('daily', 'zoom'), 'Выберите Daily или Zoom.', 400)
+        require(not room or room.get('provider', 'daily') in ('daily', 'zoom'),
+                'Неизвестный видеосервис встречи.', 409)
         choice = self.choice(db, meeting_id)
         current = choice['provider'] if choice else (room or {}).get('provider', 'daily')
         locked = bool(room or choice and choice['state'] != 'selected')
@@ -63,7 +72,11 @@ class CallProviders:
 
     def prepare_default(self, db, meeting_id, room, actor_id):
         """Pin the configured choice once; an existing room always keeps its provider."""
-        if self.choice(db, meeting_id):
+        require(not room or room.get('provider', 'daily') in ('daily', 'zoom'),
+                'Неизвестный видеосервис встречи.', 409)
+        choice = self.choice(db, meeting_id)
+        if choice:
+            require(choice['provider'] in ('daily', 'zoom'), 'Неизвестный видеосервис встречи.', 409)
             return
         if room:
             db.execute('INSERT OR IGNORE INTO cp_call_provider_choices VALUES (?,?,?,?,?,?,?)',
