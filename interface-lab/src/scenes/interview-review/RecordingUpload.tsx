@@ -32,8 +32,8 @@ export function RecordingUpload({ token, scope, onUploaded }: { token: string; s
     if (running.current || !files.length) return;
     running.current = true; setBusy(true); setError('');
     try {
-      if (files.length > 10 || files.some(file => !file.size || file.size > 1024 ** 3) || files.reduce((n, f) => n + f.size, 0) > 4 * 1024 ** 3) {
-        throw new Error('До 10 частей, до 1 ГБ каждая и до 4 ГБ суммарно.');
+      if (files.length > 10 || files.some(file => !file.size || file.size > 1024 ** 3) || files.reduce((n, f) => n + f.size, 0) > 2 * 1024 ** 3) {
+        throw new Error('До 10 частей, до 1 ГБ каждая и до 2 ГБ суммарно.');
       }
       const manifest = files.map(file => ({ name: file.name, size: file.size, content_type: mime(file) }));
       const seed = JSON.stringify([scope, files.map(file => [file.name, file.size, file.lastModified, mime(file)])]);
@@ -49,9 +49,11 @@ export function RecordingUpload({ token, scope, onUploaded }: { token: string; s
           setMessage(`Загружаем часть ${index + 1} из ${files.length}…`);
           await send(`/${state.id}/parts/${index}`, files[index]);
         }
-        setMessage('Сохраняем запись…');
-        state = await send(`/${state.id}/finalize`, {});
       }
+      // Source recovery may already have committed its receipt after a lost
+      // response. Repeat the product acknowledgement to repair its projection.
+      setMessage('Сохраняем запись…');
+      state = await send(`/${state.id}/finalize`, {});
       if (state.status !== 'registered') throw new Error('Сохранение ещё не завершено. Повторите загрузку.');
       setMessage('Запись сохранена. Расшифровка появится здесь автоматически.');
       setFiles([]); if (input.current) input.current.value = '';

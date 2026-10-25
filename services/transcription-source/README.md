@@ -223,3 +223,66 @@ The earlier alternatives-only projection describes installations with primary
 selection disabled. With selection enabled, Core and its consumers determine
 which immutable transcript is primary; this coordinator performs no assessment
 and assigns no human roles to provider speaker labels.
+
+## Product uploads and external catalogue watcher
+
+The private source API accepts service-authenticated product uploads for an
+existing Core-attested `upload`/configured-connection owned binding. Owner kinds
+are `interview`, `meeting`, and a real employer `intake` draft. The portal owns
+user/workspace authorization and proxies bytes; browsers receive no service key.
+No call room is rewritten by this service.
+
+- `POST /v1/uploads`, with `Idempotency-Key`, accepts the binding owner event
+  (without `asset_id`) plus ordered `files: [{size,content_type,name?}]`.
+- `PUT /v1/uploads/{id}/parts/{index}` accepts raw
+  `application/octet-stream` bytes; index starts at zero. SHA, exact size and
+  media probing are server-side. A different duplicate input returns 409.
+- `POST /v1/uploads/{id}/finalize` with `{}` freezes a complete batch and
+  registers one durable receipt; metadata `part_index` preserves manifest order.
+  Partial batches return 409. S3/Core outages retain checkpoints for scheduler
+  recovery, including a committed receipt with lost HTTP acknowledgement.
+- `GET /v1/uploads/{id}` returns parts, upload state, bounded error code, and
+  registered asset IDs. States are uploading/finalizing/registered/rejected/expired.
+  Registration does not claim ASR completion. The portal reads canonical progress
+  and selected transcripts from Core. Upload/finalize never call ASR.
+
+Limits: at most 10 files, default 1 GiB/file, 4 GiB manifest hard limit,
+2 GiB aggregate staging admission budget and two active raw streams across all
+processes. A batch must also fit the configured aggregate budget. Budget is
+reserved transactionally for the entire intent, survives restart, and is released
+only after registered local inputs are actually removed. Unreferenced writer files
+also consume admission capacity. 507 means staging capacity is unavailable;
+429 means both raw stream slots are busy. Retry after capacity becomes available,
+using the same intent/idempotency key. Neither response triggers paid recognition.
+Abandoned uploading intents expire after 24 hours without activity or an active
+lease; finalizing, rejected and persisted receipt checkpoints are retained.
+Cleanup never removes S3 objects or transcript history.
+
+Optional settings are `TRANSCRIPTION_SOURCE_UPLOAD_MAX_FILES` (10 maximum),
+`TRANSCRIPTION_SOURCE_UPLOAD_MAX_TOTAL_BYTES`,
+`TRANSCRIPTION_SOURCE_UPLOAD_STAGE_BUDGET_BYTES` (2147483648),
+`TRANSCRIPTION_SOURCE_UPLOAD_STREAM_CONCURRENCY` (1 or 2),
+`TRANSCRIPTION_SOURCE_UPLOAD_IDLE_TTL_SECONDS` (86400),
+`TRANSCRIPTION_SOURCE_UPLOAD_MAX_DURATION_SECONDS` (14400), and
+`TRANSCRIPTION_SOURCE_UPLOAD_PROBE_SECONDS` (30). File size uses
+`TRANSCRIPTION_SOURCE_MAX_INPUT_BYTES`. ffprobe is provided by the existing image;
+no multipart parser or SDK dependency was added.
+
+`TRANSCRIPTION_SOURCE_AUTO_ENABLED=1` enables the external watcher in source
+reconciliation, independent of the legacy materials Runtime. Required
+`TRANSCRIPTION_SOURCE_AUTO_ACTIVATED_AT` is the initial immutable asset discovery
+cutoff. `TRANSCRIPTION_SOURCE_AUTO_CALLER` defaults to collector; its Core portal
+credential retains normal owner scope. Pages come only from authenticated generic
+`GET /v1/assets`, never an S3 bucket listing. Defaults are 50 items/page and two
+pages/tick (`TRANSCRIPTION_SOURCE_AUTO_PAGE_SIZE`,
+`TRANSCRIPTION_SOURCE_AUTO_PAGES_PER_TICK`). Completed sweeps restart at the floor,
+so a later ready transition is detected without enrolling pre-activation history.
+The saved floor cannot move backward. Disable the legacy ASR notification hook
+when enabling this watcher.
+
+Automatic enrollment is unique per caller/asset, not configuration/generation.
+Page replay, restart or model rollout cannot create another paid job. Existing
+manual jobs are reused. Enabling primary selection later wakes the same job;
+a completed saved result/receipt is selected without contacting ASR, even after
+a configuration change. Incomplete recognition still refuses a configuration
+change. A new recognition revision remains an explicit manual action.

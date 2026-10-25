@@ -34,6 +34,11 @@ class Repository:
               CREATE TABLE IF NOT EXISTS idempotency(caller TEXT,key TEXT,job_id TEXT REFERENCES jobs(id),
               PRIMARY KEY(caller,key));
               CREATE TABLE IF NOT EXISTS worker_health(id INTEGER PRIMARY KEY CHECK(id=1),seen REAL);''')
+            db.executescript('''CREATE TABLE IF NOT EXISTS automatic_enrollments (
+              caller TEXT NOT NULL,asset_id TEXT NOT NULL,job_id TEXT NOT NULL REFERENCES jobs(id),
+              created_at REAL NOT NULL,PRIMARY KEY(caller,asset_id));
+              CREATE TABLE IF NOT EXISTS catalogue_state (
+              caller TEXT PRIMARY KEY,activation_floor REAL NOT NULL,cursor TEXT);''')
             # Additive migration preserves paid ASR/result/immutable receipts.
             db.execute('BEGIN IMMEDIATE')
             columns={row[1] for row in db.execute('PRAGMA table_info(jobs)')}
@@ -67,13 +72,34 @@ class Repository:
                 job[k] = json.loads(job[k])
         return job
 
-    def submit(self, caller, key, event, revision, *, select_primary=False):
+    def submit(self, caller, key, event, revision, *, select_primary=False, automatic=False):
         encoded = json.dumps(event, sort_keys=True, separators=(',', ':'))
         # Candidate scope is authenticated on every submission, before dedup.
         stable = hashlib.sha256(json.dumps([event, revision], sort_keys=True, separators=(',', ':')).encode()).hexdigest()
         stamp = self.clock()
         with self.db() as db:
             db.execute('BEGIN IMMEDIATE')
+            if automatic:
+                prior_auto = db.execute('SELECT job_id FROM automatic_enrollments WHERE caller=? AND asset_id=?',
+                    (caller,event['asset_id'])).fetchone()
+                if prior_auto:
+                    if select_primary:
+                        self._select(db,prior_auto[0],stamp)
+                    db.commit()
+                    return self.get(prior_auto[0]), False
+                # A manually submitted recording is never paid again merely
+                # because a new scheduler/configuration now discovers it.
+                prior_asset = db.execute("SELECT id,caller FROM jobs WHERE json_extract(event,'$.asset_id')=? ORDER BY created_at,id LIMIT 1",
+                    (event['asset_id'],)).fetchone()
+                if prior_asset:
+                    if prior_asset['caller'] != caller:
+                        raise Conflict()
+                    db.execute('INSERT INTO automatic_enrollments VALUES(?,?,?,?)',
+                        (caller,event['asset_id'],prior_asset['id'],stamp))
+                    if select_primary:
+                        self._select(db,prior_asset['id'],stamp)
+                    db.commit()
+                    return self.get(prior_asset['id']), False
             prior = db.execute('SELECT job_id FROM idempotency WHERE caller=? AND key=?', (caller,key)).fetchone()
             if prior:
                 old = db.execute('SELECT stable_key FROM jobs WHERE id=?', (prior[0],)).fetchone()
@@ -93,9 +119,49 @@ class Repository:
             if select_primary:
                 # Enabling primary selection is not a new ASR config/revision.
                 # Wake even a completed/failed legacy job, preserving all bytes.
-                db.execute("""UPDATE jobs SET selection_requested=1,selection_status='requested',
-                    next_at=?,updated_at=? WHERE id=? AND selection_requested=0""",(stamp,stamp,identity))
+                self._select(db,identity,stamp)
+            if automatic:
+                db.execute('INSERT INTO automatic_enrollments VALUES(?,?,?,?)',(caller,event['asset_id'],identity,stamp))
         return self.get(identity), created
+
+    @staticmethod
+    def _select(db, identity, stamp):
+        db.execute("""UPDATE jobs SET selection_requested=1,selection_status='requested',
+            next_at=?,updated_at=? WHERE id=? AND selection_requested=0""",(stamp,stamp,identity))
+
+    def select_enrolled(self, caller, asset_id):
+        """Opt-in to primary using an existing job; never create a paid request."""
+        with self.db() as db:
+            row=db.execute('SELECT job_id FROM automatic_enrollments WHERE caller=? AND asset_id=?',(caller,asset_id)).fetchone()
+            if row:
+                self._select(db,row[0],self.clock())
+        return self.get(row[0]) if row else None
+
+    def enrolled(self, caller, asset_id):
+        with self.db() as db:
+            row=db.execute('SELECT job_id FROM automatic_enrollments WHERE caller=? AND asset_id=?',(caller,asset_id)).fetchone()
+        return row[0] if row else None
+
+    def catalogue(self, caller, activation):
+        with self.db() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row=db.execute('SELECT * FROM catalogue_state WHERE caller=?',(caller,)).fetchone()
+            if row is None:
+                db.execute('INSERT INTO catalogue_state VALUES(?,?,NULL)',(caller,activation))
+                return {'activation_floor':activation,'cursor':None}
+            if activation < row['activation_floor']:
+                raise ValueError('automatic_activation_cannot_move_backwards')
+            if activation > row['activation_floor']:
+                db.execute('UPDATE catalogue_state SET activation_floor=?,cursor=NULL WHERE caller=?',(activation,caller))
+                return {'activation_floor':activation,'cursor':None}
+            return {'activation_floor':row['activation_floor'],'cursor':row['cursor']}
+
+    def catalogue_cursor(self, caller, activation, expected_cursor, cursor):
+        with self.db() as db:
+            changed=db.execute('UPDATE catalogue_state SET cursor=? WHERE caller=? AND activation_floor=? AND cursor IS ?',
+                (cursor,caller,activation,expected_cursor)).rowcount
+        if not changed:
+            raise Conflict()
 
     def due(self):
         with self.db() as db:

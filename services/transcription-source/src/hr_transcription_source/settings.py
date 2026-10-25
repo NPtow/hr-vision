@@ -33,6 +33,18 @@ class Settings:
     s3_endpoint: str | None = None
     s3_region: str | None = None
     remote_resolvers: dict = field(default_factory=dict)
+    auto_enabled: bool = False
+    auto_caller: str = 'collector'
+    auto_activated_at: float | None = None
+    auto_page_size: int = 50
+    auto_pages_per_tick: int = 2
+    upload_max_files: int = 10
+    upload_max_total_bytes: int = 4 * 1024 ** 3
+    upload_max_duration_seconds: int = 4 * 3600
+    upload_probe_seconds: int = 30
+    upload_stage_budget_bytes: int = 2 * 1024 ** 3
+    upload_stream_concurrency: int = 2
+    upload_idle_ttl_seconds: int = 24 * 3600
 
     def __post_init__(self):
         import re
@@ -55,6 +67,18 @@ class Settings:
             raise ValueError('source_and_asr_credentials_required')
         if self.lease_seconds < 600 or self.max_input_bytes <= 0 or self.max_result_bytes <= 0:
             raise ValueError('invalid_limits')
+        import math
+        if self.auto_enabled and (self.auto_caller not in self.callers or
+                self.auto_activated_at is None or not math.isfinite(self.auto_activated_at) or self.auto_activated_at <= 0):
+            raise ValueError('automatic_activation_and_caller_required')
+        if not (1 <= self.auto_page_size <= 100 and 1 <= self.auto_pages_per_tick <= 10 and
+                1 <= self.upload_max_files <= 10 and 0 < self.max_input_bytes <= 5 * 1024 ** 3 and
+                self.max_input_bytes <= self.upload_max_total_bytes <= 20 * 1024 ** 3 and
+                0 < self.upload_stage_budget_bytes <= 20 * 1024 ** 3 and
+                1 <= self.upload_stream_concurrency <= 2 and
+                self.lease_seconds * 2 <= self.upload_idle_ttl_seconds <= 7 * 24 * 3600 and
+                1 <= self.upload_probe_seconds <= 120 and 0 < self.upload_max_duration_seconds <= 24 * 3600):
+            raise ValueError('invalid_ingress_limits')
 
     @property
     def config_identity(self):
@@ -71,6 +95,18 @@ class Settings:
             revision=env.get('TRANSCRIPTION_SOURCE_CONFIG_REVISION', 'speechkit-v1'),
             asr_provider=env.get('TRANSCRIPTION_SOURCE_ASR_PROVIDER', 'yandex_speechkit'),
             select_primary=env.get('TRANSCRIPTION_SOURCE_SELECT_PRIMARY', '0') == '1',
+            auto_enabled=env.get('TRANSCRIPTION_SOURCE_AUTO_ENABLED', '0') == '1',
+            auto_caller=env.get('TRANSCRIPTION_SOURCE_AUTO_CALLER', 'collector'),
+            auto_activated_at=float(env['TRANSCRIPTION_SOURCE_AUTO_ACTIVATED_AT']) if env.get('TRANSCRIPTION_SOURCE_AUTO_ACTIVATED_AT') else None,
+            auto_page_size=int(env.get('TRANSCRIPTION_SOURCE_AUTO_PAGE_SIZE', '50')),
+            auto_pages_per_tick=int(env.get('TRANSCRIPTION_SOURCE_AUTO_PAGES_PER_TICK', '2')),
+            upload_max_files=int(env.get('TRANSCRIPTION_SOURCE_UPLOAD_MAX_FILES', '10')),
+            upload_max_total_bytes=int(env.get('TRANSCRIPTION_SOURCE_UPLOAD_MAX_TOTAL_BYTES', str(4 * 1024**3))),
+            upload_max_duration_seconds=int(env.get('TRANSCRIPTION_SOURCE_UPLOAD_MAX_DURATION_SECONDS', '14400')),
+            upload_probe_seconds=int(env.get('TRANSCRIPTION_SOURCE_UPLOAD_PROBE_SECONDS', '30')),
+            upload_stage_budget_bytes=int(env.get('TRANSCRIPTION_SOURCE_UPLOAD_STAGE_BUDGET_BYTES', str(2 * 1024**3))),
+            upload_stream_concurrency=int(env.get('TRANSCRIPTION_SOURCE_UPLOAD_STREAM_CONCURRENCY', '2')),
+            upload_idle_ttl_seconds=int(env.get('TRANSCRIPTION_SOURCE_UPLOAD_IDLE_TTL_SECONDS', '86400')),
             download_hosts=frozenset(filter(None, env.get('TRANSCRIPTION_SOURCE_DOWNLOAD_HOSTS', '').split(','))),
             max_input_bytes=int(env.get('TRANSCRIPTION_SOURCE_MAX_INPUT_BYTES', str(1024**3))),
             max_result_bytes=int(env.get('TRANSCRIPTION_SOURCE_MAX_RESULT_BYTES', str(24*1024**2))),

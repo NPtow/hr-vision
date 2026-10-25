@@ -92,7 +92,7 @@ class RecordingUploads:
                     type(item['size']) is int and 0 < item['size'] <= 1024**3 and item['content_type'] in MIME,
                     'Нужен аудио- или видеофайл до 1 ГБ.', 400)
             total += item['size']
-        require(total <= 4 * 1024**3, 'В одной загрузке — до 4 ГБ.', 413)
+        require(total <= 2 * 1024**3, 'В одной загрузке — до 2 ГБ.', 413)
         digest = hashlib.sha256(_dump(body).encode()).hexdigest()
         connection = os.environ.get('HR_RECORDING_UPLOAD_CONNECTION', 'upload')
         with self.connect() as db:
@@ -123,6 +123,14 @@ class RecordingUploads:
             self._row(db, headers, identity)
             db.execute('UPDATE hr_recording_uploads SET source_upload_id=?,binding_id=?,generation=? WHERE id=?',
                 (result['id'], binding['binding_id'], binding['generation'], identity))
+            # Durable business intent precedes bytes and survives a closed tab
+            # or lost finalize response. The bridge waits for every Core part.
+            import assessment_jobs
+            if kind == 'intake':
+                assessment_jobs.enqueue(db, 'intake', owner, scope['vacancyId'], principal['workspaceId'])
+            elif kind == 'interview':
+                candidate = db.execute('SELECT candidate_id FROM cp_interviews WHERE id=?', (owner,)).fetchone()
+                assessment_jobs.enqueue(db, 'candidate', candidate[0], scope['vacancyId'], principal['workspaceId'])
         return {**result, 'id': identity}
 
     def command(self, headers, identity, action, body):
@@ -178,7 +186,7 @@ class RecordingUploads:
             connection.endheaders()
             remaining = size
             while remaining:
-                chunk = stream.read(min(1024 * 1024, remaining))
+                chunk = stream.read(min(1022 * 1024, remaining))
                 require(chunk, 'Загрузка прервалась. Повторите её.', 400)
                 connection.send(chunk)
                 remaining -= len(chunk)

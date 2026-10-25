@@ -359,3 +359,25 @@ def test_valid_selection_fallback_for_core_without_revision_markers(setup,monkey
     assert result['selection_revision']==1
     assert primary(core,event)['selections'][0]['revision']==2
     assert state['submits']==1
+
+
+def test_auto_reused_completed_manual_job_selects_saved_result_after_config_change(setup):
+    api,runtime,event,state,core,_=setup
+    identity=submit(api,event).json()['id']
+    done=runtime.run_once(identity)
+    assert done['delivery_status']=='succeeded'
+    original=runtime.repository.get(identity)
+    runtime.settings.revision='new-model-configuration'
+    runtime.settings.asr_provider='deepgram'
+    runtime.settings.select_primary=True
+    reused,created=runtime.repository.submit('collector','auto:'+event['asset_id'],event,runtime.settings.config_identity,
+        automatic=True,select_primary=True)
+    assert not created and reused['id']==identity and reused['selection_requested']
+    result=runtime.run_once(identity)
+    assert result['selection_status']=='ready',result
+    assert state['submits']==1
+    persisted=runtime.repository.get(identity)
+    assert persisted['receipt']==original['receipt']
+    assert persisted['raw_ref']==original['raw_ref']
+    assert persisted['result']==original['result']
+    assert primary(core,event)['transcripts'][0]['id']==done['transcript_ids'][0]

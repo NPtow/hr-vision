@@ -73,5 +73,23 @@ class UploadProductTest(unittest.TestCase):
         with self.assertRaises(Problem): self.service.begin({},body)
         self.assertEqual(self.calls,[])
 
+    def test_finalize_ack_loss_leaves_durable_assessment_and_idempotent_projection(self):
+        first = self.service.begin({}, self.body())
+        with self.connect() as db:
+            self.assertEqual(db.execute('SELECT status FROM as_bindings').fetchone(), ('waiting',))
+        # Source scheduler registered the receipt while the browser was closed.
+        self.source._send = lambda *a: {'id':'source-intent','status':'registered','parts':[]}
+        self.core.materials = lambda *a: {'assets': [{'id':'a'*32,'kind':'audio','state':'ready',
+            'metadata':{'part_index':0,'duration':10},
+            'locations':[{'backend':'s3','state':'verified','sha256':'b'*64}]}]}
+        again = self.service.begin({}, self.body())
+        self.assertEqual(again['id'], first['id'])
+        for _ in range(2): self.service.command({}, again['id'], 'finalize', {})
+        with self.connect() as db:
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM as_bindings').fetchone()[0], 1)
+            person = json.loads(db.execute('SELECT body FROM em_intake_candidates WHERE id=?', (self.candidate,)).fetchone()[0])
+            self.assertEqual(person['preparedProfile']['recordings'][0]['id'], 'a'*32)
+            self.assertNotIn('transcriptText', person['preparedProfile']['recordings'][0])
+
 
 if __name__ == '__main__': unittest.main()

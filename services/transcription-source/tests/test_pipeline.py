@@ -272,8 +272,9 @@ def test_owned_zoom_keeps_original_provider_transcript_and_adds_asr_version(setu
         assert {t['metadata']['origin'] for t in transcripts}=={'zoom_provider','yandex_speechkit'}
         assert state['submits']==1
         assert result['transcript_ids'][0] in core.get('/v1/candidates/c1/dossier',headers=auth(SCOPED)).text
-        # Actual persisted Core receipts also flow through both application
-        # adapters without changing the capture text selected by assessment.
+        # Canonical Core consumers require explicit selection for every recording;
+        # provider text is retained as an immutable alternative. The legacy local
+        # adapter keeps its compatibility projection during the independent rollout.
         from types import SimpleNamespace
         from core_source_client import CoreMaterialsCatalog
         from materials_service import MaterialsService
@@ -288,13 +289,15 @@ def test_owned_zoom_keeps_original_provider_transcript_and_adds_asr_version(setu
                 return response.json()
         local=MaterialsService(SimpleNamespace(repository=service.repository,storage=store,
             clock=lambda:0,settle_seconds=86400))
-        projections=[CoreMaterialsCatalog(CoreRead(),connect=connect).legacy_materials('interview',{'id':'i1','room':room}),
-            local.legacy_materials('interview',{'id':'i1','room':room})]
-        for projected in projections:
-            assert [t['id'] for t in projected['transcripts']]==[original]
-            assert projected['transcripts'][0]['fullText']=='Actual speech'
-            assert [t['id'] for t in projected['transcriptVariants']]==result['transcript_ids']
-            assert projected['transcriptVariants'][0]['origin']=='yandex_speechkit'
+        canonical=CoreMaterialsCatalog(CoreRead(),connect=connect).legacy_materials('interview',{'id':'i1','room':room})
+        assert canonical['transcripts']==[]
+        assert canonical['transcription']['status']=='processing'
+        assert {t['id'] for t in canonical['transcriptVariants']}=={original,*result['transcript_ids']}
+        projected=local.legacy_materials('interview',{'id':'i1','room':room})
+        assert [t['id'] for t in projected['transcripts']]==[original]
+        assert projected['transcripts'][0]['fullText']=='Actual speech'
+        assert [t['id'] for t in projected['transcriptVariants']]==result['transcript_ids']
+        assert projected['transcriptVariants'][0]['origin']=='yandex_speechkit'
 
 
 def test_remote_without_explicit_resolver_is_clear_error_no_policy_change(setup):
