@@ -1484,6 +1484,14 @@ class CandidatePortal:
             require(meeting and meeting['status'] == 'completed', 'Материалы доступны после встречи.', 409)
             require(meeting_id is None or meeting['id'] == meeting_id, 'Встреча изменилась. Обновите кабинет.', 409)
             mid = meeting['id']
+            if not application_id:
+                saved = db.execute('SELECT body FROM cp_internal_profiles WHERE candidate_id=?', (cid,)).fetchone()
+                imported = json.loads(saved[0]).get('importedInterview') if saved else None
+                if imported is not None:
+                    require(storage_policy in (None, 'remote'),
+                            'Исходная запись хранится в панели ДСА.', 409)
+                    from dsa_panel import imported_materials
+                    return imported_materials(imported, cid, mid)
             catalogue_meeting = meeting
             if self.materials_catalog and not application_id and (meeting.get('room') or {}).get('provider', 'daily') == 'daily':
                 control = db.execute('SELECT start_requested_at FROM cp_recording_control WHERE interview_id=?',

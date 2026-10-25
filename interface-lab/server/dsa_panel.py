@@ -6,10 +6,52 @@ import re
 import threading
 import time
 import urllib.request
-from domain import Problem
+from domain import Problem, require, iso, now
 
 SOURCE = 'https://kabinet.158-160-179-53.sslip.io'
 EXAMPLE_IDS = ('378713', '380179', '380455', '380989')
+
+
+def imported_materials(saved, candidate_id, interview_id):
+    """Read an operator-imported snapshot after the portal authorizes its owner.
+
+    Public profile edits cannot set this internal record. Bind both the person
+    and interview, retain the source identity, and never accept arbitrary URLs.
+    Imported interviews do not create or query a video-call provider room.
+    """
+    require(isinstance(saved, dict) and saved.get('version') == 1 and
+            saved.get('candidateId') == candidate_id and saved.get('interviewId') == interview_id,
+            'Источник интервью изменился.', 409)
+    profile = saved.get('preparedProfile')
+    require(isinstance(profile, dict), 'Материалы интервью недоступны.', 422)
+    source, recordings = profile.get('source'), profile.get('recordings')
+    require(isinstance(source, dict) and source.get('kind') == 'dsa-panel' and
+            source.get('example') is True and isinstance(source.get('candidateId'), str) and
+            re.fullmatch(r'\d{1,12}', source['candidateId']) and
+            isinstance(recordings, list) and len(recordings) == 1 and isinstance(recordings[0], dict),
+            'Не удалось открыть исходную запись.', 422)
+    recording, source_id = recordings[0], source['candidateId']
+    duration = recording.get('duration')
+    require(recording.get('source') == 'dsa-panel' and recording.get('sourceCandidateId') == source_id and
+            recording.get('publicUrl') == SOURCE + '/api/video/' + source_id and
+            recording.get('mime') == 'video/mp4' and type(duration) in (int, float) and
+            math.isfinite(duration) and 0 < duration <= 14400,
+            'Не удалось открыть исходную запись.', 422)
+    transcript, provenance = profile.get('transcriptText'), profile.get('transcriptSource')
+    require(isinstance(transcript, str) and transcript.startswith('WEBVTT\n') and
+            10 < len(transcript) <= 1000000 and isinstance(provenance, dict) and
+            provenance.get('candidateId') == source_id and
+            provenance.get('sha256') == hashlib.sha256(transcript.encode()).hexdigest(),
+            'Не удалось проверить расшифровку интервью.', 422)
+    identity = hashlib.sha256(json.dumps([candidate_id, interview_id, source_id,
+        provenance['sha256']], separators=(',', ':')).encode()).hexdigest()[:32]
+    video_id, transcript_id = 'import-video-' + identity, 'import-text-' + identity
+    return {'status': 'ready', 'recordings': [{'id': video_id, 'url': recording['publicUrl'],
+                'duration': duration, 'storage': 'remote', 'copyStatus': 'not_requested'}],
+            'transcripts': [{'id': transcript_id, 'text': transcript, 'storage': 'imported'}],
+            'video': {'status': 'ready', 'ids': [video_id]},
+            'transcription': {'status': 'ready', 'ids': [transcript_id]},
+            'checkedAt': iso(now()), 'source': {'kind': 'dsa-panel', 'candidateId': source_id}}
 
 
 def prepared_example(person, transcript_text):
