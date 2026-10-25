@@ -14,11 +14,31 @@ from unittest.mock import patch
 import receiver as r
 
 
+class FakeClock:
+    def __init__(self, now=0):
+        self.now = now
+        self.sleeps = []
+
+    def monotonic(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.sleeps.append(seconds)
+        self.now += seconds
+
+
 class ReceiverTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
         self.addCleanup(self.temp.cleanup)
+        # Activation guard tests must not depend on unrelated local video imports
+        # consuming the developer machine's reserve. The low-disk case is explicit.
+        capacity = 1024 ** 3
+        disk = patch.object(r.shutil, 'disk_usage',
+                            return_value=r.shutil._ntuple_diskusage(2 * capacity, capacity, capacity))
+        disk.start()
+        self.addCleanup(disk.stop)
 
     def bundle(self, target='mockups', mutate=None, extra=None, runtime=None):
         sha, run = 'a' * 40, '12.1'
@@ -478,6 +498,22 @@ class ReceiverTest(unittest.TestCase):
         self.assertTrue((later / 'assets/shared.css').exists())
         self.assertTrue((old / 'assets/old.css').exists())
 
+    def test_insufficient_disk_reserve_still_blocks_before_any_release_change(self):
+        archive, stage, manifest = self.bundle()
+        r.unpack(archive, stage, 'mockups')
+        base = self.root / 'site'
+        base.mkdir()
+        (base / 'current').symlink_to('releases/old')
+        with patch.dict(r.BASES, mockups=base), \
+             patch.object(r.shutil, 'disk_usage', return_value=r.shutil._ntuple_diskusage(1024, 1024, 0)), \
+             patch.object(r, 'current_branch_sha') as branch, \
+             patch.object(r, 'check_origin') as health:
+            with self.assertRaisesRegex(ValueError, 'Insufficient disk reserve'):
+                r.activate(stage, manifest)
+        branch.assert_not_called()
+        health.assert_not_called()
+        self.assertEqual(r.pointer(base), 'releases/old')
+
     def test_refuses_old_commit_without_changing_current(self):
         a, s, m = self.bundle(); r.unpack(a, s, 'mockups')
         base = self.root / 'site'; base.mkdir(); (base / 'current').symlink_to('releases/old')
@@ -496,6 +532,74 @@ class ReceiverTest(unittest.TestCase):
         with patch.object(r.urllib.request, 'urlopen', side_effect=error) as request, patch.object(r.time, 'sleep'):
             with self.assertRaises(r.urllib.error.HTTPError): r.current_branch_sha('main')
             self.assertEqual(request.call_count, 1)
+
+    def test_origin_waits_for_delayed_api_and_keeps_all_three_checks(self):
+        clock = FakeClock()
+        sha, seen = 'a' * 40, []
+        def urlopen(request, timeout):
+            url = request if isinstance(request, str) else request.full_url
+            seen.append((url, timeout))
+            self.assertGreater(timeout, 0)
+            self.assertLessEqual(timeout, 4)
+            if url.endswith('/deployment.json'):
+                return io.BytesIO(json.dumps({'sha': sha, 'target': 'service'}).encode())
+            if '/iframe.html?' in url:
+                response = io.BytesIO(b'entry')
+                response.status, response.url = 200, url
+                return response
+            self.assertEqual(url, 'http://127.0.0.1:8391/api/hr/health')
+            if clock.now < 20:
+                raise ConnectionRefusedError('API startup still pending')
+            return io.BytesIO(b'{"ok":true}')
+        with patch.object(r.time, 'monotonic', side_effect=clock.monotonic), \
+             patch.object(r.time, 'sleep', side_effect=clock.sleep), \
+             patch.object(r.urllib.request, 'urlopen', side_effect=urlopen):
+            r.check_origin('service', sha)
+        self.assertEqual(clock.now, 20)
+        self.assertEqual(len(seen), 21 * 3)
+        self.assertTrue(all(timeout == 4 for _, timeout in seen))
+        for offset in range(0, len(seen), 3):
+            self.assertTrue(seen[offset][0].endswith('/deployment.json'))
+            self.assertIn('/iframe.html?', seen[offset + 1][0])
+            self.assertTrue(seen[offset + 2][0].endswith('/api/hr/health'))
+
+    def test_origin_deadline_preserves_first_and_last_errors_without_real_sleep(self):
+        clock = FakeClock(now=10)
+        first = ConnectionRefusedError('first API refusal')
+        last = TimeoutError('later readiness timeout')
+        attempts = []
+        def urlopen(request, timeout):
+            attempts.append(timeout)
+            raise first if len(attempts) == 1 else last
+        with patch.object(r.time, 'monotonic', side_effect=clock.monotonic), \
+             patch.object(r.time, 'sleep', side_effect=clock.sleep), \
+             patch.object(r.urllib.request, 'urlopen', side_effect=urlopen):
+            with self.assertRaisesRegex(RuntimeError, 'Origin verification failed') as caught:
+                r.check_origin('service', 'a' * 40)
+        self.assertEqual(clock.now, 100)
+        self.assertEqual(len(attempts), 90)
+        self.assertIn('first API refusal', str(caught.exception))
+        self.assertIn('later readiness timeout', str(caught.exception))
+        self.assertIs(caught.exception.__cause__, first)
+        self.assertEqual(attempts[-1], 1)
+        self.assertTrue(all(0 < timeout <= 4 for timeout in attempts))
+        self.assertTrue(all(0 < duration <= 1 for duration in clock.sleeps))
+
+    def test_origin_deadline_bounds_slow_requests_and_never_extends_request_timeout(self):
+        clock = FakeClock()
+        attempts = []
+        def urlopen(request, timeout):
+            attempts.append(timeout)
+            clock.now += timeout
+            raise TimeoutError('slow origin request')
+        with patch.object(r.time, 'monotonic', side_effect=clock.monotonic), \
+             patch.object(r.time, 'sleep', side_effect=clock.sleep), \
+             patch.object(r.urllib.request, 'urlopen', side_effect=urlopen):
+            with self.assertRaisesRegex(RuntimeError, 'slow origin request'):
+                r.check_origin('mockups', 'a' * 40)
+        self.assertEqual(clock.now, 90)
+        self.assertEqual(len(attempts), 18)
+        self.assertTrue(all(timeout == 4 for timeout in attempts))
 
     def test_failed_health_restores_previous_release(self):
         a, s, m = self.bundle(); r.unpack(a, s, 'mockups')
@@ -1031,6 +1135,40 @@ class ReceiverTest(unittest.TestCase):
                 r.activate_api('releases/old-api')
             restart.assert_not_called()
             self.assertEqual(r.pointer(api), 'releases/old-api')
+
+    def test_failed_rollback_preserves_original_origin_diagnostic_and_runtime_guard(self):
+        check_origin = r.check_origin
+        clock = FakeClock()
+        first = ConnectionRefusedError('startup refused')
+        later = TimeoutError('startup later timeout')
+        attempts = []
+        def urlopen(request, timeout):
+            attempts.append(timeout)
+            raise first if len(attempts) == 1 else later
+        with self.service_activation(installed=r.RUNTIME) as (stage, manifest, base, api, database, stop, restart, health):
+            health.side_effect = check_origin
+            # A recovery runtime containing any extra file remains invalid. This
+            # intentionally exercises the guard that rejected real pycache files.
+            pycache = api / 'releases/old-api/__pycache__'
+            pycache.mkdir()
+            (pycache / 'app.cpython-312.pyc').write_bytes(b'not-an-approved-runtime-file')
+            with patch.object(r.time, 'monotonic', side_effect=clock.monotonic), \
+                 patch.object(r.time, 'sleep', side_effect=clock.sleep), \
+                 patch.object(r.urllib.request, 'urlopen', side_effect=urlopen):
+                with self.assertRaisesRegex(RuntimeError, 'rollback refused') as caught:
+                    r.activate(stage, manifest)
+            message = str(caught.exception)
+            self.assertIn('Original failure: RuntimeError: Origin verification failed', message)
+            self.assertIn('first error: ConnectionRefusedError: startup refused', message)
+            self.assertIn('last error: TimeoutError: startup later timeout', message)
+            self.assertIn('rollback failure: ValueError: Incomplete recovery API', message)
+            self.assertIs(caught.exception.__cause__.__cause__, first)
+            self.assertEqual(clock.now, 90)
+            self.assertEqual(r.pointer(api), 'releases/' + manifest['release'])
+            self.assertEqual(r.pointer(base), 'releases/' + manifest['release'])
+            self.assertEqual(stop.call_count, 2)
+            restart.assert_called_once()
+            self.assertTrue((pycache / 'app.cpython-312.pyc').exists())
 
     def test_database_failure_during_fallback_never_starts_old_code(self):
         with self.service_activation() as (stage, m, base, api, db, stop, restart, health):
