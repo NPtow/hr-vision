@@ -83,6 +83,8 @@ jobs:
       - name: Check deployment safety
         working-directory: interface-lab/deploy/ci
         run: python3 -m unittest -v test_receiver
+      - name: Check isolated Jev assessment worker
+        run: python3 -m unittest discover -s services/assessment/tests -v
       - name: Check core and private Zoom service
         env:
           PYTHONPATH: interface-lab/server:services/data-core/src:services/transcription/src

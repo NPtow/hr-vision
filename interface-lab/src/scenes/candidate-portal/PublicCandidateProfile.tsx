@@ -83,14 +83,19 @@ function PublicProfileCard({ token }: { token: string }) {
   useEffect(() => {
     if (!/^[A-Za-z0-9_-]{43}$/.test(token)) return;
     const controller = new AbortController();
-    void request<{ assessment: Omit<AssessmentPresentation, 'saveFeedback'> | null }>(token, '/assessment', controller.signal)
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const load = () => void request<{ assessment: Omit<AssessmentPresentation, 'saveFeedback'> | null; status?: string }>(token, '/assessment', controller.signal)
       .then(result => {
         if (controller.signal.aborted) return;
         setAssessmentError('');
         setAssessment(result.assessment ? { ...result.assessment, saveFeedback: async () => { throw new Error('Ответы по фрагментам в публичном просмотре отключены.'); } } : undefined);
-      }).catch(cause => { if (!controller.signal.aborted) setAssessmentError((cause as Error).message); })
-      .finally(() => { if (!controller.signal.aborted) setAssessmentLoaded(true); });
-    return () => controller.abort();
+        const pending = ['pending', 'waiting', 'queued', 'running'].includes(result.status ?? '');
+        setAssessmentLoaded(!pending);
+        if (pending) timer = setTimeout(load, 8_000);
+        if (result.status === 'failed') setAssessmentError('Не удалось рассчитать оценку. Интервью доступно для просмотра.');
+      }).catch(cause => { if (!controller.signal.aborted) { setAssessmentError((cause as Error).message); setAssessmentLoaded(true); } });
+    load();
+    return () => { controller.abort(); clearTimeout(timer); };
   }, [token, attempt]);
   useEffect(() => {
     if (!/^[A-Za-z0-9_-]{43}$/.test(token)) { setClosed(true); setError('Ссылка недействительна.'); return; }

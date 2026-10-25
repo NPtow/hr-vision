@@ -126,14 +126,14 @@ class InterviewAssessmentTest(unittest.TestCase):
             person = json.loads(raw)
             person['preparedProfile']['transcriptText'] += '\n[00:07-00:08] К: Новый источник.'
             db.execute('UPDATE em_intake_candidates SET body=? WHERE id=?', (json.dumps(person), self.person['id']))
-        self.assertEqual(self.read()[1], {'assessment': None})
+        self.assertIsNone(self.read()[1]['assessment'])
         self.assertEqual(self.feedback(expectedVersion=1)[0], 409)
         with self.app.connect() as db:
             db.execute('UPDATE em_intake_candidates SET body=? WHERE id=?', (raw, self.person['id']))
             row = db.execute('SELECT body FROM cp_vacancies WHERE id=?', (self.job['id'],)).fetchone()
             job = json.loads(row[0]); job['expectations'] = 'Иные требования вакансии'
             db.execute('UPDATE cp_vacancies SET body=? WHERE id=?', (json.dumps(job), self.job['id']))
-        self.assertEqual(self.read()[1], {'assessment': None})
+        self.assertIsNone(self.read()[1]['assessment'])
         self.assertEqual(self.feedback(expectedVersion=1)[0], 409)
 
     def test_source_url_replacement_cannot_reattach_assessment_or_idempotent_retry(self):
@@ -143,7 +143,7 @@ class InterviewAssessmentTest(unittest.TestCase):
             raw = json.loads(db.execute('SELECT body FROM em_intake_candidates WHERE id=?', (self.person['id'],)).fetchone()[0])
             raw['preparedProfile']['recordings'][0]['publicUrl'] = 'https://disk.yandex.ru/i/other_fixture'
             db.execute('UPDATE em_intake_candidates SET body=? WHERE id=?', (json.dumps(raw), self.person['id']))
-        self.assertEqual(self.read()[1], {'assessment': None})
+        self.assertIsNone(self.read()[1]['assessment'])
         self.assertEqual(self.feedback(requestId=rid)[0], 409)
 
     def test_missing_transcript_is_an_unavailable_assessment_not_a_broken_player(self):

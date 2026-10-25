@@ -550,3 +550,8 @@ to{opacity:1;margin-bottom:0}
 .iv-chapter-description{margin:0 0 18px;color:#969099;font-size:12px;line-height:1.6}
 @media(prefers-reduced-motion:reduce){.iv-root .iv-chapter-trigger,.iv-root .iv-chapter-outline{scroll-behavior:auto}}
 @media(prefers-contrast:more){.iv-transcript-heading h3,.iv-root .iv-chapter-trigger,.iv-chapter-heading-title{color:#44354f!important}.iv-root .iv-chapter-outline>button{color:#51445c}}
+.iv-vacancy-match { margin: 0 24px 24px; font-size: 14px; line-height: 1.5; }
+.iv-vacancy-match summary { cursor: pointer; font-weight: 600; }
+.iv-vacancy-match ul { padding: 0; list-style: none; }
+.iv-vacancy-match li { display: flex; justify-content: space-between; gap: 24px; margin: 12px 0; }
+.iv-vacancy-match li span:last-child { color: var(--text-secondary, #72717a); text-align: right; }

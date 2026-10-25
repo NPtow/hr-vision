@@ -311,7 +311,14 @@ export function CandidateInterviewPlayer({ sourceId, name, header, media, chapte
         {hasAssessmentTab && <div hidden={tab !== 'comments' || commentHistory} className="iv-panel iv-assessment-panel" id={commentHistory ? undefined : `${id}-comments`} role="tabpanel" aria-labelledby={`${id}-comments-tab`}>
           {assessment ? <OrbitGraph key={assessment.revisionId} criteria={assessment.criteria} selectedId={assessmentFlow.selectedId} onSelect={assessmentFlow.selectCriterion}
             onEvidence={(evidence, criterionId) => { if (evidence.seconds !== null && seek(evidence.seconds)) assessmentFlow.source(evidence, criterionId); }}/>
-            : <div className="ia-orbit ia-orbit--empty"><p role="status">{assessmentStatus === 'loading' ? 'Загружаем разбор…' : 'Разбор интервью ещё не подготовлен.'}</p></div>}
+            : <div className="ia-orbit ia-orbit--empty"><p role="status">{assessmentStatus === 'loading' ? 'Готовим разбор…' : 'Разбор интервью ещё не подготовлен.'}</p></div>}
+          {assessment?.vacancyMatch && <details className="iv-vacancy-match">
+            <summary>Соответствие вакансии</summary>
+            <ul>{assessment.vacancyMatch.criteria.map(item => <li key={item.id}>
+              <span>{item.label}</span><span>{item.status === 'evidenced' ? 'Есть подтверждение в интервью' : 'Нужно уточнить'}</span>
+            </li>)}</ul>
+            {!assessment.vacancyMatch.criteria.length && <p>В вакансии нет явных требований к оценённым навыкам.</p>}
+          </details>}
         </div>}
         {<div hidden={tab !== 'comments' || (hasAssessmentTab && !commentHistory)} className="iv-panel iv-comments" id={hasAssessmentTab && !commentHistory ? undefined : `${id}-comments`} role="tabpanel" aria-labelledby={`${id}-comments-tab`}>
           {assessment && <button type="button" className="iv-comments-return" onClick={() => setCommentHistory(false)}><ChevronLeft size={14}/>К оценке навыков</button>}

@@ -45,6 +45,7 @@ export type AssessmentPresentation = {
   revisionId: string;
   criteria: AssessmentCriterion[];
   feedback: FragmentFeedback[];
+  vacancyMatch?: { revisionId: string; requiresReview: true; criteria: { id: string; label: string; status: 'evidenced' | 'clarify' | 'not_required' }[] };
   saveFeedback: (target: FeedbackTarget, opinion: FragmentOpinion, expectedVersion: number) => Promise<FragmentFeedback>;
 };
 
