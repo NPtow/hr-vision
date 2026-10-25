@@ -109,6 +109,29 @@ class SelectionTest(fixture.EmployerStoreTest):
             db.execute('UPDATE cp_candidates SET email=NULL WHERE id=?', (active,))
             self.assertFalse(selection.person(db, active)['telegramConnected'])
 
+    def test_optional_contact_stores_do_not_block_core_candidate_snapshots(self):
+        cid = self.person()
+        with self.connect() as db:
+            before = selection.person(db, cid)
+            notices.set_email(db, cid, cid + '@example.test')
+            db.execute('UPDATE cn_recipients SET telegram_chat_id=\'654321\',telegram_verified_at=0 WHERE candidate_id=?', (cid,))
+            db.execute('DROP TABLE cp_booking_profile_consents')
+            self.assertTrue(selection.person(db, cid)['telegramConnected'])
+            db.execute('DROP TABLE cn_recipients')
+            db.execute('DROP TABLE cn_booking_telegram')
+            after = selection.person(db, cid)
+            self.assertTrue(after['emailConnected'])
+            self.assertFalse(after['telegramConnected'])
+            self.assertEqual(before['sourceRevision'], after['sourceRevision'])
+
+    def test_prepared_booking_contact_does_not_require_generic_notification_store(self):
+        cid = self.person()
+        self.prepared(cid)
+        with self.connect() as db:
+            db.execute('DROP TABLE cn_recipients')
+            self.assertTrue(selection.person(db, cid)['emailConnected'])
+            self.assertTrue(selection.person(db, cid)['telegramConnected'])
+
     def test_unknown_never_becomes_a_score_or_a_recommendation(self):
         cid = self.person()
         self.core(cid, state='unknown')

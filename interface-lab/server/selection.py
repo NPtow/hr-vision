@@ -291,16 +291,21 @@ def invitation_target(db, cid, channel):
     account = db.execute('SELECT email FROM cp_candidates WHERE id=?', (cid,)).fetchone()
     if channel == 'email' and account and account[0]:
         return account[0]
+    # Core/public dossier readers need only canonical candidate tables. Optional
+    # delivery adapters must not make those snapshots depend on their schema.
+    tables = {row[0] for row in db.execute('''SELECT name FROM sqlite_master WHERE type='table'
+              AND name IN ('cp_booking_profile_consents','cn_recipients','cn_booking_telegram')''')}
     consent = db.execute('''SELECT contact_email,invitation_id FROM cp_booking_profile_consents
-                            WHERE candidate_id=?''', (cid,)).fetchone()
+                            WHERE candidate_id=?''', (cid,)).fetchone() if 'cp_booking_profile_consents' in tables else None
     if channel == 'email':
         return consent[0] if consent else None
     import candidate_notifications as notices
-    recipient = notices._dict(db.execute('SELECT * FROM cn_recipients WHERE candidate_id=?', (cid,)))
+    recipient = (notices._dict(db.execute('SELECT * FROM cn_recipients WHERE candidate_id=?', (cid,)))
+                 if 'cn_recipients' in tables else None)
     if notices._telegram_identity_active(db, recipient):
         return recipient['telegram_chat_id']
     bound = db.execute('SELECT chat_id FROM cn_booking_telegram WHERE candidate_id=? AND invitation_id=?',
-                       (cid, consent[1])).fetchone() if consent else None
+                       (cid, consent[1])).fetchone() if consent and 'cn_booking_telegram' in tables else None
     return bound[0] if bound else None
 
 
