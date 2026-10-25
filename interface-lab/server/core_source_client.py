@@ -189,7 +189,8 @@ class CoreMaterialsCatalog:
             raise ServiceError('materials_delivery_retrying', 503)
         active_sources = [s for s in data.get('sources', []) if not s.get('revoked')]
         require(not data.get('sources') or active_sources, 'Материалы недоступны.', 410)
-        recordings, transcripts, video_errors = [], [], []
+        recordings, transcripts, transcript_variants, video_errors = [], [], [], []
+        assets = {asset['id']: asset for asset in data.get('assets', [])}
         for asset in data.get('assets', []):
             if asset['kind'] != 'video' or asset['state'] not in ('ready', 'available'):
                 continue
@@ -216,10 +217,20 @@ class CoreMaterialsCatalog:
                 latest[version['asset_id']] = version
         for version in latest.values():
             normalized = version.get('metadata', {}).get('normalized', {})
-            transcripts.append({'id': version['id'], 'assetId': version['asset_id'], 'revision': version['version'],
+            projection = {'id': version['id'], 'assetId': version['asset_id'], 'revision': version['version'],
                 'text': normalized.get('vtt') or normalized.get('full_text', ''),
                 'fullText': normalized.get('full_text', ''), 'segments': version['segments'],
-                'warnings': normalized.get('warnings', []), 'storage': 'owned'})
+                'warnings': normalized.get('warnings', []), 'storage': 'owned'}
+            asset = assets.get(version['asset_id'], {})
+            external_id = asset.get('external_id') or asset.get('provider_asset_id', '')
+            # Source-created ASR assets are alternatives until an explicit
+            # application selection contract chooses one for assessment.
+            if external_id.startswith('asr:'):
+                metadata = version.get('metadata', {})
+                transcript_variants.append({**projection, 'origin': metadata.get('origin'),
+                    'model': metadata.get('model_version')})
+            else:
+                transcripts.append(projection)
         def channel(key, values):
             statuses = [row[key] for row in data.get('channels', []) if key in row]
             state = ('ready' if values else 'processing' if not statuses or 'processing' in statuses else
@@ -238,7 +249,9 @@ class CoreMaterialsCatalog:
             require(old <= fresh, 'Доступ к материалам изменился.', 409)
         self._check(access_check)
         states = (video['status'], transcription['status'])
-        return {'recordings': recordings, 'transcripts': transcripts, 'video': video, 'transcription': transcription,
+        return {'recordings': recordings, 'transcripts': transcripts,
+            **({'transcriptVariants': transcript_variants} if transcript_variants else {}),
+            'video': video, 'transcription': transcription,
             'status': 'ready' if 'ready' in states else 'error' if 'error' in states else
                       'processing' if 'processing' in states else 'not_recorded',
             'catalogVersion': 1, 'checkedAt': dt.datetime.now(dt.timezone.utc).isoformat()}

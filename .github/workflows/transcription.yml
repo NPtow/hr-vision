@@ -4,12 +4,30 @@ on:
   pull_request:
     paths:
       - 'services/transcription/**'
-      - 'interface-lab/server/materials_transcripts.py'
-      - 'interface-lab/server/test_materials_transcripts.py'
+      - 'services/transcription-source/**'
+      - 'services/data-core/**'
+      - 'services/tests/**'
+      - 'services/deploy/transcription/**'
+      - 'interface-lab/server/core_source_client.py'
+      - 'interface-lab/server/materials_*.py'
+      - 'interface-lab/server/test_materials_*.py'
+      - 'interface-lab/scripts/package-release.mjs'
+      - 'interface-lab/deploy/ci/receiver.py'
+      - 'interface-lab/deploy/ci/test_receiver.py'
       - '.github/workflows/transcription.yml'
   push:
     paths:
       - 'services/transcription/**'
+      - 'services/transcription-source/**'
+      - 'services/data-core/**'
+      - 'services/tests/**'
+      - 'services/deploy/transcription/**'
+      - 'interface-lab/server/core_source_client.py'
+      - 'interface-lab/server/materials_*.py'
+      - 'interface-lab/server/test_materials_*.py'
+      - 'interface-lab/scripts/package-release.mjs'
+      - 'interface-lab/deploy/ci/receiver.py'
+      - 'interface-lab/deploy/ci/test_receiver.py'
       - '.github/workflows/transcription.yml'
 
 permissions:
@@ -18,7 +36,9 @@ permissions:
 jobs:
   service:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5, matching repository CI
         with:
@@ -26,12 +46,42 @@ jobs:
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6, matching repository CI
         with:
           python-version: '3.12'
-      - run: python -m pip install --require-hashes -r requirements.lock
-        working-directory: services/transcription
-      - run: python -B -m unittest discover -s tests -v
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6, matching release producer CI
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Install real audio tools and pinned test dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg
+          ffmpeg -version > /dev/null
+          ffprobe -version > /dev/null
+          python -m pip install --require-hashes --only-binary=:all: -r services/deploy/transcription/requirements-tests.lock
+          python -m pip check
+      - name: Check ASR normalization, durable jobs and provider fixtures
+        run: python -B -m unittest discover -s tests -v
         working-directory: services/transcription
         env:
           PYTHONPATH: src
-      - run: python -B -m unittest test_materials_transcripts -v
+      - name: Check existing transcript import compatibility
+        run: python -B -m unittest test_materials_transcripts -v
         working-directory: interface-lab/server
-      - run: docker build -t md-transcription:ci services/transcription
+      - name: Check coordinator, actual Core HTTP path and provisioning safety
+        env:
+          PYTHONPATH: interface-lab/server:services/data-core/src:services/transcription/src:services/transcription-source/src:services/tests
+        run: >-
+          python -B -m pytest
+          services/transcription-source/tests
+          services/data-core/tests
+          services/tests/test_transcription_pipeline_http.py
+          services/deploy/transcription/tests
+          interface-lab/server/test_materials_asr_dispatch.py
+          interface-lab/server/test_materials_transcript_variants.py
+          interface-lab/server/test_materials_worker.py
+          interface-lab/server/test_materials_provider_scope.py
+          -q
+      - name: Check actual release producer and receiver layouts
+        run: python -B -m unittest -v test_receiver
+        working-directory: interface-lab/deploy/ci
+      - name: Build standalone ASR image
+        run: docker build -t md-transcription:ci services/transcription

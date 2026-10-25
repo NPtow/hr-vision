@@ -167,15 +167,44 @@ class ReceiverTest(unittest.TestCase):
         self.assertEqual(r.PRE_PUBLIC_PROFILE_RUNTIME - r.PRE_ASSESSMENT_RUNTIME, {'interview_assessment.py'})
         self.assertEqual(r.PRE_SELECTION_RUNTIME - r.PRE_PUBLIC_PROFILE_RUNTIME, {'public_profiles.py'})
         self.assertEqual(r.PRE_JEV_RUNTIME - r.PRE_SELECTION_RUNTIME, {'selection.py'})
-        self.assertEqual(r.RUNTIME - r.PRE_JEV_RUNTIME, {'assessment_jobs.py'})
+        self.assertEqual(r.PRE_ASR_DISPATCH_RUNTIME - r.PRE_JEV_RUNTIME, {'assessment_jobs.py'})
+        self.assertEqual(r.RUNTIME - r.PRE_ASR_DISPATCH_RUNTIME, {'materials_asr_dispatch.py'})
+        self.assertIn(frozenset(r.PRE_ASR_DISPATCH_RUNTIME), r.RUNTIME_LAYOUTS)
+        self.assertIn(frozenset(r.PRE_JEV_RUNTIME), r.RUNTIME_LAYOUTS)
         self.assertIn(frozenset(r.PRE_PUBLIC_PROFILE_RUNTIME), r.RUNTIME_LAYOUTS)
         self.assertEqual(r.ZOOM_RUNTIME, {'call_providers.py', 'zoom_media.py', 'materials_zoom.py', 'zoom_recording_retention.py'})
         self.assertEqual(len(r.MATERIALS_RUNTIME), 9)
         for runtime in (r.LEGACY_RUNTIME, r.BOT_RUNTIME, r.PRE_IMPORT_RUNTIME, r.PRE_OUTREACH_RUNTIME,
-                        r.PRE_ACCESS_RUNTIME, r.PRE_CV_RUNTIME, r.PRE_POOLED_RUNTIME, r.PRE_EMPLOYER_TELEGRAM_RUNTIME, r.PRE_REMINDERS_RUNTIME, r.PRE_MEETING_NOTICES_RUNTIME, r.PRE_MEETING_LAB_RUNTIME, r.PRE_RECRUITER_COACH_RUNTIME, r.PRE_CALL_CLEANUP_RUNTIME, r.PRE_OBSERVABILITY_RUNTIME, r.PRE_CANDIDATE_CALENDAR_RUNTIME, r.PRE_INTERVIEW_ASSISTANT_RUNTIME, r.PRE_MATERIALS_RUNTIME, r.PRE_ZOOM_RUNTIME, r.SERVICES_ONLY_RUNTIME, r.ZOOM_ONLY_RUNTIME, r.ASSESSMENT_ONLY_RUNTIME, r.PRE_ASSESSMENT_RUNTIME, r.RUNTIME):
+                        r.PRE_ACCESS_RUNTIME, r.PRE_CV_RUNTIME, r.PRE_POOLED_RUNTIME, r.PRE_EMPLOYER_TELEGRAM_RUNTIME, r.PRE_REMINDERS_RUNTIME, r.PRE_MEETING_NOTICES_RUNTIME, r.PRE_MEETING_LAB_RUNTIME, r.PRE_RECRUITER_COACH_RUNTIME, r.PRE_CALL_CLEANUP_RUNTIME, r.PRE_OBSERVABILITY_RUNTIME, r.PRE_CANDIDATE_CALENDAR_RUNTIME, r.PRE_INTERVIEW_ASSISTANT_RUNTIME, r.PRE_MATERIALS_RUNTIME, r.PRE_ZOOM_RUNTIME, r.SERVICES_ONLY_RUNTIME, r.ZOOM_ONLY_RUNTIME, r.ASSESSMENT_ONLY_RUNTIME, r.PRE_ASSESSMENT_RUNTIME, r.PRE_ASR_DISPATCH_RUNTIME, r.RUNTIME):
             with self.subTest(count=len(runtime)):
                 a, s, m = self.bundle('service', runtime=runtime)
                 self.assertEqual(r.unpack(a, s, 'service'), m)
+
+    def test_asr_hook_requires_complete_layout_and_is_an_api_change(self):
+        hook = 'materials_asr_dispatch.py'
+        # The complete previous runtime stays a valid rollback layout; adding
+        # the hook to an older partial history must not widen the allowlist.
+        archive, stage, manifest = self.bundle('service', runtime=r.PRE_ASR_DISPATCH_RUNTIME)
+        self.assertEqual(r.unpack(archive, stage, 'service'), manifest)
+        for partial in (r.PRE_SELECTION_RUNTIME | {hook}, r.LEGACY_RUNTIME | {hook}):
+            with self.subTest(count=len(partial)):
+                archive, stage, _ = self.bundle('service', runtime=partial)
+                with self.assertRaisesRegex(ValueError, 'Incomplete API'):
+                    r.unpack(archive, stage, 'service')
+        source, api = self.root / 'asr-incoming', self.root / 'asr-installed'
+        for folder in (source, api / 'current'):
+            for name in r.PRE_ASR_DISPATCH_RUNTIME:
+                file = folder / name
+                file.parent.mkdir(parents=True, exist_ok=True)
+                file.write_text('# unchanged previous runtime')
+        with patch.object(r, 'API', api):
+            self.assertFalse(r.api_changed(source))
+            (source / hook).write_text('# new opt-in dispatcher')
+            self.assertTrue(r.api_changed(source))
+            (api / 'current' / hook).write_text('# new opt-in dispatcher')
+            self.assertFalse(r.api_changed(source))
+            (source / hook).unlink()
+            self.assertTrue(r.api_changed(source))
 
     def test_partial_employer_telegram_layout_is_rejected(self):
         for module in ('employer_notifications.py', 'telegram_miniapp.py'):
@@ -365,6 +394,8 @@ class ReceiverTest(unittest.TestCase):
             source.write_text('# synthetic runtime fixture\n')
         # Dependency installation/configuration is outside the public release
         # producer. Even adjacent files must not leak into an API archive.
+        hook = fixture / 'server' / 'materials_asr_dispatch.py'
+        hook.write_text('# bounded, opt-in ASR recording notification fixture\n')
         non_runtime = ('requirements-materials.txt', 'requirements-materials.lock', 'requirements-api-extras.lock',
                        'MATERIALS.md', 'test_materials_worker.py', 'materials.env')
         for name in non_runtime:
@@ -386,6 +417,8 @@ class ReceiverTest(unittest.TestCase):
         stage.mkdir()
         manifest = r.unpack(fixture / 'release.tgz', stage, 'service')
         self.assertEqual({p[4:] for p in manifest['files'] if p.startswith('api/')}, r.RUNTIME)
+        self.assertEqual((stage / 'api' / hook.name).read_bytes(), hook.read_bytes())
+        self.assertEqual(manifest['files']['api/' + hook.name], r.digest(hook.read_bytes()))
         self.assertTrue(all('api/' + name not in manifest['files'] for name in non_runtime))
         self.assertTrue({'ui/call/zoom/client.html', 'ui/call/zoom/left.html', 'ui/call/zoom/client.js', 'ui/call/zoom/client.css'} <= manifest['files'].keys())
 

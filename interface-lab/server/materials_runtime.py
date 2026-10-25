@@ -27,13 +27,14 @@ class MaterialsRuntime:
     def __init__(self, connect, repository, captures, storage, *, enabled=True,
                  default_policy='remote', connection_id='daily', publish=None,
                  clock=None, settle_seconds=86400, backfill_enabled=False,
-                 provider_allowlist=None, backfill_providers=None, **worker_options):
+                 provider_allowlist=None, backfill_providers=None, asr_dispatch=None, **worker_options):
         self.connect, self.repository = connect, repository
         self.captures, self.storage, self.enabled = captures, storage, enabled
         self.default_policy, self.connection_id = _policy(default_policy), connection_id
         self.clock = clock or time.time
         self.settle_seconds = max(0, int(settle_seconds))
         self.backfill_enabled = backfill_enabled
+        self.asr_dispatch = asr_dispatch
         self.backfill_providers = backfill_providers
         self.provider_allowlist = None if provider_allowlist is None else frozenset(provider_allowlist)
         self.worker = MaterialsWorker(repository, captures, storage, publish=publish,
@@ -250,7 +251,8 @@ class MaterialsRuntime:
                 self.enqueue_discovery(source['id'], token='poll:' + str(bucket))
                 rediscovered += 1
         events = self._events()
-        return {**self.worker.reconcile(), 'backfill': backfill,
+        asr = self.asr_dispatch.dispatch(self._sources(), self.repository) if self.asr_dispatch else {'enabled': False}
+        return {**self.worker.reconcile(), 'asr': asr, 'backfill': backfill,
                 'rediscovered': rediscovered, 'events': events}
 
 
@@ -322,7 +324,9 @@ def build_runtime(connect=None, media=None, environ=None, *, publish=None, captu
             app = publisher[0]
             app.send_task('materials.run_job', args=[identity], queue='materials',
                           retry=False)
+    from materials_asr_dispatch import from_env as asr_dispatch_from_env
     return MaterialsRuntime(connect, repository, captures, storage, enabled=enabled,
+        asr_dispatch=asr_dispatch_from_env(env),
         provider_allowlist=provider_allowlist,
         default_policy=env.get('HR_MATERIALS_VIDEO_POLICY', 'remote'), connection_id=connection,
         backfill_enabled=env.get('HR_MATERIALS_BACKFILL_ENABLED', '0') == '1',

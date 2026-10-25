@@ -12,8 +12,15 @@ class Runtime:
         self.repository.init()
         self.storage = Storage(settings.data_dir)
         if backend is None:
-            from .backends import HttpAsrBackend
-            backend = HttpAsrBackend(settings)
+            if settings.backend_kind == 'deepgram':
+                from .deepgram import DeepgramBackend
+                backend = DeepgramBackend(settings)
+            elif settings.backend_kind == 'yandex_speechkit':
+                from .speechkit import SpeechKitBackend
+                backend = SpeechKitBackend(settings)
+            else:
+                from .backends import HttpAsrBackend
+                backend = HttpAsrBackend(settings)
         self.backend = backend
         self.publish = publish
 
@@ -30,6 +37,13 @@ class Runtime:
 
     def reconcile(self):
         activated = published = due_count = 0
+        # Deletion follows a durable succeeded commit. Failure is retried by scheduler.
+        if hasattr(self.backend, 'cleanup'):
+            for job in self.repository.pending_cleanup():
+                try:
+                    self.backend.cleanup(job)
+                    self.repository.cleaned(job['id'])
+                except Exception: pass
         cursor = None
         while batch := self.repository.uploads(after_id=cursor):
             for job in batch:
@@ -64,18 +78,28 @@ class Runtime:
             if job['backend_identity'] != self.settings.backend_identity:
                 self.repository.fail(job_id,token,'backend_configuration_changed')
             else:
-                result = self.backend.transcribe(self.storage.path(job['input_key']), filename=job['filename'], language=job['language'], request_id=job_id)
+                raw = provider_metadata = None
+                if hasattr(self.backend, 'transcribe_job'):
+                    result, raw, provider_metadata = self.backend.transcribe_job(self.storage.path(job['input_key']),job,self.repository,token)
+                else:
+                    result = self.backend.transcribe(self.storage.path(job['input_key']), filename=job['filename'], language=job['language'], request_id=job_id)
                 try:
                     result = validate_normalized(result)
                 except (ValueError, TypeError):
                     self.repository.fail(job_id,token,'invalid_result')
                     return {'job_id':job_id,'status':self.repository.get(job_id)['status']}
-                if len(json.dumps(result,allow_nan=False).encode())>self.settings.max_result_bytes:
+                if len(json.dumps([result,raw,provider_metadata],allow_nan=False).encode())>self.settings.max_result_bytes:
                     self.repository.fail(job_id,token,'result_too_large')
-                else: self.repository.succeed(job_id,token,result)
+                else:
+                    saved = self.repository.succeed(job_id,token,result,raw,provider_metadata)
+                    if saved and hasattr(self.backend, 'cleanup'):
+                        try:
+                            self.backend.cleanup(self.repository.get(job_id))
+                            self.repository.cleaned(job_id)
+                        except Exception: pass
         except Exception as exc:
             # Unknown exceptions after entering the backend may conceal a completed request.
-            self.repository.fail(job_id,token,getattr(exc,'code','backend_error'),retryable=getattr(exc,'retryable',False),uncertain=getattr(exc,'uncertain',True),max_attempts=self.settings.max_attempts)
+            self.repository.fail(job_id,token,getattr(exc,'code','backend_error'),retryable=getattr(exc,'retryable',False),uncertain=getattr(exc,'uncertain',True),max_attempts=self.settings.max_attempts,retry_delay=getattr(exc,'retry_delay',None))
         finally:
             stop.set()
             thread.join(timeout=1)
