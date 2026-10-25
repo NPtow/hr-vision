@@ -5,11 +5,14 @@ can choose a candidate, recording, URL, or workflow action. Runs and stage resul
 are private, bounded and idempotent. No candidate decisions are made here.
 """
 import html
+from dataclasses import dataclass
 import json
 import math
 import os
 import re
 import secrets
+import subprocess
+import tempfile
 import threading
 import time
 import urllib.error
@@ -40,6 +43,72 @@ CRITERIA = [
     'Provides part of an answer, explicitly supported by words in this passage.',
     'Directly answers the question with concrete information in this passage.',
 ]
+
+
+@dataclass(frozen=True)
+class JevConfig(ModelConfig):
+    proxy_url: str = ''
+
+
+def _jev_proxy_valid(value):
+    match = re.fullmatch(r'socks5h://(?:127\.0\.0\.1|\[::1\]):([0-9]{1,5})', value) if isinstance(value, str) else None
+    return bool(match and 1 <= int(match[1]) <= 65535)
+
+
+def _jev_http_error(code):
+    messages = {
+        401: 'TypeSafe не принял ключ Jev.',
+        403: 'TypeSafe не разрешил доступ к Jev.',
+        402: 'У Jev закончились доступные средства или требуется оплата.',
+        429: 'Достигнут лимит запросов Jev. Попробуйте позже.',
+        451: 'TypeSafe недоступен из региона сервера (HTTP 451).',
+    }
+    return Problem('Поиск по смыслу недоступен: ' + messages.get(code,
+        'TypeSafe сейчас не смог выполнить запрос (HTTP ' + str(code) + ').') +
+        ' Расшифровку можно читать вручную.', 503)
+
+
+def _jev_proxy_response(config, encoded, key, timeout):
+    """Reuse an explicitly configured loopback SOCKS5h egress, without retries.
+
+    Matches the existing Telegram curl-stdin boundary: no secrets in process
+    arguments, no inherited proxy/curlrc/debug environment, fixed HTTPS origin,
+    TLS verification and no redirect following. Never creates a proxy or route.
+    """
+    require(_jev_proxy_valid(config.proxy_url), 'Некорректная конфигурация поиска.', 503)
+    def quoted(value):
+        escaped = (value.replace('\\', '\\\\').replace('"', '\\"').replace('\t', '\\t')
+            .replace('\n', '\\n').replace('\r', '\\r').replace('\v', '\\v'))
+        return '"' + escaped + '"'
+    settings = '\n'.join(name + ' = ' + quoted(value) for name, value in (
+        ('url', JEV_ENDPOINT), ('proxy', config.proxy_url), ('request', 'POST'),
+        ('header', 'Content-Type: application/json'), ('header', 'Accept: application/json'),
+        ('header', 'Authorization: Bearer ' + config.api_key), ('header', 'Idempotency-Key: ' + key),
+        ('data', encoded.decode('utf-8')))) + '\n'
+    command = ['/usr/bin/curl', '--disable', '--config', '-', '--silent', '--show-error',
+        '--max-time', str(timeout), '--connect-timeout', str(min(5, timeout)), '--fail-with-body',
+        '--max-filesize', '128000', '--noproxy', '', '--globoff', '--proto', '=https',
+        '--max-redirs', '0', '--write-out', '\n%{http_code}']
+    try:
+        with tempfile.TemporaryFile() as response:
+            result = subprocess.run(command, input=settings.encode('utf-8'), stdout=response,
+                stderr=subprocess.DEVNULL, timeout=timeout + 2, check=False,
+                env={'PATH': '/usr/bin:/bin', 'LANG': 'C', 'LC_ALL': 'C'})
+            require(result.returncode != 63, 'Некорректный ответ поиска.', 502)
+            require(result.returncode in (0, 22),
+                'Не удалось дождаться Jev. Автоматически запрос не повторялся. Попробуйте позже.', 503)
+            size = response.seek(0, os.SEEK_END)
+            require(4 <= size <= 128004, 'Некорректный ответ поиска.', 502)
+            response.seek(0)
+            raw = response.read(128004)
+    except (OSError, subprocess.SubprocessError):
+        raise Problem('Не удалось дождаться Jev. Автоматически запрос не повторялся. Попробуйте позже.', 503) from None
+    require(re.fullmatch(rb'\n[0-9]{3}', raw[-4:]), 'Некорректный ответ поиска.', 502)
+    code = int(raw[-3:])
+    if not 200 <= code < 300:
+        raise _jev_http_error(code)
+    require(result.returncode == 0, 'Некорректный ответ поиска.', 502)
+    return raw[:-4]
 
 
 def transcript_turns(value):
@@ -187,9 +256,12 @@ def jev_config():
     # to another provider, or fall back to the chat model when search is absent.
     key = (os.getenv('HR_JEV_API_KEY') or os.getenv('JEV_API_KEY') or os.getenv('TYPESAFE_API_KEY', '')).strip()
     model = os.getenv('HR_JEV_MODEL', 'jev-latest').strip()
+    proxy = os.getenv('HR_JEV_PROXY_URL', '')
     require(key and re.fullmatch(r'jev-(?:latest|\d+\.\d+\.\d+)', model),
             'Поиск по смыслу пока не подключён. Расшифровка доступна для чтения.', 503)
-    return ModelConfig(JEV_BASE_URL, model, key, timeout=22)
+    require(not any(ord(c) <= 32 or ord(c) == 127 for c in key) and (not proxy or _jev_proxy_valid(proxy)),
+            'Некорректная конфигурация поиска.', 503)
+    return JevConfig(JEV_BASE_URL, model, key, timeout=22, proxy_url=proxy)
 
 
 def evaluate_jev(config, query, chunks, key, deadline, check, charge):
@@ -215,27 +287,23 @@ def evaluate_jev(config, query, chunks, key, deadline, check, charge):
     require(remaining > 1, 'Поиск занял слишком много времени.', 503)
     charge(len(encoded) + 3000)
     started = time.monotonic()
-    request = urllib.request.Request(JEV_ENDPOINT, data=encoded, headers={
-        'Content-Type': 'application/json', 'Accept': 'application/json',
-        'Authorization': 'Bearer ' + config.api_key,
-        'Idempotency-Key': key, 'User-Agent': 'HRVision-InterviewSearch/2.0'})
-    try:
-        with urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect()).open(
-                request, timeout=min(config.timeout, remaining)) as response:
-            raw = response.read(128001)
-    except urllib.error.HTTPError as error:
-        messages = {
-            401: 'TypeSafe не принял ключ Jev.',
-            403: 'TypeSafe не разрешил доступ к Jev.',
-            402: 'У Jev закончились доступные средства или требуется оплата.',
-            429: 'Достигнут лимит запросов Jev. Попробуйте позже.',
-        }
-        code = error.code
-        error.close()
-        raise Problem('Поиск по смыслу недоступен: ' + messages.get(code,
-            'TypeSafe сейчас не смог выполнить запрос.') + ' Расшифровку можно читать вручную.', 503) from None
-    except (urllib.error.URLError, TimeoutError, OSError):
-        raise Problem('Не удалось дождаться Jev. Автоматически запрос не повторялся. Попробуйте позже.', 503) from None
+    if getattr(config, 'proxy_url', ''):
+        raw = _jev_proxy_response(config, encoded, key, min(config.timeout, remaining))
+    else:
+        request = urllib.request.Request(JEV_ENDPOINT, data=encoded, headers={
+            'Content-Type': 'application/json', 'Accept': 'application/json',
+            'Authorization': 'Bearer ' + config.api_key,
+            'Idempotency-Key': key, 'User-Agent': 'HRVision-InterviewSearch/2.0'})
+        try:
+            with urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect()).open(
+                    request, timeout=min(config.timeout, remaining)) as response:
+                raw = response.read(128001)
+        except urllib.error.HTTPError as error:
+            code = error.code
+            error.close()
+            raise _jev_http_error(code) from None
+        except (urllib.error.URLError, TimeoutError, OSError):
+            raise Problem('Не удалось дождаться Jev. Автоматически запрос не повторялся. Попробуйте позже.', 503) from None
     check()
     try:
         require(len(raw) <= 128000, 'Некорректный ответ поиска.', 502)
@@ -272,7 +340,8 @@ def evaluate_jev(config, query, chunks, key, deadline, check, charge):
             scores[row['id']] = {name: answer[name] for name in ('type', 'score', 'confidence', 'legend', 'probabilities')}
             if probabilities[2] + probabilities[3] >= .65 and score >= 1.8:
                 ranked.append({**row, 'score': score})
-        return ranked, {'provider': 'typesafe-direct', 'model': model, 'requestedModel': config.model,
+        return ranked, {'provider': 'typesafe-direct', 'transport': 'loopback-socks5h' if getattr(config, 'proxy_url', '') else 'direct',
+            'model': model, 'requestedModel': config.model,
             'version': SEARCH_VERSION, 'usage': {name: usage[name] for name in ('input_tokens', 'output_tokens')},
             'scores': scores, 'promptHash': digest(encoded.decode()),
             'latencyMs': round((time.monotonic() - started) * 1000), 'retries': 0}
