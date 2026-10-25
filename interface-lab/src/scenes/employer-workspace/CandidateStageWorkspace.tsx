@@ -6,7 +6,8 @@ import { EmployerScreening } from '../connected-journey/EmployerScreening';
 import { Materials } from '../connected-journey/MeetingMaterials';
 import { MeetingPanel } from '../connected-journey/MeetingPanel';
 import type { Journey, Person, SourceProfile } from '../connected-journey/api';
-import { CandidateStageCard } from './CandidateStageCard';
+import { CandidateStageCard, MeetingFeedback, StageDocuments, StageNotes } from './CandidateStageCard';
+import { CandidateNextStep, CandidateStageRejection } from './CandidateNextStep';
 import { CandidateProfilePanel } from './CandidateProfilePanel';
 import { CandidateOfferForm } from './CandidateStageForms';
 import { MeetingScheduler } from './MeetingScheduler';
@@ -36,13 +37,17 @@ export function CandidateStageWorkspace({ journey, person, source, entry, onChat
     (entry === 'meeting' || entry === 'review' ? [...stages].reverse().find(stage => stage.kind === 'meeting')?.id :
       entry === 'offer' ? [...stages].reverse().find(stage => stage.kind === 'offer')?.id : undefined) || stages.at(-1)?.id || '');
   const [editor, setEditor] = useState<Editor | null>(null);
+  const [view, setView] = useState<'stage' | 'next' | 'reject' | 'notes'>('stage');
+  const [completedMeeting, setCompletedMeeting] = useState<string | null>(null);
   const [pendingStage, setPendingStage] = useState<{ kind: NextStage; knownIds: string[]; existingId?: string } | null>(null);
   const [profileOpen, setProfileOpen] = useState(() => new URLSearchParams(location.search).get('view') === 'profile');
-  const locked = !!journey.state!.closedBy || person.decision === 'declined';
+  const locked = !!journey.state!.closedBy || person.decision === 'declined' || person.offer?.status === 'accepted';
+  const selectedStage = stages.find(stage => stage.id === selectedId);
+  const activeMeeting = person.meeting && ['pending', 'confirmed', 'live'].includes(person.meeting.status);
 
   function selectStage(id: string, replace = false) {
     if (callActive) return;
-    setPendingStage(null); setSelectedId(id); setEditor(null); setProfileOpen(false); journey.setError('');
+    setPendingStage(null); setSelectedId(id); setEditor(null); setView('stage'); setProfileOpen(false); journey.setError('');
     const url = new URL(location.href);
     url.searchParams.set('applicationId', person.id);
     url.searchParams.set('pool', 'selected'); url.searchParams.set('stageId', id);
@@ -51,7 +56,7 @@ export function CandidateStageWorkspace({ journey, person, source, entry, onChat
   }
   function openProfile() {
     if (journey.busy || callActive || profileOpen) return;
-    setPendingStage(null); setEditor(null); setProfileOpen(true); journey.setError('');
+    setPendingStage(null); setEditor(null); setView('stage'); setProfileOpen(true); journey.setError('');
     const url = new URL(location.href);
     url.searchParams.set('applicationId', person.id); url.searchParams.set('pool', 'selected');
     if (selectedId) url.searchParams.set('stageId', selectedId);
@@ -70,7 +75,7 @@ export function CandidateStageWorkspace({ journey, person, source, entry, onChat
     history.replaceState(history.state, '', url);
   }, [person.id, allStages, person.archivedStageIds]);
   useEffect(() => {
-    const restore = () => { if (!callActive) { setSelectedId(visibleStage(queryStage()) || stages.at(-1)?.id || ''); setEditor(null); setProfileOpen(new URLSearchParams(location.search).get('view') === 'profile'); } };
+    const restore = () => { if (!callActive) { setSelectedId(visibleStage(queryStage()) || stages.at(-1)?.id || ''); setEditor(null); setView('stage'); setProfileOpen(new URLSearchParams(location.search).get('view') === 'profile'); } };
     window.addEventListener('popstate', restore);
     return () => window.removeEventListener('popstate', restore);
   }, [allStages, person.archivedStageIds, callActive]);
@@ -82,15 +87,37 @@ export function CandidateStageWorkspace({ journey, person, source, entry, onChat
     if (next) { setPendingStage(null); selectStage(next.id, true); }
   }, [stages, pendingStage]);
 
+  // Completion arrives before the call overlay releases its navigation lock.
+  // Wait for the canonical completed state; historical meetings never auto-open this view.
+  useEffect(() => {
+    if (!completedMeeting || callActive || locked) return;
+    if (!stages.some(stage => stage.meetingId === completedMeeting && stage.status === 'completed')) return;
+    setCompletedMeeting(null); setEditor(null); setProfileOpen(false); setView('next');
+  }, [completedMeeting, callActive, locked, stages]);
+
+  function openNextStep() {
+    if (journey.busy || callActive || locked) return;
+    setEditor(null); setProfileOpen(false); setPendingStage(null); setView('next'); journey.setError('');
+  }
+  function openRejection() {
+    if (journey.busy || callActive || locked) return;
+    if (activeMeeting) {
+      selectStage(`meeting:${person.meeting!.id}`);
+      journey.setError('Сначала завершите или отмените назначенную встречу.'); return;
+    }
+    setEditor(null); setProfileOpen(false); setView('reject'); journey.setError('');
+  }
+
   function openEditor(kind: NextStage, stage?: CandidateStage, reschedule = false) {
     if (journey.busy || callActive || locked) return;
-    if (kind === 'meeting' && person.meeting && ['pending', 'confirmed', 'live'].includes(person.meeting.status) && !reschedule) {
-      selectStage(`meeting:${person.meeting.id}`);
-      journey.setError('Сначала завершите или отмените назначенную встречу. Перенести её можно здесь.');
+    if (activeMeeting && !reschedule) {
+      selectStage(`meeting:${person.meeting!.id}`);
+      if (kind === 'offer') journey.setError('Сначала завершите или отмените назначенную встречу.');
       return;
     }
+    if (kind === 'offer' && !stage && person.offer) { selectStage(`offer:${person.offer.id}`); return; }
     if (stage?.kind === 'offer' && stage.offer?.id !== person.offer?.id) return;
-    journey.setError(''); setPendingStage(null); setProfileOpen(false);
+    journey.setError(''); setPendingStage(null); setProfileOpen(false); setView('stage');
     setEditor({ kind, stage, reschedule, requestId: crypto.randomUUID(), expectedRevision: person.workflowRevision || 0,
       offerVersion: person.offer?.version, offerStageId: person.offer?.id ? `offer:${person.offer.id}` : undefined, knownIds: stages.map(item => item.id) });
   }
@@ -115,23 +142,33 @@ export function CandidateStageWorkspace({ journey, person, source, entry, onChat
     const meeting = stage.meeting || person.meetings?.find(item => item.id === stage.meetingId);
     if (!meeting) return <p className="esc-empty">Материалы этой встречи пока недоступны.</p>;
     const historical = { ...person, meeting, feedback: stage.feedback };
-    if (meeting.status === 'completed') return <Materials journey={journey} person={historical} appearance="candidate"/>;
+    if (meeting.status === 'completed') return <div className="esc-interview esc-meeting-review" data-stage-id={stage.id}><Materials journey={journey} person={historical} appearance="candidate" enableComments/></div>;
     if (meeting.id !== person.meeting?.id || meeting.status === 'cancelled') return null;
-    return <MeetingPanel key={meeting.id} journey={journey} person={historical} onCallChange={onCallChange}
+    return <MeetingPanel key={meeting.id} compact journey={journey} person={historical} onCallChange={onCallChange}
+      onComplete={() => setCompletedMeeting(meeting.id)}
       onReschedule={() => openEditor('meeting', stage, true)}/>;
   }
   function offerActions(stage: CandidateStage) {
     const offer = stage.offer;
     if (!offer || offer.id !== person.offer?.id || offer.status !== 'draft' || locked) return null;
     const active = Object.values(journey.state!.candidates).find(candidate => candidate?.id !== person.id && candidate?.offer?.status === 'sent');
-    return <div className="esc-stage-actions"><Button disabled={journey.busy || !!active || person.afterInterest === 'no'}
+    return <div className="esc-stage-actions"><Button disabled={journey.busy || !!active || !!activeMeeting || person.afterInterest === 'no'}
       onClick={() => { void journey.act('offer.send', person.id, { version: offer.version, expectedRevision: person.workflowRevision || 0 }); }}>Отправить оффер</Button>
       {active && <p className="esc-caption">Ждём ответ на оффер от {active.name}.</p>}
       {person.afterInterest === 'no' && <p className="esc-caption">Кандидат не хочет продолжать. Обсудите это в чате.</p>}
     </div>;
   }
-  const cancel = () => { setEditor(null); journey.setError(''); };
+  const cancel = () => { setEditor(null); setView('next'); journey.setError(''); };
   let form;
+  if (view === 'next') form = <CandidateNextStep busy={journey.busy || locked} onMeeting={() => openEditor('meeting')} onOffer={() => openEditor('offer')} onReject={openRejection}/>;
+  if (view === 'reject') form = <CandidateStageRejection key={person.id} journey={journey} person={person} onCancel={cancel} onSaved={() => selectStage(selectedId)}/>;
+  if (view === 'notes' && selectedStage) form = <section className="esc-meeting-notes" aria-label="Заметки и фидбек">
+    <StageDocuments stage={selectedStage}/>
+    <StageNotes key={selectedStage.id} stage={selectedStage} workflowRevision={person.workflowRevision || 0} busy={journey.busy} onSave={locked ? undefined : saveNotes}/>
+    <MeetingFeedback stage={selectedStage}/>
+    {!selectedStage.feedback && <p className="esc-caption">Фидбек по этой встрече ещё не сохранён.</p>}
+    <Button variant="ghost" onClick={() => selectStage(selectedId)}>К встрече</Button>
+  </section>;
   if (editor?.kind === 'meeting') form = <MeetingScheduler key={editor.requestId} embedded newMeeting={!editor.reschedule}
     command={{ requestId: editor.requestId, expectedRevision: editor.expectedRevision }} journey={journey} person={person}
     onSelect={() => {}} onBack={cancel} onBooked={() => saved(editor, editor.stage?.id)}/>;
@@ -149,17 +186,18 @@ export function CandidateStageWorkspace({ journey, person, source, entry, onChat
   return <main className="esc-workspace"><CandidateStageCard
     person={{ id: person.id, name: person.name, photo: person.photo }}
     stages={stages} selectedStageId={selectedId} workflowRevision={person.workflowRevision || 0}
-    onSelectStage={selectStage} onAddStage={locked ? undefined : kind => openEditor(kind)}
+    onSelectStage={selectStage} onOpenNextStep={locked ? undefined : openNextStep} compactUpcomingMeetings
     onEditStage={locked ? undefined : stage => { if (stage.kind === 'offer') openEditor(stage.kind, stage); }}
     onSaveStageNotes={locked ? undefined : saveNotes} busy={journey.busy || callActive} error={editor ? undefined : journey.error} editor={form}
     profileOpen={profileOpen} onOpenProfile={openProfile} onCloseProfile={() => selectStage(selectedId)}
     profile={<CandidateProfilePanel key={person.id} journey={journey} person={person} source={source}/>}
     renderInterview={() => <EmployerScreening journey={journey} person={person} source={source} appearance="candidate" enableComments/>}
-    renderMeeting={meetingMaterials} renderOffer={offerActions}
+    renderMeeting={meetingMaterials} renderCompletedMeeting={meetingMaterials} renderOffer={offerActions}
     headerActions={<DropdownMenu.Root><DropdownMenu.Trigger asChild><Button variant="ghost" size="icon" aria-label="Действия с кандидатом" disabled={journey.busy}><MoreHorizontal size={20}/></Button></DropdownMenu.Trigger>
       <DropdownMenu.Portal><DropdownMenu.Content className="esc-menu" align="end" sideOffset={8}>
         <DropdownMenu.Item className="esc-menu-item" onSelect={onChat}>Открыть чат</DropdownMenu.Item>
-        {!locked && <DropdownMenu.Item className="esc-menu-item" onSelect={() => { void journey.act('reject', person.id, { expectedRevision: person.workflowRevision || 0 }); }}>Отказать</DropdownMenu.Item>}
+        {selectedStage?.kind === 'meeting' && selectedStage.status === 'completed' && <DropdownMenu.Item className="esc-menu-item" disabled={callActive} onSelect={() => { setEditor(null); setProfileOpen(false); setView('notes'); journey.setError(''); }}>Заметки и фидбек</DropdownMenu.Item>}
+        {!locked && <DropdownMenu.Item className="esc-menu-item" disabled={callActive} onSelect={openRejection}>Отказать</DropdownMenu.Item>}
       </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>}
   /></main>;
 }
