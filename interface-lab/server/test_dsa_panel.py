@@ -35,6 +35,17 @@ class ImportedInterviewTest(unittest.TestCase):
         self.assertEqual(result['video']['status'], 'ready')
         self.assertEqual(result['recordings'][0]['id'], imported_materials(saved, 'candidate', 'interview')['recordings'][0]['id'])
 
+    def test_keeps_authored_chapters_separate_from_transcript_cues(self):
+        saved = imported_fixture()
+        chapter = {'title': 'Опыт', 'seconds': 0, 'endSeconds': 20,
+                   'detail': 'Исходное описание', 'fragment': '', 'source': '', 'isQuote': False}
+        saved['preparedProfile']['chapters'] = [chapter,
+            {**chapter, 'seconds': float('nan')}, {**chapter, 'endSeconds': 35},
+            {**chapter, 'kind': 'transcript'}, {**chapter, 'seconds': -1}]
+        result = imported_materials(saved, 'candidate', 'interview')
+        self.assertEqual(result['chapters'], [chapter])
+        self.assertEqual(result['transcripts'][0]['text'], saved['preparedProfile']['transcriptText'])
+
     def test_rejects_wrong_owner_interview_source_url_or_modified_transcript(self):
         for field, value in [('candidateId', 'other'), ('interviewId', 'other')]:
             saved = imported_fixture(); saved[field] = value

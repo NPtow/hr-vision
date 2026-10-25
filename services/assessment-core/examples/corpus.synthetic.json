@@ -1,0 +1,22 @@
+{
+  "candidate_id": "synthetic-contract-check",
+  "sources": [
+    {
+      "source_id": "synthetic-cv",
+      "version": "1",
+      "kind": "cv",
+      "units": [
+        {"unit_id": "experience", "text": "Синтетический пример для проверки API. Работаю менеджером по продажам. Руководителем команды не был.", "role": "candidate"}
+      ]
+    },
+    {
+      "source_id": "synthetic-interview",
+      "version": "1",
+      "kind": "interview",
+      "units": [
+        {"unit_id": "q1", "text": "Что вы делаете, когда клиент говорит, что дорого?", "role": "interviewer", "speaker": "Рекрутер", "start_ms": 0, "end_ms": 5000},
+        {"unit_id": "a1", "text": "В последней сделке я уточнил, с каким предложением клиент сравнивает цену. Он рассказал, что у конкурента нет поддержки. Я объяснил, какие его расходы снимает наша поддержка, и спросил, отвечает ли это на вопрос о разнице в цене.", "role": "candidate", "speaker": "Кандидат", "start_ms": 5000, "end_ms": 25000}
+      ]
+    }
+  ]
+}

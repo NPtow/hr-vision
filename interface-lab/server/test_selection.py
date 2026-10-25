@@ -7,6 +7,8 @@ import unittest
 import candidate_invites
 import candidate_notifications as notices
 import selection
+import selection_status
+import assessment_jobs
 import test_employer_store as fixture
 import test_employer_acceptance as http_fixture
 
@@ -146,6 +148,133 @@ class SelectionTest(fixture.EmployerStoreTest):
             self.assertEqual(db.execute('SELECT COUNT(*) FROM sl_nominations').fetchone()[0], 0)
             self.assertEqual(db.execute('SELECT COUNT(*) FROM cn_outbox').fetchone()[0], 0)
 
+    def test_closed_room_does_not_claim_conversation_and_preview_never_mutates(self):
+        cid = self.person()
+        with self.connect() as db:
+            before = db.total_changes
+            row = selection.directory(db, self.vacancy['id'])['candidates'][0]
+            self.assertEqual(row['workflow']['interview']['state'], 'closed')
+            self.assertEqual(row['workflow']['assessment']['state'], 'not_started')
+            self.assertEqual(row['workflow']['match']['state'], 'not_compared')
+            self.assertEqual(db.total_changes, before)
+        with patch('selection_status.materials', return_value={'state': 'unavailable', 'recordings': None}), \
+             patch('selection_status.verified_assessment', return_value={'state': 'not_started', 'result': None}), \
+             patch('assessment_jobs.enqueue') as enqueue, patch('selection.nominate') as nominate:
+            value, headers = self.routes.handle('GET', selection.PREFIX + 'candidates/' + cid + '/readiness', {}, None, lambda db: 'manager')
+            self.assertEqual(value['candidateId'], cid)
+            self.assertIsNone(value['materials']['recordings'])
+            self.assertEqual(headers['Cache-Control'], 'no-store')
+            enqueue.assert_not_called()
+            nominate.assert_not_called()
+        with self.connect() as db:
+            for table in ('sl_nominations', 'cn_outbox', 'sl_commands'):
+                self.assertEqual(db.execute('SELECT COUNT(*) FROM ' + table).fetchone()[0], 0)
+
+    def test_new_pending_or_failed_assessment_does_not_reuse_old_recommendation(self):
+        cid = self.matched(self.person())
+        with self.connect() as db:
+            self.assertTrue(selection.directory(db, self.vacancy['id'])['candidates'][0]['canAdd'])
+            assessment_jobs.enqueue(db, 'candidate', cid)
+            for saved, expected in [('waiting', 'waiting_sources'), ('queued', 'queued'), ('running', 'processing'), ('failed', 'error'), ('completed', 'saved')]:
+                db.execute('UPDATE as_bindings SET status=? WHERE owner_id=?', (saved, cid))
+                row = selection.directory(db, self.vacancy['id'])['candidates'][0]
+                self.assertEqual(row['workflow']['assessment']['state'], expected)
+                self.assertEqual(row['workflow']['match']['state'], 'not_compared')
+                self.assertFalse(row['canAdd'])
+        self.assert_problem(409, self.publish, cid)
+
+    def test_detail_rejects_other_roles_before_loading_sources(self):
+        cid = self.person()
+        with patch('selection_status.materials') as fetch:
+            for role in ('candidate', 'recruiter', 'employer'):
+                self.assert_problem(403, self.routes.handle, 'GET', selection.PREFIX + 'candidates/' + cid + '/readiness', {}, None, lambda db: role)
+            fetch.assert_not_called()
+
+    def test_primary_transcript_failure_does_not_reveal_saved_assessment(self):
+        cid = self.person()
+        with self.connect() as db:
+            assessment_jobs.enqueue(db, 'candidate', cid)
+            db.execute('UPDATE as_bindings SET assessment=? WHERE owner_id=?', ('{"criteria":[]}', cid))
+        with self.connect() as db, patch('assessment_jobs.read_candidate', side_effect=selection.Problem('unavailable', 503)):
+            self.assertEqual(selection_status.verified_assessment(db, cid), {'state': 'unavailable', 'result': None, 'match': {'state': 'unavailable'}})
+        with self.connect() as db, patch('assessment_jobs.read_candidate', return_value={'status': 'pending', 'assessment': None}):
+            value = selection_status.verified_assessment(db, cid, self.vacancy['id'])
+            self.assertEqual(value, {'state': 'stale', 'result': None, 'match': {'state': 'stale'}})
+            db.execute('UPDATE as_bindings SET assessment=NULL WHERE owner_id=?', (cid,))
+            self.assertEqual(selection_status.verified_assessment(db, cid, self.vacancy['id']),
+                             {'state': 'waiting_sources', 'result': None, 'match': {'state': 'waiting_assessment'}})
+
+    def test_saved_comparison_is_verified_against_assessment_and_vacancy_revisions(self):
+        cid, vid = self.person(), self.vacancy['id']
+        with self.connect() as db, patch.dict('os.environ', {'HR_CORE_CATALOG_ENABLED': '0'}):
+            assessment_jobs.enqueue(db, 'candidate', cid, vacancy_id=vid)
+            profile = {'revisionId': 'profile-revision', 'criteria': [{'state': 'supported', 'level': 3}]}
+            revision = assessment_jobs.candidate_revision(db, cid)
+            db.execute("UPDATE as_bindings SET status='completed',assessment=?,source_revision=? WHERE owner_id=?",
+                       (json.dumps(profile), revision, cid))
+            match_revision = selection.digest(['profile-revision', selection.vacancy(db, vid)['contentHash']])
+            comparison = {'revisionId': 'comparison-revision', 'requiresReview': True, 'criteria': []}
+            db.execute("UPDATE as_matches SET status='completed',source_revision=?,result=? WHERE vacancy_id=?",
+                       (match_revision, json.dumps(comparison), vid))
+            self.assertEqual(selection.directory(db, vid)['candidates'][0]['workflow']['match']['state'], 'comparison_saved')
+            current = selection_status.verified_assessment(db, cid, vid)
+            self.assertEqual(current['match']['state'], 'compared')
+            self.assertEqual(current['result']['vacancyMatch'], comparison)
+            # A changed vacancy must not display the comparison as current.
+            db.execute("UPDATE as_matches SET source_revision='old-vacancy' WHERE vacancy_id=?", (vid,))
+            stale = selection_status.verified_assessment(db, cid, vid)
+            self.assertEqual(stale['match']['state'], 'stale')
+            self.assertNotIn('vacancyMatch', stale['result'])
+            # A later failed assessment cannot resurrect any prior comparison.
+            db.execute("UPDATE as_bindings SET status='failed' WHERE owner_id=?", (cid,))
+            failed = selection_status.verified_assessment(db, cid, vid)
+            self.assertEqual(failed['state'], 'error')
+            self.assertIsNone(failed['result'])
+            self.assertEqual(failed['match']['state'], 'waiting_assessment')
+            self.assertFalse(selection.directory(db, vid)['candidates'][0]['canAdd'])
+
+    def test_two_recording_parts_require_selected_transcript_for_each(self):
+        class Core:
+            def __init__(self): self.calls = []
+            def call(self, method, path):
+                self.calls.append((method, path))
+                if path.endswith('/dossier'):
+                    return {'candidate_id': 'c', 'interviews': [{'id': 'i', 'materials': {
+                        'assets': [{'id': 'part-1', 'kind': 'video', 'state': 'ready'}, {'id': 'part-2', 'kind': 'video', 'state': 'ready'}],
+                        'transcripts': [{'id': 'old-zoom-text'}]}}], 'meetings': []}
+                return {'owner_kind': 'interview', 'owner_id': 'i', 'status': 'processing', 'transcripts': [{'id': 'new-part-1-only'}]}
+        core = Core()
+        value = selection_status.materials('c', core)
+        self.assertEqual(value['state'], 'processing')
+        self.assertEqual(value['recordings'], 2)
+        self.assertEqual(value['transcripts'], 0)
+        self.assertTrue(all(method == 'GET' for method, _ in core.calls))
+        self.assertNotIn('old-zoom-text', json.dumps(value))
+
+    def test_sources_timeout_is_unknown_and_wrong_candidate_is_rejected(self):
+        class Core:
+            def call(self, *args): raise TimeoutError()
+        value = selection_status.materials('c', Core())
+        self.assertEqual(value['state'], 'unavailable')
+        self.assertIsNone(value['recordings'])
+        class WrongCore:
+            def call(self, *args): return {'candidate_id': 'another', 'interviews': []}
+        self.assertEqual(selection_status.materials('c', WrongCore())['state'], 'unavailable')
+
+    def test_future_meeting_does_not_hide_existing_ready_transcript(self):
+        class Core:
+            def call(self, method, path):
+                if path.endswith('/dossier'):
+                    return {'candidate_id': 'c', 'interviews': [{'id': 'i', 'materials': {
+                        'assets': [{'id': 'video-1', 'kind': 'video', 'state': 'ready'}]}}],
+                        'meetings': [{'id': 'future', 'materials': {}}]}
+                if path.endswith('/i/primary-transcripts'):
+                    return {'owner_kind': 'interview', 'owner_id': 'i', 'status': 'ready', 'transcripts': [{'id': 'text-1'}]}
+                return {'owner_kind': 'meeting', 'owner_id': 'future', 'status': 'not_requested', 'transcripts': []}
+        value = selection_status.materials('c', Core())
+        self.assertEqual((value['state'], value['recordings'], value['transcripts']), ('ready', 1, 1))
+        self.assertEqual(len(value['items']), 2)
+
     def test_hash_identity_stale_source_and_duplicate_ingestion(self):
         cid = self.person()
         first, body = self.core(cid)
@@ -257,6 +386,27 @@ class SelectionHTTPTest(unittest.TestCase):
     ok = http_fixture.EmployerAcceptanceTest.ok
     employer = http_fixture.EmployerAcceptanceTest.employer
     vacancy = http_fixture.EmployerAcceptanceTest.vacancy
+    candidate = http_fixture.EmployerAcceptanceTest.candidate
+
+    def test_core_start_requires_manager_and_current_revision(self):
+        candidate = self.candidate('Core route')
+        cid = candidate['id']
+        with self.app.connect() as db:
+            revision = selection.person(db, cid)['revision']
+        route = 'selection/candidates/' + cid + '/assessment'
+        with patch('assessment_core_bridge.configured') as configured:
+            self.assertEqual(self.request(route, {'revision': revision})[0], 401)
+            self.assertEqual(self.request(route, {'revision': revision}, cookie=candidate['cookie'])[0], 401)
+            employer = self.employer()
+            self.assertEqual(self.request(route, {'revision': revision}, token=employer['token'])[0], 401)
+            self.assertEqual(self.request(route, {'revision': 'old'}, token=self.manager)[0], 409)
+            self.assertEqual(self.request(route, {'revision': revision}, token=self.manager,
+                headers={'Origin': 'https://foreign.invalid'})[0], 403)
+            configured.assert_not_called()
+            configured.return_value.start.return_value = {'state': 'queued', 'result': None}
+            result = self.ok(route, {'revision': revision}, token=self.manager)
+            self.assertEqual(result['candidateId'], cid)
+            configured.return_value.start.assert_called_once_with(cid)
 
     def test_real_handler_rejects_employer_and_anonymous_and_lists_actual_vacancies(self):
         employer = self.employer()

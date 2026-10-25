@@ -5,7 +5,7 @@ import { candidateRequest } from './api';
 import './telegram-handoff.css';
 
 /** A bot entry keeps its intent through registration and the existing CV flow. */
-export function TelegramHandoff({ available }: { available: boolean }) {
+export function TelegramHandoff({ available, compact = false }: { available: boolean; compact?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [link, setLink] = useState('');
@@ -23,10 +23,10 @@ export function TelegramHandoff({ available }: { available: boolean }) {
     } catch (cause) { setError((cause as Error).message); }
     finally { setBusy(false); }
   }
-  return <section className="cp-telegram-handoff" aria-labelledby="cp-telegram-handoff-title">
+  return <section className={`cp-telegram-handoff${compact ? ' cp-telegram-compact' : ''}`} aria-labelledby="cp-telegram-handoff-title">
     <Send size={21} aria-hidden="true"/>
-    <div><h2 id="cp-telegram-handoff-title">Ваш кабинет — и в Telegram</h2>
-      <p>Получайте вакансии и подтверждайте встречи в боте.</p>
+    <div><h2 id="cp-telegram-handoff-title">Уведомления в Telegram</h2>
+      <p>Чтобы не пропустить новые вакансии.</p>
       {error && <p className="cp-error" role="alert">{error}</p>}
       {!available && <p role="status">Подключение временно недоступно. Можно продолжить здесь.</p>}
     </div>

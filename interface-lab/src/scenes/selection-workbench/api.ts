@@ -1,4 +1,19 @@
 import { hrRequest } from '../hh-outreach/api';
+import type { AssessmentPresentation } from '../interview-assessment/types';
+import type { FullCorpusRun } from '../interview-assessment/FullCorpusAssessment';
+
+export type WorkflowState = { state: string; origin?: string | null; revisionId?: string | null };
+export type Workflow = { interview: WorkflowState; resume: WorkflowState; assessment: WorkflowState; match: WorkflowState };
+export type Readiness = {
+  candidateId: string;
+  materials: { state: string; recordings: number | null; transcripts: number | null;
+    items: { id: string; kind: string; recordings: number; transcripts: number; transcriptState: string }[] };
+  assessment: { state: string; result: Omit<AssessmentPresentation, 'saveFeedback'> | null; match?: WorkflowState;
+    /** Reserved for the authorised new-core adapter; never a browser service-token call. */
+    coreRun?: FullCorpusRun; canRun?: boolean;
+    rubric?: { id: string; version: string; parameterCount: number };
+    corpus?: { sources: number; units: number; characters: number } };
+};
 
 export type Criterion = { criterion_id: string; state: string; level: number | null; failed_processing: boolean; missing_reason?: string | null; reason_codes?: string[]; citations?: unknown[] };
 export type Assessment = {
@@ -14,12 +29,13 @@ export type SelectionPerson = {
   resumeAvailable: boolean; inCohort: boolean; canAdd: boolean;
   assessment: Assessment | null; application: { id: string; status: string } | null;
   nomination: { id: string; state: string } | null; deliveries: { id: string; event: string; channel: string; status: string; error: string | null }[];
+  workflow?: Workflow;
 };
 export type SelectionVacancy = { id: string; title: string; company: string; city: string; salary: string; description: string; status?: string; revision: number; generation: string; workspaceId: string; contentHash: string };
 export type Directory = { candidates: SelectionPerson[]; count: number };
 export const selectionRequest = <T,>(path: string, token: string, body?: unknown) => hrRequest<T>('selection/' + path, token, body);
 
-export const verdicts: Record<string, string> = { ranked: 'Рекомендует', not_matched: 'Нет рекомендации', needs_assessment: 'Нужна оценка', non_matching: 'Не соответствует', conflicting: 'Противоречия', failed_processing: 'Ошибка обработки', stale: 'Обновить оценку' };
+export const verdicts: Record<string, string> = { ranked: 'Рекомендует', not_matched: 'Не сравнивали', needs_assessment: 'Нужна оценка', non_matching: 'Не соответствует', conflicting: 'Противоречия', failed_processing: 'Ошибка обработки', stale: 'Результат устарел' };
 export const states: Record<string, string> = { supported: 'Есть оценка', unknown: 'Недостаточно данных', not_applicable: 'Не применимо', conflict: 'Противоречие' };
 export const reasons: Record<string, string> = {
   outside_anchor_scope: 'За пределами утверждённых шкал', aggregation_rule_not_approved: 'Правило объединения ещё не утверждено',

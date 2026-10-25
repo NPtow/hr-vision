@@ -46,8 +46,11 @@ function Screening({ journey, person, source, appearance = 'panel', header, enab
   } : null, JSON.stringify([materials?.transcription.status, materials?.transcripts.map(item =>
     [item.id, item.recordingId, item.selectionRevision, item.text])]));
   const transcriptChapters = parseMeetingTranscript(transcript);
-  const chapters = recordings.length === 1 && source.shortChapters.length ? source.shortChapters : transcriptChapters;
-  const fullChapters = recordings.length === 1 && source.fullChapters.length ? source.fullChapters : transcriptChapters;
+  // Historical chapter DTOs have no recording link: retain them for a single
+  // source; multipart uses only the selected part's local transcript chapters.
+  const materialChapters = recordings.length === 1 && materials?.chapters?.length ? materials.chapters : transcriptChapters;
+  const chapters = recordings.length === 1 && source.shortChapters.length ? source.shortChapters : materialChapters;
+  const fullChapters = recordings.length === 1 && source.fullChapters.length ? source.fullChapters : materialChapters;
   const emptyMessage = error || (!available ? 'Видеосервис ещё не подключён.'
     : materials?.video.status === 'not_recorded' ? 'Запись первичного интервью отсутствует.'
     : materials?.video.status === 'error' ? 'Сейчас не удалось получить запись первичного интервью.'

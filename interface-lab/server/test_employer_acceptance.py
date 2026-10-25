@@ -137,7 +137,7 @@ class EmployerAcceptanceTest(unittest.TestCase):
             'contentBase64': base64.b64encode(cv.encode()).decode()}, cookie=cookie)
         self.ok('candidate/profile', {'name': suffix, 'salaryMin': 100000, 'salaryMax': 150000,
             'latestStartDate': (self.tick + dt.timedelta(days=14)).date().isoformat(),
-            'resumeReviewed': True, 'availability': [{'start': iso(self.tick),
+            'resumeReviewed': True, 'employmentType': 'full-time', 'anyCompany': True, 'availability': [{'start': iso(self.tick),
                 'end': iso(self.tick + dt.timedelta(hours=8))}]}, cookie=cookie)
         # An already-completed initial interview is the input boundary for the
         # employer tests. No fake provider execution is claimed for this fixture.

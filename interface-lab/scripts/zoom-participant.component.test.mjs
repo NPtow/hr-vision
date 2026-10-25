@@ -168,26 +168,40 @@ test('server completion while candidate is inside Zoom exits, but opening saved 
   assert.equal(await page.evaluate(() => window.__exits), 0);
 });
 
-for (const alreadyCompleted of [false, true]) test(`invitation ${alreadyCompleted ? 'already completed' : 'native leave'} goes to cabinet through normal session boundary`, async t => {
+for (const alreadyCompleted of [false, true]) test(`guest invitation ${alreadyCompleted ? 'already completed offers account continuation' : 'local leave waits for recruiter completion'}`, async t => {
   const page = await pageFor(t), commands = [];
+  let completed = alreadyCompleted;
+  let access = { status: 'not_requested', canSend: true, blockedReason: null };
   await page.route('**/api/hr/candidate/**', async route => {
     const path = new URL(route.request().url()).pathname;
-    commands.push(path);
+    commands.push({ path, body: route.request().postDataJSON() });
+    if (path.endsWith('/guest/continue')) access = { status: 'queued', canSend: false, blockedReason: null };
     await route.fulfill({ json: path.endsWith('/guest/state') ? {
       name: 'Кандидат', videoConfigured: true,
-      interview: { start: '2026-10-25T15:00:00Z', status: alreadyCompleted ? 'completed' : 'live', callProvider: 'zoom', recruiterName: 'Рекрутер' },
-    } : credentials() });
+      ...(completed ? { accountActive: false, continuation: access } : {}),
+      interview: { start: '2026-10-25T15:00:00Z', status: completed ? 'completed' : 'live', callProvider: 'zoom', recruiterName: 'Рекрутер' },
+    } : path.endsWith('/guest/continue') ? access : credentials() });
   });
   await page.goto(origin + '/?screen=invitation&cp=guest#invite=fixture-secret');
   if (!alreadyCompleted) {
-    assert.equal(await page.getByRole('button', { name: 'Подготовиться к встрече', exact: true }).count(), 0);
     await enterCandidate(page);
     await page.frameLocator('iframe').getByRole('button', { name: 'Leave fixture' }).click();
+    await page.getByRole('heading', { name: 'Вы вышли из встречи', exact: true }).waitFor();
+    assert.equal(new URL(page.url()).searchParams.get('cp'), 'guest');
+    assert.equal(commands.filter(c => c.path.endsWith('/guest/join')).length, 1);
+    completed = true;
+    await page.getByRole('button', { name: 'Проверить завершение', exact: true }).click();
   }
-  await page.waitForURL(url => url.searchParams.get('cp') === 'home');
-  await page.getByText('Cabinet session boundary fixture', { exact: true }).waitFor();
+  await page.getByRole('heading', { name: 'Спасибо за разговор', exact: true }).waitFor();
+  assert.equal(commands.some(c => c.path.endsWith('/guest/continue')), false, 'Reading completion must not send mail');
+  await page.getByRole('button', { name: 'Завершить регистрацию', exact: true }).click();
+  await page.getByRole('status').getByText('Отправляем доступ на почту, указанную при записи.').waitFor();
+  assert.deepEqual(commands.filter(c => c.path.endsWith('/guest/continue')),
+    [{ path: '/api/hr/candidate/guest/continue', body: { token: 'fixture-secret' } }]);
+  assert.equal(await page.getByRole('button', { name: 'Завершить регистрацию', exact: true }).count(), 0);
+  await page.getByRole('button', { name: 'Войти с данными из письма', exact: true }).click();
+  await page.waitForURL(url => url.searchParams.get('cp') === 'login');
   assert.equal(new URL(page.url()).hash, '');
-  assert.ok(commands.every(path => path.endsWith('/guest/state') || path.endsWith('/guest/join')));
   await assertNoLegacyMedia(page);
 });
 
