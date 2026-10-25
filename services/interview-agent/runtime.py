@@ -128,8 +128,11 @@ async def answer(payload, snapshot):
         require(time.monotonic() < deadline, "Помощник не успел ответить. Попробуйте позже.", 504)
 
     def charge(amount):
+        # evaluate_jev reserves serialized UTF-8 bytes, not billed tokens. A real
+        # 36-minute Russian interview needs ~256k bytes for ONE full search.
+        # Keep this transport bound separate from returned actual token usage.
         budget[0] += amount
-        require(budget[0] <= 240000, "Достигнут лимит поиска в этом вопросе. Уточните вопрос.", 429)
+        require(budget[0] <= 1200000, "Достигнут лимит поиска в этом вопросе. Уточните вопрос.", 429)
 
     def record(name, result):
         check(); calls.append({"name": name})
@@ -171,6 +174,8 @@ async def answer(payload, snapshot):
                 matches.extend(ranked); models.add(meta["model"])
                 for k in usage: usage[k] += meta["usage"][k]
         except Problem as error:
+            print(dump({"event": "retrieval_failure", "status": error.status,
+                "search": search_count[0], "encodedBytes": budget[0], "usage": usage}), flush=True)
             fatal.append(error); raise
         matches.sort(key=lambda r: (-r["score"], r["startMs"]))
         selected = [{k: r[k] for k in ("chunkId", "text", "speakerName", "startMs", "endMs")} for r in matches[:12]]
@@ -226,8 +231,10 @@ async def answer(payload, snapshot):
         for k, v in verdict.metrics.accumulated_usage.items():
             if isinstance(v, (int, float)): usage[k] = usage.get(k, 0) + v
         jev_tokens = sum(sum(c.get("usage", {}).values()) for c in calls)
+        billed = int(usage.get("totalTokens", 0)) + jev_tokens
+        require(0 <= billed <= 400000, "Достигнут лимит этого вопроса.", 429)
         return {"answer": value, "metadata": {"version": VERSION, "model": model_id,
-            "usage": usage, "jevTokens": jev_tokens, "budgetUnits": min(400000, int(usage.get("totalTokens", 0)) + jev_tokens),
+            "usage": usage, "jevTokens": jev_tokens, "budgetUnits": billed,
             "tools": calls, "grounded": True, "latencyMs": round((time.monotonic() - started) * 1000)}}
 
 
