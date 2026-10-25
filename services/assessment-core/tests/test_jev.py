@@ -402,6 +402,18 @@ class TransportTests(unittest.TestCase):
             self.assertNotIn('PRIVATE', str(error.exception))
             run.assert_called_once()
 
+    def test_bad_json_and_invalid_typed_answers_remain_available_for_private_diagnosis(self):
+        client = JevClient(JevConfig(api_key='key', proxy_url='socks5h://127.0.0.1:10808'))
+        for raw in (b'not JSON PRIVATE', b'{"answers":{},"model":"jev-1.14.0","usage":{}}'):
+            def invoke(command, **kwargs):
+                kwargs['stdout'].write(raw + b'\n200')
+                return subprocess.CompletedProcess(command, 0)
+            with patch('assessment_core.providers.jev.subprocess.run', side_effect=invoke):
+                with self.assertRaises(JevError) as error:
+                    client.evaluate(request_fixture())
+                self.assertEqual(error.exception.received_body, raw)
+                self.assertNotIn('PRIVATE', str(error.exception))
+
     def test_malformed_json_duplicate_keys_and_nonfinite_numbers_are_rejected(self):
         valid = json.dumps(response_fixture())
         examples = [b"not JSON PRIVATE", b"\xff", b"[]", b'{"model":1,"model":2}',

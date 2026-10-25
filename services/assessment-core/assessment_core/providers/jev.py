@@ -50,10 +50,12 @@ class JevError(Exception):
     """Safe diagnostic metadata, without request content or provider error text."""
 
     def __init__(self, code: str, *, outcome_unknown: bool = False,
-                 status: int | None = None):
+                 status: int | None = None, received_body: bytes | None = None):
         self.code = code if code in _MESSAGES else "http_error"
         self.outcome_unknown = outcome_unknown
         self.status = status
+        # Private diagnostic only. Never part of exception text or HTTP errors.
+        self.received_body = received_body
         super().__init__(_MESSAGES[self.code])
 
 
@@ -265,6 +267,18 @@ def _reject_constant(_value):
     raise ValueError("nonfinite JSON number")
 
 
+def _decode_response(payload, raw):
+    try:
+        response = json.loads(raw.decode('utf-8'), object_pairs_hook=_unique_object,
+                              parse_constant=_reject_constant)
+        return validate_response(payload, response)
+    except JevError as error:
+        error.received_body = raw
+        raise
+    except (UnicodeError, ValueError, RecursionError):
+        raise JevError('invalid_response', outcome_unknown=True, received_body=raw) from None
+
+
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None
@@ -276,14 +290,14 @@ def _http_error(status, raw=b''):
     if status == 400:
         try:
             if json.loads(raw).get('detail', {}).get('error_type') == 'max_tokens_exceeded':
-                return JevError('context_limit', status=status)
+                return JevError('context_limit', status=status, received_body=raw)
         except (ValueError, TypeError, AttributeError):
             pass
     code = ({401: "authentication", 403: "authentication", 402: "exhausted_balance",
              413: "request_too_large", 429: "rate_limited"}.get(status, "http_error"))
     if 300 <= status < 400:
         code = "redirect"
-    return JevError(code, status=status, outcome_unknown=status >= 500)
+    return JevError(code, status=status, outcome_unknown=status >= 500, received_body=raw)
 
 
 class JevClient:
@@ -334,12 +348,7 @@ class JevClient:
             raise JevError("network_error", outcome_unknown=True) from None
         if len(raw) > self.config.max_response_bytes:
             raise JevError("response_too_large", outcome_unknown=True)
-        try:
-            response = json.loads(raw.decode("utf-8"), object_pairs_hook=_unique_object,
-                                  parse_constant=_reject_constant)
-        except (UnicodeError, ValueError, RecursionError):
-            raise JevError("invalid_response", outcome_unknown=True) from None
-        return validate_response(payload, response)
+        return _decode_response(payload, raw)
 
     def _via_proxy(self, payload, data):
         """Reuse analytics' curl stdin boundary for the existing loopback egress.
@@ -380,9 +389,4 @@ class JevClient:
         status = int(raw[-3:])
         if status != 200:
             raise _http_error(status, raw[:-4])
-        try:
-            response = json.loads(raw[:-4].decode('utf-8'), object_pairs_hook=_unique_object,
-                                  parse_constant=_reject_constant)
-        except (UnicodeError, ValueError, RecursionError):
-            raise JevError('invalid_response', outcome_unknown=True) from None
-        return validate_response(payload, response)
+        return _decode_response(payload, raw[:-4])

@@ -83,6 +83,22 @@ class RunStoreTests(unittest.TestCase):
         forbidden_client.evaluate.assert_not_called()
         self.client.evaluate.assert_called_once()
 
+    def test_rejected_provider_body_is_private_durable_and_never_automatically_retried(self):
+        raw = b'{"PRIVATE": "received but invalid answer"}'
+        self.client.evaluate.side_effect = JevError('invalid_response', outcome_unknown=True, received_body=raw)
+        with self.assertRaises(JevError):
+            self.store.execute(self.plan, self.client)
+        with self.store.db() as db:
+            row = db.execute('SELECT body,code FROM provider_rejections WHERE run_id=?', (self.plan['run_id'],)).fetchone()
+        self.assertEqual(row['body'], raw)
+        self.assertEqual(row['code'], 'invalid_response')
+        saved = self.store.get(self.plan['run_id'])
+        self.assertNotIn('PRIVATE', str(saved['error']))
+        self.assertIsNone(saved['result'])
+        with self.assertRaises(RunUnavailable):
+            self.store.execute(self.plan, self.client)
+        self.client.evaluate.assert_called_once()
+
     def test_concurrent_same_plan_permits_only_one_external_call(self):
         started, release = threading.Event(), threading.Event()
         second_store = RunStore(self.path)

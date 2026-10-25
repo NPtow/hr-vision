@@ -35,6 +35,9 @@ class RunStore:
                 id TEXT PRIMARY KEY, status TEXT NOT NULL, plan TEXT NOT NULL,
                 response TEXT, response_sha256 TEXT, result TEXT, error TEXT,
                 created REAL NOT NULL, updated REAL NOT NULL)""")
+            db.execute('''CREATE TABLE IF NOT EXISTS provider_rejections (
+                run_id TEXT PRIMARY KEY REFERENCES runs(id), body BLOB NOT NULL,
+                code TEXT NOT NULL, http_status INTEGER, created REAL NOT NULL)''')
 
     @contextmanager
     def db(self):
@@ -147,6 +150,9 @@ class RunStore:
             response = client.evaluate(plan["request"])
         except JevError as error:
             with self.db() as db:
+                if isinstance(error.received_body, bytes):
+                    db.execute('INSERT OR IGNORE INTO provider_rejections VALUES (?,?,?,?,?)',
+                               (expected, error.received_body, error.code, error.status, time.time()))
                 db.execute("UPDATE runs SET status=?, error=?, updated=? WHERE id=? AND status='sent'",
                            ("outcome_unknown" if error.outcome_unknown else "failed",
                             canonical_json({"code": error.code, "status": error.status}), time.time(), expected))
