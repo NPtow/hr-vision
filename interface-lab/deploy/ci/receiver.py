@@ -64,12 +64,13 @@ ZOOM_ONLY_RUNTIME = PRE_ZOOM_RUNTIME | ZOOM_RUNTIME
 # the main core/source service boundary and the approved assessment capability.
 ASSESSMENT_ONLY_RUNTIME = ZOOM_ONLY_RUNTIME | {'interview_assessment.py'}
 PRE_ASSESSMENT_RUNTIME = SERVICES_ONLY_RUNTIME | ZOOM_RUNTIME
-RUNTIME = PRE_ASSESSMENT_RUNTIME | {'interview_assessment.py'}
+PRE_PUBLIC_PROFILE_RUNTIME = PRE_ASSESSMENT_RUNTIME | {'interview_assessment.py'}
+RUNTIME = PRE_PUBLIC_PROFILE_RUNTIME | {'public_profiles.py'}
 BOT_RUNTIME = PRE_IMPORT_RUNTIME - {'recruiter_access.py', 'recruiter_sources.py', 'recruiter_notifications.py'}
 LEGACY_RUNTIME = BOT_RUNTIME - {'candidate_bot.py'}
 RUNTIME_LAYOUTS = {frozenset(LEGACY_RUNTIME), frozenset(BOT_RUNTIME), frozenset(PRE_IMPORT_RUNTIME),
                    frozenset(PRE_SERVICES_RUNTIME), frozenset(SERVICES_ONLY_RUNTIME), frozenset(ZOOM_ONLY_RUNTIME),
-                   frozenset(ASSESSMENT_ONLY_RUNTIME), frozenset(PRE_ASSESSMENT_RUNTIME),
+                   frozenset(ASSESSMENT_ONLY_RUNTIME), frozenset(PRE_ASSESSMENT_RUNTIME), frozenset(PRE_PUBLIC_PROFILE_RUNTIME),
                    frozenset(PRE_OUTREACH_RUNTIME), frozenset(PRE_ACCESS_RUNTIME), frozenset(PRE_CV_RUNTIME),
                    frozenset(PRE_POOLED_RUNTIME), frozenset(PRE_EMPLOYER_TELEGRAM_RUNTIME), frozenset(PRE_REMINDERS_RUNTIME), frozenset(PRE_MEETING_NOTICES_RUNTIME), frozenset(PRE_MEETING_LAB_RUNTIME), frozenset(PRE_RECRUITER_COACH_RUNTIME), frozenset(PRE_CALL_CLEANUP_RUNTIME), frozenset(PRE_OBSERVABILITY_RUNTIME), frozenset(PRE_CANDIDATE_CALENDAR_RUNTIME), frozenset(PRE_INTERVIEW_ASSISTANT_RUNTIME), frozenset(PRE_MATERIALS_RUNTIME), frozenset(RUNTIME)}
 MAX_ARCHIVE = 50 * 1024 * 1024

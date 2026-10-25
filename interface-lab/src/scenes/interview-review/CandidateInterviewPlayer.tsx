@@ -26,7 +26,7 @@ function IconButton({ label, children, onClick, className = '', pressed, expande
 
 /** Candidate materials are supplied by the authorised caller. No fixtures or local comment store. */
 export function CandidateInterviewPlayer({ sourceId, name, header, media, chapters, fullChapters, transcriptText = '', emptyMessage,
-  initialEvidenceIndex, renderTimeComment, comments = [], canComment = false, transcriptSeekable = true, assistant, assessment }: RecordingReviewProps) {
+  initialEvidenceIndex, renderTimeComment, comments = [], canComment = false, transcriptSeekable = true, assistant, assessment, readOnly = false }: RecordingReviewProps) {
   const id = useId();
   const root = useRef<HTMLDivElement>(null);
   const video = useRef<HTMLVideoElement>(null);
@@ -262,7 +262,7 @@ export function CandidateInterviewPlayer({ sourceId, name, header, media, chapte
             <IconButton label="Вперёд на 5 секунд" className="iv-skip" onClick={() => seek(Math.min(duration - .05, current + 5))}><Redo2/><small>5</small></IconButton>
             <div className="iv-volume"><IconButton label={muted ? 'Включить звук' : 'Выключить звук'} onClick={() => setMuted(value => !value)}>{muted || !volume ? <VolumeX/> : <Volume2/>}</IconButton><div className="iv-volume-slider"><input type="range" aria-label="Громкость" min="0" max="1" step="0.05" value={muted ? 0 : volume} onChange={event => { setVolume(Number(event.target.value)); setMuted(false); }}/></div></div>
             <div className="iv-clock"><span>{time(current)}</span><span className="iv-duration"> / {time(duration)}</span></div>
-            {full && reactions(true)}<span className="iv-control-spacer"/>
+            {full && !readOnly && reactions(true)}<span className="iv-control-spacer"/>
             <div className="iv-menu-anchor" data-iv-menu><button type="button" className="iv-speed iv-icon" aria-label="Скорость воспроизведения" aria-haspopup="menu" aria-expanded={menu === 'speed'} onClick={() => setMenu(menu === 'speed' ? null : 'speed')}>{speed}<span>×</span></button>
               {menu === 'speed' && <div className="iv-popover iv-option-menu" role="menu" aria-label="Скорость воспроизведения">{[.8, 1, 1.2, 1.5, 1.7, 2].map(value => <button type="button" role="menuitemradio" aria-checked={speed === value} key={value} onClick={() => { setSpeed(value); setMenu(null); }}>{value}×{speed === value && <Check size={14}/>}</button>)}</div>}
             </div>
@@ -276,7 +276,7 @@ export function CandidateInterviewPlayer({ sourceId, name, header, media, chapte
 
       <aside ref={side} className="iv-sidebar" aria-label="Материалы интервью" hidden={theatre}>
         <div className="iv-side-heading"><div role="tablist" aria-label="Материалы интервью" className="iv-tabs">
-          {([{id:'transcript', label:'Расшифровка', icon:AlignLeft}, {id:'assistant', label:'Спросить ИИ', icon:Sparkles}, {id:'comments', label:assessment ? 'Оценка навыков' : 'Комментарии', icon:assessment ? ChartNoAxesCombined : MessageSquare}] as const).map((item, index, items) => <Tooltip.Root key={item.id}>
+          {([{id:'transcript', label:'Расшифровка', icon:AlignLeft}, {id:'assistant', label:'Спросить ИИ', icon:Sparkles}, {id:'comments', label:assessment ? 'Оценка навыков' : 'Комментарии', icon:assessment ? ChartNoAxesCombined : MessageSquare}] as const).filter(item => !readOnly || item.id === 'transcript' || (item.id === 'comments' && assessment)).map((item, index, items) => <Tooltip.Root key={item.id}>
             <Tooltip.Trigger asChild><button type="button" id={`${id}-${item.id}-tab`} role="tab" aria-controls={`${id}-${item.id}`} aria-selected={tab === item.id} tabIndex={tab === item.id ? 0 : -1} aria-label={item.label} onClick={() => chooseTab(item.id)} onKeyDown={event => {
               if (event.key === 'ArrowRight' || event.key === 'ArrowLeft' || event.key === 'Home' || event.key === 'End') {
                 event.preventDefault(); const next = items[event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : items.length - 1)) % items.length];
@@ -321,7 +321,7 @@ export function CandidateInterviewPlayer({ sourceId, name, header, media, chapte
           {commentTime !== null && renderTimeComment ? <div className="iv-comment-editor" key={commentTime}>{renderTimeComment(commentTime, () => setCommentTime(null), commentRequest)}</div>
             : canComment && <button type="button" className="iv-new-comment" onClick={() => openComment()}><MessageSquare size={17}/>Написать</button>}
         </div>}
-        {(tab === 'transcript' || tab === 'assistant') && <div className="iv-side-input">
+        {!readOnly && (tab === 'transcript' || tab === 'assistant') && <div className="iv-side-input">
           {tab === 'transcript' && <>
             {assist.searchError && <p className="iv-assistant-error" role="alert">{assist.searchError}</p>}
             {assist.search && <div className="iv-search-state" role="status"><span>{matchedRows.length ? `${hit + 1} / ${matchedRows.length}` : 'Подходящих фрагментов не найдено'}</span>
@@ -343,11 +343,11 @@ export function CandidateInterviewPlayer({ sourceId, name, header, media, chapte
           {!assistant && <span className="iv-assistant-unavailable">Помощник появится, когда будет готова расшифровка этой записи.</span>}
         </div>}
       </aside>
-      <div className="iv-below-player">{assessment ? <FragmentQuestion key={assessment.revisionId} assessment={assessment} block={assessmentFlow.visible}
+      {!readOnly && <div className="iv-below-player">{assessment ? <FragmentQuestion key={assessment.revisionId} assessment={assessment} block={assessmentFlow.visible}
         overlapping={assessmentFlow.overlapping} playing={playing} commentOpen={!!assessmentFlow.playback.commentLock}
         onCommentOpen={assessmentFlow.openComment} onCommentClose={assessmentFlow.closeComment} onChoose={assessmentFlow.selectQuestion} fallback={reactions()}
         legacyComment={(canComment || comments.length > 0) ? <button type="button" className="iv-write" aria-label="Комментарии к видео" title="Комментарии к видео" onClick={openCommentHistory}><MessageSquare size={16}/></button> : null}/>
-        : reactions()}</div>
+        : reactions()}</div>}
     </div>
     {toast && <div className="iv-toast" role="status"><Check size={15}/>{toast}</div>}
   </div></Tooltip.Provider>;
