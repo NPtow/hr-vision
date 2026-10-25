@@ -68,6 +68,7 @@ function PublicProfileCard({ token }: { token: string }) {
   const [closed, setClosed] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const materialsRef = useRef<Materials | null>(null);
+  const card = useRef<HTMLElement>(null);
   const [recordingId, setRecordingId] = useState('');
   useEffect(() => {
     if (!/^[A-Za-z0-9_-]{43}$/.test(token)) { setClosed(true); setError('Ссылка недействительна.'); return; }
@@ -93,7 +94,20 @@ function PublicProfileCard({ token }: { token: string }) {
         if (needsRefresh) {
           try {
             const loaded = await request<Materials>(token, '/materials', controller.signal);
-            if (!controller.signal.aborted) { materialsRef.current = loaded; setMaterials(loaded); setMaterialError(''); }
+            if (!controller.signal.aborted) {
+              // Storage URLs expire after five minutes. Refreshing the same
+              // recording must retain the listener's position and playing state.
+              const player = card.current?.querySelector('video');
+              if (player && loaded.recordings.some(item => item.url !== player.getAttribute('src') && current?.recordings.some(old => old.id === item.id && old.url === player.getAttribute('src')))) {
+                const at = player.currentTime, resume = !player.paused;
+                player.addEventListener('loadedmetadata', () => {
+                  if (!player.isConnected) return;
+                  if (Number.isFinite(player.duration)) player.currentTime = Math.min(at, Math.max(0, player.duration - .01));
+                  if (resume) void player.play().catch(() => { /* Native playback controls remain available. */ });
+                }, { once: true, signal: controller.signal });
+              }
+              materialsRef.current = loaded; setMaterials(loaded); setMaterialError('');
+            }
           } catch (cause) { fail(cause, true); }
         }
       } catch (cause) { fail(cause); }
@@ -119,7 +133,7 @@ function PublicProfileCard({ token }: { token: string }) {
   if (!profile) return <section className="public-candidate-state" aria-live="polite">
     {error ? <><p>{error}</p>{!closed && <button type="button" onClick={retry}>Попробовать снова</button>}</> : <><span className="public-candidate-spinner" aria-hidden="true"/><p>Открываем профиль…</p></>}
   </section>;
-  return <section className="public-candidate-card" aria-label="Профиль кандидата">
+  return <section ref={card} className="public-candidate-card" aria-label="Профиль кандидата">
     {materials ? <>
       {materials.recordings.length > 1 && <div className="public-candidate-recordings">{materials.recordings.map((item, index) =>
         <button type="button" key={item.id} aria-pressed={recording?.id === item.id} onClick={() => setRecordingId(item.id)}>Запись {index + 1}</button>)}</div>}

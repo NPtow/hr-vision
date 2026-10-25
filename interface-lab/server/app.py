@@ -32,6 +32,7 @@ from hh_outreach import HHOutreach
 from hh_outreach_routes import HHOutreachRoutes
 from hh_outreach_worker import OutreachBrowserService
 from employer_routes import EmployerRoutes
+from selection import SelectionRoutes
 from meeting_lab import MeetingLab
 from public_profiles import PublicProfiles
 import employer_access
@@ -110,6 +111,7 @@ BOOKING.event_sink = OUTREACH.event_sink
 OUTREACH_ROUTES = HHOutreachRoutes(OUTREACH, worker_secret=os.environ.get('HR_HH_OUTREACH_WORKER_SECRET', ''))
 OUTREACH_BROWSER = OutreachBrowserService.from_env(OUTREACH, CANDIDATE_PORTAL)
 EMPLOYER_ROUTES = EmployerRoutes(connect, LOCK, CANDIDATE_PORTAL, MEDIA, ORIGIN)
+SELECTION_ROUTES = SelectionRoutes(connect, LOCK, CANDIDATE_PORTAL)
 MEETING_LAB = MeetingLab(connect, LOCK, MEDIA)
 MATERIALS_RUNTIME = None
 if MATERIALS_SERVICES_ENABLED:
@@ -477,6 +479,9 @@ class Handler(BaseHTTPRequestHandler):
                 result, headers = PUBLIC_PROFILES.handle('GET', self.path, self.headers, None,
                     client_identity(self.client_address[0], self.headers))
                 return self.answer(200, result, headers)
+            if SELECTION_ROUTES.handles(self.path):
+                result, headers = SELECTION_ROUTES.handle('GET', self.path, self.headers, None, self.actor)
+                return self.answer(200, result, headers)
             if MEETING_LAB.handles(self.path):
                 result, headers = MEETING_LAB.handle('GET', self.path, self.headers)
                 return self.answer(200, result, headers)
@@ -555,7 +560,7 @@ class Handler(BaseHTTPRequestHandler):
                     'Другой источник запроса.', 403)
             require(self.headers.get('Content-Type', '').startswith('application/json'), 'Нужен JSON.', 415)
             path = urllib.parse.urlsplit(self.path).path
-            if EMPLOYER_ROUTES.handles(path) or MEETING_LAB.handles(path):
+            if EMPLOYER_ROUTES.handles(path) or MEETING_LAB.handles(path) or SELECTION_ROUTES.handles(path):
                 require(self.headers.get('Sec-Fetch-Site') not in ('cross-site', 'none') or
                         self.headers.get('Sec-Fetch-Site') == 'none' and self.headers.get('Origin') in ORIGINS,
                         'Другой источник запроса.', 403)
@@ -579,12 +584,16 @@ class Handler(BaseHTTPRequestHandler):
                 # Authenticate before reading a potentially large private file.
                 with connect() as db:
                     CANDIDATE_PORTAL.session_candidate(db, self.headers)
+            if SELECTION_ROUTES.handles(path):
+                with connect() as db:
+                    require(self.actor(db) == 'manager', 'Доступ только для команды HR Vision.', 403)
             outreach_discovery = bool(re.fullmatch(r'/api/hr/outreach/campaigns/[A-Za-z0-9_-]+/discover', path))
             if outreach_discovery:
                 OUTREACH_ROUTES.authorize(self.actor)
             limit = (256 * 1024 if path == '/api/hr/materials/webhooks/daily' else
                      12 * 1024 * 1024 if path in ('/api/hr/intake', '/api/hr/employer/intake') else
                      7 * 1024 * 1024 if path in ('/api/hr/candidate/resume', '/api/hr/recruiter/candidates', '/api/hr/employer/vacancies/import') else
+                     3 * 1024 * 1024 if path in ('/api/hr/selection/results', '/api/hr/selection/requirements', '/api/hr/selection/matches') else
                      256 * 1024 if coach_notes else
                      256 * 1024 if outreach_discovery else
                      128 * 1024 if path in ('/api/hr/employer/vacancies', '/api/hr/employer/vacancies/update') or MEETING_LAB.handles(path) else 32768)
@@ -603,6 +612,9 @@ class Handler(BaseHTTPRequestHandler):
             if PUBLIC_PROFILES.handles(self.path):
                 result, headers = PUBLIC_PROFILES.handle('POST', self.path, self.headers, body,
                     client_identity(self.client_address[0], self.headers))
+                return self.answer(200, result, headers)
+            if SELECTION_ROUTES.handles(self.path):
+                result, headers = SELECTION_ROUTES.handle('POST', self.path, self.headers, body, self.actor)
                 return self.answer(200, result, headers)
             if MEETING_LAB.handles(self.path):
                 result, headers = MEETING_LAB.handle('POST', self.path, self.headers, body)

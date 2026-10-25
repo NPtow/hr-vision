@@ -165,7 +165,8 @@ class ReceiverTest(unittest.TestCase):
         self.assertEqual(r.PRE_ASSESSMENT_RUNTIME, r.SERVICES_ONLY_RUNTIME | r.ZOOM_ONLY_RUNTIME)
         self.assertEqual(r.ASSESSMENT_ONLY_RUNTIME - r.ZOOM_ONLY_RUNTIME, {'interview_assessment.py'})
         self.assertEqual(r.PRE_PUBLIC_PROFILE_RUNTIME - r.PRE_ASSESSMENT_RUNTIME, {'interview_assessment.py'})
-        self.assertEqual(r.RUNTIME - r.PRE_PUBLIC_PROFILE_RUNTIME, {'public_profiles.py'})
+        self.assertEqual(r.PRE_SELECTION_RUNTIME - r.PRE_PUBLIC_PROFILE_RUNTIME, {'public_profiles.py'})
+        self.assertEqual(r.RUNTIME - r.PRE_SELECTION_RUNTIME, {'selection.py'})
         self.assertIn(frozenset(r.PRE_PUBLIC_PROFILE_RUNTIME), r.RUNTIME_LAYOUTS)
         self.assertEqual(r.ZOOM_RUNTIME, {'call_providers.py', 'zoom_media.py', 'materials_zoom.py', 'zoom_recording_retention.py'})
         self.assertEqual(len(r.MATERIALS_RUNTIME), 9)
@@ -688,6 +689,20 @@ class ReceiverTest(unittest.TestCase):
             db.execute('CREATE VIEW ia_assessment_revisions AS SELECT 1 WHERE 0')
             with self.assertRaisesRegex(ValueError, 'Cannot verify interview assessment schema'):
                 r.guard_outbox_runtime(db, prior)
+
+    def test_selection_receipts_require_selection_runtime_without_erasing_data(self):
+        prior = self.runtime(self.root / 'before-selection', r.PRE_SELECTION_RUNTIME)
+        current = self.runtime(self.root / 'with-selection', r.RUNTIME)
+        with sqlite3.connect(':memory:') as db:
+            for table in ('sl_core_results', 'sl_nominations'):
+                db.execute('CREATE TABLE ' + table + ' (id TEXT)')
+                r.guard_outbox_runtime(db, prior)
+                db.execute('INSERT INTO ' + table + " VALUES ('preserved')")
+                with self.assertRaisesRegex(ValueError, 'Selection data requires selection.py'):
+                    r.guard_outbox_runtime(db, prior)
+                r.guard_outbox_runtime(db, current)
+                self.assertEqual(db.execute('SELECT * FROM ' + table).fetchall(), [('preserved',)])
+                db.execute('DROP TABLE ' + table)
 
     def test_explicit_assessment_downgrade_is_refused_without_changing_data_or_queues(self):
         with self.service_activation(incoming=r.PRE_ASSESSMENT_RUNTIME, installed=r.RUNTIME) as (stage, m, base, api, database, stop, restart, health):
