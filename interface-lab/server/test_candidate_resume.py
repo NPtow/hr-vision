@@ -247,7 +247,7 @@ class CandidateCVOnboardingTest(unittest.TestCase):
         self.assertEqual('', state['latestStartDate'])
         self.assertEqual('complete', state['onboarding']['step'])
         self.problem(400, 'profile', {'anyCompany': True}, self.cookie)
-        self.problem(400, 'profile', {'preferredCompanies': []}, self.cookie)
+        self.problem(400, 'profile', {'preferredCompanies': [], 'resumeReviewed': True}, self.cookie)
         state, _ = self.call('profile', {'anyCompany': True, 'preferredCompanies': []}, self.cookie)
         self.assertTrue(state['anyCompany'])
 
