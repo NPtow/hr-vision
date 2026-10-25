@@ -54,7 +54,7 @@ export function CandidateProfile({ candidate, busy, onSave, onUpload, onSearchCh
   useEffect(() => { setEditing(false); setStopRequested(false); setLocalError(''); }, [candidate.id]);
   useEffect(() => { if (!searching) setStopRequested(false); }, [searching]);
   useEffect(() => {
-    if (editing) editor.current?.querySelector<HTMLTextAreaElement>('textarea')?.focus();
+    if (editing) editor.current?.querySelector<HTMLInputElement>('input')?.focus();
   }, [editing]);
 
   function openEditor() { setEditing(true); setLocalError(''); }

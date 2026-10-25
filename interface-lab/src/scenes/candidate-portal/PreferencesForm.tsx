@@ -10,6 +10,9 @@ export function PreferencesForm({ initial, missingFields, busy, onSubmit }: {
   const id = useId();
   const onboarding = missingFields !== undefined;
   const [draft, setDraft] = useState(() => ({ desiredRole: initial.desiredRole || '', salaryMin: initial.salaryMin == null ? '' : String(initial.salaryMin), city: initial.city || '', employmentType: initial.employmentType || '', workMode: initial.workMode || 'any', preferredCompanies: initial.preferredCompanies || [], anyCompany: initial.anyCompany === true }));
+  const [consent, setConsent] = useState(initial.consentReuse);
+  const [autoApprove, setAutoApprove] = useState(initial.autoApprove);
+  const [about, setAbout] = useState(initial.about);
   const [adding, setAdding] = useState(false);
   const [company, setCompany] = useState('');
   const [validation, setValidation] = useState('');
@@ -24,7 +27,7 @@ export function PreferencesForm({ initial, missingFields, busy, onSubmit }: {
     const salaryMin = Number(draft.salaryMin);
     if (!Number.isSafeInteger(salaryMin) || salaryMin <= 0) { setValidation('Укажите минимальную зарплату в рублях.'); return; }
     if (!draft.anyCompany && !draft.preferredCompanies.length) { setValidation('Выберите компании или отметьте «Не важно».'); return; }
-    await onSubmit({ ...draft, desiredRole: draft.desiredRole.trim(), city: draft.city.trim(), salaryMin, salaryMax: null, employmentType: draft.employmentType as CandidatePreferences['employmentType'], workMode: draft.workMode as CandidatePreferences['workMode'], ...(onboarding ? { resumeReviewed: true } : {}) });
+    await onSubmit({ ...draft, desiredRole: draft.desiredRole.trim(), city: draft.city.trim(), salaryMin, salaryMax: null, employmentType: draft.employmentType as CandidatePreferences['employmentType'], workMode: draft.workMode as CandidatePreferences['workMode'], ...(onboarding ? { resumeReviewed: true } : { about, consentReuse: consent, autoApprove: consent && autoApprove }) });
   }
   return <form className="cp-preferences cp-preferences-v2" onSubmit={submit}>
     <fieldset disabled={busy}>
@@ -42,6 +45,7 @@ export function PreferencesForm({ initial, missingFields, busy, onSubmit }: {
         </div>
         {adding && <div className="cp-company-entry"><Input aria-label="Название компании" autoFocus maxLength={120} value={company} onChange={event => setCompany(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); addCompany(company); } if (event.key === 'Escape') setAdding(false); }}/><Button type="button" variant="ghost" disabled={!company.trim()} onClick={() => addCompany(company)}>Добавить</Button></div>}
       </div>
+      {!onboarding && <details className="cp-extra-preferences"><summary>О себе и согласия</summary><label>О себе<textarea rows={3} maxLength={1500} value={about} onChange={event => setAbout(event.target.value)}/></label><label className="cp-check"><input type="checkbox" checked={consent} onChange={event => { setConsent(event.target.checked); if (!event.target.checked) setAutoApprove(false); }}/><span>Использовать резюме и интервью для подбора вакансий</span></label><label className="cp-check"><input type="checkbox" checked={autoApprove} disabled={!consent} onChange={event => setAutoApprove(event.target.checked)}/><span>Согласовывать вакансии автоматически</span></label></details>}
       {validation && <p role="alert" className="cp-error">{validation}</p>}
       <div className="cp-form-actions"><Button type="submit" disabled={busy}>{busy ? 'Сохраняем…' : onboarding ? 'Продолжить' : 'Сохранить изменения'}</Button></div>
     </fieldset>

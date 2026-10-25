@@ -335,6 +335,71 @@ class CandidateAccessFlowTest(unittest.TestCase):
         self.assertEqual(410,error.exception.status)
         self.assertEqual([], self.rows('SELECT * FROM cp_access_outbox'))
 
+    def test_expired_first_access_is_recoverable_from_email_form(self):
+        cid, _, token = self.completed_guest()
+        self.call('candidate/guest/continue', {'token': token})
+        self.access.dispatch_once()
+        old = self.mail_token()
+        with self.connect() as db:
+            db.execute('UPDATE cp_email_access SET expires=0 WHERE candidate_id=?', (cid,))
+        result, _ = self.call('candidate/email-access/request', {'email': 'candidate@example.test'})
+        self.assertEqual({'ok': True}, result)
+        self.assertEqual('sent', self.access.dispatch_once()['status'])
+        self.assertNotEqual(old, self.mail_token())
+        result, _ = self.consume_mail()
+        self.assertEqual(cid, result['id'])
+
+    def consume_mail(self):
+        with patch.object(self.portal.notifications, 'set_email') as verified:
+            result = self.call('candidate/email-access/consume', {'token': self.mail_token()})
+            self.assertTrue(verified.call_args.kwargs['verified'])
+            return result
+
+    def test_email_link_preserves_password_and_allows_passwordless_repeat_login(self):
+        cid, _, token = self.completed_guest()
+        self.call('candidate/guest/continue', {'token': token})
+        self.access.dispatch_once()
+        self.consume_mail()
+        self.assertEqual([(None,)], self.rows('SELECT password_hash FROM cp_candidates WHERE id=?', (cid,)))
+        self.call('candidate/email-access/request', {'email': 'candidate@example.test'})
+        self.assertEqual('sent', self.access.dispatch_once()['status'])
+        result, _ = self.consume_mail()
+        self.assertEqual(cid, result['id'])
+        with self.connect() as db:
+            db.execute("UPDATE cp_candidates SET password_hash='existing-hash' WHERE id=?", (cid,))
+        self.call('candidate/email-access/request', {'email': 'candidate@example.test'})
+        self.access.dispatch_once()
+        self.consume_mail()
+        self.assertEqual([('existing-hash',)], self.rows('SELECT password_hash FROM cp_candidates WHERE id=?', (cid,)))
+
+    def test_changed_account_and_conflicting_email_cannot_consume_pending_link(self):
+        cid, _, token = self.completed_guest()
+        self.call('candidate/guest/continue', {'token': token})
+        self.access.dispatch_once()
+        mail_token = self.mail_token()
+        with self.connect() as db:
+            db.execute("UPDATE cp_candidates SET email='changed@example.test' WHERE id=?", (cid,))
+        with self.assertRaises(Problem) as error:
+            self.call('candidate/email-access/consume', {'token': mail_token})
+        self.assertEqual(409, error.exception.status)
+        with self.connect() as db:
+            db.execute('UPDATE cp_candidates SET email=NULL WHERE id=?', (cid,))
+        self.call('candidate/register', {'email': 'candidate@example.test', 'password': 'test-password-123', 'consentReuse': True})
+        with self.assertRaises(Problem) as error:
+            self.call('candidate/email-access/consume', {'token': mail_token})
+        self.assertEqual(409, error.exception.status)
+        self.assertEqual([(None,)], self.rows('SELECT email FROM cp_candidates WHERE id=?', (cid,)))
+
+    def test_unknown_email_does_not_create_profile_and_cross_origin_is_rejected(self):
+        self.assertEqual({'ok': True}, self.call('candidate/email-access/request', {'email': 'unknown@example.test'})[0])
+        self.assertEqual([], self.rows('SELECT * FROM cp_candidates'))
+        self.assertEqual([], self.rows('SELECT * FROM cp_email_access'))
+        with self.assertRaises(Problem) as error:
+            self.portal.handle('POST', '/api/hr/candidate/email-access/request',
+                {'Content-Type': 'application/json', 'Origin': 'https://foreign.example.test'},
+                {'email': 'unknown@example.test'}, '127.0.0.1', self.not_manager)
+        self.assertEqual(403, error.exception.status)
+
 
 if __name__ == '__main__':
     unittest.main()

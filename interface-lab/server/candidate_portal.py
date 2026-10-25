@@ -1641,6 +1641,14 @@ class CandidatePortal:
                 with self.lock, self.connect() as db:
                     db.execute('BEGIN IMMEDIATE')
                     row = db.execute('SELECT id FROM cp_candidates WHERE email=?', (email,)).fetchone()
+                    if not row:
+                        # An expired first-access email must remain recoverable after
+                        # the short-lived call capability has expired. Never pick
+                        # between multiple pending profiles with the same address.
+                        pending = db.execute('''SELECT c.id FROM cp_email_access a
+                          JOIN cp_candidates c ON c.id=a.candidate_id
+                          WHERE a.recipient=? AND c.email IS NULL LIMIT 2''', (email,)).fetchall()
+                        row = pending[0] if len(pending) == 1 else None
                     require(self.candidate_access.config().email_configured, 'Отправка писем временно недоступна.', 503)
                     if row:
                         self.candidate_access.enqueue_link(db, row[0], email)

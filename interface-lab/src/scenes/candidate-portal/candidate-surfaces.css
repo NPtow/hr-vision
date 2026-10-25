@@ -95,3 +95,8 @@
 @media(max-width:1030px) { .cps-example-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media(max-width:600px) { .cps-example-grid { grid-template-columns:1fr; } .cp-onboarding-resume { padding:16px 20px; } .cp-preferences-v2 .cp-form-grid { gap:20px; } }
 @media(prefers-reduced-motion:reduce) { .cp-telegram-compact>svg { animation:none; } }
+.cp-extra-preferences { margin-top:28px; }
+.cp-extra-preferences summary { cursor:pointer; color:#797484; font-size:14px; }
+.cp-extra-preferences>label { display:block; margin-top:20px; }
+.cp-extra-preferences textarea { display:block; width:100%; margin-top:8px; padding:12px; background:#f6f5f8; border:0; border-radius:12px; }
+.cp-extra-preferences>.cp-check { display:flex; }
