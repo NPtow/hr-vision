@@ -113,7 +113,7 @@ function Workbench({ token, expire }: { token: string; expire: () => void }) {
           <td><button className="sl-person" onClick={() => openPerson(p.id)}>{p.name || 'Без имени'}</button></td>
           <td><InlineCell label={`Роль: ${p.name}`} value={p.desiredRole} disabled={busy} onSave={value => void save(p, { desiredRole: value })}/></td>
           <td><InlineCell label={`Город: ${p.name}`} value={p.city} disabled={busy} onSave={value => void save(p, { city: value })}/></td>
-          <td><HRInterviewBadge person={p}/></td>
+          <td><HRInterviewBadge person={p}/><button className="sl-open" aria-label={`Интервью: ${p.name}`} onClick={() => openPerson(p.id)}>Интервью</button></td>
           <td><AssessmentEntry person={p} onOpen={() => openPerson(p.id)}/></td>
           <td><span className={'sl-status ' + (p.telegramConnected ? 'sl-green' : '')}>{p.telegramConnected ? 'Подключён' : 'Не подключён'}</span></td>
           <td><span className={'sl-status ' + (p.emailConnected ? 'sl-green' : '')}>{p.emailConnected ? 'Подключена' : 'Не подключена'}</span></td>

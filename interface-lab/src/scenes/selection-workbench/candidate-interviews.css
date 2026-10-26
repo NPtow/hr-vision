@@ -1,0 +1,6 @@
+.sl-root .sl-drawer.sl-interview-drawer{width:min(1320px,100%)}
+.sl-interview-view{margin:24px 0 32px}
+.sl-interview-view>label{display:inline-flex;align-items:center;gap:10px;margin:0 16px 16px 0;font-size:13px}
+.sl-interview-view .iv-root:not(.iv-full) .iv-workspace{width:100%;margin:20px 0 0}
+.sl-root .sl-interview-drawer .iv-root h3{margin-top:0}
+@media(max-width:700px){.sl-root .sl-drawer.sl-interview-drawer{padding:24px 16px}.sl-interview-view>label{display:flex}}
