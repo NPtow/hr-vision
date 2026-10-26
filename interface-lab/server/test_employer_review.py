@@ -18,12 +18,16 @@ class Service:
     def __init__(self):
         self.status = 'queued'
         self.calls = []
+        self.run_id = 'run'
 
     def call(self, method, path, body=None):
         self.calls.append((method, path))
+        if path == '/v1/preparations':
+            self.run_id = body['assessment']['run_id']
         if path == '/v1/presentations':
-            return {'preparationId': 'prep', 'assessment': {'revisionId': 'run', 'criteria': [], 'feedback': []}}
-        return {'preparationId': 'prep', 'coreRunId': 'run', 'candidateId': self.cid,
+            return {'preparationId': 'prep', 'assessment': {'revisionId': self.run_id, 'criteria': [], 'feedback': [],
+                    'provenance': {'vacancyProfileId': body['vacancyProfile']['profile_id']}}}
+        return {'preparationId': 'prep', 'coreRunId': self.run_id, 'candidateId': self.cid,
                 'sourceRevision': 'transcript-v1', 'status': self.status}
 
 
@@ -55,6 +59,9 @@ class EmployerReviewTests(unittest.TestCase):
         body = {'candidateId': cid, 'assessment': {'run_id': 'run', 'parameters': []},
                 'sourceRevision': 'transcript-v1', 'chunks': []}
         snap = patch.object(bridge, 'snapshot', return_value=(body, rev)); snap.start(); self.addCleanup(snap.stop)
+        self.body = body
+        profile = patch.object(bridge, 'vacancy_profile', return_value={'profile_id': 'vacancy-profile'})
+        profile.start(); self.addCleanup(profile.stop)
         return cid, aid, bridge, service
 
     def next_tick(self, bridge):
@@ -93,13 +100,48 @@ class EmployerReviewTests(unittest.TestCase):
         bridge.retry(aid, 'human-retry'); self.next_tick(bridge)
         self.assertEqual(service.calls.count(('POST', '/v1/preparations')), 1)
 
-    def test_new_core_version_is_not_disguised_as_previous_score(self):
+    def test_new_core_version_updates_both_views_without_removing_candidate(self):
         _, aid, bridge, service = self.prepare_fixture()
         bridge.tick(); service.status = 'ready'; self.next_tick(bridge)
         with self.connect() as db:
             db.execute("UPDATE ac_bindings SET run_id='new-run'")
-            self.assertEqual(review.projection(db, aid), {'assessment': None, 'status': 'stale'})
-            self.assertEqual(employer_store.applications(db, 'a'), [])
+            self.assertEqual(review.projection(db, aid)['status'], 'pending')
+            self.assertEqual(review.projection(db, aid)['assessment']['revisionId'], 'run')
+            self.assertEqual(len(employer_store.applications(db, 'a')), 1)
+        self.body['assessment']['run_id'] = 'new-run'
+        self.next_tick(bridge); self.next_tick(bridge)
+        with self.connect() as db:
+            record = employer_store.applications(db, 'a')[0]
+            person = employer_projection.person(db, {'workspaceId': 'a'}, self.portal, record, self.vacancy)
+            self.assertEqual(person['assessment'], review.projection(db, aid)['assessment'])
+            self.assertEqual(person['assessment']['revisionId'], 'new-run')
+
+    def test_upstream_wait_is_not_a_failed_job_or_a_model_retry(self):
+        _, aid, bridge, service = self.prepare_fixture()
+        with patch.object(bridge, 'snapshot', side_effect=review.Waiting):
+            for _ in range(3): self.next_tick(bridge)
+        self.assertEqual(service.calls, [])
+        with self.connect() as db:
+            self.assertEqual(review.tasks(db)['tasks'], [])
+        self.next_tick(bridge); service.status = 'ready'; self.next_tick(bridge)
+        with self.connect() as db:
+            self.assertEqual(review.projection(db, aid)['status'], 'completed')
+
+    def test_existing_approvals_are_discovered_for_all_candidates_without_hiding_them(self):
+        _, aid, bridge, _ = self.prepare_fixture()
+        cid2 = self.person(); aid2 = self.import_people([cid2], external='batch-two')['applicationIds'][0]
+        cid3 = self.person(); self.import_people([cid3], external='batch-three')
+        with self.connect() as db:
+            self.portal.decide_application(db, cid2, {'applicationId': aid2, 'decision': 'accepted'})
+            db.execute('DELETE FROM er_preparations')
+        bridge.discover()
+        with self.connect() as db:
+            self.assertEqual({r[0] for r in db.execute('SELECT application_id FROM er_preparations')}, {aid, aid2})
+            self.assertEqual({r['applicationId'] for r in employer_store.applications(db, 'a')}, {aid, aid2})
+        with patch.object(bridge, 'snapshot', side_effect=OSError('unavailable')):
+            self.next_tick(bridge)
+        with self.connect() as db:
+            self.assertEqual(len(employer_store.applications(db, 'a')), 2)
 
     def test_consent_withdrawal_blocks_completion_and_team_can_see_failure(self):
         cid, aid, bridge, service = self.prepare_fixture()

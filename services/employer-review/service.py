@@ -11,8 +11,9 @@ import sqlite3
 import threading
 import time
 
-from quotes import Invalid, Model, VERSION, digest, dump, identifier, presentation, require, validate
+from quotes import Invalid, Model, VERSION, digest, dump, identifier, presentation, quote_key, require, validate
 
+SERVICE_VERSION = 'employer-review-2026-10-26.5'
 
 class Store:
     def __init__(self, path, model_name):
@@ -26,6 +27,14 @@ class Store:
                 created REAL NOT NULL, updated REAL NOT NULL)''')
             db.execute('''CREATE TABLE IF NOT EXISTS retries (
                 request_id TEXT PRIMARY KEY, job_id TEXT NOT NULL REFERENCES preparations(id))''')
+            if 'quote_key' not in {r[1] for r in db.execute('PRAGMA table_info(preparations)')}:
+                db.execute('ALTER TABLE preparations ADD COLUMN quote_key TEXT')
+            db.execute('CREATE INDEX IF NOT EXISTS preparation_quotes ON preparations(quote_key,status)')
+            for row in db.execute('SELECT id,body FROM preparations WHERE quote_key IS NULL').fetchall():
+                body = json.loads(row['body'])
+                if row['id'] == digest([VERSION, model_name, body]):
+                    db.execute('UPDATE preparations SET quote_key=? WHERE id=?',
+                               (digest([VERSION, model_name, quote_key(body)]), row['id']))
         os.chmod(path, 0o600)
 
     @contextmanager
@@ -41,13 +50,18 @@ class Store:
     def submit(self, body):
         validate(body)
         identity = digest([VERSION, self.model_name, body])
+        reusable = digest([VERSION, self.model_name, quote_key(body)])
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             if not db.execute('SELECT 1 FROM preparations WHERE id=?', (identity,)).fetchone():
-                require(db.execute("SELECT count(*) FROM preparations WHERE status IN ('queued','processing')").fetchone()[0] < 100,
+                previous = db.execute("SELECT id,status,evidence,error FROM preparations WHERE quote_key=? AND status IN ('ready','failed') ORDER BY CASE status WHEN 'ready' THEN 0 ELSE 1 END,created DESC LIMIT 1",
+                                      (reusable,)).fetchone()
+                require(previous or db.execute("SELECT count(*) FROM preparations WHERE status IN ('queued','processing')").fetchone()[0] < 100,
                         'queue_full')
-                db.execute('INSERT INTO preparations(id,body,status,created,updated) VALUES (?,?,\'queued\',?,?)',
-                           (identity, dump(body), time.time(), time.time()))
+                db.execute('''INSERT INTO preparations(id,body,status,created,updated,quote_key,evidence,metadata,error)
+                    VALUES (?,?,?,?,?,?,?,?,?)''', (identity, dump(body), previous['status'] if previous else 'queued',
+                    time.time(), time.time(), reusable, previous['evidence'] if previous else None,
+                    dump({'reusedFrom': previous['id']}) if previous else None, previous['error'] if previous else None))
         return self.read(identity)
 
     def row(self, identity):
@@ -63,10 +77,10 @@ class Store:
                 'coreRunId': body['assessment']['run_id'], 'sourceRevision': body['sourceRevision'],
                 'status': row['status'], 'error': row['error'], 'attempts': row['attempts']}
 
-    def view(self, identity, preferred):
+    def view(self, identity, preferred, vacancy=None):
         row = self.row(identity)
         require(row['status'] == 'ready', 'preparation_not_ready')
-        return {'preparationId': identity, 'assessment': presentation(json.loads(row['body']), json.loads(row['evidence']), preferred)}
+        return {'preparationId': identity, 'assessment': presentation(json.loads(row['body']), json.loads(row['evidence']), preferred, vacancy)}
 
     def tasks(self):
         with self.connect() as db:
@@ -85,7 +99,8 @@ class Store:
                 row = db.execute('SELECT status FROM preparations WHERE id=?', (identity,)).fetchone()
                 require(row and row[0] == 'failed', 'retry_not_allowed')
                 db.execute('INSERT INTO retries VALUES (?,?)', (request_id, identity))
-                db.execute("UPDATE preparations SET status='queued',error=NULL,updated=? WHERE id=?", (time.time(), identity))
+                db.execute("UPDATE preparations SET status='queued',error=NULL,metadata=?,updated=? WHERE id=?",
+                           (dump({'manualRetry': request_id}), time.time(), identity))
         return self.read(identity)
 
     def recover(self):
@@ -98,6 +113,18 @@ class Store:
             row = db.execute("SELECT * FROM preparations WHERE status='queued' ORDER BY created,id LIMIT 1").fetchone()
             if row is None:
                 return False
+            previous = db.execute("SELECT id,evidence FROM preparations WHERE quote_key=? AND status='ready' ORDER BY created LIMIT 1",
+                                  (row['quote_key'],)).fetchone()
+            if previous:
+                db.execute("UPDATE preparations SET status='ready',evidence=?,metadata=?,updated=? WHERE id=?",
+                           (previous['evidence'], dump({'reusedFrom': previous['id']}), time.time(), row['id']))
+                return True
+            failed = db.execute("SELECT id,error FROM preparations WHERE quote_key=? AND status='failed' AND id!=? ORDER BY updated DESC LIMIT 1",
+                                (row['quote_key'], row['id'])).fetchone()
+            if failed and not json.loads(row['metadata'] or '{}').get('manualRetry'):
+                db.execute("UPDATE preparations SET status='failed',error=?,metadata=?,updated=? WHERE id=?",
+                           (failed['error'], dump({'reusedFrom': failed['id']}), time.time(), row['id']))
+                return True
             db.execute("UPDATE preparations SET status='processing',attempts=attempts+1,updated=? WHERE id=?", (time.time(), row['id']))
         try:
             evidence, metadata = model(json.loads(row['body']), row['id'] + ':' + str(row['attempts'] + 1))
@@ -136,7 +163,7 @@ def handler(store, token):
             self.connection.settimeout(10)
             try:
                 if self.command == 'GET' and self.path == '/healthz':
-                    return self.answer(200, {'status': 'ok', 'version': VERSION})
+                    return self.answer(200, {'status': 'ok', 'version': SERVICE_VERSION, 'quotesVersion': VERSION})
                 if not hmac.compare_digest(self.headers.get('Authorization', ''), 'Bearer ' + token):
                     return self.answer(401, {'error': 'unauthorized'})
                 body = None
@@ -155,8 +182,9 @@ def handler(store, token):
                     require(set(body) == {'requestId'}, 'invalid_retry')
                     return self.answer(202, store.retry(match[1], body['requestId']))
                 if self.path == '/v1/presentations' and self.command == 'POST':
-                    require(set(body) == {'preparationId', 'preferredParameterIds'}, 'invalid_presentation')
-                    return self.answer(200, store.view(body['preparationId'], body['preferredParameterIds']))
+                    require({'preparationId', 'preferredParameterIds'} <= set(body) <=
+                            {'preparationId', 'preferredParameterIds', 'vacancyProfile'}, 'invalid_presentation')
+                    return self.answer(200, store.view(body['preparationId'], body['preferredParameterIds'], body.get('vacancyProfile')))
                 if self.path == '/v1/tasks' and self.command == 'GET':
                     return self.answer(200, store.tasks())
                 self.answer(404, {'error': 'not_found'})
