@@ -51,3 +51,25 @@ Runtime outcomes verified:
 
 Product UI integration, production smoke, historical artifact rollback and
 production alert delivery remain outside these observations; see ACCEPTANCE.md.
+
+## Precision-2 compatibility follow-up
+
+2026-10-26 04:59 MSK, base commit
+`d5134ed2` plus uncommitted `services/recommendations/**` changes. The only scoring
+runtime change delegates distribution validity to shared
+`jev_client.is_choice_probability_distribution`; formula, stored raw probabilities,
+exact argmax checks, policy and deterministic IDs are unchanged. Release freezes
+the helper beside this service; monorepo launch keeps its previous PYTHONPATH.
+
+Same verification command: **38 tests PASS**, 1.495s. Added candidate and vacancy
+Choice vectors totalling .99 and 1.01; raw inputs and output p are unchanged;
+derived numeric q sums to one. Off-grid/gross/zero totals and non-maximal selected
+options reject. Actual HTTP POST/GET verifies .99 is saved unchanged. A copied
+standalone artifact imports the frozen shared helper without the monorepo.
+
+```json
+{"local_hundred_profile_post_seconds":0.202083,"request_bytes":3915015,"saved_get_seconds":0.06952908300000016}
+```
+
+No model/provider requests, production changes or commit performed by this
+workstream during the compatibility follow-up.

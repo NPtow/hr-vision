@@ -26,6 +26,8 @@ ENDPOINT = "https://api.typesafe.ai/v1/systemone"
 _VERSION = re.compile(r"jev-\d+\.\d+\.\d+")
 _ALIASES = {"jev-latest", "jev-preview"}
 _PROBABILITY_TOLERANCE = 1e-5
+_CHOICE_PROBABILITY_QUANTUM = 0.01
+_CHOICE_ROUNDING_EPSILON = 1e-6
 # The documented examples return scores rounded to two decimal places. Allow
 # half the final decimal plus the bounded probability-sum rounding error.
 _SCORE_ROUNDING_TOLERANCE = 0.005
@@ -121,6 +123,34 @@ def _finite_number(value):
         return math.isfinite(value)
     except OverflowError:
         return False
+
+
+def is_choice_probability_distribution(values) -> bool:
+    """Validate Choice mass without rewriting any provider probability.
+
+    Retain the historical strict path for higher precision responses. Outside
+    it, only two-decimal values can use accumulated half-quantum error, as
+    declared by Vercel's native TypeSafe adapter (pinned source in README).
+    The decimal-grid gate and positive-mass check are additional local guards;
+    this bound does not reconstruct or certify an unrounded posterior.
+    """
+    try:
+        probabilities = tuple(values)
+    except TypeError:
+        return False
+    if (not probabilities or any(not _finite_number(value) or not 0 <= value <= 1
+                                 for value in probabilities)):
+        return False
+    total = math.fsum(probabilities)
+    if total <= 0:
+        return False
+    if math.isclose(total, 1, rel_tol=0, abs_tol=_PROBABILITY_TOLERANCE):
+        return True
+    if any(not math.isclose(value * 100, round(value * 100), rel_tol=0,
+                            abs_tol=1e-9) for value in probabilities):
+        return False
+    return math.isclose(total, 1, rel_tol=0,
+        abs_tol=len(probabilities) * _CHOICE_PROBABILITY_QUANTUM / 2 + _CHOICE_ROUNDING_EPSILON)
 
 
 def _valid_model(value):
@@ -229,8 +259,11 @@ def validate_response(payload: dict, response: dict) -> dict:
             if any(not _finite_number(value) or not 0 <= value <= 1
                    for value in probabilities.values()):
                 raise ValueError
-            if not math.isclose(math.fsum(probabilities.values()), 1,
-                                rel_tol=0, abs_tol=_PROBABILITY_TOLERANCE):
+            valid_mass = (is_choice_probability_distribution(probabilities.values())
+                          if kind == "choice" else
+                          math.isclose(math.fsum(probabilities.values()), 1,
+                                       rel_tol=0, abs_tol=_PROBABILITY_TOLERANCE))
+            if not valid_mass:
                 raise ValueError
             if not _finite_number(answer["confidence"]) or not 0 <= answer["confidence"] <= 1:
                 raise ValueError

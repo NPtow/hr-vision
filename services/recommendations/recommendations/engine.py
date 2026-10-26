@@ -13,13 +13,12 @@ from pathlib import Path
 import re
 
 from . import __version__
+from ._probabilities import is_choice_probability_distribution
 
 VERSION = "recommendations-v1"
 UNKNOWN = "insufficient_data"
 MAX_POOL = 1000
 POLICY = {"version": "tanh-v1", "k": 1, "probability_mode": "conditional_levels"}
-# Same rounding tolerance as the producing JEV transport; never renormalize p.
-PROBABILITY_TOLERANCE = 1e-5
 
 
 class InvalidInput(ValueError):
@@ -73,9 +72,9 @@ def probability(value):
 
 
 def distribution(values):
-    for value in values:
-        probability(value)
-    if not math.isclose(math.fsum(values), 1, rel_tol=0, abs_tol=PROBABILITY_TOLERANCE):
+    # Use the producer's pure validator, including its bounded precision-2
+    # exception. Raw p values and exact argmax validation remain unchanged.
+    if not is_choice_probability_distribution(values):
         raise InvalidInput()
 
 

@@ -17,7 +17,8 @@ import urllib.error
 import urllib.request
 import urllib.response
 
-from assessment_core.providers.jev import ENDPOINT, JevClient, JevConfig, JevError, validate_response
+from assessment_core.providers.jev import (ENDPOINT, JevClient, JevConfig, JevError,
+                                           is_choice_probability_distribution, validate_response)
 
 
 def request_fixture(model="jev-1.14.0"):
@@ -112,6 +113,53 @@ class ConfigTests(unittest.TestCase):
 
 
 class ResponseTests(unittest.TestCase):
+    def test_choice_quantization_preserves_raw_099_101_and_strict_precision(self):
+        for probabilities in ({"yes": 0.49, "unknown": 0.50},
+                              {"yes": 0.50, "unknown": 0.51},
+                              {"yes": 0.400004, "unknown": 0.6}):
+            response = response_fixture()
+            response["answers"]["evidence"]["probabilities"] = probabilities
+            before = deepcopy(response)
+            with self.subTest(probabilities=probabilities):
+                self.assertIs(validate_response(request_fixture(), response), response)
+                self.assertEqual(response, before)
+
+    def test_choice_quantization_rejects_offgrid_gross_and_empty_mass(self):
+        for probabilities in ({"yes": 0.499, "unknown": 0.491},
+                              {"yes": 0.48, "unknown": 0.50},
+                              {"yes": 0.2, "unknown": 0.2},
+                              {"yes": 0, "unknown": 0}):
+            response = response_fixture()
+            response["answers"]["evidence"]["probabilities"] = probabilities
+            with self.subTest(probabilities=probabilities), self.assertRaises(JevError):
+                validate_response(request_fixture(), response)
+
+    def test_choice_distribution_helper_bounds_and_type_guards(self):
+        for values in ([0, .17, .01, 0, 0, .81], [0, .07, .68, .17, .07],
+                       [.49, .50], [.50, .51]):
+            with self.subTest(values=values):
+                before = list(values)
+                self.assertTrue(is_choice_probability_distribution(values))
+                self.assertEqual(values, before)
+        for values in ([], [0] * 255, [True, 0], [1.01, -.01], [math.inf],
+                       [math.nan], ["0.5", .5], [.499, .491], [.48, .50], None):
+            with self.subTest(values=values):
+                self.assertFalse(is_choice_probability_distribution(values))
+
+    def test_choice_quantization_keeps_exact_argmax(self):
+        response = response_fixture()
+        response["answers"]["evidence"]["probabilities"] = {"yes": .50, "unknown": .49}
+        with self.assertRaises(JevError):
+            validate_response(request_fixture(), response)
+
+    def test_score_distribution_keeps_strict_mass_despite_choice_rounding_policy(self):
+        for probabilities in ({"0": .12, "1": .50, "2": .37},
+                              {"0": .13, "1": .50, "2": .38}):
+            response = response_fixture()
+            response["answers"]["skill"]["probabilities"] = probabilities
+            with self.subTest(probabilities=probabilities), self.assertRaises(JevError):
+                validate_response(request_fixture(), response)
+
     def test_noul_preserves_raw_yes_probability_without_threshold_or_confidence(self):
         for probability in (0, 0.01, 0.5, 0.93, 1):
             response = response_fixture()

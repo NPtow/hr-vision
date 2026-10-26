@@ -14,6 +14,7 @@ formula and complete pool; restart/backup recover the exact committed result.
 | R1 | tanh per level, conditional q, confidence separate, exclusions change denominator, all excluded null | PASS | `tests/test_engine.py`, explicit .07615941559557649 reference and unequal tanh(mean) |
 | R2 | Exact canonical IDs/months, fail filtered, unknown visible with human approval | PASS (service boundary) | field/revision/ranking tests in `test_engine.py`; product UI remains separate |
 | R3 | Complete pool, duplicate facts/profiles, incompatible versions/hash/IDs/order, strict probabilities | PASS | engine tests incl 1000 complete and 1001 rejected; HTTP atomic rejection keeps DB empty |
+| R3 rounding | Shared producer rule accepts bounded precision-2 sums .99/1.01, raw remains exact; off-grid/gross/zero and wrong argmax reject | PASS | engine + actual HTTP persistence tests; exported standalone package uses frozen sibling helper |
 | F1 | Protected reads/writes/metadata; framing, timeout, limits, UTF8/JSON reject without payload/secret logs | PASS | `test_api.py` + subprocess log inspection |
 | F2 | SQLite unavailable returns readiness503, health200, no partial result; recovery works | PASS | real DB path replaced with directory and restored in isolated HTTP test |
 | P1 | Commit-before-response, same request one row, crash/restart immutable GET without recalculation | PASS | `test_store.py` concurrent 16 submissions and `test_process.py` SIGKILL/restart |

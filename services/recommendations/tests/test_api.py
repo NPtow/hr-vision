@@ -11,7 +11,7 @@ from unittest.mock import patch
 from recommendations import api
 from recommendations.engine import canonical_json
 from recommendations.store import ResultStore
-from fixtures import request_fixture, synthetic_rubric
+from fixtures import request_fixture, synthetic_rubric, set_distribution
 
 TOKEN = "a1" * 32
 
@@ -70,6 +70,20 @@ class HttpTests(unittest.TestCase):
             self.assertEqual(self.request("GET", "/v1/recommendations/" + operation_id)[2], result)
         self.assertEqual(self.store.metadata()["saved_results"], 1)
         self.assertEqual(self.logs[-1]["operation_id"], operation_id)
+
+    def test_http_rounded_probabilities_preserve_saved_inputs_and_conditional_output(self):
+        value = request_fixture()
+        probabilities = [0, 0.16, 0.4, 0.23, 0]
+        set_distribution(value["candidate_profiles"][0]["parameters"][0], probabilities, unknown=0.2)
+        status, _, result = self.request("POST", "/v1/recommendations", value)
+        self.assertEqual(status, 200)
+        parameter = result["items"][0]["parameters"][0]
+        self.assertEqual([level["p_raw"] for level in parameter["levels"]], probabilities)
+        self.assertAlmostEqual(sum(level["q"] for level in parameter["levels"]), 1)
+        with self.store.db() as db:
+            snapshot = json.loads(db.execute("SELECT input FROM recommendations").fetchone()[0])
+        self.assertEqual(snapshot, value)
+        self.assertEqual(self.request("GET", "/v1/recommendations/" + result["recommendation_id"])[2], result)
 
     def test_auth_is_required_for_results_readiness_and_operator_metadata(self):
         for path in ("/readyz", "/v1/operator", "/v1/recommendations/" + "0" * 64):

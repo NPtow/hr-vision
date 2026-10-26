@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import signal
+import shutil
 import socket
 import subprocess
 import sys
@@ -147,6 +148,29 @@ class ProcessTests(unittest.TestCase):
                                 timeout=5, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.assertEqual(failed.returncode, 2)
         self.assertFalse(unused.exists())
+
+
+class PackagedImportTests(unittest.TestCase):
+    def test_exported_package_uses_frozen_sibling_without_monorepo_or_extra_pythonpath(self):
+        service_root = Path(__file__).resolve().parents[1]
+        repository = service_root.parents[1]
+        with tempfile.TemporaryDirectory() as temporary:
+            release = Path(temporary) / "release"
+            release.mkdir()
+            for source, name in ((service_root / "recommendations", "recommendations"),
+                                 (service_root / "rubrics", "rubrics"),
+                                 (repository / "packages/jev-client/jev_client", "jev_client")):
+                shutil.copytree(source, release / name, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+            env = dict(os.environ, PYTHONPATH=str(release))
+            script = (
+                "from pathlib import Path; import jev_client; "
+                "from recommendations.engine import distribution, default_rubric; "
+                "distribution([.49,.50]); assert default_rubric()['parameters']; "
+                "assert Path(jev_client.__file__).resolve().parent == Path('jev_client').resolve()"
+            )
+            result = subprocess.run([sys.executable, "-c", script], cwd=release, env=env,
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5)
+            self.assertEqual(result.returncode, 0, result.stderr.decode())
 
 
 if __name__ == "__main__":

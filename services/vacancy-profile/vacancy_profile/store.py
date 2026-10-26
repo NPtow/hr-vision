@@ -8,15 +8,19 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 import fcntl
+import hashlib
+import re
 import json
 import os
 from pathlib import Path
 import sqlite3
 import time
+import tempfile
 
+from . import __version__
 from .engine import canonical_json, revise
 from .engine import digest, interpret, validate_plan
-from jev_client import JevError
+from jev_client import JevError, _decode_response
 
 
 class RunUnavailable(Exception):
@@ -196,6 +200,114 @@ class RunStore:
             db.execute("UPDATE runs SET status='completed', result=?, updated=? WHERE id=? AND status IN ('response_saved','completed')",
                        (canonical_json(result), time.time(), run_id))
         return result
+
+    def recovery_audit(self, run_id):
+        """Private operator evidence, never an HTTP route or a startup migration."""
+        if type(run_id) is not str or not re.fullmatch(r"[a-f0-9]{64}", run_id):
+            raise ValueError("invalid run identity")
+        directory = self.path.parent / "operator-recoveries"
+        path = directory / (run_id + ".json")
+        if directory.is_symlink() or path.is_symlink():
+            raise RunUnavailable("recovery_audit_unavailable")
+        if not path.exists():
+            return None
+        with path.open("rb") as source:
+            raw = source.read(65537)
+        if len(raw) > 65536:
+            raise RunUnavailable("recovery_audit_unavailable")
+        audit = json.loads(raw)
+        if (type(audit) is not dict or audit.get("contract_version") != "vacancy-rejection-recovery-v1"
+                or audit.get("run_id") != run_id or audit.get("phase") not in ("prepared", "completed")
+                or type(audit.get("body_sha256")) is not str
+                or not re.fullmatch(r"[a-f0-9]{64}", audit["body_sha256"])
+                or type(audit.get("original_error")) is not dict
+                or audit["original_error"].get("code") != "invalid_response"):
+            raise RunUnavailable("recovery_audit_unavailable")
+        return audit
+
+    def _save_recovery_audit(self, run_id, audit):
+        directory = self.path.parent / "operator-recoveries"
+        path = directory / (run_id + ".json")
+        if directory.is_symlink() or path.is_symlink():
+            raise RunUnavailable("recovery_audit_unavailable")
+        directory.mkdir(mode=0o700, exist_ok=True)
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=directory,
+                                             prefix=".recovery-", delete=False) as output:
+                temporary = Path(output.name)
+                os.chmod(temporary, 0o600)
+                output.write(canonical_json(audit) + "\n")
+                output.flush()
+                os.fsync(output.fileno())
+            os.replace(temporary, path)
+            fd = os.open(directory, os.O_RDONLY)
+            try:
+                os.fsync(fd)
+            finally:
+                os.close(fd)
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
+
+    def recover_rejection(self, run_id, expected_body_sha256):
+        """Explicit local reconciliation of already received bytes; zero network I/O.
+
+        The exclusive process lock spans validation, durable promotion and replay.
+        Raw rejection bytes and original error remain private audit evidence.
+        """
+        if (type(run_id) is not str or not re.fullmatch(r"[a-f0-9]{64}", run_id)
+                or type(expected_body_sha256) is not str
+                or not re.fullmatch(r"[a-f0-9]{64}", expected_body_sha256)):
+            raise ValueError("invalid reconciliation identity")
+        with self.runtime_lock():
+            with self.db() as db:
+                db.execute("BEGIN IMMEDIATE")
+                row = db.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()
+                rejection = db.execute("SELECT * FROM provider_rejections WHERE run_id=?", (run_id,)).fetchone()
+                audit = self.recovery_audit(run_id)
+                if row is None or rejection is None or rejection["code"] != "invalid_response":
+                    raise RunUnavailable("rejection_recovery_unavailable")
+                body = rejection["body"]
+                if (type(body) is not bytes or not body or len(body) > 2 * 1024 * 1024
+                        or hashlib.sha256(body).hexdigest() != expected_body_sha256):
+                    raise RunUnavailable("rejection_body_hash_mismatch")
+                plan = json.loads(row["plan"])
+                validate_plan(plan)
+                if plan["run_id"] != run_id:
+                    raise RunUnavailable("saved_plan_hash_mismatch")
+                error = json.loads(row["error"]) if row["error"] is not None else None
+                initial = (row["status"] == "outcome_unknown" and type(error) is dict
+                           and error.get("code") == "invalid_response"
+                           and (audit is None or audit["phase"] == "prepared"
+                                and audit["body_sha256"] == expected_body_sha256
+                                and audit["original_error"] == error))
+                continuing = (row["status"] in ("response_saved", "completed") and audit is not None
+                              and audit["body_sha256"] == expected_body_sha256)
+                if not initial and not continuing:
+                    raise RunUnavailable("rejection_recovery_state_conflict")
+                response = _decode_response(plan["request"], body)
+                # Verify domain interpretation before any row changes, so invalid
+                # or incompatible responses leave the original state untouched.
+                interpret(plan, response)
+                encoded, response_hash = canonical_json(response), digest(response)
+                if continuing:
+                    if row["response"] != encoded or row["response_sha256"] != response_hash:
+                        raise RunUnavailable("saved_response_hash_mismatch")
+                else:
+                    if audit is None:
+                        audit = {"contract_version": "vacancy-rejection-recovery-v1", "run_id": run_id,
+                                 "body_sha256": expected_body_sha256, "original_error": error,
+                                 "phase": "prepared", "actor_uid": os.geteuid(),
+                                 "service_version": __version__, "created_at": time.time()}
+                        self._save_recovery_audit(run_id, audit)
+                    db.execute("""UPDATE runs SET status='response_saved',response=?,response_sha256=?,
+                                  error=NULL,updated=? WHERE id=? AND status='outcome_unknown'""",
+                               (encoded, response_hash, time.time(), run_id))
+            result = self.replay(run_id)
+            if audit["phase"] != "completed":
+                self._save_recovery_audit(run_id, {**audit, "phase": "completed", "completed_at": time.time()})
+            return result
 
     def profile(self, profile_id):
         with self.db() as db:

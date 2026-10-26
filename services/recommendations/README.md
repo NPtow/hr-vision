@@ -10,6 +10,9 @@ The API implements `packages/assessment-contracts/README.md`. The bundled
 `rubrics/sales-v1.json` is frozen into the release. Profile hash, rubric ID/version,
 all parameter IDs and ordered level definitions must match it. Runtime does not
 read another service's files or database. Public identifiers alone grant no access.
+The pure probability validator is frozen from `packages/jev-client` as a sibling
+`jev_client` package in the runtime artifact. It calls no provider. The local
+checkout resolves that same package without adding a second PYTHONPATH entry.
 
 ## Run
 
@@ -51,9 +54,13 @@ importance: `importance-0-3-v1`. Vacancy raw importance Choices use
 `I0,I1,I2,I3,insufficient_data`. A manual vacancy profile may include
 `revision:{author,parent_profile_id}`, changes `profile_id` and retains raw answers.
 
-Every numeric probability must be a genuine finite number in [0,1], with total
-within `1e-5` of one (same rounding tolerance as producing JEV transport). Chosen
-options must have maximal raw probability. Booleans never stand in for numbers.
+Every numeric probability must be a genuine finite number in [0,1]. The shared
+producer validator accepts sums within `1e-5` of one, or precision-2 rounded
+distributions where every value lies on the 0.01 grid and the positive total
+differs from one by at most `N*0.005+1e-6` for N options. This covers the upstream
+adapter's documented precision without changing any raw value. Off-grid sum
+errors, grossly incomplete distributions and zero mass reject. Chosen options
+must still have maximal raw probability. Booleans never stand in for numbers.
 Unknown fields, source text, duplicate JSON keys, duplicate candidate profiles or
 fact rows, incomplete fact/profile sets and incompatible catalogues reject the
 whole request before any durable mutation. An empty candidate fact list is a
