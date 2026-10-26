@@ -91,6 +91,15 @@ jobs:
           PYTHONPATH: services/assessment-core
           PYTHONDONTWRITEBYTECODE: '1'
         run: python3 -m unittest discover -s services/assessment-core/tests -q
+      - name: Check independent vacancy and recommendation services
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          PYTHONPATH=packages/jev-client python3 -m unittest discover -s packages/jev-client/tests -q
+          PYTHONPATH=packages/jev-client:services/vacancy-profile python3 -m unittest discover -s services/vacancy-profile/tests -q
+          PYTHONPATH=services/recommendations python3 -m unittest discover -s services/recommendations/tests -q
+          python3 -m unittest discover -s services/deploy/assessment-services/tests -q
+          PYTHONPATH=services/assessment-core:packages/jev-client:services/vacancy-profile:services/recommendations:interface-lab/server python3 -m unittest discover -s services/tests/assessment-flow -q
       - name: Check core and private Zoom service
         env:
           PYTHONPATH: interface-lab/server:services/data-core/src:services/transcription/src

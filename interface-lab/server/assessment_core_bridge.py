@@ -1,7 +1,8 @@
 """Manager-authorized adapter to the independent full-corpus assessment service.
 
-Reuse the canonical corpus collector and ServiceHTTP. GET only reads; POST is
-the explicit evaluation command. No vacancy scoring, invitations or ASR here.
+Reuse the canonical corpus collector and ServiceHTTP. GET only reads; explicit
+commands and the opt-in durable lifecycle use the same start method.
+No vacancy scoring, invitations or ASR here.
 """
 import hashlib
 import json
@@ -112,16 +113,21 @@ class Bridge:
             require(receipt.get('assessment') is None, 'Незавершённый результат ядра.', 502)
         return receipt
 
-    def start(self, cid):
+    def identity(self, cid, source_revision):
+        return digest([cid, source_revision, self.rubric_hash, self.model, REQUEST_FORMAT])
+
+    def start(self, cid, *, expected_revision=None):
         self.authorize(cid)
         try:
             snapshot = self.collector.collect(cid)
             require(snapshot['status'] == 'ready',
                     'Не все материалы готовы: ' + ', '.join(i['code'] for i in snapshot['manifest']['issues']), 409)
             snapshot = self.collector.revalidate(snapshot)
+            require(expected_revision is None or snapshot['revision'] == expected_revision,
+                    'Материалы изменились до отправки оценки.', 409)
         except CollectionError:
             raise Problem('Материалы изменились или недоступны. Обновите карточку.', 409) from None
-        identity = digest([cid, snapshot['revision'], self.rubric_hash, self.model, REQUEST_FORMAT])
+        identity = self.identity(cid, snapshot['revision'])
         with self.lock, self.connect() as db:
             self.authorize(cid)
             init(db)
@@ -144,6 +150,13 @@ class Bridge:
             self.authorize(cid)
             db.execute('UPDATE ac_bindings SET run_id=?,status=?,receipt=?,updated=? WHERE id=?',
                        (receipt['run_id'], receipt['status'], dump(receipt), time.time(), identity))
+
+    def save_source_evidence(self, cid, snapshot):
+        # Portal-owned readiness metadata; model services never read this DB.
+        import selection_status
+        with self.lock, self.connect() as db:
+            self.authorize(cid)
+            selection_status.save_evidence(db, cid, snapshot)
 
     def read(self, cid):
         self.authorize(cid)
@@ -168,6 +181,7 @@ class Bridge:
             return {**base, 'state': 'dispatch_unknown'}
         receipt = self.validate_receipt(self.service.call('GET', '/v1/assessments/' + row['run_id']), cid, row['run_id'])
         self.collector.revalidate(current)
+        self.save_source_evidence(cid, current)
         self._save(row['id'], cid, receipt)
         return {**base, 'state': LABELS[receipt['status']], 'coreRun': receipt,
                 'canRun': receipt['status'] == 'completed',
