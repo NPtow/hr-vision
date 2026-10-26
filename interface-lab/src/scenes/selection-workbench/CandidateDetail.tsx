@@ -24,7 +24,9 @@ export function ModalPanel({ className, titleId, onClose, children }: { classNam
     document.body.style.overflow = 'hidden';
     panel.current?.focus();
     const key = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !e.defaultPrevented) { e.preventDefault(); close.current(); }
+      // Informational tooltips prevent Escape's default while dismissing themselves.
+      // This dialog still owns Escape; a nested dialog owns its own focused events.
+      if (e.key === 'Escape' && panel.current && (e.target as Element | null)?.closest('[role="dialog"]') === panel.current) { e.preventDefault(); close.current(); }
       if (e.key === 'Tab' && panel.current) {
         const items = [...panel.current.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),select:not(:disabled),a[href],textarea:not(:disabled),summary')].filter(item => item.getClientRects().length > 0);
         const first = items[0], last = items.at(-1);

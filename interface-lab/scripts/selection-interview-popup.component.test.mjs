@@ -87,6 +87,27 @@ test('shared player survives StrictMode ref reattachment and a new signed src on
   await until(() => video.evaluate(node => !node.paused && node.currentTime > 0));
 });
 
+test('first Escape closes candidate popup with a keyboard tooltip open after repeated trapped Tab navigation', async t => {
+  const { page } = await setup(t);
+  const search = page.getByPlaceholder('Найти кандидата', { exact: true }); await search.fill('Борис');
+  const opener = page.getByRole('button', { name: 'Интервью: Борис Соколов', exact: true }); await opener.click();
+  const dialog = page.getByRole('dialog');
+  await page.getByText('candidate-2 interview-1 часть 1 сохранённый ответ.', { exact: true }).waitFor();
+  for (let index = 0; index < 50; index++) {
+    await page.keyboard.press('Tab');
+    assert.equal(await dialog.evaluate(node => node.contains(document.activeElement)), true);
+  }
+  // Focus the real Radix trigger to make tooltip ownership deterministic.
+  // Its dismissable layer prevents the Escape default action before the modal listener.
+  const transcriptTab = page.getByRole('tab', { name: 'Расшифровка', exact: true });
+  await transcriptTab.focus(); await transcriptTab.hover();
+  await page.getByRole('tooltip').waitFor();
+  await page.keyboard.press('Escape');
+  await until(async () => await dialog.count() === 0);
+  assert.equal(await opener.evaluate(node => node === document.activeElement), true);
+  assert.equal(await search.inputValue(), 'Борис');
+});
+
 test('shortlist popup preserves vacancy search, selected candidate and explicit unknown approval', async t => {
   const { page, state, close } = await setup(t, { vacancy: true });
   const search = page.getByRole('textbox', { name: 'Найти кандидата в вакансии', exact: true }); await search.fill('Борис');
