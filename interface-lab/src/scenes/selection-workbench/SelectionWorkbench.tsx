@@ -5,7 +5,7 @@ import { useOperatorSession } from '../hh-outreach/session';
 import { OutreachError } from '../hh-outreach/api';
 import { selectionRequest, type SelectionPerson, type SelectionVacancy } from './api';
 import { loadCandidateDirectory } from './directory';
-import { workflowFor, StateBadge, assessmentLabels, HRInterviewBadge } from './review-state';
+import { candidateAssessmentState, AssessmentEntry, assessmentLabels, HRInterviewBadge } from './review-state';
 import { CandidateDetail, InlineCell } from './CandidateDetail';
 import { hasHRInterview } from './matching-contract';
 import { VacancyDetail } from './VacancyDetail';
@@ -69,7 +69,7 @@ function Workbench({ token, expire }: { token: string; expire: () => void }) {
       : !!p.hrInterview && ['missing', 'incomplete', 'processing'].includes(p.hrInterview.state)))
     && (filters.telegram === 'all' || p.telegramConnected === (filters.telegram === 'yes'))
     && (filters.email === 'all' || p.emailConnected === (filters.email === 'yes'))
-    && (filters.assessment === 'all' || workflowFor(p).assessment.state === filters.assessment)
+    && (filters.assessment === 'all' || candidateAssessmentState(p).state === filters.assessment)
     && [p.name, p.desiredRole, p.city, p.email].join(' ').toLocaleLowerCase('ru').includes(search.toLocaleLowerCase('ru'))), [people, search, filters]);
   const activeFilters = Object.values(filters).filter(value => value !== 'all').length;
   const person = people.find(p => p.id === detail);
@@ -96,7 +96,7 @@ function Workbench({ token, expire }: { token: string; expire: () => void }) {
           <label>HR-интервью<select aria-label="HR-интервью" value={filters.interview} onChange={e => setFilters({ ...filters, interview: e.target.value as StatusFilters['interview'] })}><option value="ready">Проведено · запись и текст</option><option value="all">Все кандидаты</option><option value="pending">Материалы не готовы</option><option value="unknown">Не удалось проверить</option></select></label>
           <label>Telegram<select aria-label="Telegram" value={filters.telegram} onChange={e => setFilters({ ...filters, telegram: e.target.value })}><option value="all">Любой статус</option><option value="yes">Подключён</option><option value="no">Не подключён</option></select></label>
           <label>Почта<select aria-label="Почта" value={filters.email} onChange={e => setFilters({ ...filters, email: e.target.value })}><option value="all">Любой статус</option><option value="yes">Подключена</option><option value="no">Не подключена</option></select></label>
-          <label>Оценка навыков<select aria-label="Оценка навыков" value={filters.assessment} onChange={e => setFilters({ ...filters, assessment: e.target.value })}><option value="all">Любой статус</option>{Object.entries(assessmentLabels).filter(([key]) => people.some(p => workflowFor(p).assessment.state === key)).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+          <label>Оценка навыков<select aria-label="Оценка навыков" value={filters.assessment} onChange={e => setFilters({ ...filters, assessment: e.target.value })}><option value="all">Любой статус</option>{Object.entries(assessmentLabels).filter(([key]) => people.some(p => candidateAssessmentState(p).state === key)).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
           <button className="sl-filter-reset" onClick={() => { setFilters(defaultFilters); setSearch(''); }}>По умолчанию</button>
         </div>}
         {loading ? <div className="sl-empty" role="status">Загружаем данные…</div> : error ? <div className="sl-empty">Каталог не загружен. Нажмите «Обновить», чтобы повторить загрузку целиком.</div> : tab === 'vacancies' ? <div className="sl-scroll"><table><thead><tr><th>Вакансия</th><th>Работодатель</th><th>Город</th><th>Условия</th><th/></tr></thead><tbody>{vacancies.filter(v => [v.title, v.company, v.city].join(' ').toLocaleLowerCase('ru').includes(search.toLocaleLowerCase('ru'))).map(v => <tr key={v.id}><td><button className="sl-person" onClick={() => setVid(v.id)}>{v.title}</button></td><td>{v.company}</td><td>{v.city || '—'}</td><td>{v.salary || '—'}</td><td><button className="sl-open" aria-label={`Открыть вакансию: ${v.title}`} onClick={() => setVid(v.id)}>Открыть<ChevronRight size={15}/></button></td></tr>)}</tbody></table>{!vacancies.length && <div className="sl-empty">Нет вакансий</div>}</div>
@@ -105,7 +105,7 @@ function Workbench({ token, expire }: { token: string; expire: () => void }) {
           <td><InlineCell label={`Роль: ${p.name}`} value={p.desiredRole} disabled={busy} onSave={value => void save(p, { desiredRole: value })}/></td>
           <td><InlineCell label={`Город: ${p.name}`} value={p.city} disabled={busy} onSave={value => void save(p, { city: value })}/></td>
           <td><HRInterviewBadge person={p}/></td>
-          <td><button className="sl-assessment-link" aria-label={`Оценка: ${p.name}`} onClick={() => openPerson(p.id)}><StateBadge state={workflowFor(p).assessment} labels={assessmentLabels}/></button></td>
+          <td><AssessmentEntry person={p} onOpen={() => openPerson(p.id)}/></td>
           <td><span className={'sl-status ' + (p.telegramConnected ? 'sl-green' : '')}>{p.telegramConnected ? 'Подключён' : 'Не подключён'}</span></td>
           <td><span className={'sl-status ' + (p.emailConnected ? 'sl-green' : '')}>{p.emailConnected ? 'Подключена' : 'Не подключена'}</span></td>
         </tr>)}</tbody></table></div><footer className="sl-table-footer"><span>{rows.length} в таблице · всего {people.length}</span></footer></>

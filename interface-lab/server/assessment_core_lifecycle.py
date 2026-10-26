@@ -24,15 +24,20 @@ TERMINAL = {'completed', 'failed', 'outcome_unknown', 'dispatch_unknown',
             'superseded', 'poll_failed'}
 
 
+def poll_backoff(errors):
+    return min(300, 5 * 2 ** min(max(errors - 1, 0), 6))
+
+
 @dataclass(frozen=True)
 class Scope:
     candidate_ids: tuple = ()
     created_since: str | None = None
     batch_size: int = 10
     interval: float = 60
+    all_completed_hr: bool = False
 
     def __post_init__(self):
-        if (not self.candidate_ids and not self.created_since or len(self.candidate_ids) > 1000
+        if (not self.candidate_ids and not self.created_since and not self.all_completed_hr or len(self.candidate_ids) > 1000
                 or not 1 <= self.batch_size <= 100 or not 1 <= self.interval <= 3600
                 or any(not isinstance(cid, str) or not re.fullmatch(r'[A-Za-z0-9_.:-]{1,200}', cid)
                        for cid in self.candidate_ids)):
@@ -54,7 +59,8 @@ def configured_scope():
             'HR_ASSESSMENT_CORE_AUTO_CANDIDATE_IDS', '').split(',') if x.strip())))
         return Scope(ids, os.environ.get('HR_ASSESSMENT_CORE_AUTO_CREATED_SINCE') or None,
                      int(os.environ.get('HR_ASSESSMENT_CORE_AUTO_BATCH_SIZE', '10')),
-                     float(os.environ.get('HR_ASSESSMENT_CORE_AUTO_INTERVAL_SECONDS', '60')))
+                     float(os.environ.get('HR_ASSESSMENT_CORE_AUTO_INTERVAL_SECONDS', '60')),
+                     os.environ.get('HR_ASSESSMENT_CORE_AUTO_ALL_COMPLETED_HR') == '1')
     except (ValueError, TypeError):
         raise Problem('automatic_assessment_scope_configuration_error', 503) from None
 
@@ -89,12 +95,47 @@ def init(db):
       request_format TEXT NOT NULL, state TEXT NOT NULL, run_id TEXT, error_code TEXT,
       poll_errors INTEGER NOT NULL DEFAULT 0, created REAL NOT NULL, updated REAL NOT NULL)''')
     db.execute('CREATE INDEX IF NOT EXISTS ac_auto_work_state ON ac_auto_work(state,updated,id)')
+    columns = {row[1] for row in db.execute('PRAGMA table_info(ac_auto_work)')}
+    for name in ('next_poll_at', 'last_poll_at'):
+        if name not in columns:
+            db.execute('ALTER TABLE ac_auto_work ADD COLUMN ' + name + ' REAL NOT NULL DEFAULT 0')
+
+
+def public_candidate_status(db, cid):
+    """Local read only projection; caller owns candidate authorization.
+
+    Never collect sources, initialize a table, call a service, or dispatch.
+    Absence of an observation is not evidence of ready/missing materials.
+    """
+    if not db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='ac_auto_candidates'").fetchone():
+        return {'state': 'not_enrolled'}
+    columns = {row[1] for row in db.execute('PRAGMA table_info(ac_auto_work)')}
+    schedule = ','.join('w.' + name if name in columns else '0' for name in ('next_poll_at', 'last_poll_at'))
+    row = db.execute('''SELECT c.state,c.error_code,c.source_revision,c.updated,w.run_id,w.poll_errors,'''
+      + schedule + ''' FROM ac_auto_candidates c LEFT JOIN ac_auto_work w ON w.id=c.work_id
+      WHERE c.candidate_id=?''', (cid,)).fetchone()
+    if row is None:
+        return {'state': 'not_enrolled'}
+    state, error, revision, updated, run_id, errors, next_poll, last_poll = row
+    public = {'blocked': 'waiting_materials', 'source_error': 'source_unavailable',
+              'dispatching': 'dispatching', 'submitted': 'processing', 'completed': 'ready',
+              'failed': 'error', 'poll_failed': 'dependency_unavailable', 'superseded': 'stale'}.get(state, state)
+    if state == 'submitted' and error == 'assessment_read_failed':
+        public = 'dependency_unavailable'
+    elif state == 'submitted' and error == 'assessment_delayed':
+        public = 'processing_delayed'
+    return {'state': public, 'automaticState': state, 'errorCode': error, 'sourceRevision': revision,
+            'runId': run_id, 'updatedAt': updated, 'pollErrors': errors or 0,
+            'retryAt': next_poll if state == 'submitted' else None, 'lastPollAt': last_poll or None}
 
 
 class Lifecycle:
     def __init__(self, bridge, scope):
         self.bridge, self.scope = bridge, scope
-        self.scope_hash = bridge_module.digest([sorted(scope.candidate_ids), scope.created_since])
+        signature = [sorted(scope.candidate_ids), scope.created_since]
+        if scope.all_completed_hr:
+            signature.append('all_completed_hr')
+        self.scope_hash = bridge_module.digest(signature)
         with bridge.lock, bridge.connect() as db:
             init(db)
             db.execute('INSERT OR IGNORE INTO ac_auto_cursor VALUES (?,?,?)',
@@ -113,6 +154,13 @@ class Lifecycle:
                 AND b.run_id IS NOT NULL) THEN 'submitted' ELSE 'dispatch_unknown' END,
               run_id=(SELECT run_id FROM ac_bindings b WHERE b.id=ac_auto_work.id),
               error_code='interrupted_dispatch',updated=? WHERE state='dispatching' ''', (time.time(),))
+            # Older versions stopped safe observation forever. A persisted run
+            # receipt authorizes GET only, never another dispatch.
+            db.execute('''UPDATE ac_auto_work SET state='submitted',
+              run_id=COALESCE(run_id,(SELECT run_id FROM ac_bindings b WHERE b.id=ac_auto_work.id)),updated=?
+              WHERE state='poll_failed' AND error_code IN ('assessment_read_failed','assessment_deadline_exceeded')
+              AND COALESCE(run_id,(SELECT run_id FROM ac_bindings b WHERE b.id=ac_auto_work.id)) IS NOT NULL''',
+                       (time.time(),))
             db.execute('''UPDATE ac_auto_candidates SET
               state=(SELECT state FROM ac_auto_work w WHERE w.id=work_id),
               error_code=(SELECT error_code FROM ac_auto_work w WHERE w.id=work_id),updated=?
@@ -128,17 +176,19 @@ class Lifecycle:
     def scan(self):
         """Bounded keyset scan; cursor survives restart and rotates at end.
 
-        No historical candidate outside the explicit allowlist/creation cutoff
-        is enrolled. A creation cutoff is stable across restarts, unlike now().
+        Historical enrollment requires the explicit all-completed-HR policy,
+        allowlist, or stable creation cutoff. Corpus validation stays canonical.
         """
         with self.bridge.lock, self.bridge.connect() as db:
             cursor = db.execute('SELECT candidate_id FROM ac_auto_cursor WHERE scope_hash=?',
                                 (self.scope_hash,)).fetchone()[0]
             clauses, parameters = [], [cursor]
-            if self.scope.candidate_ids:
+            if self.scope.all_completed_hr:
+                clauses.append('1=1')
+            elif self.scope.candidate_ids:
                 clauses.append('c.id IN (' + ','.join('?' for _ in self.scope.candidate_ids) + ')')
                 parameters.extend(self.scope.candidate_ids)
-            if self.scope.created_since:
+            if self.scope.created_since and not self.scope.all_completed_hr:
                 clauses.append('julianday(c.created_at)>=julianday(?)')
                 parameters.append(self.scope.created_since)
             parameters.append(self.scope.batch_size)
@@ -151,7 +201,6 @@ class Lifecycle:
             try:
                 self.bridge.authorize(cid)
                 snapshot = self.bridge.collector.collect(cid)
-                self.bridge.save_source_evidence(cid, snapshot)
                 revision = snapshot['revision']
                 if snapshot['status'] != 'ready' or not ready_hr_interview(snapshot):
                     self._observed(cid, revision, 'blocked', 'complete_hr_materials_required')
@@ -163,6 +212,18 @@ class Lifecycle:
                           VALUES (?,?,?,?,?,?,'queued',?,?)''',
                           (identity, cid, revision, self.bridge.rubric_hash, self.bridge.model,
                            bridge_module.REQUEST_FORMAT, time.time(), time.time()))
+                        # A previously superseded input may become current again.
+                        # Receipted runs resume GET; undispatched work may queue.
+                        # Unknown POST/provider outcomes never enter this path.
+                        db.execute('''UPDATE ac_auto_work SET state=CASE
+                          WHEN EXISTS(SELECT 1 FROM ac_bindings b WHERE b.id=ac_auto_work.id AND b.run_id IS NOT NULL)
+                          THEN CASE WHEN (SELECT status FROM ac_bindings b WHERE b.id=ac_auto_work.id)
+                            IN ('completed','failed','outcome_unknown')
+                            THEN (SELECT status FROM ac_bindings b WHERE b.id=ac_auto_work.id) ELSE 'submitted' END
+                          ELSE 'queued' END,
+                          run_id=COALESCE(run_id,(SELECT run_id FROM ac_bindings b WHERE b.id=ac_auto_work.id)),
+                          error_code=NULL,updated=? WHERE id=? AND state='superseded' ''', (time.time(), identity))
+                        bridge_module.select_current(db, cid, identity)
                         state, error = db.execute('SELECT state,error_code FROM ac_auto_work WHERE id=?',
                                                  (identity,)).fetchone()
                     self._observed(cid, revision, state, error, identity)
@@ -179,10 +240,12 @@ class Lifecycle:
                            ('', time.time(), self.scope_hash))
         return len(ids)
 
-    def _state(self, work, state, error=None, run_id=None):
+    def _state(self, work, state, error=None, run_id=None, *, poll_errors=None, next_poll_at=None, last_poll_at=None):
         with self.bridge.lock, self.bridge.connect() as db:
-            db.execute('UPDATE ac_auto_work SET state=?,error_code=?,run_id=COALESCE(?,run_id),updated=? WHERE id=?',
-                       (state, error, run_id, time.time(), work['id']))
+            db.execute('''UPDATE ac_auto_work SET state=?,error_code=?,run_id=COALESCE(?,run_id),
+              poll_errors=COALESCE(?,poll_errors),next_poll_at=COALESCE(?,next_poll_at),
+              last_poll_at=COALESCE(?,last_poll_at),updated=? WHERE id=?''',
+                       (state, error, run_id, poll_errors, next_poll_at, last_poll_at, time.time(), work['id']))
             db.execute('''UPDATE ac_auto_candidates SET state=?,error_code=?,updated=?
               WHERE candidate_id=? AND work_id=?''',
                        (state, error, time.time(), work['candidate_id'], work['id']))
@@ -191,7 +254,8 @@ class Lifecycle:
         with self.bridge.connect() as db:
             db.row_factory = sqlite3.Row
             work = [dict(row) for row in db.execute('''SELECT * FROM ac_auto_work
-              WHERE state IN ('queued','submitted') ORDER BY updated,id LIMIT ?''', (self.scope.batch_size,))]
+              WHERE state='queued' OR (state='submitted' AND next_poll_at<=?)
+              ORDER BY updated,id LIMIT ?''', (time.time(), self.scope.batch_size))]
         for item in work:
             cid = item['candidate_id']
             if (item['rubric_hash'] != self.bridge.rubric_hash or item['model'] != self.bridge.model
@@ -225,8 +289,8 @@ class Lifecycle:
                 else:
                     self._state(item, 'dispatch_unknown', 'dispatch_not_acknowledged')
             else:
-                if time.time() - item['created'] > 600:
-                    self._state(item, 'poll_failed', 'assessment_deadline_exceeded')
+                if not item['run_id']:
+                    self._state(item, 'dispatch_unknown', 'dispatch_not_acknowledged')
                     continue
                 try:
                     self.bridge.authorize(cid)
@@ -236,15 +300,26 @@ class Lifecycle:
                     self.bridge._save(item['id'], cid, receipt)
                     code = (receipt.get('error') or {}).get('code')
                     code = code if isinstance(code, str) and re.fullmatch('[a-z0-9_]{1,80}', code) else None
-                    self._state(item, receipt['status'] if receipt['status'] in TERMINAL else 'submitted', code)
+                    state = receipt['status'] if receipt['status'] in TERMINAL else 'submitted'
+                    if state == 'submitted' and not code and time.time() - item['created'] > 600:
+                        code = 'assessment_delayed'
+                    self._state(item, state, code, poll_errors=0,
+                                next_poll_at=time.time() + 1, last_poll_at=time.time())
                 except CollectionError:
                     self._state(item, 'superseded', 'sources_changed')
+                except Problem as error:
+                    if error.status in (403, 404):
+                        self._state(item, 'superseded', 'candidate_access_denied')
+                    else:
+                        self._poll_error(item)
                 except Exception:
-                    with self.bridge.lock, self.bridge.connect() as db:
-                        db.execute('UPDATE ac_auto_work SET poll_errors=poll_errors+1,updated=? WHERE id=?',
-                                   (time.time(), item['id']))
-                    self._state(item, 'poll_failed' if item['poll_errors'] >= 2 else 'submitted', 'assessment_read_failed')
+                    self._poll_error(item)
         return len(work)
+
+    def _poll_error(self, item):
+        errors = item['poll_errors'] + 1
+        self._state(item, 'submitted', 'assessment_read_failed', poll_errors=errors,
+                    next_poll_at=time.time() + poll_backoff(errors), last_poll_at=time.time())
 
     def tick(self):
         scanned = self.scan()
@@ -254,7 +329,8 @@ class Lifecycle:
         """Diagnostics only: never collect, dispatch, or expose source text."""
         with self.bridge.connect() as db:
             return {'enabled': True, 'scope': {'candidate_count': len(self.scope.candidate_ids),
-                    'created_since': self.scope.created_since, 'batch_size': self.scope.batch_size},
+                    'created_since': self.scope.created_since, 'batch_size': self.scope.batch_size,
+                    'all_completed_hr': self.scope.all_completed_hr},
                     'work': dict(db.execute('SELECT state,count(*) FROM ac_auto_work GROUP BY state')),
                     'candidates': dict(db.execute('SELECT state,count(*) FROM ac_auto_candidates GROUP BY state')),
                     'cursor': db.execute('SELECT candidate_id FROM ac_auto_cursor WHERE scope_hash=?',
@@ -268,7 +344,7 @@ class Lifecycle:
             if observed is None:
                 return {'state': 'not_enrolled'}
             result = dict(observed)
-            work = db.execute('SELECT state,run_id,error_code,poll_errors,created,updated FROM ac_auto_work WHERE id=?',
+            work = db.execute('SELECT state,run_id,error_code,poll_errors,next_poll_at,last_poll_at,created,updated FROM ac_auto_work WHERE id=?',
                               (result['work_id'],)).fetchone()
             return {**result, 'work': dict(work) if work else None}
 
@@ -278,6 +354,8 @@ class Runtime:
         self.lifecycle, self.owner_fd = lifecycle, owner_fd
         self.stop_event = threading.Event()
         self.last_error = None
+        self.last_tick_at = None
+        self.last_success_at = None
         self.thread = threading.Thread(target=self._run, name='assessment-source-lifecycle', daemon=True)
         self.thread.start()
 
@@ -290,8 +368,10 @@ class Runtime:
                 return
             while not self.stop_event.is_set():
                 try:
+                    self.last_tick_at = time.time()
                     self.lifecycle.tick()
                     self.last_error = None
+                    self.last_success_at = time.time()
                 except Exception:
                     self.last_error = 'automatic_assessment_reconcile_failed'
                 self.stop_event.wait(self.lifecycle.scope.interval)
@@ -299,7 +379,11 @@ class Runtime:
             os.close(self.owner_fd)
 
     def status(self):
-        return {**self.lifecycle.status(), 'running': self.thread.is_alive(), 'error': self.last_error}
+        running = self.thread.is_alive()
+        healthy = (running and self.last_error is None and self.last_success_at is not None
+                   and time.time() - self.last_success_at <= max(120, self.lifecycle.scope.interval * 2))
+        return {**self.lifecycle.status(), 'running': running, 'healthy': healthy, 'error': self.last_error,
+                'lastTickAt': self.last_tick_at, 'lastSuccessAt': self.last_success_at}
 
     def stop(self, timeout=60):
         self.stop_event.set()

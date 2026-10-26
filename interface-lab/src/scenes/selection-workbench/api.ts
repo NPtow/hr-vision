@@ -2,12 +2,14 @@ import type { HRInterview } from './matching-contract';
 import { hrRequest } from '../hh-outreach/api';
 import type { AssessmentPresentation } from '../interview-assessment/types';
 import type { FullCorpusRun } from '../interview-assessment/FullCorpusAssessment';
+import type { AssessmentAutomation } from './assessment-automation';
 
 export type WorkflowState = { state: string; origin?: string | null; revisionId?: string | null };
-export type Workflow = { interview: WorkflowState; resume: WorkflowState; assessment: WorkflowState; match: WorkflowState };
+export type Workflow = { interview: WorkflowState; resume: WorkflowState; assessment: WorkflowState; match: WorkflowState; automation?: AssessmentAutomation };
 export type Readiness = {
   candidateId: string;
   hrInterview?: HRInterview;
+  automation?: AssessmentAutomation;
   materials: { state: string; recordings: number | null; transcripts: number | null;
     items: { id: string; kind: string; recordings: number; transcripts: number; transcriptState: string }[] };
   assessment: { state: string; result: Omit<AssessmentPresentation, 'saveFeedback'> | null; match?: WorkflowState;

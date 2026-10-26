@@ -53,7 +53,7 @@ test('default is a real HR interview: recording AND complete primary transcript,
 
 test('assessment opens in Candidates, preserves raw probabilities and insufficient data', async t => {
   const { page, state } = await setup(t);
-  await page.getByRole('button', { name: 'Оценка: Анна Романова' }).click();
+  await page.getByRole('button', { name: 'Открыть оценку: Анна Романова' }).click();
   await page.getByRole('region', { name: 'Оценка по параметрам' }).waitFor();
   await page.locator('.fc-parameter summary').first().click();
   assert.match(await page.locator('.fc-parameter').first().innerText(), /20\s?%/);

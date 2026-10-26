@@ -192,7 +192,9 @@ class ReceiverTest(unittest.TestCase):
         self.assertEqual(r.PRE_FULL_CORPUS_RUNTIME - r.PRE_SELECTION_STATUS_RUNTIME, {'selection_status.py'})
         self.assertEqual(r.PRE_PRODUCT_RECORDINGS_RUNTIME - r.PRE_FULL_CORPUS_RUNTIME, {'assessment_corpus.py', 'assessment_core_bridge.py'})
         self.assertEqual(r.PRE_RECOMMENDATIONS_RUNTIME - r.PRE_EMPLOYER_REVIEW_RUNTIME, {'employer_review.py'})
-        self.assertEqual(r.RUNTIME - r.PRE_RECOMMENDATIONS_RUNTIME, r.RECOMMENDATIONS_RUNTIME)
+        self.assertEqual(r.PRE_MATERIALS_LIFECYCLE_RUNTIME - r.PRE_RECOMMENDATIONS_RUNTIME, r.RECOMMENDATIONS_RUNTIME)
+        self.assertEqual(r.RUNTIME - r.PRE_MATERIALS_LIFECYCLE_RUNTIME, {'selection_materials_lifecycle.py'})
+        self.assertIn(frozenset(r.PRE_MATERIALS_LIFECYCLE_RUNTIME), r.RUNTIME_LAYOUTS)
         self.assertIn(frozenset(r.PRE_RECOMMENDATIONS_RUNTIME), r.RUNTIME_LAYOUTS)
         self.assertEqual(r.PRE_EMPLOYER_REVIEW_RUNTIME - r.PRE_PRODUCT_RECORDINGS_RUNTIME,
                          {'recording_uploads.py', 'canonical_materials.py', 'transcript_bundle.py'})
@@ -205,7 +207,7 @@ class ReceiverTest(unittest.TestCase):
         self.assertIn(frozenset(r.PRE_PUBLIC_PROFILE_RUNTIME), r.RUNTIME_LAYOUTS)
         self.assertEqual(r.ZOOM_RUNTIME, {'call_providers.py', 'zoom_media.py', 'materials_zoom.py', 'zoom_recording_retention.py'})
         self.assertEqual(len(r.MATERIALS_RUNTIME), 9)
-        for runtime in (r.LEGACY_RUNTIME, r.BOT_RUNTIME, r.PRE_IMPORT_RUNTIME, r.PRE_OUTREACH_RUNTIME,
+        for runtime in (r.PRE_MATERIALS_LIFECYCLE_RUNTIME, r.LEGACY_RUNTIME, r.BOT_RUNTIME, r.PRE_IMPORT_RUNTIME, r.PRE_OUTREACH_RUNTIME,
                         r.PRE_ACCESS_RUNTIME, r.PRE_CV_RUNTIME, r.PRE_POOLED_RUNTIME, r.PRE_EMPLOYER_TELEGRAM_RUNTIME, r.PRE_REMINDERS_RUNTIME, r.PRE_MEETING_NOTICES_RUNTIME, r.PRE_MEETING_LAB_RUNTIME, r.PRE_RECRUITER_COACH_RUNTIME, r.PRE_CALL_CLEANUP_RUNTIME, r.PRE_OBSERVABILITY_RUNTIME, r.PRE_CANDIDATE_CALENDAR_RUNTIME, r.PRE_INTERVIEW_ASSISTANT_RUNTIME, r.PRE_MATERIALS_RUNTIME, r.PRE_ZOOM_RUNTIME, r.SERVICES_ONLY_RUNTIME, r.ZOOM_ONLY_RUNTIME, r.ASSESSMENT_ONLY_RUNTIME, r.PRE_ASSESSMENT_RUNTIME, r.PRE_ASR_DISPATCH_RUNTIME, r.RUNTIME):
             with self.subTest(count=len(runtime)):
                 a, s, m = self.bundle('service', runtime=runtime)
