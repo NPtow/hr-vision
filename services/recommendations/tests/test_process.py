@@ -13,8 +13,8 @@ import tempfile
 import time
 import unittest
 
-from recommendations.engine import canonical_json, default_rubric
-from fixtures import request_fixture
+from recommendations.engine import HIGHER_POLICY, canonical_json, default_rubric
+from fixtures import request_fixture, set_importance
 
 
 class ProcessTests(unittest.TestCase):
@@ -148,6 +148,23 @@ class ProcessTests(unittest.TestCase):
                                 timeout=5, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.assertEqual(failed.returncode, 2)
         self.assertFalse(unused.exists())
+
+    def test_new_policy_process_restart_preserves_server_points_and_unknown_requirement(self):
+        value = request_fixture(default_rubric())
+        value["policy"] = dict(HIGHER_POLICY)
+        set_importance(value["vacancy_profile"], 0, 3, required=None)
+        status, result = self.http("POST", "/v1/recommendations", value)
+        self.assertEqual(status, 200)
+        self.assertEqual(result["service_version"], "1.1.0")
+        item = result["items"][0]
+        self.assertAlmostEqual(item["score_points"], 50 * (item["score"] + 1))
+        self.assertEqual(item["parameters"][0]["utility_mode"], "higher_level_linear")
+        self.assertIsNone(item["parameters"][0]["required_level_id"])
+        self.stop(crash=True)
+        self.start()
+        self.assertEqual(self.http("GET", "/v1/recommendations/" + result["recommendation_id"]), (200, result))
+        self.assertEqual(self.http("POST", "/v1/recommendations", value), (200, result))
+        self.assertEqual(self.http("GET", "/v1/operator")[1]["storage"]["saved_results"], 1)
 
 
 class PackagedImportTests(unittest.TestCase):

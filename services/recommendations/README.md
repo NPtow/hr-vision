@@ -1,4 +1,4 @@
-# Recommendations 1.0.0
+# Recommendations 1.1.0
 
 Independent deterministic process with its own SQLite. Owner: assessment core
 team (thread «Ядро»). The authorized HR backend supplies immutable candidate and
@@ -67,16 +67,35 @@ whole request before any durable mutation. An empty candidate fact list is a
 confirmed empty set; null means unknown. A missing industry key is unknown,
 not zero months. Canonical IDs are compared exactly without case folding or aliases.
 
-Initial policy is exactly
-`{version:"tanh-v1",k:1,probability_mode:"conditional_levels"}`.
+Supported policies have the same three keys:
+`{version:"tanh-higher-v2",k:1,probability_mode:"conditional_levels"}` for automatic
+comparison, and the earlier `version:"tanh-v1"` with its strict unknown-requirement
+behavior. An omitted or unknown policy is rejected.
 Positions follow the catalogue 1..N. For an included skill,
 `q=p/sum(numeric p)`, `u=tanh(k*(position-required_position))`,
 `m=sum(q*u)`, `score=sum(importance*m)/sum(included importance)`.
+For `tanh-higher-v2`, when the positive-weight requirement is unknown, use
+`u=2*(position-1)/(N-1)-1` for the catalogue's N levels instead. The parameter
+explicitly reports `utility_mode:"higher_level_linear"`, `required_level_id:null`
+and `required_position:null`; no requirement is invented. Known requirements
+retain the existing curve and report `utility_mode:"required_level_tanh"`.
 Confidence is displayed separately. Raw probabilities are never rewritten.
 Weight zero or chosen insufficient data excludes the skill from numerator and
-denominator. All excluded means `score:null,status:unscored,rank:null`.
-Unknown importance or positive weight with unknown requirement rejects with
-`422 {error:"clarification_required"}` rather than returning a partial match.
+denominator. All excluded means `score:null,score_points:null,status:unscored,rank:null`.
+Unknown importance rejects with `422 {error:"clarification_required"}` under both
+policies. A positive weight with unknown requirement rejects under `tanh-v1`.
+Under v2 that parameter's source status remains `needs_review`; it is included by
+the explicit fallback without changing the immutable vacancy profile.
+
+Each newly calculated item reports server-owned `score_points=50*(score+1)` in
+[0,100], with null preserved. A valid raw index of zero means 50 points. Existing
+raw `score` and `weighted_contribution` remain. Each included parameter reports
+`weight_share=w/sum(included w)` and
+`score_points_contribution=weight_share*50*(m+1)`; the latter sum to item points
+within floating precision. Excluded parameters have zero share/point contribution
+when the row has a score, and `utility_mode:null`. All-unscored rows have null
+shares/point contributions. Derived numeric bounds are checked; at most 1e-12
+of machine-rounding overshoot is bounded to an endpoint. Inputs are never clamped.
 
 Confirmed mandatory failure produces `eligibility:fail,status:filtered,rank:null`;
 it remains in the saved audit and the consumer hides it from the ordinary list.
@@ -131,8 +150,12 @@ need to be printed. Search structured logs by returned request/operation ID.
 
 The initial schema is append-only: no update/delete/migration endpoint exists.
 Releasing a new scorer changes the service version and therefore new result IDs;
-previous saved results remain readable using their stored version. Preserve the
-previous artifact and DB backup before switching process/routing. A production
+previous saved results remain readable using their stored version. GET preserves
+previous results exactly: it never adds `score_points` or utility metadata to old
+records. Version 1.1.0 accepts both policies and retains the SQLite schema. A
+rollback artifact can read saved records through the same identity check, but
+cannot calculate the new policy; switch the consumer policy with the rollback.
+Preserve the previous artifact and DB backup before switching process/routing. A production
 artifact rollback is the release owner's responsibility and remains unverified
 here; local restart and restore do not prove a previous production release works.
 

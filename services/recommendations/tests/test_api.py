@@ -9,9 +9,9 @@ import unittest
 from unittest.mock import patch
 
 from recommendations import api
-from recommendations.engine import canonical_json
+from recommendations.engine import HIGHER_POLICY, canonical_json
 from recommendations.store import ResultStore
-from fixtures import request_fixture, synthetic_rubric, set_distribution
+from fixtures import request_fixture, synthetic_rubric, set_distribution, set_importance
 
 TOKEN = "a1" * 32
 
@@ -84,6 +84,24 @@ class HttpTests(unittest.TestCase):
             snapshot = json.loads(db.execute("SELECT input FROM recommendations").fetchone()[0])
         self.assertEqual(snapshot, value)
         self.assertEqual(self.request("GET", "/v1/recommendations/" + result["recommendation_id"])[2], result)
+
+    def test_http_new_policy_points_are_server_generated_and_old_policy_remains_strict(self):
+        value = request_fixture()
+        set_importance(value["vacancy_profile"], 0, 3, required=None)
+        self.assertEqual(self.request("POST", "/v1/recommendations", value)[2], {"error": "clarification_required"})
+        value["policy"] = dict(HIGHER_POLICY)
+        status, _, result = self.request("POST", "/v1/recommendations", value)
+        self.assertEqual(status, 200)
+        item = result["items"][0]
+        self.assertEqual(result["service_version"], "1.1.0")
+        self.assertAlmostEqual(item["score_points"], 50 * (item["score"] + 1))
+        self.assertAlmostEqual(sum(p["score_points_contribution"] for p in item["parameters"]), item["score_points"])
+        self.assertEqual(item["parameters"][0]["utility_mode"], "higher_level_linear")
+        self.assertIsNone(item["parameters"][0]["required_level_id"])
+        self.assertEqual(self.request("GET", "/v1/recommendations/" + result["recommendation_id"])[2], result)
+        value["candidate_profiles"][0]["parameters"][0]["score_points_contribution"] = 100
+        self.assertEqual(self.request("POST", "/v1/recommendations", value)[0], 422)
+        self.assertEqual(self.store.metadata()["saved_results"], 1)
 
     def test_auth_is_required_for_results_readiness_and_operator_metadata(self):
         for path in ("/readyz", "/v1/operator", "/v1/recommendations/" + "0" * 64):

@@ -19,6 +19,7 @@ VERSION = "recommendations-v1"
 UNKNOWN = "insufficient_data"
 MAX_POOL = 1000
 POLICY = {"version": "tanh-v1", "k": 1, "probability_mode": "conditional_levels"}
+HIGHER_POLICY = {"version": "tanh-higher-v2", "k": 1, "probability_mode": "conditional_levels"}
 
 
 class InvalidInput(ValueError):
@@ -167,7 +168,7 @@ def choice(answer, options):
         raise InvalidInput()
 
 
-def validate_vacancy(profile, rubric):
+def validate_vacancy(profile, rubric, *, allow_unknown_requirement=False):
     obj(profile, ("contract_version", "profile_id", "run_id", "vacancy_id", "source_revision",
                   "vacancy_sha256", "rubric_id", "rubric_version", "rubric_sha256",
                   "importance_version", "model", "parameters", "usage"), ("revision",))
@@ -215,7 +216,8 @@ def validate_vacancy(profile, rubric):
             if (requirement != (None if raw_level == UNKNOWN else raw_level)
                     or importance != (UNKNOWN if raw_importance == UNKNOWN else int(raw_importance[1:]))):
                 raise InvalidInput()
-        needs_clarification |= status == "needs_review"
+        needs_clarification |= (importance == UNKNOWN or status == "needs_review"
+                                and not allow_unknown_requirement)
     if needs_clarification:
         raise InvalidInput("clarification_required")
     return parameters
@@ -347,19 +349,33 @@ def required_checks(vacancy, candidate):
     return checks
 
 
+def bounded_number(value, minimum, maximum):
+    """Check derived numeric bounds; tolerate only machine-rounding at endpoints.
+
+    The original profile and probability values are never changed. Tiny floating
+    overshoot can occur when summing conditional probabilities at utility ±1.
+    """
+    if (type(value) not in (int, float) or not math.isfinite(value)
+            or value < minimum - 1e-12 or value > maximum + 1e-12):
+        raise InvalidInput()
+    return min(maximum, max(minimum, value))
+
+
 def recommend(value, *, rubric=None):
     """Pure operation; validation precedes any calculation or durable mutation."""
     canonical_json(value)
     obj(value, ("vacancy_profile", "candidate_profiles", "candidate_fields", "vacancy_fields", "policy"))
     policy = value["policy"]
     obj(policy, POLICY)
-    if (policy["version"] != POLICY["version"] or policy["probability_mode"] != POLICY["probability_mode"]
+    if (policy["version"] not in (POLICY["version"], HIGHER_POLICY["version"])
+            or policy["probability_mode"] != POLICY["probability_mode"]
             or type(policy["k"]) not in (int, float) or policy["k"] != 1 or not math.isfinite(policy["k"])):
         raise InvalidInput("unsupported_policy")
     rubric = default_rubric() if rubric is None else rubric
     rubric_parameters(rubric)
     vacancy = value["vacancy_profile"]
-    vacancy_parameters = validate_vacancy(vacancy, rubric)
+    vacancy_parameters = validate_vacancy(vacancy, rubric,
+                                         allow_unknown_requirement=policy["version"] == HIGHER_POLICY["version"])
     profiles = value["candidate_profiles"]
     if type(profiles) is not list or not 1 <= len(profiles) <= MAX_POOL:
         raise InvalidInput("invalid_pool_size")
@@ -385,6 +401,7 @@ def recommend(value, *, rubric=None):
             parameter = {"parameter_id": pid, "title": target["title"], "weight": weight,
                          "required_level_id": requirement, "excluded": excluded is not None,
                          "exclusion_reason": excluded, "m": None, "weighted_contribution": None,
+                         "utility_mode": None, "weight_share": None, "score_points_contribution": None,
                          "numeric_probability_mass": math.fsum(l["probability"] for l in cp["levels"]),
                          "insufficient_data_probability": cp["insufficient_data_probability"],
                          "model_confidence": cp["model_confidence"], "levels": []}
@@ -395,22 +412,37 @@ def recommend(value, *, rubric=None):
                                                 "p_raw": level["probability"], "q": None,
                                                 "u": None, "contribution": None})
             else:
-                required_position = next(i for i, l in enumerate(target["levels"], 1)
-                                         if l["level_id"] == requirement)
+                required_position = (None if requirement is None else
+                                     next(i for i, l in enumerate(target["levels"], 1)
+                                          if l["level_id"] == requirement))
+                parameter["utility_mode"] = ("higher_level_linear" if required_position is None
+                                             else "required_level_tanh")
                 for position, level in enumerate(cp["levels"], 1):
                     q = level["probability"] / parameter["numeric_probability_mass"]
-                    u = math.tanh(policy["k"] * (position - required_position))
+                    u = (2 * (position - 1) / (len(target["levels"]) - 1) - 1 if required_position is None
+                         else math.tanh(policy["k"] * (position - required_position)))
                     parameter["levels"].append({"level_id": level["level_id"], "position": position,
                                                 "p_raw": level["probability"], "q": q,
                                                 "u": u, "contribution": q * u})
                 parameter["required_position"] = required_position
-                parameter["m"] = math.fsum(l["contribution"] for l in parameter["levels"])
+                parameter["m"] = bounded_number(math.fsum(l["contribution"] for l in parameter["levels"]), -1, 1)
                 parameter["weighted_contribution"] = weight * parameter["m"]
                 included_weights.append(weight)
                 weighted_matches.append(parameter["weighted_contribution"])
             parameters.append(parameter)
         denominator = sum(included_weights)
-        score = math.fsum(weighted_matches) / denominator if denominator else None
+        score = bounded_number(math.fsum(weighted_matches) / denominator, -1, 1) if denominator else None
+        score_points = bounded_number(50 * (score + 1), 0, 100) if score is not None else None
+        if score is not None:
+            for parameter in parameters:
+                parameter["weight_share"] = (bounded_number(parameter["weight"] / denominator, 0, 1)
+                                             if not parameter["excluded"] else 0)
+                parameter["score_points_contribution"] = (bounded_number(
+                    parameter["weight_share"] * 50 * (parameter["m"] + 1), 0, 100)
+                    if not parameter["excluded"] else 0)
+            if not math.isclose(math.fsum(p["score_points_contribution"] for p in parameters),
+                                score_points, rel_tol=0, abs_tol=1e-10):
+                raise InvalidInput()
         checks = required_checks(value["vacancy_fields"], fields[cid])
         eligibility = ("fail" if any(c["status"] == "fail" for c in checks) else
                        "unknown" if any(c["status"] == "unknown" for c in checks) else "pass")
@@ -418,7 +450,7 @@ def recommend(value, *, rubric=None):
                       "candidate_corpus_sha256": profile["corpus_sha256"],
                       "candidate_fields_revision": fields[cid]["revision"],
                       "eligibility": eligibility, "requires_human_approval": eligibility == "unknown",
-                      "required_checks": checks, "score": score,
+                      "required_checks": checks, "score": score, "score_points": score_points,
                       "status": "filtered" if eligibility == "fail" else "scored" if score is not None else "unscored",
                       "rank": None, "parameters": parameters,
                       "coverage": {"total_parameters": len(parameters),

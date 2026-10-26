@@ -8,9 +8,9 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from recommendations.engine import InvalidInput, canonical_json
+from recommendations.engine import HIGHER_POLICY, InvalidInput, canonical_json, digest
 from recommendations.store import ResultStore, StoreUnavailable
-from fixtures import request_fixture, synthetic_rubric
+from fixtures import request_fixture, synthetic_rubric, set_importance
 
 
 class StoreTests(unittest.TestCase):
@@ -103,6 +103,38 @@ class StoreTests(unittest.TestCase):
         with self.assertRaises(sqlite3.OperationalError):
             self.store.get("0" * 64)
         self.assertFalse(self.path.exists())
+
+    def test_previous_version_result_without_points_reads_unchanged_after_upgrade(self):
+        historical = self.store.submit(self.value)
+        historical["service_version"] = "1.0.1"
+        historical["recommendation_id"] = digest({"service_version": "1.0.1", "input": self.value})
+        for item in historical["items"]:
+            item.pop("score_points")
+            for parameter in item["parameters"]:
+                for field in ("utility_mode", "weight_share", "score_points_contribution"):
+                    parameter.pop(field)
+        with self.store.db() as db:
+            db.execute("INSERT INTO recommendations VALUES (?,?,?,?,?,?)",
+                       (historical["recommendation_id"], canonical_json(self.value), canonical_json(historical),
+                        digest(historical), "1.0.1", 1))
+        restarted = ResultStore(self.path, rubric=self.rubric)
+        with patch("recommendations.store.recommend", side_effect=AssertionError("GET must not upgrade result")):
+            self.assertEqual(restarted.get(historical["recommendation_id"]), historical)
+        self.assertNotIn("score_points", restarted.get(historical["recommendation_id"])["items"][0])
+        self.assertNotEqual(self.store.submit(self.value)["recommendation_id"], historical["recommendation_id"])
+
+    def test_new_policy_is_saved_idempotently_and_unknown_importance_never_partially_saves(self):
+        self.value["policy"] = dict(HIGHER_POLICY)
+        set_importance(self.value["vacancy_profile"], 0, 3, required=None)
+        result = self.store.submit(self.value)
+        self.assertEqual(result, self.store.submit(deepcopy(self.value)))
+        self.assertEqual(self.store.metadata()["saved_results"], 1)
+        self.assertEqual(result["items"][0]["parameters"][0]["utility_mode"], "higher_level_linear")
+        invalid = deepcopy(self.value)
+        set_importance(invalid["vacancy_profile"], 1, "insufficient_data", required=None)
+        with self.assertRaisesRegex(InvalidInput, "clarification_required"):
+            self.store.submit(invalid)
+        self.assertEqual(self.store.metadata()["saved_results"], 1)
 
 
 if __name__ == "__main__":
