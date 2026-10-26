@@ -1,13 +1,17 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
+import { ChevronRight } from 'lucide-react';
 import { selectionRequest, type SelectionVacancy } from './api';
 import { OutreachError } from '../hh-outreach/api';
 import { type ProfileEnvelope, type Importance, matchingLabels } from './matching-contract';
 import { RequiredFieldsEditor } from './RequiredFieldsEditor';
+import { RequirementDistribution } from './RequirementDistribution';
+import { levelLabel } from './distribution-data';
 
 export function VacancyRequirements({ vacancy, value, token, expire, onChange }: {
   vacancy: SelectionVacancy; value: ProfileEnvelope; token: string; expire: () => void; onChange: () => void;
 }) {
   const [editing, setEditing] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null);
   const [draft, setDraft] = useState(value.profile?.parameters ?? []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -27,11 +31,11 @@ export function VacancyRequirements({ vacancy, value, token, expire, onChange }:
     finally { pending.current = false; setBusy(false); }
   }
   const invalidDraft = draft.some(p => p.importance !== 0 && p.importance !== 'insufficient_data' && !p.required_level_id);
-  return <details className="sl-requirements"><summary>Требования вакансии<span>{value.stale ? 'Нужно обновить' : matchingLabels[value.state] ?? 'Статус неизвестен'}</span></summary>
+  return <details className="sl-requirements"><summary><h2 className="md-requirements-title">Требования вакансии</h2><span>{value.stale ? 'Нужно обновить' : matchingLabels[value.state] ?? 'Статус неизвестен'}</span></summary>
     <div className="sl-requirements-body">
       {value.stale && <p role="status">Вакансия изменилась. Требования и сравнение нужно обновить.</p>}
       {!value.profile && <p className="sl-muted">Требования к навыкам ещё не рассчитаны.</p>}
-      {value.profile && !editing && <><div className="sl-scroll"><table aria-label="Требования к навыкам"><thead><tr><th>Навык</th><th>Требуемый уровень</th><th>Важность</th></tr></thead><tbody>{value.profile.parameters.map(p => <tr key={p.parameter_id}><td>{p.title}</td><td>{p.levels.find(l => l.level_id === p.required_level_id)?.label ?? 'Нужно уточнить'}</td><td>{importanceLabel(p.importance)}</td></tr>)}</tbody></table></div><button className="sl-open" disabled={busy || value.stale} onClick={() => { setDraft(value.profile!.parameters); setEditRevision(value.revision); setEditProfileId(value.profile!.profile_id); setEditing(true); }}>Изменить требования</button></>}
+      {value.profile && !editing && <><div className="sl-scroll"><table className="md-requirement-table" aria-label="Требования к навыкам"><thead><tr><th>Навык</th><th>Требуемый уровень</th><th>Важность</th></tr></thead><tbody>{value.profile.parameters.map(p => <Fragment key={p.parameter_id}><tr className="md-requirement-row" data-open={expanded === p.parameter_id}><td><button className="md-skill-toggle" aria-expanded={expanded === p.parameter_id} aria-controls={expanded === p.parameter_id ? `requirement-${p.parameter_id}` : undefined} onClick={() => setExpanded(current => current === p.parameter_id ? null : p.parameter_id)}><ChevronRight size={16}/>{p.title}</button></td><td data-label="Требуемый уровень">{levelLabel(p)}</td><td data-label="Важность">{importanceLabel(p.importance)}</td></tr>{expanded === p.parameter_id && <tr><td colSpan={3}><div id={`requirement-${p.parameter_id}`}><RequirementDistribution parameter={p}/></div></td></tr>}</Fragment>)}</tbody></table></div><button className="sl-open" disabled={busy || value.stale} onClick={() => { setDraft(value.profile!.parameters); setEditRevision(value.revision); setEditProfileId(value.profile!.profile_id); setEditing(true); }}>Изменить требования</button></>}
       {editing && <form onSubmit={e => { e.preventDefault(); void command(true); }}>
         <div className="sl-scroll"><table aria-label="Редактор требований"><thead><tr><th>Навык</th><th>Требуемый уровень</th><th>Важность</th></tr></thead><tbody>{draft.map((p, i) => <tr key={p.parameter_id}><td>{p.title}</td><td><label><span className="sl-sr">Уровень: {p.title}</span><select disabled={busy} value={p.required_level_id ?? ''} onChange={e => setDraft(d => d.map((v, j) => i === j ? { ...v, required_level_id: e.target.value || null } : v))}><option value="">Не определён</option>{p.levels.map(l => <option key={l.level_id} value={l.level_id}>{l.label}</option>)}</select></label></td><td><label><span className="sl-sr">Важность: {p.title}</span><select disabled={busy} value={p.importance} onChange={e => setDraft(d => d.map((v, j) => i === j ? { ...v, importance: e.target.value === 'insufficient_data' ? 'insufficient_data' : Number(e.target.value) as Importance } : v))}><option value="insufficient_data">Не определена</option>{([0, 1, 2, 3] as const).map(w => <option key={w} value={w}>{importanceLabel(w)}</option>)}</select></label></td></tr>)}</tbody></table></div>
         {invalidDraft && <p role="status">Укажите уровень для навыков с важностью больше нуля.</p>}
