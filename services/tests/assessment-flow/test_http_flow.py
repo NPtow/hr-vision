@@ -186,6 +186,7 @@ class HTTPFlowTests(unittest.TestCase):
                prefix + '_SERVICE_TOKEN': TOKEN, prefix + '_PORT': str(self.ports[service]),
                prefix + '_DB': str(self.path / (service + '.sqlite3')),
                prefix + '_JEV_API_KEY': 'synthetic-never-call-provider'}
+        env.update(getattr(self, 'process_environment', {}))
         process = subprocess.Popen([sys.executable, '-m', module], cwd=ROOT, env=env, stdout=log, stderr=log)
         self.processes[service] = process
         deadline = time.monotonic() + 8
@@ -493,6 +494,131 @@ class HTTPFlowTests(unittest.TestCase):
         self.assertEqual(self.start()['recommendationId'], value['recommendationId'])
         self.assertEqual(self.cstore.diagnostics()['counts'], {'completed': 4})
         self.assertEqual(self.vstore.diagnostics()['jobs'], {'completed': 1})
+
+
+class ProviderFailureProcessTests(unittest.TestCase):
+    """Unmodified OS-process worker/transport; SOCKS has no listening socket.
+
+    A closed loopback port exercises immediate failure; a reserved non-listening
+    socket exercises the built-in eight-second connect timeout. No internet/DNS
+    or provider requests can cross this SOCKS boundary. No credentials
+    are loaded. Full production plans use the same trusted 16-parameter rubric.
+    """
+    launch = HTTPFlowTests.launch
+    http = HTTPFlowTests.http
+    stop_all = HTTPFlowTests.stop_all
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix='assessment-provider-fault-')
+        self.addCleanup(self.temp.cleanup)
+        self.path = Path(self.temp.name)
+        self.logs, self.processes, self.ports = {}, {}, {}
+        self.addCleanup(self.stop_all)
+        self.proxy = socket.socket()
+        self.proxy.bind(('127.0.0.1', 0))
+        self.addCleanup(self.proxy.close)
+        proxy_url = 'socks5h://127.0.0.1:' + str(self.proxy.getsockname()[1])
+        self.process_environment = {'ASSESSMENT_CORE_JEV_PROXY': proxy_url,
+                                    'VACANCY_PROFILE_JEV_PROXY': proxy_url}
+        self.private = 'PRIVATE PROCESS FAULT CORPUS'
+        self.corpus = {'candidate_id': 'isolated-fault-candidate', 'sources': [{
+            'source_id': 'cv:fault', 'version': 'fixture-v1', 'kind': 'cv',
+            'units': [{'unit_id': 'u1', 'text': self.private, 'role': 'candidate'}]}]}
+        self.vacancy = {'vacancy_id': 'isolated-fault-vacancy', 'revision': 'fixture-v1',
+                        'data': {'description': self.private}}
+
+    def setup_service(self, service):
+        if service == 'candidate':
+            return (CandidateStore(self.path / 'candidate.sqlite3'),
+                    candidate_plan(self.corpus, RUBRIC), '/v1/assessments',
+                    {'corpus': self.corpus, 'rubric': RUBRIC})
+        return (VacancyStore(self.path / 'vacancy.sqlite3'), vacancy_plan(self.vacancy, RUBRIC),
+                '/v1/vacancy-profiles', {'vacancy': self.vacancy, 'rubric': RUBRIC})
+
+    def restart(self, service):
+        self.processes[service].send_signal(signal.SIGINT)
+        self.processes[service].wait(timeout=5)
+        self.logs[service].close()
+        self.launch(service)
+
+    def assert_safe_logs(self, service):
+        self.logs[service].flush()
+        output = (self.path / (service + '.log')).read_text()
+        for secret in (TOKEN, self.private, 'synthetic-never-call-provider'):
+            self.assertNotIn(secret, output)
+
+    def assert_proxy_failure(self, *, expected_code, seconds):
+        for service in ('candidate', 'vacancy'):
+            with self.subTest(service=service):
+                store, plan, route, body = self.setup_service(service)
+                self.launch(service)
+                started = time.monotonic()
+                code, receipt = self.http(service, 'POST', route, body)
+                self.assertEqual((code, receipt['run_id']), (202, plan['run_id']))
+                deadline = started + seconds
+                while True:
+                    code, receipt = self.http(service, 'GET', route + '/' + plan['run_id'])
+                    self.assertEqual(code, 200)
+                    if receipt['status'] in ('failed', 'outcome_unknown'):
+                        break
+                    if time.monotonic() >= deadline:
+                        self.fail(service + ' local proxy failure exceeded configured acceptance bound')
+                    time.sleep(.02)
+                elapsed = time.monotonic() - started
+                self.assertEqual(receipt['error']['code'], expected_code)
+                self.assertNotIn(self.private, candidates.dump(receipt))
+                terminal = store.get(plan['run_id'])
+                self.assertIsNone(terminal['response'])
+                # Repeat the actual HTTP acceptance command. It must reuse the
+                # terminal row rather than requeue or attempt a provider POST.
+                self.assertEqual(self.http(service, 'POST', route, body), (202, receipt))
+                time.sleep(1.1)  # more than the real worker's one-second idle poll
+                self.assertEqual(store.get(plan['run_id']), terminal)
+                self.restart(service)
+                self.assertEqual(self.http(service, 'GET', route + '/' + plan['run_id']), (200, receipt))
+                self.assertEqual(self.http(service, 'POST', route, body), (202, receipt))
+                time.sleep(1.1)
+                self.assertEqual(store.get(plan['run_id']), terminal)
+                self.assertIsNone(store.next_queued())
+                self.assert_safe_logs(service)
+                print(candidates.dump({'service': service, 'closed_proxy_terminal_seconds': elapsed,
+                    'terminal_status': receipt['status'], 'error': receipt['error']['code'],
+                    'same_terminal_row_after_repeated_post_and_restart': True}))
+
+    def test_real_workers_closed_proxy_fail_finitely_and_never_repost_after_restart(self):
+        self.proxy.close()
+        self.assert_proxy_failure(expected_code='network_error', seconds=8)
+
+    def test_real_workers_nonlistening_proxy_enforces_eight_second_connect_timeout(self):
+        # The host refuses a closed port immediately, but leaves a reserved,
+        # non-listening socket pending. The unchanged curl --connect-timeout 8
+        # terminates both OS-process calls, well below the provider120s budget.
+        self.assert_proxy_failure(expected_code='timeout', seconds=12)
+
+    def test_malformed_saved_typed_response_is_terminal_raw_retained_after_process_restart(self):
+        for service in ('candidate', 'vacancy'):
+            with self.subTest(service=service):
+                store, plan, route, body = self.setup_service(service)
+                malformed = typed_response(plan, vacancy=service == 'vacancy')
+                # Correct hash over an invalid typed answer proves validation,
+                # rather than only a checksum mismatch, causes terminal failure.
+                next(iter(malformed['answers'].values()))['probabilities'] = {'invalid-level': 1}
+                seed_saved(store, plan, malformed)
+                self.launch(service)
+                code, receipt = self.http(service, 'GET', route + '/' + plan['run_id'])
+                self.assertEqual((code, receipt['status'], receipt['error']['code']),
+                                 (200, 'failed', 'invalid_saved_response'))
+                saved = store.get(plan['run_id'])
+                self.assertEqual(saved['response'], malformed)
+                self.assertEqual(saved['response_sha256'], candidates.digest(malformed))
+                self.assertIsNone(saved['result'])
+                self.assertIsNone(store.next_queued())
+                self.assertEqual(self.http(service, 'POST', route, body), (202, receipt))
+                self.restart(service)
+                self.assertEqual(self.http(service, 'GET', route + '/' + plan['run_id']), (200, receipt))
+                self.assertEqual(store.get(plan['run_id']), saved)
+                self.assertEqual(self.http(service, 'GET', '/readyz')[0], 200)
+                self.assert_safe_logs(service)
 
 
 if __name__ == '__main__':

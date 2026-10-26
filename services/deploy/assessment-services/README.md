@@ -41,7 +41,7 @@ calls are made by the installer or health checks.
 
 ```sh
 python3 /root/assessment-delivery/operate.py candidate inspect --probe
-python3 /root/assessment-delivery/guarded_upgrade.py /root/candidate.tar.gz --expected-current FULL_COMMIT --legacy-candidate --receiver /ABSOLUTE/REVIEWED/INSTALLED/receiver.py --receiver-sha256 REVIEWED_RECEIVER_SHA256
+python3 -B /root/assessment-delivery/guarded_upgrade.py /root/candidate.tar.gz --expected-current FULL_COMMIT --legacy-candidate --receiver /ABSOLUTE/REVIEWED/INSTALLED/receiver.py --receiver-sha256 REVIEWED_RECEIVER_SHA256
 python3 /root/assessment-delivery/operate.py vacancy install /root/vacancy.tar.gz --expected-current absent --consumers-quiesced
 python3 /root/assessment-delivery/operate.py recommendations install /root/recommendations.tar.gz --expected-current absent --consumers-quiesced
 ```
@@ -60,6 +60,26 @@ must pass before material writers resume. If activation/origin recovery fails,
 API is stopped through the receiver and material writers remain paused. Inspect
 units and recover through the guarded receiver; do not manually resume writers.
 Other direct candidate writers must remain disabled for this operation.
+
+Before actions the wrapper prints its operation journal path under
+`/var/lib/hr-vision-operations/` (root-owned directory mode 0700; atomic files
+mode 0600). Phases distinguish candidate inspection/install, stopped live guard,
+API restore, origin verification and material resume. The originally paused unit
+identities are durably saved before stopping API. Failed-phase metadata freezes
+the original exception type chain and integer errno/exit codes before recovery
+can mask them; arbitrary exception messages, child output and arguments are never
+stored. The captured existing UI SHA/API/UI pointers help diagnose origin revision
+mismatch. Journal inspection is read-only and root-only:
+
+```sh
+python3 -B /root/assessment-delivery/guarded_upgrade.py --inspect-journal /var/lib/hr-vision-operations/OBSERVED.json
+```
+
+The wrapper disables bytecode writes itself and invokes the operator child with
+`python -B`. Receiver runtime file guards remain strict: unexpected generated
+files must be reviewed and handled explicitly, never silently ignored. An old
+failed attempt without this journal cannot gain retrospective phase evidence.
+
 
 `--legacy-candidate` is only for the first upgrade from an existing unmanifested
 candidate release such as b667a…. It records a checked, root-owned file inventory
@@ -123,13 +143,13 @@ accepted work and is deliberately outside this command. `inspect --id` prints on
 status/timing/raw-response-present/result-present, never stored texts or secrets.
 Unknown provider outcomes require reconciliation, never blind POST retry.
 
-Local evidence (26.10.2026): thirteen delivery tests pass, including an actual isolated
+Local evidence (26.10.2026): sixteen delivery tests pass, including an actual isolated
 recommendations HTTP process from a committed fixture artifact, `/healthz` + `/readyz`,
 update, injected failed-health return and controlled rollback. Other tests cover
-five pure receiver-orchestration scenarios (successful ordering, busy core,
+seven pure receiver-orchestration/journal scenarios (successful ordering, busy core,
 failed install, stopped-state live guard and unsafe API/origin recovery),
 byte-reproducible packaging despite dirty files, manifest tamper, operator locking,
-active/raced jobs during update and controlled rollback, occupied-port refusal,
+active/raced jobs during update and controlled rollback, occupied-listener refusal and actual TIME_WAIT acceptance with SO_REUSEADDR,
 and live-WAL backup/isolated restore/hash corruption. The six
 rubric activation tests also pass, including nested shared-client edits/additions/
 removals. Commands:

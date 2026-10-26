@@ -52,8 +52,9 @@ class GuardedUpgradeTests(unittest.TestCase):
             raise ValueError('origin health failure')
 
     def fake_run(self, argv, **kwargs):
-        self.assertEqual(argv[2], 'candidate')
-        action = argv[3]
+        self.assertEqual(argv[1], '-B')
+        self.assertEqual(argv[3], 'candidate')
+        action = argv[4]
         self.events.append(action)
         if action == 'inspect':
             result = {'current': 'b' * 40, 'database': {'active': self.active}}
@@ -65,9 +66,9 @@ class GuardedUpgradeTests(unittest.TestCase):
             result = {'current': 'c' * 40}
         return SimpleNamespace(stdout=json.dumps(result))
 
-    def execute(self):
+    def execute(self, journal=None):
         return module.execute(self.receiver, Path('/reviewed/operate.py'), Path('/artifact.tar.gz'),
-                              'b' * 40, legacy=True, run=self.fake_run)
+                              'b' * 40, legacy=True, run=self.fake_run, journal=journal)
 
     def test_success_holds_pause_through_install_and_origin_verification(self):
         result = self.execute()
@@ -106,6 +107,42 @@ class GuardedUpgradeTests(unittest.TestCase):
                     self.execute()
                 self.assertFalse(any(isinstance(item, tuple) and item[0] == 'resume' for item in self.events))
                 self.assertEqual(self.events[-1], 'stop')
+
+    def test_private_phase_journal_distinguishes_install_and_origin_failure(self):
+        journal = module.PrivateJournal(self.root / 'private-journal', require_root=False)
+        self.origin_fails = True
+        with self.assertRaises(module.GuardFailure):
+            self.execute(journal)
+        document = module.inspect_journal(journal.path, require_root=False)
+        phases = {(event['phase'], event['status']) for event in document['events']}
+        self.assertIn(('candidate_install', 'passed'), phases)
+        self.assertIn(('restore_api', 'passed'), phases)
+        self.assertIn(('verify_origin', 'failed'), phases)
+        self.assertNotIn(('resume_materials', 'started'), phases)
+        self.assertEqual(journal.path.stat().st_mode & 0o777, 0o600)
+        identity = next(event['details'] for event in document['events'] if event['phase'] == 'deployment_identity')
+        self.assertEqual(identity['existing_ui_sha'], 'a' * 40)
+        paused = next(event['details'] for event in document['events'] if event['phase'] == 'materials_pause_state')
+        self.assertEqual(paused['paused_units'], ['materials-worker'])
+        phases_in_order = [event['phase'] for event in document['events']]
+        self.assertLess(phases_in_order.index('materials_pause_state'), phases_in_order.index('stop_api'))
+
+    def test_journal_exception_metadata_never_contains_message_output_or_argv(self):
+        journal = module.PrivateJournal(self.root / 'private-journal', require_root=False)
+        try:
+            try:
+                raise subprocess.CalledProcessError(42, ['python', 'SECRET_ARG'], output='SECRET_STDOUT', stderr='SECRET_STDERR')
+            except subprocess.CalledProcessError as original:
+                raise ValueError('SECRET_MESSAGE') from original
+        except ValueError as error:
+            journal('candidate_install', 'failed', error=error)
+        encoded = journal.path.read_text()
+        self.assertNotIn('SECRET', encoded)
+        chain = module.inspect_journal(journal.path, require_root=False)['events'][0]['exception_chain']
+        self.assertEqual(chain, [{'type': 'ValueError'}, {'type': 'CalledProcessError', 'returncode': 42}])
+        journal.path.chmod(0o644)
+        with self.assertRaisesRegex(module.GuardFailure, 'Private operation journal'):
+            module.inspect_journal(journal.path, require_root=False)
 
 
 if __name__ == '__main__':

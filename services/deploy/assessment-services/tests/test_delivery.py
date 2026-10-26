@@ -1,5 +1,6 @@
 """Isolated committed artifacts, operator locks, SQLite WAL, and real child processes."""
 import hashlib
+import errno
 import importlib.util
 import json
 import os
@@ -140,6 +141,32 @@ class DeliveryTests(unittest.TestCase):
             self.assertGreaterEqual(listener.fileno(), 0)
             self.assertFalse(self.host.current.exists())
         self.host.check_port_available()
+
+    def test_time_wait_without_listener_does_not_block_reusable_port_probe(self):
+        listener = socket.socket()
+        self.addCleanup(listener.close)
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        listener.bind(('127.0.0.1', 0))
+        listener.listen(1)
+        port = listener.getsockname()[1]
+        client = socket.create_connection(('127.0.0.1', port))
+        self.addCleanup(client.close)
+        server, _ = listener.accept()
+        self.addCleanup(server.close)
+        # Server actively closes first: this server port, not the client port,
+        # enters TIME_WAIT after the client acknowledges and closes.
+        server.shutdown(socket.SHUT_WR)
+        self.assertEqual(client.recv(1), b'')
+        client.close()
+        self.assertEqual(server.recv(1), b'')
+        server.close()
+        listener.close()
+        with socket.socket() as non_reusable_probe:
+            with self.assertRaises(OSError) as rejected:
+                non_reusable_probe.bind(('127.0.0.1', port))
+            self.assertEqual(rejected.exception.errno, errno.EADDRINUSE)
+        self.host.spec = dict(self.host.spec, port=port)
+        self.host.check_port_available()  # SO_REUSEADDR succeeds, no listener.
 
     def test_failed_initial_install_preserves_data_and_can_retry(self):
         health = self.host.health
