@@ -40,6 +40,7 @@ from core_source_client import ServiceHTTP
 from domain import Problem
 import selection
 import selection_facts as facts
+from selection_materials_lifecycle import Lifecycle as MaterialsLifecycle
 import test_selection as portal_fixture
 
 TOKEN = 'e1' * 32
@@ -103,6 +104,19 @@ class SourceCollector:
             raise CollectionError('sources_changed_since_collection')
         return value
 
+    def collect_interviews(self, cid):
+        """Same synthetic HR source manifest, without a dispatchable CV corpus.
+
+        Canonical source validation is covered by the collector suites. This
+        process-level suite keeps its existing explicit materials boundary.
+        """
+        snapshot = self.collect(cid)
+        sources = [source for source in snapshot['corpus']['sources'] if source['kind'] == 'interview']
+        return {**snapshot, 'corpus': None, 'manifest': {**snapshot['manifest'],
+            'scope': ['interviews'], 'source_count': len(sources),
+            'unit_count': sum(len(source['units']) for source in sources),
+            'text_characters': sum(len(unit['text']) for source in sources for unit in source['units'])}}
+
 
 class HTTPFlowTests(unittest.TestCase):
     def setUp(self):
@@ -117,6 +131,12 @@ class HTTPFlowTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.path = Path(self.temp.name)
         self.collector = SourceCollector(self.auth_candidate)
+        # HR readiness has its own consumer and no longer comes from model
+        # reads. Run that actual consumer against the same synthetic source
+        # boundary before assessment enrollment, including the unassessed ID.
+        self.materials = MaterialsLifecycle(self.connect, self.lock, self.auth_candidate, self.collector)
+        self.assertEqual(self.materials.scan(), len(self.ids))
+        self.assertEqual(self.materials.status()['candidates'], {'ready': len(self.ids)})
         self.cstore, self.vstore = CandidateStore(self.path / 'candidate.sqlite3'), VacancyStore(self.path / 'vacancy.sqlite3')
         self.plans, self.raw = {}, {}
         for name, cid in self.ids.items():
