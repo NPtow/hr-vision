@@ -1,3 +1,4 @@
+import { hasHRInterview } from './matching-contract';
 import type { SelectionPerson, Workflow, WorkflowState, Readiness } from './api';
 import { FullCorpusAssessment, fullCorpusStatusLabels } from '../interview-assessment/FullCorpusAssessment';
 
@@ -55,8 +56,8 @@ export function ReviewState({ person, readiness, loading, error }: {
   const showResult = !loading && !error && !['stale', 'unavailable', 'error', 'expired', 'cancelled'].includes(assessment.state);
   return <>
     <dl className="sl-readiness">
-      <div><dt>Встреча</dt><dd>{interviewLabels[workflow.interview.state] ?? 'Статус неизвестен'}</dd>
-        {workflow.interview.state === 'closed' && <small>Комната закрыта. Это не подтверждает участие собеседников или наличие записи.</small>}</div>
+      <div><dt>HR-интервью</dt><dd><HRInterviewBadge person={readiness?.hrInterview ? { ...person, hrInterview: readiness.hrInterview } : person}/></dd>
+        <small>Нужны запись и готовый основной текст всех частей HR-интервью.</small></div>
       <div><dt>Резюме</dt><dd>{person.resumeAvailable ? 'Есть в базе' : 'Не загружено'}</dd></div>
       <div><dt>Материалы</dt><dd><StateBadge state={{ state: loading ? 'loading' : error ? 'unavailable' : sources?.state ?? 'unknown' }} labels={materialLabels}/></dd>
         {sources && sources.recordings !== null && <small>Записей в каталоге: {sources.recordings} · основных текстов: {sources.transcripts}</small>}
@@ -75,4 +76,13 @@ export function ReviewState({ person, readiness, loading, error }: {
       <details><summary>Версия результата</summary><p className="sl-hash">{result.revisionId}</p></details>
     </section>}
   </>;
+}
+
+export function HRInterviewBadge({ person }: { person: SelectionPerson }) {
+  const ready = hasHRInterview(person);
+  const state = person.hrInterview?.state;
+  const text = ready ? 'Проведено' : state === 'processing' ? 'Текст обрабатывается'
+    : state === 'incomplete' || state === 'ready' ? 'Не все части готовы'
+    : state === 'missing' ? 'Нет материалов' : 'Не подтверждено';
+  return <span className={'sl-status ' + (ready ? 'sl-green' : '')}>{text}</span>;
 }
