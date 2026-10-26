@@ -35,7 +35,7 @@ export type SelectionPerson = {
   hrInterview?: HRInterview;
 };
 export type SelectionVacancy = { id: string; title: string; company: string; city: string; salary: string; description: string; status?: string; revision: number; generation: string; workspaceId: string; contentHash: string };
-export type Directory = { candidates: SelectionPerson[]; count: number };
+export type Directory = { candidates: SelectionPerson[]; count: number; offset: number; limit: number; nextOffset: number | null };
 export const selectionRequest = <T,>(path: string, token: string, body?: unknown) => hrRequest<T>('selection/' + path, token, body);
 
 export const verdicts: Record<string, string> = { ranked: 'Рекомендует', not_matched: 'Не сравнивали', needs_assessment: 'Нужна оценка', non_matching: 'Не соответствует', conflicting: 'Противоречия', failed_processing: 'Ошибка обработки', stale: 'Результат устарел' };

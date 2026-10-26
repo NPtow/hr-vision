@@ -1,7 +1,8 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Search, Send } from 'lucide-react';
 import { OutreachError } from '../hh-outreach/api';
-import { selectionRequest, type Directory, type SelectionPerson, type SelectionVacancy } from './api';
+import { selectionRequest, type SelectionPerson, type SelectionVacancy } from './api';
+import { loadCandidateDirectory, recommendationCandidateIds, recommendationPoolLimitMessage, MAX_RECOMMENDATION_CANDIDATES } from './directory';
 import { hasHRInterview, indexLabel, matchingLabels, type ProfileEnvelope, type RecommendationsEnvelope, type PublishReceipt, type RecommendationItem } from './matching-contract';
 import { VacancyRequirements } from './VacancyRequirements';
 import { MatchExplanation } from './MatchExplanation';
@@ -12,6 +13,7 @@ export function VacancyDetail({ vacancy, people, token, expire, onBack, onCandid
   const [vacancyPeople, setVacancyPeople] = useState(people);
   const [profile, setProfile] = useState<ProfileEnvelope | null>(null), [data, setData] = useState<RecommendationsEnvelope | null>(null);
   const [loading, setLoading] = useState(true), [busy, setBusy] = useState(''), [error, setError] = useState(''), [notice, setNotice] = useState('');
+  const [directoryUnavailable, setDirectoryUnavailable] = useState(true);
   const [search, setSearch] = useState(''), [selected, setSelected] = useState(new Set<string>()), [approved, setApproved] = useState(new Set<string>());
   const [expanded, setExpanded] = useState('');
   const generation = useRef(0), pending = useRef(false);
@@ -20,11 +22,11 @@ export function VacancyDetail({ vacancy, people, token, expire, onBack, onCandid
   const load = useCallback(async () => {
     const seq = ++generation.current; setLoading(true); setError('');
     try {
-      const [p, r, directory] = await Promise.all([selectionRequest<ProfileEnvelope>(path + '/profile', token), selectionRequest<RecommendationsEnvelope>(path + '/recommendations', token), selectionRequest<Directory>('candidates?vacancyId=' + encodeURIComponent(vacancy.id), token)]);
+      const [p, r, directory] = await Promise.all([selectionRequest<ProfileEnvelope>(path + '/profile', token), selectionRequest<RecommendationsEnvelope>(path + '/recommendations', token), loadCandidateDirectory(token, vacancy.id)]);
       if (seq !== generation.current) return;
       if (p.vacancyId !== vacancy.id || r.vacancyId !== vacancy.id || p.profile && (p.profile.vacancy_id !== vacancy.id || p.profile.contract_version !== 'vacancy-level-importance-v1') || r.result && (r.result.vacancy_id !== vacancy.id || r.result.contract_version !== 'recommendations-v1' || r.result.recommendation_id !== r.recommendationId)) throw new Error('Не удалось подтвердить результат для этой вакансии.');
-      setProfile(p); setData(r); setVacancyPeople(directory.candidates);
-    } catch (cause) { if (seq !== generation.current) return; if (cause instanceof OutreachError && [401, 403].includes(cause.status)) expire(); else setError((cause as Error).message); }
+      setProfile(p); setData(r); setVacancyPeople(directory.candidates); setDirectoryUnavailable(false);
+    } catch (cause) { if (seq !== generation.current) return; setDirectoryUnavailable(true); setVacancyPeople([]); if (cause instanceof OutreachError && [401, 403].includes(cause.status)) expire(); else setError((cause as Error).message); }
     finally { if (seq === generation.current) setLoading(false); }
   }, [path, token, expire, vacancy.id]);
   useEffect(() => { void load(); return () => { generation.current++; }; }, [load]);
@@ -34,6 +36,8 @@ export function VacancyDetail({ vacancy, people, token, expire, onBack, onCandid
   }, [profile, data, vacancyPeople, error, load]);
   useEffect(() => { setSelected(new Set()); setApproved(new Set()); setExpanded(''); command.current = null; }, [data?.recommendationId, data?.revision, profile?.profile?.profile_id]);
   const validResult = !!(data?.result && profile?.profile && !data.stale && !profile.stale && ['ready', 'completed'].includes(data.state) && ['ready', 'completed'].includes(profile.state) && data.revision === profile.revision && profile.revision === vacancy.contentHash && data.result.vacancy_profile_id === profile.profile.profile_id && data.result.rubric_sha256 === profile.profile.rubric_sha256);
+  const poolCount = vacancyPeople.filter(hasHRInterview).length;
+  const poolError = poolCount > MAX_RECOMMENDATION_CANDIDATES ? recommendationPoolLimitMessage(poolCount) : '';
   const rows = useMemo(() => {
     const eligible = vacancyPeople.filter(hasHRInterview), byId = new Map(eligible.map(p => [p.id, p]));
     const items = data?.result?.items ?? [], seen = new Set(items.map(i => i.candidate_id));
@@ -46,16 +50,16 @@ export function VacancyDetail({ vacancy, people, token, expire, onBack, onCandid
   const gate = (id: string) => data?.invitationEligibility.find(v => v.candidateId === id);
   const selectable = (id: string, item: RecommendationItem | null) => {
     const g = gate(id);
-    return validResult && !loading && !error && !!item && item.status === 'scored' && item.eligibility !== 'fail' && !!g?.canInvite && g.channels.length > 0 && (item.eligibility !== 'unknown' || approved.has(id));
+    return validResult && !directoryUnavailable && !loading && !error && !!item && item.status === 'scored' && item.eligibility !== 'fail' && !!g?.canInvite && g.channels.length > 0 && (item.eligibility !== 'unknown' || approved.has(id));
   };
   const selectableIds = rows.filter(({ person, item }) => selectable(person.id, item)).map(r => r.person.id);
   const chosen = rows.filter(({ person, item }) => selected.has(person.id) && selectable(person.id, item));
   const toggle = (id: string) => setSelected(current => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   async function run(recommend: boolean) {
-    if (pending.current || loading || !data || !profile || !recommend && (!validResult || !chosen.length)) return;
+    if (pending.current || loading || directoryUnavailable || !data || !profile || !recommend && (!validResult || !chosen.length)) return;
     pending.current = true; setBusy(recommend ? 'Сравниваем…' : 'Отправляем…'); setError(''); setNotice('');
     try {
-      if (recommend) await selectionRequest(path + '/recommendations', token, { revision: profile.revision, candidateIds: vacancyPeople.filter(hasHRInterview).map(p => p.id).sort() });
+      if (recommend) await selectionRequest(path + '/recommendations', token, { revision: profile.revision, candidateIds: recommendationCandidateIds(vacancyPeople) });
       else {
         const ids = chosen.map(r => r.person.id).sort(), unknownApprovals = chosen.filter(r => r.item?.eligibility === 'unknown').map(r => r.person.id).sort();
         const fingerprint = JSON.stringify([vacancy.id, data.revision, data.recommendationId, ids, unknownApprovals]);
@@ -84,10 +88,10 @@ export function VacancyDetail({ vacancy, people, token, expire, onBack, onCandid
     <div className="sl-vacancy-heading"><div><p>{vacancy.company}</p><h2>{vacancy.title}</h2><p>{[vacancy.city, vacancy.salary].filter(Boolean).join(' · ')}</p></div></div>
     {profile && <VacancyRequirements vacancy={vacancy} value={profile} token={token} expire={expire} onChange={() => void load()}/>}
     <div className="sl-surface" aria-busy={loading || !!busy}><div className="sl-toolbar"><label className="sl-search"><Search size={17}/><span className="sl-sr">Найти кандидата в вакансии</span><input placeholder="Найти кандидата" value={search} onChange={e => { setSearch(e.target.value); setSelected(new Set()); }}/></label>
-      {data?.canRun && profile && <button className="sl-open" disabled={loading || !!busy || profile.stale || profile.profile === null || profile.profile.parameters.some(p => p.importance === 'insufficient_data' || p.importance > 0 && !p.required_level_id)} onClick={() => void run(true)}>Обновить соответствие</button>}
+      {data?.canRun && profile && <button className="sl-open" disabled={loading || directoryUnavailable || !!poolError || !!busy || profile.stale || profile.profile === null || profile.profile.parameters.some(p => p.importance === 'insufficient_data' || p.importance > 0 && !p.required_level_id)} onClick={() => void run(true)}>Обновить соответствие</button>}
       <button className="sl-send" disabled={!chosen.length || !!busy || loading || !!error} onClick={() => void run(false)}><Send size={16}/>{busy || `Отправить приглашения${chosen.length ? ' · ' + chosen.length : ''}`}</button><button className="sl-refresh" disabled={loading || !!busy} onClick={() => void load()}>Обновить</button></div>
-      {error && <p className="sl-error" role="alert">{error}</p>}{notice && <p className="sl-notice" role="status">{notice}</p>}{stale && <p className="sl-warning" role="status">Данные изменились. Обновите соответствие перед приглашением. Прежние баллы не показаны как актуальные.</p>}
-      {loading ? <div className="sl-empty" role="status">Проверяем требования и соответствие…</div> : rows.length ? <><div className="sl-scroll"><table className="sl-recommendations"><thead><tr><th className="sl-check"><input type="checkbox" aria-label="Выбрать доступных кандидатов" disabled={!!busy || !selectableIds.length} checked={!!selectableIds.length && selectableIds.every(id => selected.has(id))} onChange={e => setSelected(e.target.checked ? new Set(selectableIds) : new Set())}/></th><th>Кандидат</th><th>Соответствие</th><th>Условия</th><th>Приглашение</th><th/></tr></thead><tbody>{rows.map(({ person: p, item }) => {
+      {error && <p className="sl-error" role="alert">{error}</p>}{!directoryUnavailable && poolError && <p className="sl-error" role="alert">{poolError}</p>}{notice && <p className="sl-notice" role="status">{notice}</p>}{stale && <p className="sl-warning" role="status">Данные изменились. Обновите соответствие перед приглашением. Прежние баллы не показаны как актуальные.</p>}
+      {loading ? <div className="sl-empty" role="status">Проверяем требования и соответствие…</div> : directoryUnavailable ? <div className="sl-empty">Каталог не загружен. Нажмите «Обновить», чтобы повторить загрузку целиком.</div> : rows.length ? <><div className="sl-scroll"><table className="sl-recommendations"><thead><tr><th className="sl-check"><input type="checkbox" aria-label="Выбрать доступных кандидатов" disabled={!!busy || !selectableIds.length} checked={!!selectableIds.length && selectableIds.every(id => selected.has(id))} onChange={e => setSelected(e.target.checked ? new Set(selectableIds) : new Set())}/></th><th>Кандидат</th><th>Соответствие</th><th>Условия</th><th>Приглашение</th><th/></tr></thead><tbody>{rows.map(({ person: p, item }) => {
         const g = gate(p.id), canSelect = selectable(p.id, item), pendingState = data?.pendingCandidates.find(c => c.candidateId === p.id)?.state;
         const label = item ? item.status === 'scored' ? indexLabel(item.score) : 'Недостаточно данных' : pendingState ? matchingLabels[pendingState] ?? 'Ожидает оценки' : 'Не сравнивали';
         return <Fragment key={p.id}><tr data-selected={selected.has(p.id) && canSelect}>

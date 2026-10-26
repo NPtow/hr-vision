@@ -30,7 +30,8 @@ export function makeFixture() {
     return [p.id, raw ? { state: 'ready', result: null, canRun: true, coreRun: { run_id: raw.run_id, status: 'completed', error: null, corpus_revision: raw.corpus_sha256, rubric_version: raw.rubric_version, model: raw.model, assessment: raw } } : { state: 'not_started', result: null, canRun: false }];
   }));
   const state = { people, vacancy, profileEnvelope, recommendations, required, candidateFacts, assessment, writes: [], responses: new Map(), failPublishOnce: false, pendingVerificationMode: false, delay: 0 };
-  state.request = (method, pathname, body) => {
+  state.request = (method, target, body) => {
+    const url = new URL(target, 'http://127.0.0.1'), pathname = url.pathname;
     if (state.responses.has(pathname)) return state.responses.get(pathname);
     const prefix = '/api/hr/selection/', action = pathname.slice(prefix.length);
     if (pathname === '/api/hr/access') return { ready: true };
@@ -68,7 +69,11 @@ export function makeFixture() {
       return { httpStatus: 404, error: 'Unknown fixture command' };
     }
     if (action === 'vacancies') return { vacancies: [vacancy] };
-    if (action === 'candidates') return { candidates: people, count: people.length };
+    if (action === 'candidates') {
+      const offset = Number(url.searchParams.get('offset') ?? 0), limit = Number(url.searchParams.get('limit') ?? 500);
+      const candidates = people.slice(offset, offset + limit);
+      return { candidates, count: people.length, offset, limit, nextOffset: offset + candidates.length < people.length ? offset + candidates.length : null };
+    }
     if (action.endsWith('/profile')) return profileEnvelope;
     if (action.endsWith('/recommendations')) return recommendations;
     if (action.endsWith('/required-fields')) return action.startsWith('vacancies/') ? required : candidateFacts[action.split('/')[1]];

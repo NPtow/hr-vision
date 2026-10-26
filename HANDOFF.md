@@ -82,3 +82,13 @@ node --test scripts/selection-statuses.component.test.mjs
 ```
 
 Cherry-pick this branch's UI commit into the combined branch. Re-run shared typecheck/build and actual backend acceptance there. Do not deploy this isolated branch by itself: its new endpoints are supplied by the core branch.
+
+## Follow-up: complete directory pagination
+
+The initial UI assumed a complete directory from one GET. The current backend returns `count/offset/limit/nextOffset` and defaults to 200 rows. The follow-up commit adds `directory.ts`, used by both the global directory and the vacancy-scoped directory. It requests 500 rows per page and resolves only after `nextOffset=null` and a consistent complete traversal. It rejects missing metadata, count drift, gaps/short pages, non-progressing or invalid continuations, and missing/repeated candidate IDs. `vacancyId` is preserved on every page. Page errors render a whole-catalog error instead of a partial list or a false empty result; 401/403 still expire the session.
+
+The matching command still uses the unchanged HR recording AND primary-text/all-parts predicate. More than 1000 ready candidates produces an explicit error and disables calculation; it never slices the pool. Saved recommendation scores/order and requirement levels are unchanged. This fix addresses catalog truncation at scale; Ядро confirmed that the current production count is 78, so pagination does not explain the reported three missing candidates.
+
+Follow-up evidence: `node --test scripts/selection-directory.test.mjs` **35/35 passed** (12 main scenarios plus validation subcases); `npm run typecheck` and `HR_BUILD_TARGET=service npm run build` passed. Logs: `output/playwright/selection-vacancy-ui/pagination-{unit-tests,typecheck,build}.log`. The fixture server and existing component-test request stub now retain query parameters and return pagination metadata.
+
+**No browser was started or tested for this follow-up** because Work browser access is disabled. The earlier 14 browser passes and screenshots describe the preceding UI commit, not this pagination change. Backend/API/deployment are untouched. Restart the synthetic preview API to load its updated fixture code before reusing the local preview.
