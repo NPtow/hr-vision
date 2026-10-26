@@ -1,0 +1,337 @@
+{
+  "schema_version": "assessment-production-smoke-v1",
+  "report_generated_at_utc": "2026-10-26T02:20:32.916099+00:00",
+  "observation_date": "2026-10-26",
+  "provenance": "Sanitized execution receipt supplied by the release owner. This summary was written without host actions.",
+  "privacy": "Contains no candidate identifiers, names, source text, raw probability distributions, credentials, host addresses or private report paths.",
+  "overall_verdict": "NOT READY",
+  "versions": {
+    "application_main_commit": "20c6e42ab405cb535db76054530e277013049216",
+    "pull_request_number": 62,
+    "github_actions_run_id": 40255512560,
+    "build": "SUCCESS",
+    "deploy": "SUCCESS",
+    "observed_api_commit": "20c6e42ab405cb535db76054530e277013049216",
+    "observed_ui_commit": "20c6e42ab405cb535db76054530e277013049216",
+    "assessment_service_commit": "3256b75ae796b89bf1a024e7ce057eedab1587b6",
+    "tooling_commit": "ad59e153eb02c8fc3bcd5c24afaeee7001ad993f",
+    "all_three_service_health_manifests": "PASS",
+    "rubric_version": "2026-10-26.behavioral-anchors.1"
+  },
+  "production_candidate_read_audit": {
+    "status": "PASS",
+    "method": "GET-only full saved-plan/body and raw-response replay audit",
+    "profiles_checked": 3,
+    "chunk_counts": [
+      139,
+      65,
+      115
+    ],
+    "character_counts": [
+      21937,
+      23536,
+      32905
+    ],
+    "questions_per_profile": 16,
+    "same_complete_cv_and_interview_corpus_for_every_parameter": true,
+    "raw_response_hash_and_replay_match_saved_unchanged": true,
+    "new_candidate_provider_posts_during_audit": 0,
+    "outbox_delta_during_audit": 0,
+    "messages_sent_during_audit": 0,
+    "full_saved_source_plan_verified_after_patch": true
+  },
+  "production_vacancy_profile": {
+    "status": "PASS_WITH_UNKNOWN_REQUIREMENTS",
+    "initial_live_jev_posts": 1,
+    "choice_questions": 32,
+    "rounded_probability_sum_observed": 0.99,
+    "raw_response_retained_unchanged": true,
+    "exclusive_owner_offline_recovery": {
+      "status": "PASS",
+      "exact_response_body_sha256": "f087cd7ba703be0dacc4174abbb7c3d45633e9e18f2e530e0612e0c08fa03984",
+      "terminal_service_status": "completed",
+      "new_provider_posts": 0
+    },
+    "current_manager_get_state": "needs_review",
+    "positive_weight_parameters_with_unknown_required_level": 7,
+    "all_required_levels_complete": false
+  },
+  "production_consumers": {
+    "hr_api_reads": "PASS",
+    "api_and_ui_release_identity": "PASS",
+    "browser_workflow": "UNVERIFIED",
+    "browser_reason": "Browser verification was disabled.",
+    "live_ranking": "UNVERIFIED",
+    "live_ranking_executed": false,
+    "live_ranking_reason": "Manager must clarify positive-weight required levels before ranking; unknown requirements were not replaced with invented levels.",
+    "candidate_or_employer_messages_sent": 0,
+    "known_ui_gap": {
+      "issue": "Deployed UI ignores nextOffset while backend page defaults to200.",
+      "current_directory_count": 78,
+      "audited_profiles_in_first_page": 3,
+      "currently_hides_audited_profiles": false,
+      "code_fix_status": "PASS",
+      "original_ui_commit": "301bf1b725f2a5a8856b98aadd871d5b1e0d1f2e",
+      "cherry_pick_commit": "c3eb8a9604c4ddac297104e264003b953f36a658",
+      "deployment_status": "NOT_DEPLOYED",
+      "deployed_application_commit": "20c6e42ab405cb535db76054530e277013049216",
+      "browser_acceptance": "UNVERIFIED"
+    }
+  },
+  "latest_local_regression_reported": {
+    "full_server": {
+      "passed": 1541,
+      "skipped": 2
+    },
+    "receiver": {
+      "passed": 87
+    },
+    "candidate_core_after_patch": {
+      "passed": 115
+    },
+    "vacancy_after_patch": {
+      "passed": 21
+    },
+    "recommendations_after_patch": {
+      "passed": 38
+    },
+    "shared_client_export": {
+      "passed": 5
+    },
+    "actual_process_integration": {
+      "passed": 13
+    },
+    "delivery": {
+      "passed": 19
+    },
+    "boundary": "Local isolated tests; synthetic provider fixtures and forced-loopback fault tests are not production provider or browser acceptance.",
+    "pagination_node_tests": {
+      "passed": 35,
+      "node_only": true
+    },
+    "typescript_check": "PASS",
+    "ui_service_build": "PASS"
+  },
+  "pending_receipts": {
+    "production_fresh_backup_and_isolated_restore": {
+      "status": "PASS",
+      "receipt": "production_backup_restore"
+    },
+    "production_resource_observation": {
+      "status": "PASS",
+      "receipt": "production_resource_observation",
+      "scope": "Bounded311.146second idle/read smoke only."
+    },
+    "production_rollback_rehearsal": {
+      "status": "UNVERIFIED",
+      "receipt": "production_recommendations_guarded_rollback",
+      "remaining": "Candidate and vacancy production rollback have not been executed."
+    }
+  },
+  "evidence_boundaries": [
+    "A deployed UI release identity does not prove its browser workflow.",
+    "Completed vacancy processing preserves unknown requirements; it does not prove a complete requirement profile or a live ranking.",
+    "No blind provider retry or new candidate assessment was used for the read/recovery audit.",
+    "Fresh production online backup/isolated restore is proven for all three current databases. A311.146second idle/read resource smoke passed without implying sustained load/endurance. Actual production rollback is proven only for recommendations, not candidate/vacancy. Pagination correction is code-tested but not deployed; browser workflow remains unverified."
+  ],
+  "production_backup_restore": {
+    "status": "PASS",
+    "observed_at_utc": [
+      "2026-10-26T02:10:37Z",
+      "2026-10-26T02:10:38Z"
+    ],
+    "method": "Fresh online SQLite backup followed by isolated restore for each of the three services.",
+    "all_three_integrity_check": "PASS",
+    "all_three_logical_all_tables_equal": true,
+    "content_sha256": {
+      "candidate_database": "997358e72265da293fb3990d6ecbff0f98f01db5d8dd0394f17e7e0bbf57cc42",
+      "vacancy_database": "dc8e03e1237ef19669eec4fc2672695148bfa5cd479e94cb34808a1e84924014",
+      "recommendations_database": "0ce80f2f8e53bfd09ee61809149556f018596d4f7822d8f7044b6732ebde6f3b"
+    },
+    "recommendations_database_empty": true,
+    "boundary": "Exact restoration is proven for the current database contents. The recommendations database is empty; a production ranking has not been executed."
+  },
+  "installed_operations_tooling": {
+    "status": "PASS",
+    "installed_together_under_both_deploy_locks": true,
+    "operate_sha256": "571fa7a42aff5aa887fc53b35e1f6d2c978aff2d838feb23d3049d7dd10bd25e",
+    "wrapper_sha256": "58ff807ec07b74fedea8520e08bfb15c0aa31e08252d8dccb8266574ea4dc5a8"
+  },
+  "production_update_and_rollback": {
+    "candidate_guarded_update_restart_hardening": "PASS",
+    "vacancy_recommendations_install_observation": "Raw installer assertion completed with application API available and active_jobs0.",
+    "isolated_rollback": "PASS",
+    "actual_production_rollback": {
+      "recommendations": "PASS",
+      "candidate": "UNVERIFIED",
+      "vacancy": "UNVERIFIED"
+    },
+    "boundary": "Recommendations actual guarded production rollback/re-upgrade passed on an empty database. Candidate and vacancy production rollback were not executed; do not generalize this proof to all three services."
+  },
+  "production_public_https_api": {
+    "status": "PASS",
+    "boundary": "Public HTTPS reverse-proxy API with normal authorized manager authentication; no credentials or public-host address retained in this artifact.",
+    "get_operations": [
+      "directory",
+      "three_candidate_readiness",
+      "vacancy_profile"
+    ],
+    "elapsed_seconds": 1.215,
+    "directory_count": 78,
+    "audited_profiles_in_first_page": 3,
+    "all_three_candidate_state": "ready",
+    "all_three_core_status": "completed",
+    "parameters_each": 16,
+    "all_three_hr_recording_count": 1,
+    "all_three_primary_transcript_count": 1,
+    "all_three_all_parts_ready": true,
+    "vacancy_state": "needs_review",
+    "vacancy_parameter_count": 16,
+    "notification_counts_unchanged": true,
+    "new_provider_posts": 0,
+    "deployment_commit": "20c6e42ab405cb535db76054530e277013049216",
+    "deployment_run": "40255512560.1"
+  },
+  "production_recommendations_guarded_rollback": {
+    "status": "PASS",
+    "service": "recommendations",
+    "version_sequence": [
+      "3256b75ae796b89bf1a024e7ce057eedab1587b6",
+      "ca732af740a79e3b7ac0ab0b874832ea9a0409b1",
+      "3256b75ae796b89bf1a024e7ce057eedab1587b6"
+    ],
+    "operation_statuses": [
+      "passed",
+      "passed"
+    ],
+    "verified_phases_in_both_operations": [
+      "before-live-guard",
+      "pause",
+      "stop",
+      "stopped-guard",
+      "install",
+      "restore",
+      "origin",
+      "resume"
+    ],
+    "journal_sha256": [
+      "0be32817bd7c0326fb3553a913785805126a10ede351b179fab2cdaeb3d18d33",
+      "945b89910afdad224ec87e1c1f716df06f3c0414d3ef1db7ca22152aaf75f1cf"
+    ],
+    "database_empty": true,
+    "model_operations": 0,
+    "messages_sent": 0,
+    "all_three_current_runtime_commit_after_rehearsal": "3256b75ae796b89bf1a024e7ce057eedab1587b6",
+    "boundary": "Actual guarded production rollback/re-upgrade is demonstrated only for recommendations. Candidate and vacancy production rollback were not executed."
+  },
+  "production_ui_auth_protocol_api": {
+    "status": "PASS",
+    "transport": "Public HTTPS API; exact UI authentication protocol exercised by an API client.",
+    "steps": [
+      {
+        "method": "POST",
+        "route": "/access",
+        "request_fields": [
+          "teamKey"
+        ]
+      },
+      {
+        "method": "GET",
+        "route": "/access",
+        "observed_state": "ready"
+      },
+      {
+        "method": "POST",
+        "route": "/session",
+        "request": {
+          "actor": "manager",
+          "scope": "sfera"
+        }
+      },
+      {
+        "method": "GET",
+        "route": "directory",
+        "observed_count": 78,
+        "audited_profiles_present": 3
+      },
+      {
+        "method": "GET",
+        "route": "candidate_readiness",
+        "audited_profiles": 3,
+        "all_core_status": "completed",
+        "all_candidate_state": "ready",
+        "parameters_each": 16
+      }
+    ],
+    "credentials_and_cookie_jar": "In memory only; no values or cookies retained in this evidence.",
+    "browser_automation_used": false,
+    "boundary": "Confirms the UI authentication/API protocol, not browser rendering or user interaction. Live ranking remains pending human requirement input."
+  },
+  "initial_production_resource_snapshot": {
+    "status": "PARTIAL",
+    "observed_at_utc": [
+      "2026-10-26T02:10:37Z",
+      "2026-10-26T02:10:38Z"
+    ],
+    "sampled_interval_seconds": 0.55,
+    "all_three_manifest_health": "PASS",
+    "all_three_runtime_commit": "3256b75ae796b89bf1a024e7ce057eedab1587b6",
+    "active_jobs": 0,
+    "active_unit_count": 6,
+    "active_units": [
+      "application_api",
+      "candidate_service",
+      "vacancy_service",
+      "recommendations_service",
+      "materials_scheduler",
+      "materials_worker"
+    ],
+    "invocation_identity_unchanged_between_samples": true,
+    "restart_counters": 0,
+    "memory_bytes": {
+      "candidate_service": 15138816,
+      "vacancy_service": 14315520,
+      "recommendations_service": 13541376,
+      "application_api": 85516288
+    },
+    "host_mem_available_approx_gib": 1.2,
+    "boundary": "Two snapshots0.55seconds apart only. No endurance, sustained workload or longer observation-window claim.",
+    "new_steady_baseline_utc": "2026-10-26T02:14:18.610Z",
+    "new_baseline_context": "Captured after intentional application API and recommendations restarts for the guarded rehearsal. Endpoint sample is pending; earlier0.55s snapshots are separate evidence."
+  },
+  "production_resource_observation": {
+    "status": "PASS",
+    "scope": "Bounded idle/read production smoke only.",
+    "start_epoch_seconds": 1792980858.610714,
+    "end_epoch_seconds": 1792981169.7568386,
+    "start_utc": "2026-10-26T02:14:18.610Z",
+    "end_utc": "2026-10-26T02:19:29.756Z",
+    "interval_seconds": 311.146,
+    "active_unit_count": 6,
+    "all_six_units_active": true,
+    "invocation_identity_unchanged_over_window": true,
+    "restart_counters": 0,
+    "all_three_service_queues": 0,
+    "all_three_health_manifest": "PASS",
+    "all_three_current_runtime_commit": "3256b75ae796b89bf1a024e7ce057eedab1587b6",
+    "endpoint_memory_bytes": {
+      "application_api": 85475328,
+      "candidate_service": 15147008,
+      "vacancy_service": 14147584,
+      "recommendations_service": 13426688
+    },
+    "endpoint_host_mem_available_kib": 1277432,
+    "boundary": "Measured311.146second idle/read smoke after intentional API/recommendations restart. No sustained-load, endurance, long-term reliability or production-ranking claim."
+  },
+  "ui_correction_delivery": {
+    "status": "NOT_DEPLOYED",
+    "original_ui_commit": "301bf1b725f2a5a8856b98aadd871d5b1e0d1f2e",
+    "cherry_pick_commit": "c3eb8a9604c4ddac297104e264003b953f36a658",
+    "node_tests_passed": 35,
+    "typescript": "PASS",
+    "ui_service_build": "PASS",
+    "node_only_suite_added_to_github_actions_workflow": true,
+    "new_deployment_receipt": null,
+    "browser_executed": false
+  }
+}

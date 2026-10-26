@@ -71,6 +71,7 @@ jobs:
           node --test scripts/candidate-navigation.test.ts
           node --test scripts/pooled-booking.test.ts
           node --test scripts/telegram-employer.test.ts
+          node --test scripts/selection-directory.test.mjs
       - name: Check API against isolated temporary state
         working-directory: interface-lab/server
         env:
