@@ -153,7 +153,15 @@ def materialize(body, response):
     return result
 
 
-def presentation(body, evidence, preferred):
+def quote_key(body):
+    # Scores and vacancy requirements do not change the quote model's input.
+    return digest([body['candidateId'], body['sourceRevision'], body['chunks'], [
+        {'id': p['parameter_id'], 'title': p['title'], 'levels': [
+            {k: level[k] for k in ('level_id', 'label', 'description')} for level in p['levels']]}
+        for p in body['assessment']['parameters']]])
+
+
+def presentation(body, evidence, preferred, vacancy=None):
     require(isinstance(preferred, list) and len(preferred) <= 40 and all(isinstance(x, str) for x in preferred)
             and len(set(preferred)) == len(preferred), 'invalid_parameter_order')
     a = body['assessment']; parameters = a['parameters']; known = {p['parameter_id'] for p in parameters}
@@ -161,19 +169,49 @@ def presentation(body, evidence, preferred):
     order = list(dict.fromkeys(preferred + [p['parameter_id'] for p in parameters]))
     selected = sorted((p for p in parameters if p['insufficient_data_probability'] <= .5),
                       key=lambda p: order.index(p['parameter_id']))[:7]
+    targets = {}
+    if vacancy is not None:
+        require(isinstance(vacancy, dict) and vacancy.get('contract_version') == 'vacancy-level-importance-v1'
+                and vacancy.get('importance_version') == 'importance-0-3-v1'
+                and all(vacancy.get(k) == a.get(k) and a.get(k) for k in
+                        ('rubric_id', 'rubric_version', 'rubric_sha256')), 'vacancy_contract_mismatch')
+        identifier(vacancy.get('profile_id')); identifier(vacancy.get('vacancy_id'))
+        rows = vacancy.get('parameters')
+        require(isinstance(rows, list) and len(rows) == len(parameters) and
+                all(isinstance(p, dict) for p in rows) and
+                {p.get('parameter_id') for p in rows} == known, 'vacancy_parameters_mismatch')
+        weights = {}
+        for p in rows:
+            original = next(c for c in parameters if c['parameter_id'] == p['parameter_id'])
+            ids = [l['level_id'] for l in original['levels']]
+            require(isinstance(p.get('levels'), list) and
+                    [l.get('level_id') for l in p['levels'] if isinstance(l, dict)] == ids,
+                    'vacancy_scale_mismatch')
+            weight, required = p.get('importance'), p.get('required_level_id')
+            require(weight in (None, 'insufficient_data') or type(weight) is int and 0 <= weight <= 3, 'invalid_importance')
+            require(required is None or required in ids, 'invalid_required_level')
+            targets[p['parameter_id']] = ids.index(required) + 1 if required else None
+            weights[p['parameter_id']] = weight if type(weight) is int else None
+        def rank(p):
+            pid = p['parameter_id']; target = targets[pid]
+            level = next(i + 1 for i, l in enumerate(p['levels']) if l['level_id'] == p['selected_level_id'])
+            return (-weights[pid], -max(0, level - target) if target else 0, order.index(pid))
+        selected = sorted((p for p in parameters if p['status'] == 'assessed' and
+            p['insufficient_data_probability'] <= .5 and (weights[p['parameter_id']] or 0) > 0), key=rank)[:7]
     criteria = []
     for p in selected:
         level = next((i + 1 for i, l in enumerate(p['levels']) if l['level_id'] == p['selected_level_id']), None)
         # Label only, not a new model explanation or an invented reason for the core score.
         label = next((l['label'] for l in p['levels'] if l['level_id'] == p['selected_level_id']), '')
         criteria.append({'id': p['parameter_id'], 'label': p['title'], 'state': 'supported' if level else 'unknown',
-            'level': level, 'target': None, 'summary': label, 'evidence': evidence.get(p['parameter_id'], []),
+            'level': level, 'target': targets.get(p['parameter_id']), 'summary': label, 'evidence': evidence.get(p['parameter_id'], []),
             'modelEstimate': None if level is None else {'value': level, 'confidence': p['model_confidence'],
                 'probabilities': [l['probability'] for l in p['levels']], 'model': a['model'],
                 'method': 'core-selected-level', 'evidenceIds': []}})
     return {'revisionId': a['run_id'], 'criteria': criteria, 'feedback': [],
             'provenance': {'coreRunId': a['run_id'], 'corpusHash': a['corpus_sha256'],
-                           'sourceRevision': body['sourceRevision'], 'quotesVersion': VERSION}}
+                           'sourceRevision': body['sourceRevision'], 'quotesVersion': VERSION,
+                           **({'vacancyProfileId': vacancy['profile_id']} if vacancy else {})}}
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):

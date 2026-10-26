@@ -20,11 +20,15 @@ export function useInterviewAssessment(token: string, identity: RecordingIdentit
     if (!source || !token) return;
     const commands = new Map<string, string>();
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const read = () => request<{ assessment: Snapshot | null; status?: string; matchStatus?: string }>('employer/interview-assessment', token, source, controller.signal);
-    const load = () => void read().then(({ assessment, status, matchStatus }) => {
+    let refreshInterval: number | undefined;
+    const read = () => request<{ assessment: Snapshot | null; status?: string; matchStatus?: string; refreshAfterMs?: number }>('employer/interview-assessment', token, source, controller.signal);
+    const load = () => void read().then(({ assessment, status, matchStatus, refreshAfterMs }) => {
       if (controller.signal.aborted || currentContext.current !== context) return;
-      if (!assessment) { setResult({ context }); if (['pending','waiting','queued','running'].includes(status ?? '')) timer = setTimeout(load, 8_000); return; }
-      if (['pending','waiting','queued','running'].includes(matchStatus ?? '')) timer = setTimeout(load, 8_000);
+      refreshInterval = typeof refreshAfterMs === 'number' && Number.isFinite(refreshAfterMs)
+        ? Math.max(8_000, Math.min(60_000, refreshAfterMs)) : undefined;
+      if (refreshInterval) timer = setTimeout(load, refreshInterval);
+      else if (['pending','waiting','queued','running'].includes((assessment ? matchStatus : status) ?? '')) timer = setTimeout(load, 8_000);
+      if (!assessment) { setResult({ context }); return; }
       if (source.source === 'screening') { setResult({ context, assessment: { ...assessment,
         saveFeedback: async () => { throw new Error('Оценка доступна только для просмотра.'); },
       } }); return; }
@@ -50,7 +54,11 @@ export function useInterviewAssessment(token: string, identity: RecordingIdentit
         }
       } } });
     }).catch(cause => {
-      if (!controller.signal.aborted && currentContext.current === context) setResult({ context, error: cause instanceof Error ? cause.message : 'Не удалось загрузить оценку.' });
+      if (controller.signal.aborted || currentContext.current !== context) return;
+      const accessLost = cause instanceof RequestError && [401, 403, 404].includes(cause.status);
+      setResult(previous => ({ context, ...(!accessLost && previous?.context === context ? { assessment: previous.assessment } : {}),
+        error: cause instanceof Error ? cause.message : 'Не удалось загрузить оценку.' }));
+      if (refreshInterval && !accessLost) timer = setTimeout(load, refreshInterval);
     });
     load();
     return () => { controller.abort(); clearTimeout(timer); };

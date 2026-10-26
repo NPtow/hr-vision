@@ -16,6 +16,7 @@ def fixture():
     return {'candidateId': 'candidate-test', 'sourceRevision': 'transcript-v1', 'assessment': {
         'candidate_id': 'candidate-test', 'contract_version': 'full-corpus-level-choice-v1',
         'run_id': 'core-run', 'corpus_sha256': 'corpus-v1', 'model': 'core-model',
+        'rubric_id': 'sales', 'rubric_version': 'v1', 'rubric_sha256': 'rubric-hash',
         'parameters': [{'parameter_id': 'p' + str(i), 'title': 'Параметр ' + str(i), 'status': 'assessed',
             'insufficient_data_probability': .1, 'model_confidence': .7, 'selected_level_id': 'L3',
             'levels': [{'level_id': 'L' + str(n), 'label': str(n), 'description': 'Уровень ' + str(n),
@@ -30,7 +31,31 @@ def answer(body, spans=()):
                            for i, p in enumerate(body['assessment']['parameters'])]}
 
 
+def vacancy(body):
+    return {'contract_version': 'vacancy-level-importance-v1', 'importance_version': 'importance-0-3-v1',
+        'profile_id': 'vacancy-profile', 'vacancy_id': 'vacancy-test',
+        **{k: body['assessment'][k] for k in ('rubric_id', 'rubric_version', 'rubric_sha256')},
+        'parameters': [{'parameter_id': p['parameter_id'], 'levels': p['levels'],
+                        'importance': 1, 'required_level_id': 'L3'} for p in body['assessment']['parameters']]}
+
+
 class ContractTests(unittest.TestCase):
+    def test_vacancy_priority_keeps_original_levels_and_omits_total(self):
+        body = fixture(); profile = vacancy(body)
+        profile['parameters'][0]['importance'] = 0
+        profile['parameters'][1]['importance'] = 'insufficient_data'
+        profile['parameters'][7].update(importance=3, required_level_id='L1')
+        profile['parameters'][8]['importance'] = 3
+        view = presentation(body, {}, [], profile)
+        self.assertEqual([c['id'] for c in view['criteria']], ['p7','p8','p2','p3','p4','p5','p6'])
+        self.assertEqual((view['criteria'][0]['level'], view['criteria'][0]['target']), (3, 1))
+        self.assertEqual(view['provenance']['vacancyProfileId'], 'vacancy-profile')
+        self.assertNotIn('score', view); self.assertNotIn('score_points', view)
+        body['assessment']['parameters'][7]['insufficient_data_probability'] = .51
+        self.assertEqual(len(presentation(body, {}, [], profile)['criteria']), 6)
+        profile['rubric_sha256'] = 'other-rubric'
+        with self.assertRaises(Invalid): presentation(body, {}, [], profile)
+
     def test_exact_range_and_unmodified_scores(self):
         body = validate(fixture()); before = copy.deepcopy(body)
         e = materialize(body, answer(body, [{'startId': 't0', 'endId': 't1'}]))
@@ -99,6 +124,24 @@ class LifecycleTests(unittest.TestCase):
         restarted = Store(self.store.path, 'fake-model'); restarted.recover()
         self.assertFalse(restarted.tick(self.model)); self.assertEqual(self.calls, 1)
 
+    def test_new_score_reuses_quotes_and_queued_versions_share_one_model_call(self):
+        first = fixture(); second = copy.deepcopy(first)
+        second['assessment']['run_id'] = 'new-run'
+        second['assessment']['parameters'][0]['selected_level_id'] = 'L4'
+        a = self.store.submit(first)['preparationId']
+        b = self.store.submit(second)['preparationId']
+        self.store.tick(self.model); self.store.tick(self.model)
+        self.assertEqual(self.calls, 1)
+        self.assertNotEqual(a, b)
+        self.assertEqual(self.store.view(b, [], vacancy(second))['assessment']['criteria'][0]['level'], 4)
+        self.assertEqual(self.store.read(b)['attempts'], 0)
+        third = copy.deepcopy(second); third['assessment']['run_id'] = 'third-run'
+        self.assertEqual(self.store.submit(third)['status'], 'ready')
+        self.assertFalse(self.store.tick(self.model)); self.assertEqual(self.calls, 1)
+        third['chunks'][0]['text'] = 'Новый ответ кандидата'
+        c = self.store.submit(third)['preparationId']; self.store.tick(self.model)
+        self.assertEqual(self.store.read(c)['status'], 'ready'); self.assertEqual(self.calls, 2)
+
     def test_failed_work_waits_for_idempotent_manual_retry(self):
         pid = self.store.submit(fixture())['preparationId']
         def fail(*args):
@@ -112,6 +155,19 @@ class LifecycleTests(unittest.TestCase):
         self.store.retry(pid, 'human-1'); self.store.tick(self.model)
         self.store.retry(pid, 'human-1')
         self.assertFalse(self.store.tick(self.model)); self.assertEqual(self.calls, 2)
+
+    def test_new_core_version_does_not_retry_a_failed_quote_call(self):
+        first = fixture(); second = copy.deepcopy(first); second['assessment']['run_id'] = 'second'
+        self.store.submit(first); b = self.store.submit(second)['preparationId']
+        def fail(*args):
+            self.calls += 1
+            raise Invalid('provider_unavailable')
+        self.store.tick(fail); self.store.tick(fail)
+        self.assertEqual(self.calls, 1)
+        third = copy.deepcopy(first); third['assessment']['run_id'] = 'third'
+        self.assertEqual(self.store.submit(third)['status'], 'failed')
+        self.store.retry(b, 'manual-retry-shared'); self.store.tick(self.model)
+        self.assertEqual(self.store.read(b)['status'], 'ready'); self.assertEqual(self.calls, 2)
 
     def test_interrupted_call_never_replays_automatically(self):
         pid = self.store.submit(fixture())['preparationId']
