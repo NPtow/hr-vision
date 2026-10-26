@@ -57,6 +57,7 @@ class GuardedUpgradeTests(unittest.TestCase):
         action = argv[4]
         self.events.append(action)
         if action == 'inspect':
+            self.assertIn('--legacy-candidate', argv)
             result = {'current': 'b' * 40, 'database': {'active': self.active}}
         else:
             self.assertIn('--consumers-quiesced', argv)
@@ -81,6 +82,16 @@ class GuardedUpgradeTests(unittest.TestCase):
         self.active = 1
         with self.assertRaisesRegex(module.GuardFailure, 'jobs active'):
             self.execute()
+        self.assertEqual(self.events, ['inspect'])
+
+    def test_unsafe_legacy_inventory_refuses_before_stopping_hr(self):
+        def unsafe_legacy(argv, **kwargs):
+            self.assertIn('--legacy-candidate', argv)
+            self.events.append('inspect')
+            raise subprocess.CalledProcessError(1, argv)
+        with self.assertRaises(subprocess.CalledProcessError):
+            module.execute(self.receiver, Path('/reviewed/operate.py'), Path('/artifact.tar.gz'),
+                           'b' * 40, legacy=True, run=unsafe_legacy)
         self.assertEqual(self.events, ['inspect'])
 
     def test_install_failure_recovers_original_api_and_resumes_materials(self):

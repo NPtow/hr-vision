@@ -1,6 +1,6 @@
 {
-  "observed_at_utc": "2026-10-26T01:33:58.161614+00:00",
-  "commit": "ca732af740a79e3b7ac0ab0b874832ea9a0409b1",
+  "observed_at_utc": "2026-10-26T01:40:27.444050+00:00",
+  "commit": "c2cee004c84152f8045ab921f633e23b6a5bfd54",
   "dirty_worktree": true,
   "command_process": [
     "/opt/homebrew/bin/python3",
@@ -31,20 +31,20 @@
   "result": "PASS",
   "logs": {
     "provider-fault-process.log": {
-      "sha256": "84313a5c73cf5531c27bdf95260e23f978a91801d874a77d6480649b73d1962c",
+      "sha256": "26a1a167676cf92d0231ed7ac5f24f32c4d11bb5a03be70461453f92209ebe14",
       "summary": [
         "test_malformed_saved_typed_response_is_terminal_raw_retained_after_process_restart (test_http_flow.ProviderFailureProcessTests.test_malformed_saved_typed_response_is_terminal_raw_retained_after_process_restart) ... ok",
         "test_real_workers_closed_proxy_fail_finitely_and_never_repost_after_restart (test_http_flow.ProviderFailureProcessTests.test_real_workers_closed_proxy_fail_finitely_and_never_repost_after_restart) ... ok",
-        "test_real_workers_nonlistening_proxy_enforces_eight_second_connect_timeout (test_http_flow.ProviderFailureProcessTests.test_real_workers_nonlistening_proxy_enforces_eight_second_connect_timeout) ... ok",
+        "test_real_workers_silent_socks_handshake_enforces_eight_second_timeout (test_http_flow.ProviderFailureProcessTests.test_real_workers_silent_socks_handshake_enforces_eight_second_timeout) ... ok",
         "",
         "----------------------------------------------------------------------",
-        "Ran 3 tests in 29.959s",
+        "Ran 3 tests in 30.371s",
         "",
         "OK",
-        "{\"closed_proxy_terminal_seconds\":1.0446579159997782,\"error\":\"network_error\",\"same_terminal_row_after_repeated_post_and_restart\":true,\"service\":\"candidate\",\"terminal_status\":\"outcome_unknown\"}",
-        "{\"closed_proxy_terminal_seconds\":1.0532099590000144,\"error\":\"network_error\",\"same_terminal_row_after_repeated_post_and_restart\":true,\"service\":\"vacancy\",\"terminal_status\":\"outcome_unknown\"}",
-        "{\"closed_proxy_terminal_seconds\":8.833594249999805,\"error\":\"timeout\",\"same_terminal_row_after_repeated_post_and_restart\":true,\"service\":\"candidate\",\"terminal_status\":\"outcome_unknown\"}",
-        "{\"closed_proxy_terminal_seconds\":8.928162541000347,\"error\":\"timeout\",\"same_terminal_row_after_repeated_post_and_restart\":true,\"service\":\"vacancy\",\"terminal_status\":\"outcome_unknown\"}"
+        "{\"closed_proxy_terminal_seconds\":1.0660055409989582,\"error\":\"network_error\",\"same_terminal_row_after_repeated_post_and_restart\":true,\"service\":\"candidate\",\"terminal_status\":\"outcome_unknown\"}",
+        "{\"closed_proxy_terminal_seconds\":1.0367819590010185,\"error\":\"network_error\",\"same_terminal_row_after_repeated_post_and_restart\":true,\"service\":\"vacancy\",\"terminal_status\":\"outcome_unknown\"}",
+        "{\"closed_proxy_terminal_seconds\":9.087437541000327,\"error\":\"timeout\",\"same_terminal_row_after_repeated_post_and_restart\":true,\"service\":\"candidate\",\"terminal_status\":\"outcome_unknown\"}",
+        "{\"closed_proxy_terminal_seconds\":9.07165141600126,\"error\":\"timeout\",\"same_terminal_row_after_repeated_post_and_restart\":true,\"service\":\"vacancy\",\"terminal_status\":\"outcome_unknown\"}"
       ]
     },
     "provider-fault-regression.log": {
@@ -67,28 +67,28 @@
   },
   "metrics": [
     {
-      "closed_proxy_terminal_seconds": 1.0446579159997782,
+      "closed_proxy_terminal_seconds": 1.0660055409989582,
       "error": "network_error",
       "same_terminal_row_after_repeated_post_and_restart": true,
       "service": "candidate",
       "terminal_status": "outcome_unknown"
     },
     {
-      "closed_proxy_terminal_seconds": 1.0532099590000144,
+      "closed_proxy_terminal_seconds": 1.0367819590010185,
       "error": "network_error",
       "same_terminal_row_after_repeated_post_and_restart": true,
       "service": "vacancy",
       "terminal_status": "outcome_unknown"
     },
     {
-      "closed_proxy_terminal_seconds": 8.833594249999805,
+      "closed_proxy_terminal_seconds": 9.087437541000327,
       "error": "timeout",
       "same_terminal_row_after_repeated_post_and_restart": true,
       "service": "candidate",
       "terminal_status": "outcome_unknown"
     },
     {
-      "closed_proxy_terminal_seconds": 8.928162541000347,
+      "closed_proxy_terminal_seconds": 9.07165141600126,
       "error": "timeout",
       "same_terminal_row_after_repeated_post_and_restart": true,
       "service": "vacancy",
@@ -117,7 +117,7 @@
     "services/recommendations/recommendations/api.py": "e17ca1d63cd7270cca5e85820ac99b13d37e18ce3b36f851b833c41d6d3eb8ad",
     "services/recommendations/recommendations/engine.py": "c85e93c6c7cb7d24e22e9d680e0dfdcf1f810b739415a6816c954f89c70d2f7e",
     "services/recommendations/recommendations/store.py": "7a67c1dff8f499cf89153ecb417e482acf817ef8e7eb4d15dd99b93f92ae09b1",
-    "services/tests/assessment-flow/test_http_flow.py": "82c9919b2f3675d232970fa4626f1f6148c101c2d49b43a4fcc4d715c268793d",
+    "services/tests/assessment-flow/test_http_flow.py": "f2f4029b264798e20e2f6f759c33ef30ddfb09ec35422690c76c53a96f3dbe1c",
     "services/vacancy-profile/vacancy_profile/__init__.py": "6ea2360e99d0f99664f5661e61c07c69a5dcf3c1517fa795bd9bd5392c2c096a",
     "services/vacancy-profile/vacancy_profile/__main__.py": "e86807be0bf98ab4fdfdb68c698b74c6ca26d3e201b1121e75122071d86d5000",
     "services/vacancy-profile/vacancy_profile/api.py": "cbd24a0f05505b45638fa69a8529e080bf47b7d3da2ecdca6cda28a5e1dd2dc2",
@@ -125,5 +125,8 @@
     "services/vacancy-profile/vacancy_profile/ops.py": "033e3498e3cf7ff6c32dd2630283482ce1c09fa9e647ca6686448b5ee8a5e20b",
     "services/vacancy-profile/vacancy_profile/store.py": "6c15b45d865cad93e9834c3df2df0fc0492d8cf10f3bc2a93d37c79d9bc6dc09"
   },
-  "boundary": "Unmodified candidate/vacancy OS processes, real private HTTP/SQLite/worker/JEV curl transport. Forced SOCKS loopback only; fake API keys. Closed port proves immediate network_error; reserved non-listening socket proves actual8s connect timeout. Synthetic malformed typed response_saved proves startup validation/raw retention. No internet/provider/YC/production/delivery. Full provider processing/read deadline not waited; only configured transport/unit-bound evidence for that longer timer."
+  "boundary": "Unmodified candidate/vacancy OS processes, real private HTTP/SQLite/worker/JEV curl transport. Forced SOCKS loopback only; fake API keys. Closed port proves immediate network_error. A listening TCP socket accepts but never reads, replies or forwards SOCKS negotiation; actual8s connect/handshake deadline terminates the call. Accepted connection count remains exactly one per service across repeated POST and restart. Synthetic malformed response_saved proves startup validation/raw retention. No internet/provider/YC/production/delivery. Full provider processing/read deadline not waited; only configured transport/unit-bound evidence for that longer timer.",
+  "previous_observed_at_utc": "2026-10-26T01:33:58.161614+00:00",
+  "portable_fixture": "Actual LISTEN/accept plus silent SOCKS negotiation replaces OS-dependent bound/non-listening behavior. Socket is held until fixture cleanup beyond8s. Executed here on macOS; Ubuntu execution is not claimed.",
+  "regression_note": "Original10 HTTP integration tests passed in provider-fault-regression.log before this timeout-fixture-only change; they were not rerun for this change."
 }

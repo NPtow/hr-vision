@@ -18,6 +18,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from unittest.mock import patch
@@ -497,10 +498,11 @@ class HTTPFlowTests(unittest.TestCase):
 
 
 class ProviderFailureProcessTests(unittest.TestCase):
-    """Unmodified OS-process worker/transport; SOCKS has no listening socket.
+    """Unmodified OS-process worker/transport; isolated loopback SOCKS failures.
 
-    A closed loopback port exercises immediate failure; a reserved non-listening
-    socket exercises the built-in eight-second connect timeout. No internet/DNS
+    A closed loopback port exercises immediate failure; a listening socket that
+    accepts but never answers SOCKS exercises the eight-second handshake timeout.
+    It creates no outgoing connections. No internet/DNS
     or provider requests can cross this SOCKS boundary. No credentials
     are loaded. Full production plans use the same trusted 16-parameter rubric.
     """
@@ -553,6 +555,7 @@ class ProviderFailureProcessTests(unittest.TestCase):
                 store, plan, route, body = self.setup_service(service)
                 self.launch(service)
                 started = time.monotonic()
+                connections_before = len(getattr(self, 'proxy_connections', []))
                 code, receipt = self.http(service, 'POST', route, body)
                 self.assertEqual((code, receipt['run_id']), (202, plan['run_id']))
                 deadline = started + seconds
@@ -581,6 +584,9 @@ class ProviderFailureProcessTests(unittest.TestCase):
                 self.assertEqual(store.get(plan['run_id']), terminal)
                 self.assertIsNone(store.next_queued())
                 self.assert_safe_logs(service)
+                if hasattr(self, 'proxy_connections'):
+                    self.assertEqual(len(self.proxy_connections), connections_before + 1,
+                                     'one SOCKS connection only; repeated POST/restart must not retry')
                 print(candidates.dump({'service': service, 'closed_proxy_terminal_seconds': elapsed,
                     'terminal_status': receipt['status'], 'error': receipt['error']['code'],
                     'same_terminal_row_after_repeated_post_and_restart': True}))
@@ -589,10 +595,33 @@ class ProviderFailureProcessTests(unittest.TestCase):
         self.proxy.close()
         self.assert_proxy_failure(expected_code='network_error', seconds=8)
 
-    def test_real_workers_nonlistening_proxy_enforces_eight_second_connect_timeout(self):
-        # The host refuses a closed port immediately, but leaves a reserved,
-        # non-listening socket pending. The unchanged curl --connect-timeout 8
-        # terminates both OS-process calls, well below the provider120s budget.
+    def test_real_workers_silent_socks_handshake_enforces_eight_second_timeout(self):
+        # Accept TCP on every OS, then hold SOCKS negotiation open without reading,
+        # replying or forwarding. curl --connect-timeout 8 includes this handshake.
+        self.proxy.listen(4)
+        self.proxy.settimeout(.1)
+        self.proxy_connections = []
+        stopping = threading.Event()
+        def accept_silently():
+            while not stopping.is_set():
+                try:
+                    connection, _ = self.proxy.accept()
+                    self.proxy_connections.append(connection)
+                except socket.timeout:
+                    continue
+                except OSError:
+                    if not stopping.is_set():
+                        raise
+                    return
+        listener = threading.Thread(target=accept_silently, name='silent-loopback-socks', daemon=True)
+        listener.start()
+        def close_fixture():
+            stopping.set()
+            self.proxy.close()
+            listener.join(timeout=2)
+            for connection in self.proxy_connections:
+                connection.close()
+        self.addCleanup(close_fixture)
         self.assert_proxy_failure(expected_code='timeout', seconds=12)
 
     def test_malformed_saved_typed_response_is_terminal_raw_retained_after_process_restart(self):

@@ -473,6 +473,8 @@ def main():
     inspect = commands.add_parser('inspect')
     inspect.add_argument('--id')
     inspect.add_argument('--probe', action='store_true')
+    inspect.add_argument('--legacy-candidate', action='store_true',
+                         help='Validate protected legacy source before entering HR maintenance')
     commands.add_parser('backup')
     install = commands.add_parser('install')
     install.add_argument('artifact', type=Path)
@@ -507,6 +509,10 @@ def main():
             if host.current.is_symlink() and (host.current.resolve() / 'release.json').exists():
                 validate_release(host.current.resolve(), args.service)
                 result['manifestVerified'] = True
+            elif args.legacy_candidate:
+                require(host.current.is_symlink(), 'Legacy current release required')
+                host.legacy_inventory(host.current.resolve())
+                result['legacyInventoryVerified'] = True
             if args.id:
                 result['operation'] = host.inspect_operation(args.id)
             if args.probe:

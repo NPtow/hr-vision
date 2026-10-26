@@ -145,7 +145,7 @@ def execute(receiver, operate, artifact, expected_current, *, legacy=False, run=
                         check=True, capture_output=True, text=True, timeout=420)
         return json.loads(completed.stdout)
     def preflight():
-        inspected = command('inspect')
+        inspected = command('inspect', *(['--legacy-candidate'] if legacy else []))
         require(inspected.get('current') == expected_current, 'Candidate current changed')
         require(inspected.get('database', {}).get('active') == 0, 'Candidate jobs active; finish them before guarded upgrade')
     step('candidate_inspect', preflight)
