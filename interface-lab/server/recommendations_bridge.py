@@ -11,7 +11,7 @@ import selection_facts
 import vacancy_profile_bridge
 
 MAX_VERIFICATION_ATTEMPTS = 8
-POLICY = {'version': 'tanh-v1', 'k': 1, 'probability_mode': 'conditional_levels'}
+POLICY = {'version': 'tanh-higher-v2', 'k': 1, 'probability_mode': 'conditional_levels'}
 
 
 def init(db):
@@ -53,6 +53,37 @@ def configured(connect, lock, authorize_vacancy, authorize_candidate):
         raise Problem('Настройка рекомендаций недоступна.', 503) from None
 
 
+def automatic_candidate_ids(portal, db, vacancy_id):
+    """Complete HR-ready pool; account/consent restrictions govern invitations."""
+    import selection
+    import selection_status
+    value = selection.vacancy(db, vacancy_id)
+    selection.employers.ensure_open(db, value['workspaceId'], vacancy_id)
+    return [cid for (cid,) in db.execute('SELECT id FROM cp_candidates ORDER BY id').fetchall()
+            if selection_status.evidence(db, selection.person(db, cid))['state'] == 'ready']
+
+
+def profile_comparable(value):
+    """Keep source uncertainty, but permit an absent target under higher-v2."""
+    profile = value.get('profile')
+    if not isinstance(profile, dict):
+        return False
+    if value.get('state') == 'ready':
+        return True  # The recommendation service validates the full contract.
+    parameters = profile.get('parameters')
+    return bool(value.get('state') == 'needs_review' and isinstance(parameters, list) and parameters
+                and all(type(p.get('importance')) is int and 0 <= p['importance'] <= 3
+                        for p in parameters))
+
+
+def materials_version(db, person):
+    import selection_status
+    value = selection_status.evidence(db, person)
+    # Verification timestamps change on every healthy scan, not the input.
+    return {key: value.get(key) for key in ('state', 'materialsRevision', 'allPartsReady',
+            'recordingCount', 'transcriptCount', 'contractVersion', 'items')}
+
+
 def local_versions(db, vid, cids):
     import assessment_core_bridge
     import selection
@@ -61,11 +92,12 @@ def local_versions(db, vid, cids):
     candidates = {}
     for cid in cids:
         row = assessment_core_bridge.latest(db, cid)
+        person = selection.person(db, cid)
         candidates[cid] = {'binding': row['id'] if row else None, 'run': row['run_id'] if row else None,
             'source': row['source_revision'] if row else None, 'rubric': row['rubric_hash'] if row else None,
             'model': row['model'] if row else None, 'status': row['status'] if row else None, 'format': row.get('request_format') if row else None,
             'fields': selection_facts.read(db, 'candidate', cid)['revision'],
-            'input': selection.person(db, cid)['sourceRevision']}
+            'input': person['sourceRevision'], 'materials': materials_version(db, person)}
     try:
         runtime_rubric = digest(json.loads(Path(os.environ['HR_ASSESSMENT_CORE_RUBRIC']).read_text()))
     except (KeyError, OSError, ValueError):
@@ -74,7 +106,8 @@ def local_versions(db, vid, cids):
             'vacancy': v['contentHash'], 'profile': vp['profile_id'] if vp else None,
             'rubric': vp['rubric_hash'] if vp else None, 'model': vp['model'] if vp else None,
             'vacancy_fields': selection_facts.read(db, 'vacancy', vid)['revision'], 'candidates': candidates,
-            'policy': POLICY, 'pool': cids}
+            'policy': POLICY, 'pool': cids,
+            'ready_pool': automatic_candidate_ids(None, db, vid)}
 
 
 def projections(db, vid):
@@ -113,7 +146,7 @@ class Bridge:
     def gather(self, vid, cids):
         versions = self.versions(vid, cids)
         profile = self.vacancy.read(vid)
-        require(profile['state'] == 'ready' and profile['profile'], 'Уточните требования вакансии.', 409)
+        require(profile_comparable(profile), 'Уточните важность навыков вакансии.', 409)
         ready, pending = [], []
         for cid in cids:
             value = self.candidate.read(cid)
@@ -186,10 +219,14 @@ class Bridge:
                 eligibility.append({'candidateId': cid, 'canInvite': can,
                     'reason': 'unknown_requires_approval' if can and item['eligibility'] == 'unknown' else
                               'ready' if can else 'stale' if reasons else 'already_added' if existing or nominated else 'no_delivery_channel' if not channels else 'not_eligible', 'channels': channels})
+        import recommendation_lifecycle
+        with self.connect() as db:
+            automation = recommendation_lifecycle.projection(db, vid)
         return {'vacancyId': vid, 'revision': versions.get('vacancy'), 'state': 'stale' if reasons else
                 'ready' if result else 'waiting_assessment', 'stale': bool(reasons), 'staleReasons': reasons,
                 'canRun': True, 'recommendationId': result['recommendation_id'] if result else None,
-                'result': result, 'pendingCandidates': pending, 'candidateIds': cids, 'invitationEligibility': eligibility}
+                'result': result, 'pendingCandidates': pending, 'candidateIds': cids, 'invitationEligibility': eligibility,
+                'automation': automation}
 
     def read(self, vid):
         self.authorize_vacancy(vid)

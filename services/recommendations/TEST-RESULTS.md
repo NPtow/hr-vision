@@ -73,3 +73,33 @@ standalone artifact imports the frozen shared helper without the monorepo.
 
 No model/provider requests, production changes or commit performed by this
 workstream during the compatibility follow-up.
+
+## Version 1.1.0: automatic-policy arithmetic and points
+
+2026-10-26 19:32 MSK, branch `codex/automatic-vacancy-comparison`, baseline
+`a567c7bac4bbc631050fd73cd3fee81c32b67554`, uncommitted recommendations changes.
+
+Command unchanged: **52 tests PASS**, 1.807s. Existing `test_engine.py` assertions
+were not weakened. New open tests in `test_higher_policy.py` verify known-r
+arithmetic/ranking agreement with `tanh-v1`, unknown-r signed linear fallback over
+2/3/7/10 levels, immutable raw input, conditional probabilities, correct weight
+denominator, −1/0/+1 → 0/50/100, null preservation, additive point contributions,
+finite ranges, rejection of client-injected result fields and unknown importance.
+
+Real HTTP verifies strict-v1 rejection and v2 calculation from the same unknown-r
+profile, server-generated points, immutable GET and no partial stored row on
+invalid input. Actual independent process is killed/restarted after a v2 POST;
+GET and repeated POST return the exact same saved result. A historical
+1.0.1-shaped record without point fields remains unchanged when read by 1.1.0;
+the GET path is checked with calculation disabled. SQLite schema is unchanged.
+
+```json
+{"local_hundred_profile_post_seconds":0.26016149999999993,"request_bytes":3915015,"saved_get_seconds":0.08359404100000001}
+```
+
+These are ordinary implementation/open tests and isolated local runtime checks.
+They do not represent isolated coding or protected build/seal/verify completion;
+the unavailable protected runner remains the separately accepted exception in
+`AUTOMATION.md`. Independent runtime QA and production acceptance belong to their
+respective workstreams. No production reads/recalculation, provider requests,
+deployments or commits were performed here.
