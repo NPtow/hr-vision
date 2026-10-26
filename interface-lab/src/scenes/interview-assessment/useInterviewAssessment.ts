@@ -10,8 +10,7 @@ export function useInterviewAssessment(assessment: AssessmentPresentation | unde
   const playback = state.revision === revision ? state.playback : initialFeedbackPlayback;
   const selectable = useMemo(() => {
     const criteria = assessment?.criteria ?? [];
-    const evidenced = criteria.filter(criterion => criterion.evidence.length > 0);
-    return evidenced.length ? evidenced : criteria.filter(criterion => criterion.state !== 'not_applicable');
+    return criteria.filter(criterion => criterion.state !== 'not_applicable');
   }, [assessment?.criteria]);
   const selectedId = selection.revision === revision && selectable.some(criterion => criterion.id === selection.id)
     ? selection.id : selectable[0]?.id ?? '';

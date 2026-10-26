@@ -1,0 +1,36 @@
+[Unit]
+Description=HR Vision employer assessment preparation
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=120
+StartLimitBurst=3
+
+[Service]
+DynamicUser=yes
+StateDirectory=hr-vision-employer-review
+StateDirectoryMode=0700
+WorkingDirectory=/opt/hr-vision-employer-review/current
+EnvironmentFile=/etc/hr-vision/employer-review.env
+Environment=PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 service.py
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=190
+KillSignal=SIGINT
+MemoryMax=256M
+MemorySwapMax=0
+CPUQuota=50%
+TasksMax=32
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target

@@ -395,6 +395,8 @@ def import_batch(db, workspace_id, vacancy_id, body, portal=None):
                                batch_id=bid, rank=item['rank'], reason=item['reason'])
                 outcome = 'added'
                 result['addedApplicationIds'].append(aid)
+                import employer_review
+                employer_review.enqueue(db, aid)
             else:
                 require(review[0] == workspace_id, 'Кандидат не найден.', 404)
                 outcome = 'existing'
@@ -430,6 +432,8 @@ def application(db, workspace_id, application_id, include_rejected=False, includ
     require(include_rejected or row[5] != 'rejected', 'Кандидат не найден.', 404)
     require(include_unapproved or (row[3] == 'accepted' and profile.get('consentReuse') is True),
             'Кандидат не найден.', 404)
+    import employer_review
+    require(include_unapproved or employer_review.ready(db, application_id), 'Кандидат не найден.', 404)
     return {'applicationId': row[0], 'candidateId': row[1], 'vacancyId': row[2],
             'status': row[3], 'approvedAutomatically': bool(row[4]), 'reviewState': row[5],
             'queueOrder': row[6], 'skipCount': row[7], 'source': row[8], 'sourceVersion': row[9],
@@ -455,8 +459,10 @@ def applications(db, workspace_id, view='all', vacancy_id=None):
       AND (? IS NULL OR a.vacancy_id=?) AND r.state!='rejected'
       ORDER BY r.queue_order,r.created_at,a.id''',
                       (workspace_id, workspace_id, vacancy_id, vacancy_id)).fetchall()
+    import employer_review
     return [application(db, workspace_id, row[0]) for row in rows
             if row[1] == 'accepted' and json.loads(row[2]).get('consentReuse') is True
+            and employer_review.ready(db, row[0])
             and (view == 'all' or row[3] == view)]
 
 
