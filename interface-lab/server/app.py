@@ -751,6 +751,8 @@ if __name__ == '__main__':
     import recommendations_bridge
     CANDIDATE_PORTAL.recommendation_lifecycle = recommendations_bridge.start_background(
         connect, LOCK, CANDIDATE_PORTAL)
+    import employer_review
+    employer_review.start_worker(CANDIDATE_PORTAL)
     candidate_notifications.start_worker(connect, update_handler=CANDIDATE_BOT.handle_update,
         telegram_renderer=CANDIDATE_BOT.render_notification)
     HH_ROUTES.start_worker()

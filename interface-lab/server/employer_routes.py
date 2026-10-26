@@ -322,6 +322,9 @@ class EmployerRoutes:
             meeting = self.portal.interview(db, app['candidateId']) if scope['source'] == 'screening' else self._meeting(db, app, scope)
             require(meeting and meeting['status'] == 'completed', 'Материалы доступны после встречи.', 409)
             if scope['source'] == 'screening' and not feedback:
+                import employer_review
+                if employer_review.tracked(db, app['applicationId']):
+                    return employer_review.projection(db, app['applicationId'])
                 import assessment_jobs
                 return assessment_jobs.read_candidate(db, app['candidateId'], scope['recordingId'], app['vacancyId']) or {'assessment': None}
             require(not feedback, 'Оценка этого интервью недоступна.', 404)

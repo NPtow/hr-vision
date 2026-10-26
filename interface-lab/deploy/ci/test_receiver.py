@@ -191,10 +191,12 @@ class ReceiverTest(unittest.TestCase):
         self.assertEqual(r.PRE_SELECTION_STATUS_RUNTIME - r.PRE_ASR_DISPATCH_RUNTIME, {'materials_asr_dispatch.py'})
         self.assertEqual(r.PRE_FULL_CORPUS_RUNTIME - r.PRE_SELECTION_STATUS_RUNTIME, {'selection_status.py'})
         self.assertEqual(r.PRE_PRODUCT_RECORDINGS_RUNTIME - r.PRE_FULL_CORPUS_RUNTIME, {'assessment_corpus.py', 'assessment_core_bridge.py'})
-        self.assertEqual(r.PRE_RECOMMENDATIONS_RUNTIME - r.PRE_PRODUCT_RECORDINGS_RUNTIME,
-                         {'recording_uploads.py', 'canonical_materials.py', 'transcript_bundle.py'})
+        self.assertEqual(r.PRE_RECOMMENDATIONS_RUNTIME - r.PRE_EMPLOYER_REVIEW_RUNTIME, {'employer_review.py'})
         self.assertEqual(r.RUNTIME - r.PRE_RECOMMENDATIONS_RUNTIME, r.RECOMMENDATIONS_RUNTIME)
         self.assertIn(frozenset(r.PRE_RECOMMENDATIONS_RUNTIME), r.RUNTIME_LAYOUTS)
+        self.assertEqual(r.PRE_EMPLOYER_REVIEW_RUNTIME - r.PRE_PRODUCT_RECORDINGS_RUNTIME,
+                         {'recording_uploads.py', 'canonical_materials.py', 'transcript_bundle.py'})
+        self.assertIn(frozenset(r.PRE_EMPLOYER_REVIEW_RUNTIME), r.RUNTIME_LAYOUTS)
         self.assertIn(frozenset(r.PRE_PRODUCT_RECORDINGS_RUNTIME), r.RUNTIME_LAYOUTS)
         self.assertIn(frozenset(r.PRE_FULL_CORPUS_RUNTIME), r.RUNTIME_LAYOUTS)
         self.assertIn(frozenset(r.PRE_SELECTION_STATUS_RUNTIME), r.RUNTIME_LAYOUTS)
@@ -841,6 +843,17 @@ class ReceiverTest(unittest.TestCase):
                 r.guard_outbox_runtime(db, prior)
             r.guard_outbox_runtime(db, current)
             self.assertEqual(db.execute('SELECT id FROM ac_bindings').fetchall(), [('retained-run',)])
+
+    def test_prepared_employer_candidates_cannot_bypass_gate_after_rollback(self):
+        prior = self.runtime(self.root / 'before-employer-review', r.PRE_EMPLOYER_REVIEW_RUNTIME)
+        current = self.runtime(self.root / 'with-employer-review', r.RUNTIME)
+        with sqlite3.connect(':memory:') as db:
+            db.execute('CREATE TABLE er_preparations (application_id TEXT)')
+            r.guard_outbox_runtime(db, prior)
+            db.execute("INSERT INTO er_preparations VALUES ('candidate-preparing')")
+            with self.assertRaisesRegex(ValueError, 'Employer preparations'):
+                r.guard_outbox_runtime(db, prior)
+            r.guard_outbox_runtime(db, current)
 
     def test_jev_queue_requires_runtime_and_cannot_be_hidden_by_view(self):
         prior = self.runtime(self.root / 'before-jev', r.PRE_JEV_RUNTIME)

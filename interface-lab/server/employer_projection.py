@@ -118,6 +118,7 @@ def _safe_meeting(db, principal, portal, aid, meeting_id, saved):
 
 
 def person(db, principal, portal, record, vacancy):
+    import employer_review
     aid, cid = record['applicationId'], record['candidateId']
     profile = record['profile']
     state = workflow.load(db, aid, actor='manager', vacancy_id=vacancy['id'])
@@ -141,6 +142,7 @@ def person(db, principal, portal, record, vacancy):
         'sourceProfile': _profile(db, cid, profile, portal),
         'reviewState': record['reviewState'], 'queueOrder': record['queueOrder'],
         'matchingReason': record['reason'], 'matchingSource': record['source'],
+        'assessment': (employer_review.projection(db, aid) or {}).get('assessment'),
         'interest': record['status'], 'auto': bool(profile.get('autoApprove')),
         'slots': [], 'busy': [],
         'freeSlots': _free_slots(db, cid, principal['workspaceId'], profile),

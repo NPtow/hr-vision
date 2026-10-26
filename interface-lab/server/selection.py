@@ -495,6 +495,22 @@ class SelectionRoutes:
         require(next((v for k, v in headers.items() if k.lower() == 'sec-fetch-site'), '') != 'cross-site',
                 'Другой источник запроса.', 403)
         action = parsed.path[len(PREFIX):].strip('/')
+        if action in ('review-tasks', 'review-prepare', 'review-retry'):
+            import employer_review
+            with self.lock, self.connect() as db:
+                require(actor(db) == 'manager', 'Доступ только для команды HR Vision.', 403)
+                if method == 'GET' and action == 'review-tasks':
+                    return employer_review.tasks(db), dict(HEADERS)
+            require(method == 'POST' and action != 'review-tasks' and isinstance(body, dict), 'Проверьте запрос.', 400)
+            keys = {'applicationId', 'preferredParameterIds' if action == 'review-prepare' else 'requestId'}
+            require(set(body) == keys and isinstance(body['applicationId'], str), 'Проверьте запрос.', 400)
+            if action == 'review-retry':
+                require(isinstance(body['requestId'], str) and 0 < len(body['requestId']) <= 100, 'Проверьте запрос.', 400)
+            require(employer_review.enabled(), 'Подготовка цитат ещё не подключена.', 503)
+            bridge = employer_review.Bridge(self.portal)
+            result = (bridge.prepare(body['applicationId'], body['preferredParameterIds']) if action == 'review-prepare'
+                      else bridge.retry(body['applicationId'], body['requestId']))
+            return result, dict(HEADERS)
         def authorize_core(cid):
             with self.lock, self.connect() as db:
                 require(actor(db) == 'manager', 'Доступ только для команды HR Vision.', 403)

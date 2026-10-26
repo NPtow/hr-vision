@@ -847,8 +847,12 @@ class CandidatePortal:
             db.execute('INSERT INTO cp_applications(id,candidate_id,vacancy_id,status,approved_automatically,created_at,decided_at) VALUES (?,?,?,?,?,?,?)',
                        (aid, cid, vacancy['id'], 'accepted' if auto else 'pending', int(auto), iso(now()), iso(now()) if auto else None))
             self.event(db, cid, 'application.proposed', aid)
-            import assessment_jobs
-            assessment_jobs.enqueue(db, 'candidate', cid, vacancy['id'])
+            import employer_review
+            if employer_review.enabled():
+                employer_review.enqueue(db, aid)
+            else:
+                import assessment_jobs
+                assessment_jobs.enqueue(db, 'candidate', cid, vacancy['id'])
 
     def decide_application(self, db, cid, body):
         with meeting_transaction(db):

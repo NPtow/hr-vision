@@ -66,6 +66,7 @@ if (target === 'service') for (const name of [
   'core_source_client.py', 'core_source_outbox.py', 'zoom_api_client.py', 'public_profiles.py', 'assessment_jobs.py',
   'assessment_corpus.py', 'assessment_core_bridge.py', 'assessment_core_lifecycle.py',
   'selection_facts.py', 'vacancy_profile_bridge.py', 'recommendations_bridge.py',
+  'employer_review.py',
 ]) add(`server/${name}`, `api/${name}`);
 writeFileSync(`${stage}/release.json`, JSON.stringify(manifest) + '\n');
 execFileSync('tar', ['-czf', 'release.tgz', '-C', stage, 'release.json', 'ui', ...(target === 'service' ? ['api'] : [])], {
