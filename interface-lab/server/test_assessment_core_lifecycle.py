@@ -309,17 +309,43 @@ class LifecycleTests(unittest.TestCase):
         self.start_core('paused')
         self.lifecycle.tick()
         self.stop_core()
-        self.lifecycle.process()
-        self.lifecycle = Lifecycle(self.bridge, self.lifecycle.scope)
-        self.lifecycle.recover()
-        self.lifecycle.process()
-        self.lifecycle.process()
+        now = time.time() + 1
+        with patch('assessment_core_lifecycle.time.time', return_value=now), patch.object(
+                self.bridge.service, 'call', wraps=self.bridge.service.call) as reads:
+            self.lifecycle.process()
+            first = self.lifecycle.candidate_status('c1')['work']
+            self.assertEqual(first['poll_errors'], 1)
+            self.assertGreater(first['next_poll_at'], now)
+            self.lifecycle = Lifecycle(self.bridge, self.lifecycle.scope)
+            self.lifecycle.recover()
+            for _ in range(3):
+                self.lifecycle.process()
+            resumed = self.lifecycle.candidate_status('c1')['work']
+            self.assertEqual(resumed['poll_errors'], 1)
+            self.assertEqual(resumed['next_poll_at'], first['next_poll_at'])
+            self.assertEqual(reads.call_count, 1)
+        for _ in range(2):
+            due = self.lifecycle.candidate_status('c1')['work']['next_poll_at']
+            with patch('assessment_core_lifecycle.time.time', return_value=due):
+                self.lifecycle.process()
         result = self.lifecycle.candidate_status('c1')
-        self.assertEqual(result['state'], 'poll_failed')
+        self.assertEqual(result['state'], 'submitted')
         self.assertEqual(result['work']['poll_errors'], 3)
-        self.lifecycle.process()
+        with patch('assessment_core_lifecycle.time.time', return_value=due):
+            self.lifecycle.process()
         self.assertEqual(self.lifecycle.candidate_status('c1')['work']['poll_errors'], 3)
         self.assertEqual(self.calls(), [])
+        self.start_core('success')
+        deadline = time.monotonic() + 5
+        while not self.calls() and time.monotonic() < deadline:
+            time.sleep(.01)
+        with patch('assessment_core_lifecycle.time.time', return_value=result['work']['next_poll_at']), patch.object(
+                self.bridge.service, 'call', wraps=self.bridge.service.call) as reads:
+            self.lifecycle.process()
+        self.assertEqual(self.lifecycle.candidate_status('c1')['state'], 'completed')
+        self.assertEqual(self.lifecycle.candidate_status('c1')['work']['poll_errors'], 0)
+        self.assertEqual([call.args[0] for call in reads.call_args_list], ['GET'])
+        self.assertEqual(len(self.calls()), 1)
 
     def test_runtime_ownership_and_shutdown_release_are_real(self):
         settings = {'HR_ASSESSMENT_CORE_AUTO_ENABLED': '1', 'HR_ASSESSMENT_CORE_AUTO_CANDIDATE_IDS': 'c1'}

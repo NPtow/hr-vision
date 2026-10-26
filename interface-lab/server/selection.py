@@ -15,6 +15,8 @@ from domain import Problem, iso, now, require, text
 import employer_store as employers
 import selection_status
 import assessment_core_bridge
+import assessment_core_lifecycle
+import selection_materials_lifecycle
 import selection_facts
 import vacancy_profile_bridge
 import recommendations_bridge
@@ -281,6 +283,7 @@ def directory(db, vid=None, *, offset=0, limit=200, candidate_ids=None):
             item['interviewStatus'] == 'completed' and item['assessment'] and
             item['assessment']['recommendation'] == 'ranked' and not item['application'] and not nominated)
         item['workflow'] = selection_status.overview(db, item, vid)
+        item['workflow']['automation'] = assessment_core_lifecycle.public_candidate_status(db, cid)
         # A newer assessment pipeline supersedes an engine-v1 recommendation.
         # Until its matching adapter is connected, it cannot authorize sending.
         item['canAdd'] = item['canAdd'] and item['workflow']['match']['state'] == 'ranked'
@@ -495,6 +498,19 @@ class SelectionRoutes:
         require(next((v for k, v in headers.items() if k.lower() == 'sec-fetch-site'), '') != 'cross-site',
                 'Другой источник запроса.', 403)
         action = parsed.path[len(PREFIX):].strip('/')
+        if action == 'status':
+            with self.connect() as db:
+                require(actor(db) == 'manager', 'Доступ только для команды HR Vision.', 403)
+                require(method == 'GET', 'Действие не найдено.', 404)
+            status = {}
+            for name, attribute in (('materials', 'selection_materials_lifecycle'),
+                                    ('assessment', 'assessment_lifecycle')):
+                runtime = getattr(self.portal, attribute, None)
+                status[name] = runtime.status() if runtime is not None else {'enabled': False, 'running': False}
+            status['ok'] = all(not value.get('enabled') or
+                (value.get('running') and value.get('healthy', True) and not value.get('error'))
+                for value in status.values())
+            return status, dict(HEADERS)
         if action in ('review-tasks', 'review-prepare', 'review-retry'):
             import employer_review
             with self.lock, self.connect() as db:
@@ -597,6 +613,7 @@ class SelectionRoutes:
                     vacancy(db, vid)
             # External reads cannot hold the shared application lock. Opening a
             # drawer may verify saved sources, but never starts ASR, a model or invitations.
+            selection_materials_lifecycle.refresh_candidate(self.connect, self.lock, authorize_core, cid)
             sources = selection_status.materials(cid)
             if assessment_core_bridge.enabled():
                 try:
@@ -616,8 +633,10 @@ class SelectionRoutes:
                         'Материалы кандидата изменились. Обновите карточку.', 409)
                 hr_interview = selection_status.evidence(db, person(db, cid))
                 required_fields = selection_facts.read(db, 'candidate', cid)
+                automation = assessment_core_lifecycle.public_candidate_status(db, cid)
             return {'candidateId': cid, 'materials': sources, 'assessment': assessment,
-                    'hrInterview': hr_interview, 'requiredFields': required_fields}, dict(HEADERS)
+                    'hrInterview': hr_interview, 'requiredFields': required_fields,
+                    'automation': automation}, dict(HEADERS)
         with self.lock, self.connect() as db:
             require(actor(db) == 'manager', 'Доступ только для команды HR Vision.', 403)
             if method == 'GET' and action == 'candidates':

@@ -737,6 +737,7 @@ if __name__ == '__main__':
     import assessment_jobs
     assessment_jobs.start_worker(CANDIDATE_PORTAL)
     import assessment_core_lifecycle
+    import selection_materials_lifecycle
 
     def authorize_assessment_candidate(candidate_id):
         # Background reconciliation has no browser session. Its configured
@@ -746,6 +747,8 @@ if __name__ == '__main__':
             require(db.execute('SELECT 1 FROM cp_candidates WHERE id=?',
                                (candidate_id,)).fetchone(), 'Кандидат не найден.', 404)
 
+    CANDIDATE_PORTAL.selection_materials_lifecycle = selection_materials_lifecycle.configured(
+        connect, LOCK, authorize_assessment_candidate)
     CANDIDATE_PORTAL.assessment_lifecycle = assessment_core_lifecycle.start_background(
         connect, LOCK, authorize_assessment_candidate)
     import recommendations_bridge
@@ -763,6 +766,8 @@ if __name__ == '__main__':
         server.serve_forever()
     finally:
         server.server_close()
+        if CANDIDATE_PORTAL.selection_materials_lifecycle is not None:
+            CANDIDATE_PORTAL.selection_materials_lifecycle.stop()
         if CANDIDATE_PORTAL.assessment_lifecycle is not None:
             CANDIDATE_PORTAL.assessment_lifecycle.stop()
         if CANDIDATE_PORTAL.recommendation_lifecycle is not None:
