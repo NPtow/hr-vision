@@ -1,5 +1,7 @@
 import copy
 import http.client
+import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -12,6 +14,8 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest import mock
+from contextlib import redirect_stdout
 
 from jev_client import JevError
 from vacancy_profile.engine import UNKNOWN, digest, interpret, prepare, validate_plan
@@ -172,6 +176,107 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(self.store.get(self.plan['run_id'])['error']['code'], 'invalid_saved_response')
         self.assertFalse(work_once(self.store, self.client))
         self.assertEqual(self.client.calls, 0)
+
+    def rejected_response(self, raw):
+        self.store.submit(self.plan)
+        client = Fake(error=JevError('invalid_response', outcome_unknown=True, received_body=raw))
+        self.assertFalse(work_once(self.store, client))
+        return hashlib.sha256(raw).hexdigest(), client
+
+    def test_explicit_rejection_recovery_rounded_raw_and_cli_zero_posts(self):
+        raw_response = response(self.plan)
+        first_answers = list(raw_response['answers'].values())[:2]
+        for answer in first_answers:
+            answer['probabilities'][answer['choice']] = .99
+        raw = json.dumps(raw_response).encode()
+        body_hash, client = self.rejected_response(raw)
+        run_id = self.plan['run_id']
+        with mock.patch('jev_client.JevClient.evaluate', side_effect=AssertionError('POST forbidden')) as provider:
+            profile = self.store.recover_rejection(run_id, body_hash)
+            self.assertEqual(self.store.recover_rejection(run_id, body_hash), profile)
+            output = io.StringIO()
+            with mock.patch('sys.argv', ['ops', 'recover-rejection', run_id, '--db', str(self.store.path),
+                                         '--expected-body-sha256', body_hash]), redirect_stdout(output):
+                from vacancy_profile.ops import main
+                self.assertEqual(main(), 0)
+            self.assertEqual(json.loads(output.getvalue())['provider_posts'], 0)
+            provider.assert_not_called()
+        self.assertEqual(client.calls, 1)
+        row = self.store.get(run_id)
+        self.assertEqual((row['status'], row['error']), ('completed', None))
+        self.assertEqual(row['response'], raw_response)
+        self.assertEqual(self.store.current_profile(run_id), profile)
+        self.assertEqual(sum(profile['parameters'][0]['raw_answers']['level']['probabilities'].values()), .99)
+        with self.store.db() as db:
+            self.assertEqual(db.execute('SELECT body FROM provider_rejections').fetchone()[0], raw)
+        audit = self.store.recovery_audit(run_id)
+        self.assertEqual(audit['body_sha256'], body_hash)
+        self.assertEqual(audit['original_error']['code'], 'invalid_response')
+        self.assertEqual(audit['phase'], 'completed')
+        audit_path = self.store.path.parent / 'operator-recoveries' / (run_id + '.json')
+        self.assertEqual(audit_path.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(len(list(audit_path.parent.glob('*.json'))), 1)
+
+    def test_rejection_recovery_interruption_resumes_without_schema_change(self):
+        raw = json.dumps(response(self.plan)).encode()
+        body_hash, _ = self.rejected_response(raw)
+        run_id = self.plan['run_id']
+        with self.store.db() as db:
+            schema_before = [tuple(row) for row in db.execute('SELECT name,sql FROM sqlite_master ORDER BY name')]
+        with mock.patch.object(self.store, 'replay', side_effect=RuntimeError('interrupted after saved response')):
+            with self.assertRaises(RuntimeError):
+                self.store.recover_rejection(run_id, body_hash)
+        self.assertEqual(self.store.get(run_id)['status'], 'response_saved')
+        self.assertEqual(self.store.recovery_audit(run_id)['phase'], 'prepared')
+        restarted = RunStore(self.store.path)
+        with restarted.runtime_lock():
+            restarted.recover()
+        self.assertEqual(restarted.get(run_id)['status'], 'completed')
+        profile = restarted.recover_rejection(run_id, body_hash)
+        self.assertEqual(profile['run_id'], run_id)
+        self.assertEqual(restarted.recovery_audit(run_id)['phase'], 'completed')
+        with restarted.db() as db:
+            self.assertEqual([tuple(row) for row in db.execute('SELECT name,sql FROM sqlite_master ORDER BY name')],
+                             schema_before)
+
+    def test_rejection_recovery_refuses_hash_invalid_body_or_owned_database(self):
+        raw = json.dumps(response(self.plan)).encode()
+        body_hash, _ = self.rejected_response(raw)
+        original = self.store.get(self.plan['run_id'])
+        with self.assertRaisesRegex(RunUnavailable, 'hash_mismatch'):
+            self.store.recover_rejection(self.plan['run_id'], '0' * 64)
+        with self.store.runtime_lock():
+            with self.assertRaisesRegex(RunUnavailable, 'store_in_use'):
+                self.store.recover_rejection(self.plan['run_id'], body_hash)
+        self.assertEqual(self.store.get(self.plan['run_id']), original)
+        invalid = b'{"invalid":"PRIVATE RAW"}'
+        with self.store.db() as db:
+            db.execute('UPDATE provider_rejections SET body=?', (invalid,))
+        with self.assertRaises(JevError):
+            self.store.recover_rejection(self.plan['run_id'], hashlib.sha256(invalid).hexdigest())
+        self.assertEqual(self.store.get(self.plan['run_id']), original)
+        self.assertIsNone(self.store.recovery_audit(self.plan['run_id']))
+
+    def test_rejection_recovery_refuses_wrong_states_no_body_or_wrong_error(self):
+        raw = json.dumps(response(self.plan)).encode()
+        body_hash, _ = self.rejected_response(raw)
+        run_id = self.plan['run_id']
+        for status in ('queued', 'sent', 'failed', 'response_saved', 'completed'):
+            with self.store.db() as db:
+                db.execute('UPDATE runs SET status=? WHERE id=?', (status, run_id))
+            original = self.store.get(run_id)
+            with self.assertRaises(RunUnavailable):
+                self.store.recover_rejection(run_id, body_hash)
+            self.assertEqual(self.store.get(run_id), original)
+        with self.store.db() as db:
+            db.execute("UPDATE runs SET status='outcome_unknown',error=? WHERE id=?",
+                       (json.dumps({'code': 'timeout'}), run_id))
+        with self.assertRaisesRegex(RunUnavailable, 'state_conflict'):
+            self.store.recover_rejection(run_id, body_hash)
+        with self.store.db() as db:
+            db.execute('DELETE FROM provider_rejections WHERE run_id=?', (run_id,))
+        with self.assertRaisesRegex(RunUnavailable, 'unavailable'):
+            self.store.recover_rejection(run_id, body_hash)
 
     def test_exclusive_owner(self):
         with self.store.runtime_lock():

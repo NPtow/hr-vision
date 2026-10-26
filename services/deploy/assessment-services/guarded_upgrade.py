@@ -1,4 +1,4 @@
-"""Upgrade candidate core while the installed guarded receiver owns HR quiescence."""
+"""Upgrade one assessment service while the installed guarded receiver owns HR quiescence."""
 import argparse
 from contextlib import contextmanager
 import fcntl
@@ -100,7 +100,7 @@ class PrivateJournal:
         if details:
             # Only generated/deployment identifiers are accepted, never source texts.
             event['details'] = {key: value for key, value in details.items()
-                                if key in ('existing_ui_sha', 'expected_candidate_commit', 'api_pointer', 'ui_pointer', 'paused_units')}
+                                if key in ('existing_ui_sha', 'expected_candidate_commit', 'api_pointer', 'ui_pointer', 'paused_units', 'service', 'expected_service_commit')}
         self.document['events'].append(event)
         require(len(self.document['events']) <= 128, 'Operation journal event limit exceeded')
         descriptor, temporary = tempfile.mkstemp(prefix='.operation-', dir=self.path.parent)
@@ -127,7 +127,7 @@ def inspect_journal(path, *, require_root=True):
     return document
 
 
-def execute(receiver, operate, artifact, expected_current, *, legacy=False, run=subprocess.run, journal=None):
+def execute(receiver, operate, artifact, expected_current, *, service='candidate', legacy=False, run=subprocess.run, journal=None):
     """Call under deployment_locks(); injectable subprocess/receiver for isolated tests."""
     record = journal or (lambda *arguments, **keywords: None)
     def step(phase, action):
@@ -139,16 +139,18 @@ def execute(receiver, operate, artifact, expected_current, *, legacy=False, run=
             raise
         record(phase, 'passed')
         return result
-    require(SHA.fullmatch(expected_current), 'Observed full candidate commit required')
+    require(service in ('candidate', 'vacancy', 'recommendations'), 'Unknown assessment service')
+    require(not legacy or service == 'candidate', 'Legacy candidate flag is valid only for candidate service')
+    require(SHA.fullmatch(expected_current), 'Observed full service commit required')
     def command(*arguments):
-        completed = run([sys.executable, '-B', str(operate), 'candidate', *arguments],
+        completed = run([sys.executable, '-B', str(operate), service, *arguments],
                         check=True, capture_output=True, text=True, timeout=420)
         return json.loads(completed.stdout)
     def preflight():
-        inspected = command('inspect', *(['--legacy-candidate'] if legacy else []))
-        require(inspected.get('current') == expected_current, 'Candidate current changed')
-        require(inspected.get('database', {}).get('active') == 0, 'Candidate jobs active; finish them before guarded upgrade')
-    step('candidate_inspect', preflight)
+        inspected = command('inspect', *(['--legacy-candidate'] if legacy else ['--validate-current']))
+        require(inspected.get('current') == expected_current, 'Service current changed')
+        require(inspected.get('database', {}).get('active') == 0, 'Service jobs active; finish them before guarded upgrade')
+    step(service + '_inspect', preflight)
     previous_api = step('capture_api_pointer', lambda: receiver.pointer(receiver.API))
     previous_ui = step('capture_ui_pointer', lambda: receiver.pointer(receiver.BASES['service']))
     require(previous_api and previous_ui, 'Installed API and UI pointers required')
@@ -159,7 +161,8 @@ def execute(receiver, operate, artifact, expected_current, *, legacy=False, run=
         return deployment['sha']
     deployment_sha = step('read_existing_deployment', deployment_identity)
     record('deployment_identity', 'passed', details={'existing_ui_sha': deployment_sha,
-        'expected_candidate_commit': expected_current, 'api_pointer': previous_api, 'ui_pointer': previous_ui})
+        'expected_candidate_commit': expected_current if service == 'candidate' else None,
+        'expected_service_commit': expected_current, 'service': service, 'api_pointer': previous_api, 'ui_pointer': previous_ui})
     tag = 'assessment-upgrade-' + secrets.token_hex(12)
     step('live_guard_before_stop', lambda: receiver.guard_and_backup(tag + '-before'))
     paused = step('pause_materials', receiver.pause_materials)
@@ -177,8 +180,8 @@ def execute(receiver, operate, artifact, expected_current, *, legacy=False, run=
         arguments = ['install', str(artifact), '--expected-current', expected_current, '--consumers-quiesced']
         if legacy:
             arguments.append('--legacy-candidate')
-        result = step('candidate_install', lambda: command(*arguments))
-        return {'candidate': result, 'existingUiSha': deployment_sha,
+        result = step(service + '_install', lambda: command(*arguments))
+        return {service: result, 'service': service, 'existingUiSha': deployment_sha,
                 'hrApiPointer': previous_api, 'guardedBackups': [tag + '-before', tag + '-stopped']}
     finally:
         if stopped_attempted:
@@ -201,6 +204,7 @@ def main():
     parser.add_argument('artifact', type=Path, nargs='?')
     parser.add_argument('--inspect-journal', type=Path)
     parser.add_argument('--expected-current')
+    parser.add_argument('--service', choices=('candidate', 'vacancy', 'recommendations'), default='candidate')
     parser.add_argument('--legacy-candidate', action='store_true')
     parser.add_argument('--receiver', type=Path)
     parser.add_argument('--receiver-sha256', help='SHA256 of reviewed installed receiver, not a secret')
@@ -223,13 +227,13 @@ def main():
         with deployment_locks():
             journal('acquire_deployment_locks', 'passed')
             result = execute(receiver, operate, args.artifact.resolve(), args.expected_current,
-                             legacy=args.legacy_candidate, journal=journal)
+                             service=args.service, legacy=args.legacy_candidate, journal=journal)
         journal('operation', 'passed')
         result['operationJournal'] = str(journal.path)
         print(json.dumps(result, sort_keys=True))
     except BaseException as error:
         journal('operation', 'failed', error=error)
-        raise GuardFailure('Guarded candidate upgrade failed; inspect private operation journal: ' + str(journal.path)) from error
+        raise GuardFailure('Guarded service upgrade failed; inspect private operation journal: ' + str(journal.path)) from error
 
 
 if __name__ == '__main__':
@@ -238,4 +242,4 @@ if __name__ == '__main__':
     except GuardFailure as error:
         raise SystemExit(str(error)) from None
     except BaseException:
-        raise SystemExit('Guarded candidate upgrade failed; inspect API/material/core unit states before retry') from None
+        raise SystemExit('Guarded service upgrade failed; inspect API/material/core unit states before retry') from None

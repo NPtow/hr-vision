@@ -3,7 +3,8 @@ import { ArrowUpRight, ChevronRight, ListFilter, Search, Table2 } from 'lucide-r
 import logo from '../employer-workspace/assets/hr-vision-logo.svg';
 import { useOperatorSession } from '../hh-outreach/session';
 import { OutreachError } from '../hh-outreach/api';
-import { selectionRequest, type Directory, type SelectionPerson, type SelectionVacancy } from './api';
+import { selectionRequest, type SelectionPerson, type SelectionVacancy } from './api';
+import { loadCandidateDirectory } from './directory';
 import { workflowFor, StateBadge, assessmentLabels, HRInterviewBadge } from './review-state';
 import { CandidateDetail, InlineCell } from './CandidateDetail';
 import { hasHRInterview } from './matching-contract';
@@ -45,11 +46,12 @@ function Workbench({ token, expire }: { token: string; expire: () => void }) {
     try {
       const [list, data] = await Promise.all([
         selectionRequest<{ vacancies: SelectionVacancy[] }>('vacancies', token),
-        selectionRequest<Directory>('candidates', token),
+        loadCandidateDirectory(token),
       ]);
       if (seq === generation.current) { setVacancies(list.vacancies); setPeople(data.candidates); }
     } catch (cause) {
       if (seq !== generation.current) return;
+      setPeople([]); setVacancies([]);
       if (cause instanceof OutreachError && [401, 403].includes(cause.status)) expire();
       else setError((cause as Error).message);
     } finally { if (seq === generation.current) setLoading(false); }
@@ -81,9 +83,9 @@ function Workbench({ token, expire }: { token: string; expire: () => void }) {
   }
   return <div className="sl-workspace">
     <div className="sl-heading"><h1>База подбора</h1></div>
-    <nav className="sl-tabs" aria-label="Разделы базы">{(['candidates', 'vacancies'] as const).map(key => <button key={key} aria-current={key === tab ? 'page' : undefined} onClick={() => { setTab(key); setDetail(''); setVid(''); setSearch(''); }}>{key === 'candidates' ? 'Кандидаты' : 'Вакансии'}<span>{key === 'candidates' ? people.filter(hasHRInterview).length : vacancies.length}</span></button>)}</nav>
+    <nav className="sl-tabs" aria-label="Разделы базы">{(['candidates', 'vacancies'] as const).map(key => <button key={key} aria-current={key === tab ? 'page' : undefined} onClick={() => { setTab(key); setDetail(''); setVid(''); setSearch(''); }}>{key === 'candidates' ? 'Кандидаты' : 'Вакансии'}<span>{loading || error ? '—' : key === 'candidates' ? people.filter(hasHRInterview).length : vacancies.length}</span></button>)}</nav>
     {error && <p className="sl-error" role="alert">{error}</p>}
-    {tab === 'vacancies' && vid && !loading ? vacancy
+    {tab === 'vacancies' && vid && !loading && !error ? vacancy
       ? <VacancyDetail key={vid} vacancy={vacancy} people={people} token={token} expire={expire} onBack={() => setVid('')} onCandidate={openPerson}/>
       : <div className="sl-empty"><p>Вакансия недоступна.</p><button onClick={() => setVid('')}>К вакансиям</button></div>
       : <section className="sl-surface" aria-label={tab === 'candidates' ? 'Кандидаты' : 'Вакансии'} aria-busy={loading || busy}>
@@ -97,7 +99,7 @@ function Workbench({ token, expire }: { token: string; expire: () => void }) {
           <label>Оценка навыков<select aria-label="Оценка навыков" value={filters.assessment} onChange={e => setFilters({ ...filters, assessment: e.target.value })}><option value="all">Любой статус</option>{Object.entries(assessmentLabels).filter(([key]) => people.some(p => workflowFor(p).assessment.state === key)).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
           <button className="sl-filter-reset" onClick={() => { setFilters(defaultFilters); setSearch(''); }}>По умолчанию</button>
         </div>}
-        {loading ? <div className="sl-empty" role="status">Загружаем данные…</div> : tab === 'vacancies' ? <div className="sl-scroll"><table><thead><tr><th>Вакансия</th><th>Работодатель</th><th>Город</th><th>Условия</th><th/></tr></thead><tbody>{vacancies.filter(v => [v.title, v.company, v.city].join(' ').toLocaleLowerCase('ru').includes(search.toLocaleLowerCase('ru'))).map(v => <tr key={v.id}><td><button className="sl-person" onClick={() => setVid(v.id)}>{v.title}</button></td><td>{v.company}</td><td>{v.city || '—'}</td><td>{v.salary || '—'}</td><td><button className="sl-open" aria-label={`Открыть вакансию: ${v.title}`} onClick={() => setVid(v.id)}>Открыть<ChevronRight size={15}/></button></td></tr>)}</tbody></table>{!vacancies.length && <div className="sl-empty">Нет вакансий</div>}</div>
+        {loading ? <div className="sl-empty" role="status">Загружаем данные…</div> : error ? <div className="sl-empty">Каталог не загружен. Нажмите «Обновить», чтобы повторить загрузку целиком.</div> : tab === 'vacancies' ? <div className="sl-scroll"><table><thead><tr><th>Вакансия</th><th>Работодатель</th><th>Город</th><th>Условия</th><th/></tr></thead><tbody>{vacancies.filter(v => [v.title, v.company, v.city].join(' ').toLocaleLowerCase('ru').includes(search.toLocaleLowerCase('ru'))).map(v => <tr key={v.id}><td><button className="sl-person" onClick={() => setVid(v.id)}>{v.title}</button></td><td>{v.company}</td><td>{v.city || '—'}</td><td>{v.salary || '—'}</td><td><button className="sl-open" aria-label={`Открыть вакансию: ${v.title}`} onClick={() => setVid(v.id)}>Открыть<ChevronRight size={15}/></button></td></tr>)}</tbody></table>{!vacancies.length && <div className="sl-empty">Нет вакансий</div>}</div>
         : rows.length ? <><div className="sl-scroll"><table><thead><tr><th>Кандидат</th><th>Роль</th><th>Город</th><th>HR-интервью</th><th>Оценка навыков</th><th>Telegram</th><th>Почта</th></tr></thead><tbody>{rows.map(p => <tr key={p.id}>
           <td><button className="sl-person" onClick={() => openPerson(p.id)}>{p.name || 'Без имени'}</button></td>
           <td><InlineCell label={`Роль: ${p.name}`} value={p.desiredRole} disabled={busy} onSave={value => void save(p, { desiredRole: value })}/></td>
@@ -109,6 +111,6 @@ function Workbench({ token, expire }: { token: string; expire: () => void }) {
         </tr>)}</tbody></table></div><footer className="sl-table-footer"><span>{rows.length} в таблице · всего {people.length}</span></footer></>
         : <div className="sl-empty"><Table2 size={24}/><h2>Нет кандидатов по выбранным фильтрам</h2>{people.some(p => !p.hrInterview || p.hrInterview.state === 'unavailable') && <p>Для части базы готовность HR-интервью пока не подтверждена.</p>}<button onClick={() => { setFilters({ ...defaultFilters, interview: 'all' }); setSearch(''); }}>Показать всех кандидатов</button></div>}
       </section>}
-    {tab === 'candidates' && person && <CandidateDetail key={person.id} person={person} token={token} expire={expire} busy={busy} onClose={() => setDetail('')} onSave={fields => void save(person, fields)}/>}
+    {tab === 'candidates' && !loading && !error && person && <CandidateDetail key={person.id} person={person} token={token} expire={expire} busy={busy} onClose={() => setDetail('')} onSave={fields => void save(person, fields)}/>}
   </div>;
 }

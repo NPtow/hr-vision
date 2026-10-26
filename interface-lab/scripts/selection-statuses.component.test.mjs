@@ -23,7 +23,7 @@ async function setup(t, { viewport = { width: 1440, height: 1000 }, state = make
     const req = route.request(), url = new URL(req.url());
     if (url.origin !== origin) { unexpected.push(req.method() + ' ' + url.origin); return route.abort(); }
     if (!url.pathname.startsWith('/api/')) return route.continue();
-    const value = state.request(req.method(), url.pathname, req.method() === 'POST' ? req.postDataJSON() : null);
+    const value = state.request(req.method(), url.pathname + url.search, req.method() === 'POST' ? req.postDataJSON() : null);
     if (state.delay && req.method() === 'POST' && url.pathname.endsWith('/publish')) await new Promise(resolve => setTimeout(resolve, state.delay));
     return route.fulfill({ status: value?.httpStatus ?? 200, json: value });
   });

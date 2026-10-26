@@ -155,6 +155,45 @@ class GuardedUpgradeTests(unittest.TestCase):
         with self.assertRaisesRegex(module.GuardFailure, 'Private operation journal'):
             module.inspect_journal(journal.path, require_root=False)
 
+    def test_vacancy_update_keeps_hr_paused_until_selected_service_health_return(self):
+        self.check_selected_service_upgrade('vacancy')
+
+    def test_recommendations_update_keeps_hr_paused_until_selected_service_health_return(self):
+        self.check_selected_service_upgrade('recommendations')
+
+    def check_selected_service_upgrade(self, service):
+        calls = []
+        def selected_run(argv, **kwargs):
+            calls.append(argv)
+            self.assertEqual(argv[1], '-B')
+            self.assertEqual(argv[3], service)
+            self.assertNotIn('--legacy-candidate', argv)
+            action = argv[4]
+            self.events.append(action)
+            if action == 'inspect':
+                self.assertIn('--validate-current', argv)
+                result = {'current': 'b' * 40, 'database': {'active': 0}}
+            else:
+                self.assertEqual(action, 'install')
+                self.assertEqual(self.events[-3:], ['stop', ('guard_backup', 'stopped'), 'install'])
+                self.assertIn('--consumers-quiesced', argv)
+                self.assertEqual(argv[argv.index('--expected-current') + 1], 'b' * 40)
+                result = {'current': 'c' * 40}
+            return SimpleNamespace(stdout=json.dumps(result))
+        journal = module.PrivateJournal(self.root / 'selected-journal', require_root=False)
+        result = module.execute(self.receiver, Path('/reviewed/operate.py'), Path('/artifact.tar.gz'),
+                                'b' * 40, service=service, run=selected_run, journal=journal)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(result[service]['current'], 'c' * 40)
+        self.assertEqual(self.events[-3:], [('activate', 'releases/existing'),
+            ('origin', 'service', 'a' * 40), ('resume', ['materials-worker'])])
+        records = module.inspect_journal(journal.path, require_root=False)['events']
+        self.assertTrue(any(event['phase'] == service + '_install' and event['status'] == 'passed' for event in records))
+        with self.assertRaisesRegex(module.GuardFailure, 'only for candidate'):
+            module.execute(self.receiver, Path('/reviewed/operate.py'), Path('/artifact.tar.gz'),
+                           'b' * 40, service=service, legacy=True, run=selected_run)
+        self.assertEqual(len(calls), 2)  # Invalid legacy flag refused before any subprocess/pause.
+
 
 if __name__ == '__main__':
     unittest.main()

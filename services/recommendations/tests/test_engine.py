@@ -139,7 +139,7 @@ class EngineTests(unittest.TestCase):
             lambda v: v["candidate_profiles"][0]["parameters"][0]["levels"][0].update(probability=float("nan")),
             lambda v: v["candidate_profiles"][0]["parameters"][0]["levels"][0].update(probability=float("inf")),
             lambda v: v["candidate_profiles"][0]["parameters"][0]["levels"][0].update(probability=-0.1),
-            lambda v: v["candidate_profiles"][0]["parameters"][0]["levels"][0].update(probability=0.01),
+            lambda v: v["candidate_profiles"][0]["parameters"][0]["levels"][0].update(probability=0.011),
             lambda v: v["candidate_profiles"][0]["parameters"][0].update(selected_level_id="L2"),
             lambda v: v["candidate_profiles"][0]["parameters"][0].update(model_confidence=True),
             lambda v: v["vacancy_profile"]["parameters"][0].update(importance=True),
@@ -206,6 +206,43 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(result["levels"][0]["p_raw"], 0.000004)
         self.assertAlmostEqual(result["numeric_probability_mass"], 1.000004)
         self.assertAlmostEqual(sum(l["q"] for l in result["levels"]), 1)
+
+    def test_rounded_choice_totals_are_preserved_and_only_numeric_q_is_normalized(self):
+        for probabilities, unknown in (([0, 0.16, 0.4, 0.23, 0], 0.2),
+                                       ([0, 0.16, 0.41, 0.24, 0], 0.2)):
+            value = deepcopy(self.value)
+            p = value["candidate_profiles"][0]["parameters"][0]
+            set_distribution(p, probabilities, unknown=unknown)
+            raw_level = value["vacancy_profile"]["parameters"][0]["raw_answers"]["level"]
+            raw_level["probabilities"] = {level["level_id"]: raw for level, raw in zip(p["levels"], probabilities)}
+            raw_level["probabilities"][UNKNOWN] = unknown
+            raw_importance = value["vacancy_profile"]["parameters"][0]["raw_answers"]["importance"]
+            raw_importance["probabilities"] = {"I0": 0.1, "I1": 0.5, "I2": 0.2, "I3": 0.1,
+                                                 UNKNOWN: round(sum(probabilities) + unknown - 0.9, 2)}
+            before = deepcopy(value)
+            with self.subTest(total=sum(probabilities) + unknown):
+                parameter = self.run_result(value)["items"][0]["parameters"][0]
+                self.assertEqual([level["p_raw"] for level in parameter["levels"]], probabilities)
+                self.assertEqual(parameter["insufficient_data_probability"], unknown)
+                self.assertAlmostEqual(sum(level["q"] for level in parameter["levels"]), 1)
+                self.assertEqual(value, before)
+
+    def test_rounded_exception_still_rejects_off_grid_gross_all_zero_and_non_argmax(self):
+        for probabilities, unknown, chosen in (([0, 0.16, 0.401, 0.23, 0], 0.2, "L3"),
+                                               ([0, 0.1, 0.4, 0.1, 0], 0.1, "L3"),
+                                               ([0, 0, 0, 0, 0], 0, "L3"),
+                                               ([0, 0.16, 0.4, 0.23, 0], 0.2, "L4")):
+            value = deepcopy(self.value)
+            set_distribution(value["candidate_profiles"][0]["parameters"][0], probabilities, unknown, chosen)
+            with self.subTest(probabilities=probabilities, chosen=chosen), self.assertRaises(InvalidInput):
+                self.run_result(value)
+        # The same rounded allowance never relaxes a vacancy Choice's argmax.
+        value = deepcopy(self.value)
+        raw_level = value["vacancy_profile"]["parameters"][0]["raw_answers"]["level"]
+        raw_level["probabilities"] = {"L1": 0, "L2": 0.16, "L3": 0.23, "L4": 0.4,
+                                      "L5": 0, UNKNOWN: 0.2}
+        with self.assertRaises(InvalidInput):
+            self.run_result(value)
 
     def test_maximum_pool_is_complete_and_next_candidate_is_rejected(self):
         value = request_fixture(self.rubric, count=1000)

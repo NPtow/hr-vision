@@ -72,3 +72,32 @@ terminal counts. Provider rejections are retained only in private SQLite table
 retry exists. `response_saved` is replayed at startup without a model call.
 Queued work resumes, interrupted `sent` becomes `outcome_unknown`. GET never
 starts work. Startup fails safely for invalid configuration or a locked DB.
+
+
+Explicit reconciliation of a response rejected by an older validator is an
+operator command, never an automatic retry. First gracefully stop only the
+vacancy service and verify the intended retained body SHA from private evidence.
+Run from its immutable updated artifact, with the same state-directory owner:
+
+```sh
+python3 -m vacancy_profile.ops recover-rejection RUN_ID --db /var/lib/hr-vision-vacancy-profile/runs.sqlite3 --expected-body-sha256 BODY_SHA256
+```
+
+The command acquires the service's exclusive runtime lock; a still-running unit
+makes it fail safely. It requires `outcome_unknown` with `invalid_response` and
+matching retained rejection bytes, validates the saved plan and the exact body
+through the current shared decoder, saves `response_saved` then replays to
+`completed`. It never constructs a client or performs a provider POST. It does
+not normalize, rewrite or discard the raw probabilities or rejection bytes.
+Invalid body/hash/state leaves the run unchanged. Matching audited completed
+commands return the same profile, and interrupted audited `response_saved`
+recovery can continue without a call.
+
+Private operator audit is an atomically replaced, fsync'd mode0600 JSON file at
+`operator-recoveries/RUN_ID.json` beside the DB, under a mode0700 directory. It
+records prepared/completed phases, body SHA, original error, actor UID, service
+version and timestamps. It creates no SQLite table/column or startup migration.
+Retain this directory with state backups if reconciliation evidence is needed;
+standard SQLite backups retain raw rejection bytes and completed profiles.
+Restart the unit after success and verify the exact run/profile through its
+ordinary read API. The HTTP API has no recovery route.

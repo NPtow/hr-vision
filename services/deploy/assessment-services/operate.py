@@ -473,6 +473,8 @@ def main():
     inspect = commands.add_parser('inspect')
     inspect.add_argument('--id')
     inspect.add_argument('--probe', action='store_true')
+    inspect.add_argument('--validate-current', action='store_true',
+                         help='Validate current manifest or recorded legacy inventory before maintenance')
     inspect.add_argument('--legacy-candidate', action='store_true',
                          help='Validate protected legacy source before entering HR maintenance')
     commands.add_parser('backup')
@@ -513,6 +515,10 @@ def main():
                 require(host.current.is_symlink(), 'Legacy current release required')
                 host.legacy_inventory(host.current.resolve())
                 result['legacyInventoryVerified'] = True
+            if args.validate_current:
+                require(host.current.is_symlink(), 'Current release required for validation')
+                host.validate_known(host.current.resolve())
+                result['currentReleaseVerified'] = True
             if args.id:
                 result['operation'] = host.inspect_operation(args.id)
             if args.probe:

@@ -1,10 +1,34 @@
 # Shared JEV transport
 
-Standard-library package extracted byte-for-byte from the candidate service's
+Standard-library package extracted from the candidate service's
 `assessment_core.providers.jev`. Public imports remain
 `JevClient`, `JevConfig`, `JevError`, and `validate_response`. It performs one
 bounded POST with no automatic retries and retains strict typed-response,
 probability, safe-error and private raw-rejection behavior.
+
+`is_choice_probability_distribution(values) -> bool` is the common validation
+policy used by the transport and recommendation consumer. It never changes its
+input. Finite numeric values must lie in `[0,1]`, with positive total mass.
+The historical `abs(sum(p)-1) <= 1e-5` path still accepts higher precision output.
+Otherwise every value must lie on the `0.01` grid (scaled floating-point
+tolerance `1e-9`), and `abs(sum(p)-1) <= N*0.005 + 1e-6`. This is accumulated
+serialization error, not an inferred or normalized posterior. Exact option
+keys and exact selected argmax remain mandatory. This exception applies only
+to Choice; Score mass and weighted-mean checks retain their original rules.
+
+The bounded rounding policy follows the merged Vercel AI SDK implementation,
+pinned to commit `20c4031d1fc59aab54b67c16679e3981374690ab`:
+
+- [Native TypeSafe adapter](https://github.com/vercel/ai/blob/20c4031d1fc59aab54b67c16679e3981374690ab/packages/typesafe-ai/src/typesafe-ai-decision-model.ts#L324-L325)
+  declares two decimal places while returning provider probabilities unchanged.
+- [Distribution validator](https://github.com/vercel/ai/blob/20c4031d1fc59aab54b67c16679e3981374690ab/packages/ai/src/decide/validate-decision.ts#L202-L230)
+  uses `1e-6 + N * (0.5 * 10**(-decimals))` for the sum bound. The grid gate,
+  positive-mass requirement and retained exact argmax are our stricter guards.
+- [Native TypeSafe OpenAPI](https://api.typesafe.ai/openapi.json), checked
+  2026-10-26, says Choice probabilities sum to approximately 1, without an
+  explicit precision bound. Thus this is an explicit client interoperability
+  policy grounded in the pinned adapter, rather than a stronger native API
+  guarantee. No score, confidence, choice, or stored raw probability is repaired.
 
 In the checkout, new consumers set
 `PYTHONPATH=services/vacancy-profile:packages/jev-client` and import `jev_client`.
