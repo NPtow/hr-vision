@@ -1,8 +1,10 @@
 import { hasHRInterview } from './matching-contract';
 import type { SelectionPerson, Workflow, WorkflowState, Readiness } from './api';
 import { FullCorpusAssessment, fullCorpusStatusLabels } from '../interview-assessment/FullCorpusAssessment';
+import { assessmentStatus, automationLabels, automationRetryLabel, pendingAssessmentLabels, type AssessmentAutomation } from './assessment-automation';
 
 export const assessmentLabels: Record<string, string> = {
+  ...pendingAssessmentLabels,
   dispatch_unknown: 'Проверить запуск', outcome_unknown: 'Исход расчёта неизвестен',
   not_started: 'Не рассчитано', waiting_sources: 'Ждёт материалы', queued: 'В очереди',
   processing: 'Считается', saved: 'Расчёт сохранён', ready: 'Готово',
@@ -45,6 +47,24 @@ export function StateBadge({ state, labels }: { state: WorkflowState; labels: Re
   return <span className={'sl-status ' + tone}>{labels[state.state] ?? 'Статус неизвестен'}</span>;
 }
 
+export function candidateAssessmentState(person: SelectionPerson): WorkflowState {
+  const workflow = workflowFor(person);
+  return { ...workflow.assessment, state: assessmentStatus(workflow.assessment.state, workflow.automation) };
+}
+
+export function AssessmentEntry({ person, onOpen }: { person: SelectionPerson; onOpen: () => void }) {
+  return <div className="sl-assessment-entry"><StateBadge state={candidateAssessmentState(person)} labels={assessmentLabels}/>
+    <button className="sl-assessment-link" aria-label={`Открыть оценку: ${person.name || 'Без имени'}`} onClick={onOpen}>Открыть оценку</button></div>;
+}
+
+export function AutomationState({ automation }: { automation?: AssessmentAutomation }) {
+  if (!automation) return null;
+  const retry = automationRetryLabel(automation.retryAt);
+  return <div><dt>Фоновая обработка</dt><dd><StateBadge state={{ state: automation.state }} labels={automationLabels}/></dd>
+    {retry && <small>Повторная проверка сервисом: {retry}</small>}
+    {['dispatch_unknown', 'outcome_unknown'].includes(automation.state) && <small>Не запускайте расчёт повторно, пока результат предыдущего запуска не подтверждён.</small>}</div>;
+}
+
 export function ReviewState({ person, readiness, loading, error }: {
   person: SelectionPerson; readiness: Readiness | null; loading: boolean; error: string;
 }) {
@@ -53,6 +73,8 @@ export function ReviewState({ person, readiness, loading, error }: {
   const sources = readiness?.materials;
   const result = readiness?.assessment.result;
   const coreRun = readiness?.assessment.coreRun;
+  const automation = readiness ? readiness.automation : workflow.automation;
+  const displayAssessment = { ...assessment, state: coreRun ? assessment.state : assessmentStatus(assessment.state, automation) };
   const showResult = !loading && !error && !['stale', 'unavailable', 'error', 'expired', 'cancelled'].includes(assessment.state);
   return <>
     <dl className="sl-readiness">
@@ -62,10 +84,11 @@ export function ReviewState({ person, readiness, loading, error }: {
       <div><dt>Материалы</dt><dd><StateBadge state={{ state: loading ? 'loading' : error ? 'unavailable' : sources?.state ?? 'unknown' }} labels={materialLabels}/></dd>
         {sources && sources.recordings !== null && <small>Записей в каталоге: {sources.recordings} · основных текстов: {sources.transcripts}</small>}
         {sources?.items.map((item, i) => <small key={item.kind + item.id}>{item.kind === 'interview' ? 'Интервью' : 'Встреча'} {i + 1}: {item.recordings} записей · {({ ready: 'основной текст выбран', processing: 'текст обрабатывается', error: 'ошибка текста', not_requested: 'основной текст не выбран' } as Record<string, string>)[item.transcriptState] ?? 'статус текста неизвестен'}</small>)}</div>
-      <div><dt>Оценка навыков</dt><dd><StateBadge state={loading ? { state: 'checking' } : error ? { state: 'unavailable' } : coreRun && showResult ? { state: coreRun.status } : assessment} labels={coreRun ? { ...assessmentLabels, ...fullCorpusStatusLabels } : assessmentLabels}/></dd>
+      <div><dt>Оценка навыков</dt><dd><StateBadge state={loading ? { state: 'checking' } : error ? { state: 'unavailable' } : coreRun && showResult ? { state: coreRun.status } : displayAssessment} labels={coreRun ? { ...assessmentLabels, ...fullCorpusStatusLabels } : assessmentLabels}/></dd>
         {assessment.state === 'stale' && <small>Материалы изменились. Предыдущие баллы не показаны как актуальные.</small>}
         {assessment.state === 'insufficient_data' && <small>В материалах недостаточно оснований для оценки. Это не нулевой балл.</small>}
-        {assessment.state === 'not_started' && <small>Просмотр карточки не запускает расчёт.</small>}</div>
+        {assessment.state === 'not_started' && !automation && <small>Просмотр карточки не запускает расчёт.</small>}</div>
+      {!loading && !error && <AutomationState automation={automation}/>}
     </dl>
     {error && <p className="sl-error" role="alert">{error}</p>}
     {coreRun && showResult && <FullCorpusAssessment run={coreRun} candidateId={person.id}/>}

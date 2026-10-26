@@ -4,6 +4,7 @@ import { OutreachError } from '../hh-outreach/api';
 import { selectionRequest, verdicts, states, reasons, criterionNames, type SelectionPerson, type Readiness } from './api';
 import { RequiredFieldsEditor } from './RequiredFieldsEditor';
 import { ReviewState } from './review-state';
+import { startReadinessPolling } from './readiness-poll';
 
 export function InlineCell({ value, label, disabled, onSave }: { value: string; label: string; disabled: boolean; onSave: (value: string) => void }) {
   const [editing, setEditing] = useState(false); const [draft, setDraft] = useState(value);
@@ -42,21 +43,15 @@ export function CandidateDetail({ person: p, token, expire, busy, onClose, onSav
   const [retry, setRetry] = useState(0);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState('');
+  const [pollExhausted, setPollExhausted] = useState(false);
   useEffect(() => {
-    let active = true;
-    setLoading(true); setError(''); setReadiness(null);
-    void selectionRequest<Readiness>('candidates/' + encodeURIComponent(p.id) + '/readiness', token)
-      .then(value => { if (active) { if (value.candidateId !== p.id) throw new Error('Получена карточка другого кандидата.'); setReadiness(value); } })
-      .catch(cause => { if (!active) return; if (cause instanceof OutreachError && [401, 403].includes(cause.status)) expire(); else setError('Не удалось проверить материалы и оценку. Повторите проверку.'); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
+    setLoading(true); setError(''); setReadiness(null); setPollExhausted(false);
+    return startReadinessPolling(p.id, token, {
+      onValue: value => { setReadiness(value); setLoading(false); },
+      onError: cause => { setLoading(false); if (cause instanceof OutreachError && [401, 403].includes(cause.status)) expire(); else setError('Не удалось проверить материалы и оценку. Повторите проверку.'); },
+      onExhausted: () => setPollExhausted(true),
+    });
   }, [p.id, p.sourceRevision, token, retry, expire]);
-  const coreStatus = readiness?.assessment.coreRun?.status;
-  useEffect(() => {
-    if (!coreStatus || !['queued', 'sent', 'response_saved'].includes(coreStatus)) return;
-    const timer = window.setTimeout(() => setRetry(value => value + 1), 3000);
-    return () => window.clearTimeout(timer);
-  }, [coreStatus, readiness]);
   async function startAssessment() {
     if (starting) return;
     setStarting(true); setStartError('');
@@ -82,6 +77,7 @@ export function CandidateDetail({ person: p, token, expire, busy, onClose, onSav
         onClick={() => void startAssessment()}>{starting ? 'Собираем CV и интервью…' : readiness.assessment.coreRun ? 'Обновить оценку по материалам' : 'Оценить CV и интервью'}</button>}
       {startError && <p role="alert">{startError}</p>}
       {readiness?.assessment.rubric && <p className="sl-muted">Шкала: {readiness.assessment.rubric.version} · параметров: {readiness.assessment.rubric.parameterCount}</p>}
+      {pollExhausted && <p className="sl-muted" role="status">Автообновление приостановлено. Проверить статус можно кнопкой ниже.</p>}
       <button className="sl-open" disabled={loading} onClick={() => setRetry(value => value + 1)}>Проверить актуальность</button>
       {p.assessment && <details className="sl-legacy"><summary>Архивная оценка</summary>
         <p>Предыдущий результат сохранён отдельно. Это не результат нового ядра.</p>

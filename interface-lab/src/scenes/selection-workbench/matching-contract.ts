@@ -14,8 +14,11 @@ export type VacancyFields = {
 };
 export type CandidateFields = { work_locations: string[] | null; employment_types: string[] | null; industry_months: Record<string, number> | null };
 export type FieldOptions = { locations: { id: string; label: string }[]; employmentTypes: { id: string; label: string }[]; industries: { id: string; label: string }[] };
-export type RequiredFieldsResponse = { vacancyId: string; revision: string; fields: VacancyFields; options?: FieldOptions };
-export type CandidateFieldsResponse = { candidateId: string; revision: string; fields: CandidateFields; options?: FieldOptions };
+export type FieldSource = { kind: string; sourceRevision: string | null; sourceFields: string[]; state: string; author?: string; manualRevision?: string };
+export type FieldConflict = { manualValue: unknown; sourceValue: unknown; manualSourceRevision: string | null; sourceRevision: string | null };
+export type FieldEvidence = { sourceRevision?: string; fieldSources?: Record<string, FieldSource>; conflicts?: Record<string, FieldConflict> };
+export type RequiredFieldsResponse = FieldEvidence & { vacancyId: string; revision: string; fields: VacancyFields; options?: FieldOptions };
+export type CandidateFieldsResponse = FieldEvidence & { candidateId: string; revision: string; fields: CandidateFields; options?: FieldOptions };
 export type Importance = 0 | 1 | 2 | 3 | 'insufficient_data';
 export type VacancyParameter = {
   parameter_id: string; title: string;
