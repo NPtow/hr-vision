@@ -11,15 +11,18 @@ Use only the full commit explicitly reviewed by the release owner.
    owner supplies `REVIEWED_CODE_SHA`, a full 40-hex immutable reviewed commit.
    Recommendations may be staged from this reviewed branch commit before merge;
    its exporter and guarded updater have no main-reachability requirement.
-2. Export **recommendations only** from that exact immutable commit. Runtime 1.1.0
-   adds `tanh-higher-v2` and `score_points`, accepts `tanh-v1`, and returns historical
+2. Export **recommendations only** from that exact immutable commit. Runtime 1.2.0
+   adds `tanh-higher-zero-v3` (unknown importance has effective weight zero),
+   accepts `tanh-v1` and `tanh-higher-v2`, and returns historical
    saved results unchanged. SQLite schema and `recommendations-v1` data compatibility
    remain unchanged.
 3. Upgrade recommendations using `guarded_upgrade.py --service recommendations`.
    Existing HR uses its prior explicit policy during this interval. The wrapper
    holds HR/material writers paused through service health and original HR/origin
    checks. Other assessment units are untouched.
-4. Before new HR delivery, root separately installs the reviewed receiver from the
+4. Verify the installed receiver against the reviewed source. If it already matches,
+   retain it; this policy-only release requires no receiver change. Otherwise,
+   before new HR delivery, root separately installs the reviewed receiver from the
    reviewed HR release commit at `/usr/local/libexec/hr-vision-ci/receiver.py`. The complete runtime
    adds `recommendation_lifecycle.py`; previous complete layouts remain accepted.
    The CI payload cannot update its own receiver.
@@ -94,7 +97,7 @@ preparation script/tests.
 
 Failed recommendations health automatically returns old compatible service/config
 and retains live DB; guarded wrapper restores original HR. Once new HR sends
-`tanh-higher-v2`, reverting recommendations alone to pre-1.1 rejects that policy.
+`tanh-higher-zero-v3`, reverting recommendations alone to pre-1.2 rejects that policy.
 Recover HR compatibly first, then recommendations, or use a forward fix. Never
 rewrite/delete historical results to permit recovery. The additive HR tables `rc_auto_vacancies`/`rc_auto_cursor` may remain when
 returning to the immediately prior complete HR API: it has no autonomous profile

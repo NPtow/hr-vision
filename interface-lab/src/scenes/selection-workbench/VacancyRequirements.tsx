@@ -2,7 +2,7 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { selectionRequest, type SelectionVacancy } from './api';
 import { OutreachError } from '../hh-outreach/api';
-import { type ProfileEnvelope, type Importance, matchingLabels } from './matching-contract';
+import { type ProfileEnvelope, type Importance, matchingLabels, isSupportedImportance } from './matching-contract';
 import { RequiredFieldsEditor } from './RequiredFieldsEditor';
 import { RequirementDistribution } from './RequirementDistribution';
 import { levelLabel } from './distribution-data';
@@ -31,8 +31,8 @@ export function VacancyRequirements({ vacancy, value, token, expire, onChange }:
     finally { pending.current = false; setBusy(false); }
   }
   const missingTarget = draft.some(p => typeof p.importance === 'number' && p.importance > 0 && !p.required_level_id);
-  const requirementState = value.state === 'needs_review' && value.profile?.parameters.every(p => typeof p.importance === 'number')
-    ? 'Готово к сравнению' : value.state === 'needs_review' ? 'Нужно уточнить важность навыков' : matchingLabels[value.state] ?? 'Статус неизвестен';
+  const requirementState = value.state === 'needs_review' && value.profile?.parameters.every(p => isSupportedImportance(p.importance))
+    ? 'Готово к сравнению' : value.state === 'needs_review' ? 'Проверьте значения требований' : matchingLabels[value.state] ?? 'Статус неизвестен';
   return <details className="sl-requirements"><summary><h2 className="md-requirements-title">Требования вакансии</h2><span>{value.stale ? 'Нужно обновить' : requirementState}</span></summary>
     <div className="sl-requirements-body">
       {value.stale && <p role="status">Вакансия изменилась. Требования и сравнение нужно обновить.</p>}
@@ -50,4 +50,4 @@ export function VacancyRequirements({ vacancy, value, token, expire, onChange }:
     </div>
   </details>;
 }
-const importanceLabel = (v: Importance) => ({ 0: '0 · Не требуется', 1: '1 · Желательно', 2: '2 · Важно', 3: '3 · Очень важно', insufficient_data: 'Нужно уточнить' })[v] ?? 'Нужно уточнить';
+const importanceLabel = (v: Importance) => ({ 0: '0 · Не требуется', 1: '1 · Желательно', 2: '2 · Важно', 3: '3 · Очень важно', insufficient_data: 'Не определена · вес 0' })[v] ?? 'Нужно уточнить';

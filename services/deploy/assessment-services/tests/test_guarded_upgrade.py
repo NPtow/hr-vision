@@ -28,7 +28,12 @@ class GuardedUpgradeTests(unittest.TestCase):
         deployment = self.base / 'releases/existing/deployment.json'
         deployment.parent.mkdir(parents=True)
         deployment.write_text(json.dumps({'sha': 'a' * 40, 'target': 'service'}))
-        self.receiver = SimpleNamespace(API=self.api, BASES={'service': self.base},
+        self.api_source = self.api / 'releases/existing'
+        self.api_source.mkdir(parents=True)
+        self.api_runtime = frozenset({'app.py', 'domain.py'})
+        for name in self.api_runtime:
+            (self.api_source / name).write_text('# synthetic immutable API runtime\n')
+        self.receiver = SimpleNamespace(API=self.api, BASES={'service': self.base}, RUNTIME_LAYOUTS={self.api_runtime},
             pointer=lambda base: 'releases/existing', guard_and_backup=self.backup,
             pause_materials=self.pause, stop_api=lambda: self.events.append('stop'),
             activate_api=self.activate, check_origin=self.origin,
@@ -80,6 +85,47 @@ class GuardedUpgradeTests(unittest.TestCase):
         self.assertEqual(self.events, ['inspect', ('guard_backup', 'before'), 'pause', 'stop',
             ('guard_backup', 'stopped'), 'install', ('activate', 'releases/existing'),
             ('origin', 'service', 'a' * 40), ('resume', ['materials-worker'])])
+
+    def test_extra_generated_pyc_aborts_before_backup_pause_stop_or_install_without_deleting_it(self):
+        cache = self.api_source / '__pycache__'
+        cache.mkdir()
+        generated = cache / 'app.cpython-310.pyc'
+        generated.write_bytes(b'synthetic generated Python bytecode')
+        with self.assertRaisesRegex(module.GuardFailure, 'Incomplete original API runtime'):
+            self.execute()
+        self.assertEqual(self.events, ['inspect'])
+        self.assertEqual(generated.read_bytes(), b'synthetic generated Python bytecode')
+
+    def test_missing_original_runtime_file_aborts_before_backup_pause_stop_or_install(self):
+        (self.api_source / 'domain.py').unlink()
+        with self.assertRaisesRegex(module.GuardFailure, 'Incomplete original API runtime'):
+            self.execute()
+        self.assertEqual(self.events, ['inspect'])
+        self.assertFalse((self.api_source / 'domain.py').exists())
+
+    def test_original_runtime_symlink_is_refused_without_touching_its_target(self):
+        source = self.api_source / 'domain.py'
+        source.unlink()
+        outside = self.root / 'external.py'
+        outside.write_text('# external source\n')
+        source.symlink_to(outside)
+        with self.assertRaisesRegex(module.GuardFailure, 'Unsafe original API runtime'):
+            self.execute()
+        self.assertEqual(self.events, ['inspect'])
+        self.assertTrue(source.is_symlink())
+        self.assertEqual(outside.read_text(), '# external source\n')
+
+    def test_original_api_pointer_change_aborts_before_backup_pause_stop_or_install(self):
+        reads = [0]
+        def pointer(base):
+            if base == self.api:
+                reads[0] += 1
+                return 'releases/existing' if reads[0] == 1 else 'releases/changed'
+            return 'releases/existing'
+        self.receiver.pointer = pointer
+        with self.assertRaisesRegex(module.GuardFailure, 'Original API pointer changed'):
+            self.execute()
+        self.assertEqual(self.events, ['inspect'])
 
     def test_busy_core_refuses_before_hr_pause(self):
         self.active = 1

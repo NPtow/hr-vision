@@ -1,4 +1,4 @@
-# Recommendations 1.1.0
+# Recommendations 1.2.0
 
 Independent deterministic process with its own SQLite. Owner: assessment core
 team (thread «Ядро»). The authorized HR backend supplies immutable candidate and
@@ -68,13 +68,14 @@ confirmed empty set; null means unknown. A missing industry key is unknown,
 not zero months. Canonical IDs are compared exactly without case folding or aliases.
 
 Supported policies have the same three keys:
-`{version:"tanh-higher-v2",k:1,probability_mode:"conditional_levels"}` for automatic
-comparison, and the earlier `version:"tanh-v1"` with its strict unknown-requirement
-behavior. An omitted or unknown policy is rejected.
+`{version:"tanh-higher-zero-v3",k:1,probability_mode:"conditional_levels"}` is
+exported as `AUTO_POLICY` for automatic comparison. Both earlier versions remain
+supported: `tanh-higher-v2` and `tanh-v1`. The latter retains strict
+unknown-requirement behavior. An omitted or unknown policy is rejected.
 Positions follow the catalogue 1..N. For an included skill,
 `q=p/sum(numeric p)`, `u=tanh(k*(position-required_position))`,
 `m=sum(q*u)`, `score=sum(importance*m)/sum(included importance)`.
-For `tanh-higher-v2`, when the positive-weight requirement is unknown, use
+For `tanh-higher-v2` and `tanh-higher-zero-v3`, when the positive-weight requirement is unknown, use
 `u=2*(position-1)/(N-1)-1` for the catalogue's N levels instead. The parameter
 explicitly reports `utility_mode:"higher_level_linear"`, `required_level_id:null`
 and `required_position:null`; no requirement is invented. Known requirements
@@ -82,9 +83,16 @@ retain the existing curve and report `utility_mode:"required_level_tanh"`.
 Confidence is displayed separately. Raw probabilities are never rewritten.
 Weight zero or chosen insufficient data excludes the skill from numerator and
 denominator. All excluded means `score:null,score_points:null,status:unscored,rank:null`.
-Unknown importance rejects with `422 {error:"clarification_required"}` under both
-policies. A positive weight with unknown requirement rejects under `tanh-v1`.
-Under v2 that parameter's source status remains `needs_review`; it is included by
+Under v3, unknown importance gives effective `weight:0`, `excluded:true`,
+`exclusion_reason:"unknown_importance"`. Every v3 parameter includes
+`source_importance`, preserving the original integer or `"insufficient_data"`.
+An explicit source weight zero remains `exclusion_reason:"zero_importance"`.
+Coverage sums effective weights, so excluded unknown importance contributes zero
+weight but remains counted among excluded parameters. The vacancy profile, its
+`needs_review` status and raw Choice answers stay unchanged in the saved snapshot.
+Unknown importance still rejects with `422 {error:"clarification_required"}` under
+`tanh-v1` and `tanh-higher-v2`. A positive weight with unknown requirement rejects
+under `tanh-v1`. Under v2/v3 that parameter's source status remains `needs_review`; it is included by
 the explicit fallback without changing the immutable vacancy profile.
 
 Each newly calculated item reports server-owned `score_points=50*(score+1)` in
@@ -152,7 +160,7 @@ The initial schema is append-only: no update/delete/migration endpoint exists.
 Releasing a new scorer changes the service version and therefore new result IDs;
 previous saved results remain readable using their stored version. GET preserves
 previous results exactly: it never adds `score_points` or utility metadata to old
-records. Version 1.1.0 accepts both policies and retains the SQLite schema. A
+records. Version 1.2.0 accepts all three policies and retains the SQLite schema. A
 rollback artifact can read saved records through the same identity check, but
 cannot calculate the new policy; switch the consumer policy with the rollback.
 Preserve the previous artifact and DB backup before switching process/routing. A production

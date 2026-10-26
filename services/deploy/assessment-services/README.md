@@ -77,6 +77,12 @@ API is stopped through the receiver and material writers remain paused. Inspect
 units and recover through the guarded receiver; do not manually resume writers.
 Other direct writers to the selected service must remain disabled for this operation.
 
+Before any backup, pause, stop or install, the wrapper also validates the original
+API inventory against the installed receiver's exact recovery layouts. Missing
+files, generated `.pyc` files, symlinks or a changed API pointer abort while the
+running API remains untouched. It never deletes or ignores unexpected files; the
+stopped-state compatibility check still runs during restoration.
+
 Before actions the wrapper prints its operation journal path under
 `/var/lib/hr-vision-operations/` (root-owned directory mode 0700; atomic files
 mode 0600). Phases identify the selected service and distinguish inspection/install, stopped live guard,

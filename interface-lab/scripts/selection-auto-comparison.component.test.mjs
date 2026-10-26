@@ -148,15 +148,70 @@ test('known weights with null target render higher-better details, raw probabili
   assert.equal(requests.filter(r=>r.method==='POST'&&r.path.endsWith('/recommendations')).length,0);
 });
 
-test('unknown importance remains a clarification and cannot authorize an old score',async t=>{
-  const state=fixture();state.profileEnvelope.profile.parameters[0].importance='insufficient_data';
-  state.profileEnvelope.state='needs_review';state.recommendations.automation={state:'needs_review',errorCode:'importance_required'};
+function unknownImportanceFixture({all=false,profileState='completed'}={}) {
+  const state=fixture();state.recommendations.result.policy.version='tanh-higher-zero-v3';
+  state.profileEnvelope.state=profileState;
+  const excluded=state.profileEnvelope.profile.parameters.filter((_,index)=>all||index===0);
+  for(const parameter of excluded){
+    parameter.importance='insufficient_data';parameter.status='needs_review';
+    parameter.raw_answers.importance={type:'choice',choice:'insufficient_data',confidence:.7,
+      probabilities:{I0:0,I1:0,I2:.1,I3:.2,insufficient_data:.7}};
+    for(const item of state.recommendations.result.items){
+      const p=item.parameters.find(p=>p.parameter_id===parameter.parameter_id);
+      Object.assign(p,{excluded:true,exclusion_reason:'unknown_importance',weight:0,weight_share:0,score_points_contribution:0,utility_mode:null,m:null});
+      for(const level of p.levels??[])Object.assign(level,{q:null,u:null,contribution:null});
+      item.coverage.included_parameters=item.parameters.filter(p=>!p.excluded).length;
+      item.coverage.excluded_parameters=item.parameters.length-item.coverage.included_parameters;
+      if(all){item.score=null;item.score_points=null;item.rank=null;item.status='unscored';item.coverage.included_weight=0;}
+    }
+  }
+  return state;
+}
+
+test('completed unknown importance excludes only that skill, keeps raw unknown and never mutates its profile',async t=>{
+  const state=unknownImportanceFixture(),before=structuredClone(state.profileEnvelope.profile);
   const {page,row,requests}=await setup(t,state);
-  await page.getByText(/Уточните важность навыков в требованиях вакансии/).first().waitFor();
-  assert.doesNotMatch(await row('Борис Соколов').innerText(),/11,1 \/ 100/);
+  await until(async()=> (await row('Борис Соколов').innerText()).includes('11,1 / 100'));
+  assert.match(await row('Борис Соколов').innerText(),/навыков учтено: 1 из 2/);
+  await row('Борис Соколов').getByRole('button',{name:'Почему такой балл',exact:true}).click();
+  const explanation=page.locator('.sl-match-explanation');
+  await explanation.locator('.md-skill-disclosure > summary').first().click();await page.clock.runFor(50);
+  await until(async()=> (await explanation.innerText()).includes('Важность не определена: эффективный вес 0'));
+  assert.equal(await explanation.locator('.md-required').count(),0);
+  await page.locator('.sl-requirements > summary').click();
+  await page.locator('.md-skill-toggle').first().click();await page.clock.runFor(50);
+  const rawImportance=page.locator('.sl-requirements .md-requirement-detail .md-distribution').last();
+  await until(async()=> (await rawImportance.innerText()).includes('70'));
+  assert.match(await rawImportance.innerText(),/Недостаточно данных[\s\S]*70\s?%/);
+  assert.equal(await rawImportance.locator('[data-answer=true]').getAttribute('data-unknown'),'true');
+  assert.doesNotMatch(await page.locator('.sl-requirements').innerText(),/Уточните.*для расчёта|Нужно уточнить важность/);
+  assert.deepEqual(state.profileEnvelope.profile,before);assert.deepEqual(state.writes,[]);noCompute(requests);
+});
+
+test('old cached needs_review status transitions to current v3 without a manual recalculation',async t=>{
+  const state=unknownImportanceFixture({profileState:'needs_review'}),ready=structuredClone(state.recommendations);
+  Object.assign(state.recommendations,{state:'needs_review',stale:true,result:null,recommendationId:null,
+    automation:{state:'needs_review',errorCode:'importance_required'}});
+  const {page,poll,row,requests}=await setup(t,state);
+  await page.getByText(/Ожидает автоматического обновления сравнения/).first().waitFor();
+  assert.doesNotMatch(await page.locator('.sl-workspace').innerText(),/Уточните важность навыков/);
+  assert.match(await page.locator('.sl-requirements > summary').innerText(),/Готово к сравнению/);
   assert.equal(await page.getByRole('button',{name:/^Отправить приглашения/}).isDisabled(),true);
-  assert.equal(await row('Борис Соколов').getByRole('button',{name:'Почему такой балл',exact:true}).count(),0);
-  noCompute(requests);
+  Object.assign(state.recommendations,ready);state.profileEnvelope.state='completed';await poll();
+  await until(async()=> (await row('Борис Соколов').innerText()).includes('11,1 / 100'));
+  assert.match(await page.locator('.sl-requirements > summary').innerText(),/Готово/);noCompute(requests);
+});
+
+test('all unknown importance leaves null score and no rank rather than fabricating zero',async t=>{
+  const state=unknownImportanceFixture({all:true});
+  const {page,row,requests}=await setup(t,state);
+  await until(async()=> (await row('Борис Соколов').innerText()).includes('Нет данных для балла'));
+  assert.doesNotMatch(await row('Борис Соколов').innerText(),/0 \/ 100|Место/);
+  assert.equal(await page.getByRole('button',{name:/^Отправить приглашения/}).isDisabled(),true);
+  await row('Борис Соколов').getByRole('button',{name:'Почему такой балл',exact:true}).click();
+  assert.match(await page.locator('.sl-match-explanation').innerText(),/нет сопоставимых навыков с ненулевым весом/);
+  assert.match(await page.locator('.sl-match-explanation').innerText(),/Учтено 0 из 2/);
+  assert.equal(state.recommendations.result.items[0].score_points,null);noCompute(requests);
 });
 
 test('late GET from a previous vacancy cannot replace the newly opened result',async t=>{

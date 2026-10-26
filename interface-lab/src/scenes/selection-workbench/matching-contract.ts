@@ -20,6 +20,8 @@ export type FieldEvidence = { sourceRevision?: string; fieldSources?: Record<str
 export type RequiredFieldsResponse = FieldEvidence & { vacancyId: string; revision: string; fields: VacancyFields; options?: FieldOptions };
 export type CandidateFieldsResponse = FieldEvidence & { candidateId: string; revision: string; fields: CandidateFields; options?: FieldOptions };
 export type Importance = 0 | 1 | 2 | 3 | 'insufficient_data';
+export const isSupportedImportance = (value: unknown): value is Importance => value === 'insufficient_data'
+  || typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 3;
 export type VacancyParameter = {
   parameter_id: string; title: string;
   levels: { level_id: string; label: string; description: string }[];
@@ -67,7 +69,7 @@ export type PublishReceipt = { added: string[]; waitingProfile: string[]; propos
 export const matchingLabels: Record<string, string> = {
   not_started: 'Ещё не рассчитано', missing: 'Ещё не рассчитано', queued: 'В очереди', sent: 'Считается',
   processing: 'Считается', running: 'Считается', response_saved: 'Сохраняется результат', ready: 'Готово',
-  completed: 'Готово', needs_review: 'Нужно уточнить требования', stale: 'Результат устарел',
+  completed: 'Готово', needs_review: 'Ожидает автоматического обновления сравнения', stale: 'Результат устарел',
   failed: 'Ошибка расчёта', error: 'Ошибка расчёта', unavailable: 'Не удалось проверить',
   outcome_unknown: 'Исход расчёта неизвестен', dispatch_unknown: 'Проверьте запуск',
   waiting_profile: 'Ожидает требования вакансии', waiting_vacancy_profile: 'Ожидает требования вакансии',

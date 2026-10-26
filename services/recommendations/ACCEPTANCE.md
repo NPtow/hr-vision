@@ -1,6 +1,6 @@
 # Recommendations acceptance
 
-Version 1.1.0, branch `codex/automatic-vacancy-comparison`; owner «Ядро».
+Version 1.2.0, branch `codex/matching-unknown-importance-zero`; owner «Ядро».
 Scope: isolated local service (actual loopback HTTP + SQLite and subprocesses).
 No live model/provider, production deployment, employer delivery or SSH performed.
 
@@ -13,6 +13,7 @@ formula and complete pool; restart/backup recover the exact committed result.
 |---|---|---|---|
 | R1 | tanh per level, conditional q, confidence separate, exclusions change denominator, all excluded null | PASS | `tests/test_engine.py`, explicit .07615941559557649 reference and unequal tanh(mean) |
 | R1 v2 | Known requirements retain tanh; unknown requirement uses signed linear utility with no fake level; importance unknown still rejects | PASS | `tests/test_higher_policy.py` and real HTTP tests; v1 strict regression preserved |
+| R1 v3 | Unknown importance effective zero, distinct exclusion reason, immutable source/raw answers; all unknown weights => null/unscored | PASS (local runtime) | `test_auto_policy.py`, API persistence and independent subprocess crash/restart; v1/v2 still reject unknown importance |
 | R1 points | −1/0/+1 maps 0/50/100; null stays null; weighted point contributions sum to item points; finite intervals | PASS | open algorithmic tests for endpoints, mixtures, weights and 2/3/7/10-level catalogues |
 | Compat | Old stored results GET unchanged, v1 strict, new result policy/version distinct and idempotent | PASS (local runtime) | `test_store.py` historical 1.0.1-shaped row + no-recalculation assertion; no production rollback claim |
 | R2 | Exact canonical IDs/months, fail filtered, unknown visible with human approval | PASS (service boundary) | field/revision/ranking tests in `test_engine.py`; product UI remains separate |

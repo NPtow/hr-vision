@@ -43,3 +43,17 @@ test('a zero-weight skill retains its raw level without presenting it as require
  assert.equal(activeRequiredLevel({...p,weight:2},{...requirement,importance:2}),'L3');
  assert.deepEqual(p,before);
 });
+
+
+test('unknown importance is preserved as a source answer while no target is marked required',()=>{
+ const parameter={importance:'insufficient_data',required_level_id:'L2',levels:[{level_id:'L2',label:'Второй'}],raw_answers:{
+   level:{choice:'L2',probabilities:{L2:.9,insufficient_data:.1}},
+   importance:{choice:'insufficient_data',probabilities:{I0:0,I1:.1,I2:0,I3:0,insufficient_data:.9}}}};
+ const before=structuredClone(parameter), distributions=requirementDistributions(parameter);
+ assert.equal(distributions.importance.choice,'insufficient_data');
+ assert.equal(distributions.importance.options.find(p=>p.id==='insufficient_data').probability,.9);
+ assert.equal(distributions.importance.options.find(p=>p.id==='I0').probability,0);
+ assert.equal(activeRequiredLevel({weight:0,required_level_id:'L2'},parameter),undefined);
+ assert.equal(activeRequiredLevel({required_level_id:'L2'},parameter),undefined);
+ assert.equal(levelLabel(parameter),'Не участвует в расчёте');assert.deepEqual(parameter,before);
+});

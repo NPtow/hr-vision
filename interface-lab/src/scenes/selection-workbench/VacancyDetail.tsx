@@ -3,7 +3,7 @@ import { ArrowLeft, Search, Send } from 'lucide-react';
 import { OutreachError } from '../hh-outreach/api';
 import { selectionRequest, type SelectionPerson, type SelectionVacancy } from './api';
 import { loadCandidateDirectory, recommendationPoolLimitMessage, MAX_RECOMMENDATION_CANDIDATES } from './directory';
-import { hasHRInterview, scoreLabel, matchingLabels, type ProfileEnvelope, type RecommendationsEnvelope, type PublishReceipt, type RecommendationItem } from './matching-contract';
+import { hasHRInterview, scoreLabel, matchingLabels, isSupportedImportance, type ProfileEnvelope, type RecommendationsEnvelope, type PublishReceipt, type RecommendationItem } from './matching-contract';
 import { VacancyRequirements } from './VacancyRequirements';
 import { MatchExplanation } from './MatchExplanation';
 import { AssessmentEntry } from './review-state';
@@ -94,7 +94,7 @@ export function VacancyDetail({ vacancy, people, token, expire, onBack, onCandid
     }));
   }, [people]);
   const profileUsable = !!profile?.profile && ['ready', 'completed', 'needs_review'].includes(profile.state)
-    && profile.profile.parameters.every(parameter => typeof parameter.importance === 'number');
+    && profile.profile.parameters.every(parameter => isSupportedImportance(parameter.importance));
   const validResult = !candidateInputsChanged && !!(data?.result && profile?.profile && profileUsable && !data.stale && !profile.stale && ['ready', 'completed'].includes(data.state) && data.revision === profile.revision && profile.revision === vacancy.contentHash && data.result.vacancy_profile_id === profile.profile.profile_id && data.result.rubric_sha256 === profile.profile.rubric_sha256);
   useEffect(() => { setSelected(new Set()); setApproved(new Set()); setExpanded(''); command.current = null; }, [data?.recommendationId, data?.revision, profile?.profile?.profile_id, validResult]);
   const poolCount = vacancyPeople.filter(hasHRInterview).length;
@@ -141,7 +141,9 @@ export function VacancyDetail({ vacancy, people, token, expire, onBack, onCandid
     finally { pending.current = false; setBusy(''); }
   }
   const automaticState = data?.automation?.state ?? data?.state ?? profile?.state ?? 'not_started';
-  const automaticLabel = data?.automation?.errorCode === 'importance_required' ? 'Уточните важность навыков в требованиях вакансии' : matchingLabels[automaticState] ?? 'Проверяем соответствие';
+  const automaticLabel = validResult ? 'Готово' : data?.automation?.errorCode === 'importance_required'
+    ? 'Ожидает автоматического обновления сравнения' : data?.automation?.errorCode === 'vacancy_profile_requires_review'
+      ? 'Проверьте значения требований вакансии' : matchingLabels[automaticState] ?? 'Проверяем соответствие';
   const retryAt = data?.automation?.retryAt;
   const retryDate = typeof retryAt === 'number' && Number.isFinite(retryAt) && retryAt > 0 ? new Date(retryAt * 1000) : null;
   const retryLabel = automaticState === 'backoff' && retryDate && !Number.isNaN(retryDate.getTime())
@@ -157,7 +159,7 @@ export function VacancyDetail({ vacancy, people, token, expire, onBack, onCandid
       {error && <p className="sl-error" role="alert">{error}</p>}{!directoryUnavailable && poolError && <p className="sl-error" role="alert">{poolError}</p>}{notice && <p className="sl-notice" role="status">{notice}</p>}{stale && <p className="sl-warning" role="status">Данные изменились. Соответствие пересчитывается автоматически. Прежние баллы не показаны как актуальные.</p>}
       {loading ? <div className="sl-empty" role="status">Проверяем требования и соответствие…</div> : directoryUnavailable ? <div className="sl-empty">Каталог не загружен. Нажмите «Обновить», чтобы повторить загрузку целиком.</div> : rows.length ? <><div className="sl-scroll"><table className="sl-recommendations"><thead><tr><th className="sl-check"><input type="checkbox" aria-label="Выбрать доступных кандидатов" disabled={!!busy || !selectableIds.length} checked={!!selectableIds.length && selectableIds.every(id => selected.has(id))} onChange={e => setSelected(e.target.checked ? new Set(selectableIds) : new Set())}/></th><th>Кандидат</th><th>Оценка навыков</th><th>Соответствие</th><th>Условия</th><th>Приглашение</th><th/></tr></thead><tbody>{rows.map(({ person: p, item }) => {
         const g = gate(p.id), canSelect = selectable(p.id, item), pendingState = data?.pendingCandidates.find(c => c.candidateId === p.id)?.state;
-        const label = item ? item.status === 'scored' ? scoreLabel(item) : 'Недостаточно данных' : pendingState ? matchingLabels[pendingState] ?? 'Ожидает оценки' : automaticLabel;
+        const label = item ? item.status === 'scored' ? scoreLabel(item) : 'Нет данных для балла' : pendingState ? matchingLabels[pendingState] ?? 'Ожидает оценки' : automaticLabel;
         return <Fragment key={p.id}><tr className="md-recommendation-row" data-selected={selected.has(p.id) && canSelect}>
           <td className="sl-check"><input type="checkbox" aria-label={`Пригласить: ${p.name}`} disabled={!canSelect || !!busy} checked={selected.has(p.id) && canSelect} onChange={() => toggle(p.id)}/></td>
           <td><button className="sl-person" onClick={() => onCandidate(p.id)}>{p.name || 'Без имени'}</button><small>{p.desiredRole}</small></td><td><AssessmentEntry person={p} onOpen={() => onCandidate(p.id)}/></td><td>{error ? 'Не удалось проверить' : stale ? 'Нужно обновить' : <><strong>{label}</strong>{item?.status === 'scored' && item.rank !== null && <small>Место {item.rank} · навыков учтено: {item.coverage.included_parameters} из {item.coverage.total_parameters}</small>}</>}</td>

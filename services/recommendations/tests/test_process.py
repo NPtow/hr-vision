@@ -13,7 +13,7 @@ import tempfile
 import time
 import unittest
 
-from recommendations.engine import HIGHER_POLICY, canonical_json, default_rubric
+from recommendations.engine import AUTO_POLICY, HIGHER_POLICY, canonical_json, default_rubric
 from fixtures import request_fixture, set_importance
 
 
@@ -155,7 +155,7 @@ class ProcessTests(unittest.TestCase):
         set_importance(value["vacancy_profile"], 0, 3, required=None)
         status, result = self.http("POST", "/v1/recommendations", value)
         self.assertEqual(status, 200)
-        self.assertEqual(result["service_version"], "1.1.0")
+        self.assertEqual(result["service_version"], "1.2.0")
         item = result["items"][0]
         self.assertAlmostEqual(item["score_points"], 50 * (item["score"] + 1))
         self.assertEqual(item["parameters"][0]["utility_mode"], "higher_level_linear")
@@ -165,6 +165,28 @@ class ProcessTests(unittest.TestCase):
         self.assertEqual(self.http("GET", "/v1/recommendations/" + result["recommendation_id"]), (200, result))
         self.assertEqual(self.http("POST", "/v1/recommendations", value), (200, result))
         self.assertEqual(self.http("GET", "/v1/operator")[1]["storage"]["saved_results"], 1)
+
+    def test_v3_process_unknown_importance_and_all_zero_survive_crash_restart(self):
+        value = request_fixture(default_rubric())
+        value["policy"] = dict(AUTO_POLICY)
+        for i in range(len(value["vacancy_profile"]["parameters"])):
+            set_importance(value["vacancy_profile"], i, "insufficient_data", required=None)
+        status, empty = self.http("POST", "/v1/recommendations", value)
+        self.assertEqual(status, 200)
+        self.assertEqual(empty["service_version"], "1.2.0")
+        self.assertEqual(empty["items"][0]["status"], "unscored")
+        self.assertIsNone(empty["items"][0]["score_points"])
+        set_importance(value["vacancy_profile"], 0, 3, required=None)
+        status, scored = self.http("POST", "/v1/recommendations", value)
+        self.assertEqual(status, 200)
+        self.assertAlmostEqual(scored["items"][0]["score_points"], 52.5)
+        self.assertEqual(scored["items"][0]["parameters"][1]["exclusion_reason"], "unknown_importance")
+        self.stop(crash=True)
+        self.start()
+        for result in (empty, scored):
+            self.assertEqual(self.http("GET", "/v1/recommendations/" + result["recommendation_id"]), (200, result))
+        self.assertEqual(self.http("POST", "/v1/recommendations", value), (200, scored))
+        self.assertEqual(self.http("GET", "/v1/operator")[1]["storage"]["saved_results"], 2)
 
 
 class PackagedImportTests(unittest.TestCase):

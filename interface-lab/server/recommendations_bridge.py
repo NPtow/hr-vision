@@ -11,7 +11,7 @@ import selection_facts
 import vacancy_profile_bridge
 
 MAX_VERIFICATION_ATTEMPTS = 8
-POLICY = {'version': 'tanh-higher-v2', 'k': 1, 'probability_mode': 'conditional_levels'}
+POLICY = {'version': 'tanh-higher-zero-v3', 'k': 1, 'probability_mode': 'conditional_levels'}
 
 
 def init(db):
@@ -64,7 +64,7 @@ def automatic_candidate_ids(portal, db, vacancy_id):
 
 
 def profile_comparable(value):
-    """Keep source uncertainty, but permit an absent target under higher-v2."""
+    """V3 scores known weights; unknown importance contributes zero, raw retained."""
     profile = value.get('profile')
     if not isinstance(profile, dict):
         return False
@@ -72,7 +72,8 @@ def profile_comparable(value):
         return True  # The recommendation service validates the full contract.
     parameters = profile.get('parameters')
     return bool(value.get('state') == 'needs_review' and isinstance(parameters, list) and parameters
-                and all(type(p.get('importance')) is int and 0 <= p['importance'] <= 3
+                and all(isinstance(p, dict) and (p.get('importance') == 'insufficient_data'
+                        or type(p.get('importance')) is int and 0 <= p['importance'] <= 3)
                         for p in parameters))
 
 
@@ -146,7 +147,7 @@ class Bridge:
     def gather(self, vid, cids):
         versions = self.versions(vid, cids)
         profile = self.vacancy.read(vid)
-        require(profile_comparable(profile), 'Уточните важность навыков вакансии.', 409)
+        require(profile_comparable(profile), 'Профиль требований вакансии ещё не готов к сравнению.', 409)
         ready, pending = [], []
         for cid in cids:
             value = self.candidate.read(cid)
