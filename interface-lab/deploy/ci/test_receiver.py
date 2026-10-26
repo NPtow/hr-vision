@@ -194,7 +194,9 @@ class ReceiverTest(unittest.TestCase):
         self.assertEqual(r.PRE_RECOMMENDATIONS_RUNTIME - r.PRE_EMPLOYER_REVIEW_RUNTIME, {'employer_review.py'})
         self.assertEqual(r.PRE_MATERIALS_LIFECYCLE_RUNTIME - r.PRE_RECOMMENDATIONS_RUNTIME, r.RECOMMENDATIONS_RUNTIME)
         self.assertEqual(r.PRE_RECOMMENDATION_LIFECYCLE_RUNTIME - r.PRE_MATERIALS_LIFECYCLE_RUNTIME, {'selection_materials_lifecycle.py'})
-        self.assertEqual(r.RUNTIME - r.PRE_RECOMMENDATION_LIFECYCLE_RUNTIME, {'recommendation_lifecycle.py'})
+        self.assertEqual(r.PRE_SELECTION_INTERVIEWS_RUNTIME - r.PRE_RECOMMENDATION_LIFECYCLE_RUNTIME, {'recommendation_lifecycle.py'})
+        self.assertEqual(r.RUNTIME - r.PRE_SELECTION_INTERVIEWS_RUNTIME, {'selection_interviews.py'})
+        self.assertIn(frozenset(r.PRE_SELECTION_INTERVIEWS_RUNTIME), r.RUNTIME_LAYOUTS)
         self.assertIn(frozenset(r.PRE_RECOMMENDATION_LIFECYCLE_RUNTIME), r.RUNTIME_LAYOUTS)
         self.assertIn(frozenset(r.PRE_MATERIALS_LIFECYCLE_RUNTIME), r.RUNTIME_LAYOUTS)
         self.assertIn(frozenset(r.PRE_RECOMMENDATIONS_RUNTIME), r.RUNTIME_LAYOUTS)
@@ -209,11 +211,44 @@ class ReceiverTest(unittest.TestCase):
         self.assertIn(frozenset(r.PRE_PUBLIC_PROFILE_RUNTIME), r.RUNTIME_LAYOUTS)
         self.assertEqual(r.ZOOM_RUNTIME, {'call_providers.py', 'zoom_media.py', 'materials_zoom.py', 'zoom_recording_retention.py'})
         self.assertEqual(len(r.MATERIALS_RUNTIME), 9)
-        for runtime in (r.PRE_RECOMMENDATION_LIFECYCLE_RUNTIME, r.PRE_MATERIALS_LIFECYCLE_RUNTIME, r.LEGACY_RUNTIME, r.BOT_RUNTIME, r.PRE_IMPORT_RUNTIME, r.PRE_OUTREACH_RUNTIME,
+        for runtime in (r.PRE_SELECTION_INTERVIEWS_RUNTIME, r.PRE_RECOMMENDATION_LIFECYCLE_RUNTIME, r.PRE_MATERIALS_LIFECYCLE_RUNTIME, r.LEGACY_RUNTIME, r.BOT_RUNTIME, r.PRE_IMPORT_RUNTIME, r.PRE_OUTREACH_RUNTIME,
                         r.PRE_ACCESS_RUNTIME, r.PRE_CV_RUNTIME, r.PRE_POOLED_RUNTIME, r.PRE_EMPLOYER_TELEGRAM_RUNTIME, r.PRE_REMINDERS_RUNTIME, r.PRE_MEETING_NOTICES_RUNTIME, r.PRE_MEETING_LAB_RUNTIME, r.PRE_RECRUITER_COACH_RUNTIME, r.PRE_CALL_CLEANUP_RUNTIME, r.PRE_OBSERVABILITY_RUNTIME, r.PRE_CANDIDATE_CALENDAR_RUNTIME, r.PRE_INTERVIEW_ASSISTANT_RUNTIME, r.PRE_MATERIALS_RUNTIME, r.PRE_ZOOM_RUNTIME, r.SERVICES_ONLY_RUNTIME, r.ZOOM_ONLY_RUNTIME, r.ASSESSMENT_ONLY_RUNTIME, r.PRE_ASSESSMENT_RUNTIME, r.PRE_ASR_DISPATCH_RUNTIME, r.RUNTIME):
             with self.subTest(count=len(runtime)):
                 a, s, m = self.bundle('service', runtime=runtime)
                 self.assertEqual(r.unpack(a, s, 'service'), m)
+
+    def test_interview_reader_requires_complete_layout_and_previous_api_stays_recoverable(self):
+        module = 'selection_interviews.py'
+        previous = self.runtime(self.root / 'before-interview-reader', r.PRE_SELECTION_INTERVIEWS_RUNTIME)
+        current = self.runtime(self.root / 'with-interview-reader', r.RUNTIME)
+        for runtime in (r.PRE_SELECTION_INTERVIEWS_RUNTIME, r.RUNTIME):
+            archive, stage, manifest = self.bundle('service', runtime=runtime)
+            self.assertEqual(r.unpack(archive, stage, 'service'), manifest)
+        for partial in (r.PRE_RECOMMENDATION_LIFECYCLE_RUNTIME | {module}, r.LEGACY_RUNTIME | {module}):
+            with self.subTest(count=len(partial)):
+                archive, stage, _ = self.bundle('service', runtime=partial)
+                with self.assertRaisesRegex(ValueError, 'Incomplete API'):
+                    r.unpack(archive, stage, 'service')
+        with sqlite3.connect(':memory:') as db:
+            db.execute('CREATE TABLE rc_auto_vacancies (vacancy_id TEXT, state TEXT)')
+            db.execute("INSERT INTO rc_auto_vacancies VALUES ('existing','ready')")
+            # New reader is read-only: stored automation data neither forces its
+            # presence nor gets dropped when the previous complete API returns.
+            r.guard_outbox_runtime(db, current)
+            r.guard_outbox_runtime(db, previous)
+            self.assertEqual(db.execute('SELECT * FROM rc_auto_vacancies').fetchall(), [('existing', 'ready')])
+        api = self.root / 'interview-reader-installed'
+        (api / 'current').mkdir(parents=True)
+        for name in r.PRE_SELECTION_INTERVIEWS_RUNTIME:
+            target = api / 'current' / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes((previous / name).read_bytes())
+        with patch.object(r, 'API', api):
+            self.assertFalse(r.api_changed(previous))
+            self.assertTrue(r.api_changed(current))
+            (api / 'current' / module).write_bytes((current / module).read_bytes())
+            self.assertFalse(r.api_changed(current))
+            self.assertTrue(r.api_changed(previous))
 
     def test_asr_hook_requires_complete_layout_and_is_an_api_change(self):
         hook = 'materials_asr_dispatch.py'
@@ -399,7 +434,8 @@ class ReceiverTest(unittest.TestCase):
 
     def test_materials_dependencies_config_docs_and_tests_are_not_runtime(self):
         for name in ('requirements-materials.txt', 'requirements-materials.lock', 'requirements-api-extras.lock',
-                     'MATERIALS.md', 'test_materials_worker.py', 'materials.env'):
+                     'MATERIALS.md', 'test_materials_worker.py', 'materials.env',
+                       'SELECTION_INTERVIEWS.md', 'test_selection_interviews.py'):
             def mutate(m, files):
                 files['api/' + name] = b'not runtime'
                 m['files']['api/' + name] = r.digest(files['api/' + name])
@@ -432,7 +468,8 @@ class ReceiverTest(unittest.TestCase):
         hook = fixture / 'server' / 'materials_asr_dispatch.py'
         hook.write_text('# bounded, opt-in ASR recording notification fixture\n')
         non_runtime = ('requirements-materials.txt', 'requirements-materials.lock', 'requirements-api-extras.lock',
-                       'MATERIALS.md', 'test_materials_worker.py', 'materials.env')
+                       'MATERIALS.md', 'test_materials_worker.py', 'materials.env',
+                       'SELECTION_INTERVIEWS.md', 'test_selection_interviews.py')
         for name in non_runtime:
             (fixture / 'server' / name).write_text('must not be packaged\n')
         for name in ('index.html', 'iframe.html'):
@@ -453,6 +490,10 @@ class ReceiverTest(unittest.TestCase):
         manifest = r.unpack(fixture / 'release.tgz', stage, 'service')
         self.assertEqual({p[4:] for p in manifest['files'] if p.startswith('api/')}, r.RUNTIME)
         self.assertEqual((stage / 'api' / hook.name).read_bytes(), hook.read_bytes())
+        interview_reader = 'api/selection_interviews.py'
+        self.assertIn(interview_reader, manifest['files'])
+        self.assertEqual(manifest['files'][interview_reader], r.digest((fixture / 'server/selection_interviews.py').read_bytes()))
+        self.assertEqual((stage / interview_reader).read_bytes(), (fixture / 'server/selection_interviews.py').read_bytes())
         lifecycle = 'api/recommendation_lifecycle.py'
         self.assertIn(lifecycle, manifest['files'])
         self.assertEqual(manifest['files'][lifecycle], r.digest((stage / lifecycle).read_bytes()))

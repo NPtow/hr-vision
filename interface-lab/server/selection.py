@@ -537,6 +537,15 @@ class SelectionRoutes:
                 require(actor(db) == 'manager', 'Доступ только для команды HR Vision.', 403)
                 vacancy(db, vid)
         parts = action.split('/')
+        if len(parts) in (3, 5) and parts[0] == 'candidates' and parts[2] == 'interviews':
+            require(method == 'GET' and (len(parts) == 3 or parts[4] == 'materials'),
+                    'Действие не найдено.', 404)
+            cid = parts[1]
+            authorize_core(cid)
+            import selection_interviews
+            reader = selection_interviews.configured(self.connect, authorize_core)
+            value = reader.list(cid) if len(parts) == 3 else reader.materials(cid, parts[3])
+            return value, dict(HEADERS)
         if len(parts) == 3 and parts[0] in ('vacancies', 'candidates') and parts[2] == 'required-fields':
             kind = 'vacancy' if parts[0] == 'vacancies' else 'candidate'
             (authorize_vacancy if kind == 'vacancy' else authorize_core)(parts[1])
