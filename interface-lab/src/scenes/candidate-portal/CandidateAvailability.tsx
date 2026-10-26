@@ -24,14 +24,17 @@ export function CandidateAvailability({ initial, schedule = empty, timezone, bus
   const last = new TZDate(today.getTime() + 369 * 86400_000, timezone);
   const [mode, setMode] = useState<'dates' | 'weekly'>('dates');
   const [selected, setSelected] = useState<Date>(today);
-  const [editing, setEditing] = useState(false);
+  const [dateEditing, setDateEditing] = useState(false);
   const [draft, setDraft] = useState<DayAvailability[]>([]);
   const [rule, setRule] = useState<WeeklyAvailability | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const pending = useRef(false);
-  const trigger = useRef<HTMLButtonElement | null>(null);
+  const triggers = useRef<{ dates: HTMLButtonElement | null; weekly: HTMLButtonElement | null }>({ dates: null, weekly: null });
+  const datesMode = useRef<HTMLButtonElement | null>(null);
+  const weeklyMode = useRef<HTMLButtonElement | null>(null);
+  const editing = mode === 'dates' ? dateEditing : rule !== null;
   const key = scheduleDateKey(selected, timezone);
   const intervalsFor = useMemo(() => {
     const cache = new Map<string, DayAvailability[]>();
@@ -44,21 +47,35 @@ export function CandidateAvailability({ initial, schedule = empty, timezone, bus
   const override = schedule.dates.find(item => item.date === key && item.timezone === timezone);
   const locked = busy || submitting;
   const label = (date: Date) => scheduleLabel(date, timezone, { day: 'numeric', month: 'long', weekday: 'long' });
-  function close() { setEditing(false); setRule(null); onEditing(false); requestAnimationFrame(() => trigger.current?.focus()); }
+  function close(weeklyCount = schedule.weekly.length) {
+    const returnToDates = mode === 'weekly' && weeklyCount === 0;
+    const target = returnToDates ? datesMode.current : triggers.current[mode];
+    if (mode === 'dates') setDateEditing(false);
+    else setRule(null);
+    if (returnToDates) setMode('dates');
+    onEditing(returnToDates && dateEditing);
+    requestAnimationFrame(() => (target?.isConnected ? target : mode === 'dates' ? datesMode.current : weeklyMode.current)?.focus());
+  }
   function startEditing(button: HTMLButtonElement) {
-    trigger.current = button; setDraft(intervals.length ? intervals : [{ startTime: '', endTime: '' }]);
-    setError(''); setNotice(''); setEditing(true); onEditing(true);
+    triggers.current.dates = button; setDraft(intervals.length ? intervals : [{ startTime: '', endTime: '' }]);
+    setError(''); setNotice(''); setDateEditing(true); onEditing(true);
   }
   function editRule(button: HTMLButtonElement, existing?: WeeklyAvailability) {
-    trigger.current = button;
+    triggers.current.weekly = button;
     setRule(existing ? { ...existing, weekdays: [...existing.weekdays] } : { id: crypto.randomUUID(), startDate: scheduleDateKey(Date.now(), timezone), weekdays: [0, 1, 2, 3, 4], startTime: '', endTime: '', timezone });
-    setError(''); setNotice(''); setEditing(true); onEditing(true);
+    setError(''); setNotice(''); onEditing(true);
+  }
+  function selectMode(next: 'dates' | 'weekly', button: HTMLButtonElement) {
+    setMode(next); setError(''); setNotice('');
+    // Each mode keeps its own draft; switching never saves or resets it.
+    if (next === 'weekly' && !rule && !schedule.weekly.length) editRule(button);
+    else onEditing(next === 'dates' ? dateEditing : rule !== null);
   }
   async function save(next: AvailabilitySchedule) {
     if (locked || pending.current) return;
     pending.current = true; setSubmitting(true); setError(''); setNotice('');
     try {
-      if (await onSave(next)) { close(); setNotice('Расписание сохранено'); }
+      if (await onSave(next)) { close(next.weekly.length); setNotice('Расписание сохранено'); }
       else setError('Не удалось сохранить. Попробуйте ещё раз.');
     } catch { setError('Не удалось сохранить. Попробуйте ещё раз.'); }
     finally { pending.current = false; setSubmitting(false); }
@@ -81,7 +98,7 @@ export function CandidateAvailability({ initial, schedule = empty, timezone, bus
   }
   return <section className="cp-schedule-availability" aria-label="Моя доступность" onKeyDown={event => { if (event.key === 'Escape' && editing && !locked) { event.stopPropagation(); close(); } }}>
     <h2>Моя доступность</h2>
-    <div className="cp-schedule-modes" role="group" aria-label="Настройка расписания"><button type="button" aria-pressed={mode === 'dates'} disabled={locked || editing} onClick={() => { setMode('dates'); setError(''); setNotice(''); }}>По датам</button><button type="button" aria-pressed={mode === 'weekly'} disabled={locked || editing} onClick={() => { setMode('weekly'); setError(''); setNotice(''); }}>Каждую неделю</button></div>
+    <div className="cp-schedule-modes" role="group" aria-label="Настройка расписания"><button ref={datesMode} type="button" aria-pressed={mode === 'dates'} disabled={locked} onClick={event => selectMode('dates', event.currentTarget)}>По датам</button><button ref={weeklyMode} type="button" aria-pressed={mode === 'weekly'} disabled={locked} onClick={event => selectMode('weekly', event.currentTarget)}>Каждую неделю</button></div>
     {mode === 'dates' ? <div className="cp-date-schedule">
       <div className="cp-date-calendar">
         <DayPicker mode="single" required selected={selected} defaultMonth={selected} locale={ru} timeZone={timezone}
@@ -107,7 +124,7 @@ export function CandidateAvailability({ initial, schedule = empty, timezone, bus
           </div>)}
           {!draft.length && <p className="cp-date-off">В этот день вы недоступны</p>}
           <div className="cp-date-actions"><Button type="button" variant="ghost" disabled={locked || draft.length >= 24} onClick={() => setDraft(rows => [...rows, { startTime: '', endTime: '' }])}><Plus size={16}/>Добавить интервал</Button>{draft.length > 0 && <Button type="button" variant="ghost" disabled={locked} onClick={() => { setDraft([]); setError(''); }}>Закрыть день</Button>}</div>
-          <div className="cp-date-actions"><Button type="submit" disabled={locked}>{submitting ? 'Сохраняем…' : 'Сохранить день'}</Button><Button type="button" variant="ghost" disabled={locked} onClick={close}>Отмена</Button></div>
+          <div className="cp-date-actions"><Button type="submit" disabled={locked}>{submitting ? 'Сохраняем…' : 'Сохранить день'}</Button><Button type="button" variant="ghost" disabled={locked} onClick={() => close()}>Отмена</Button></div>
         </form>}
       </div>
     </div> : rule ? <form className="cp-weekly-editor" onSubmit={submitRule}>
@@ -115,10 +132,10 @@ export function CandidateAvailability({ initial, schedule = empty, timezone, bus
       <fieldset className="cp-weekdays" disabled={locked}><legend>Дни недели</legend>{days.map((day, i) => <button type="button" key={day} aria-label={dayNames[i]} aria-pressed={rule.weekdays.includes(i)} onClick={() => setRule({ ...rule, weekdays: rule.weekdays.includes(i) ? rule.weekdays.filter(n => n !== i) : [...rule.weekdays, i] })}>{day}</button>)}</fieldset>
       <div className="cp-weekly-times"><label>С<input type="time" step={60} required disabled={locked} value={rule.startTime} onChange={event => setRule({ ...rule, startTime: event.target.value })}/></label><label>До<input type="time" step={60} required disabled={locked} value={rule.endTime === '24:00' ? '00:00' : rule.endTime} onChange={event => setRule({ ...rule, endTime: event.target.value === '00:00' ? '24:00' : event.target.value })}/></label></div>
       <p className="cp-date-kind">{rule.timezone}</p>
-      <div className="cp-date-actions"><Button type="submit" disabled={locked}>{submitting ? 'Сохраняем…' : 'Сохранить расписание'}</Button><Button type="button" variant="ghost" disabled={locked} onClick={close}>Отмена</Button>{schedule.weekly.some(item => item.id === rule.id) && <Button type="button" variant="ghost" disabled={locked} onClick={() => void save({ ...schedule, weekly: schedule.weekly.filter(item => item.id !== rule.id) })}>Удалить интервал</Button>}</div>
+      <div className="cp-date-actions"><Button type="submit" disabled={locked}>{submitting ? 'Сохраняем…' : 'Сохранить расписание'}</Button><Button type="button" variant="ghost" disabled={locked} onClick={() => close()}>Отмена</Button>{schedule.weekly.some(item => item.id === rule.id) && <Button type="button" variant="ghost" disabled={locked} onClick={() => void save({ ...schedule, weekly: schedule.weekly.filter(item => item.id !== rule.id) })}>Удалить интервал</Button>}</div>
     </form> : <div className="cp-weekly-blocks">
       {schedule.weekly.map(item => <div className="cp-weekly-block" key={item.id}><div className="cp-weekly-summary"><div><strong>{ruleDays(item)}</strong><span className="cp-weekly-time">{item.startTime}–{item.endTime}</span><span className="cp-date-kind">С {item.startDate.split('-').reverse().join('.')} · {item.timezone}</span></div><Button type="button" variant="secondary" disabled={locked} onClick={event => editRule(event.currentTarget, item)}>Изменить</Button></div><div className="cp-weekly-strip" aria-hidden="true">{days.map((day, i) => <span key={day} data-active={item.weekdays.includes(i)}>{day}</span>)}</div></div>)}
-      <Button type="button" variant={schedule.weekly.length ? 'ghost' : 'default'} disabled={locked || schedule.weekly.length >= 20} onClick={event => editRule(event.currentTarget)}><Plus size={16}/>{schedule.weekly.length ? 'Добавить интервал' : 'Настроить расписание'}</Button>
+      <Button type="button" variant="ghost" disabled={locked || schedule.weekly.length >= 20} onClick={event => editRule(event.currentTarget)}><Plus size={16}/>Добавить интервал</Button>
     </div>}
     {error && <p className="cp-error" role="alert">{error}</p>}{notice && <p className="cp-date-notice" role="status">{notice}</p>}
   </section>;
