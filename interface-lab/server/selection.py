@@ -504,7 +504,8 @@ class SelectionRoutes:
                 require(method == 'GET', 'Действие не найдено.', 404)
             status = {}
             for name, attribute in (('materials', 'selection_materials_lifecycle'),
-                                    ('assessment', 'assessment_lifecycle')):
+                                    ('assessment', 'assessment_lifecycle'),
+                                    ('recommendations', 'recommendation_automation_lifecycle')):
                 runtime = getattr(self.portal, attribute, None)
                 status[name] = runtime.status() if runtime is not None else {'enabled': False, 'running': False}
             status['ok'] = all(not value.get('enabled') or

@@ -76,7 +76,8 @@ RECOMMENDATIONS_RUNTIME = {'assessment_core_lifecycle.py', 'selection_facts.py',
 PRE_EMPLOYER_REVIEW_RUNTIME = PRE_PRODUCT_RECORDINGS_RUNTIME | {'recording_uploads.py', 'canonical_materials.py', 'transcript_bundle.py'}
 PRE_RECOMMENDATIONS_RUNTIME = PRE_EMPLOYER_REVIEW_RUNTIME | {'employer_review.py'}
 PRE_MATERIALS_LIFECYCLE_RUNTIME = PRE_RECOMMENDATIONS_RUNTIME | RECOMMENDATIONS_RUNTIME
-RUNTIME = PRE_MATERIALS_LIFECYCLE_RUNTIME | {'selection_materials_lifecycle.py'}
+PRE_RECOMMENDATION_LIFECYCLE_RUNTIME = PRE_MATERIALS_LIFECYCLE_RUNTIME | {'selection_materials_lifecycle.py'}
+RUNTIME = PRE_RECOMMENDATION_LIFECYCLE_RUNTIME | {'recommendation_lifecycle.py'}
 BOT_RUNTIME = PRE_IMPORT_RUNTIME - {'recruiter_access.py', 'recruiter_sources.py', 'recruiter_notifications.py'}
 LEGACY_RUNTIME = BOT_RUNTIME - {'candidate_bot.py'}
 RUNTIME_LAYOUTS = {frozenset(PRE_RECOMMENDATIONS_RUNTIME), frozenset(PRE_PRODUCT_RECORDINGS_RUNTIME), frozenset(PRE_FULL_CORPUS_RUNTIME), frozenset(PRE_SELECTION_STATUS_RUNTIME), frozenset(PRE_JEV_RUNTIME), frozenset(LEGACY_RUNTIME), frozenset(BOT_RUNTIME), frozenset(PRE_IMPORT_RUNTIME),
@@ -86,6 +87,7 @@ RUNTIME_LAYOUTS = {frozenset(PRE_RECOMMENDATIONS_RUNTIME), frozenset(PRE_PRODUCT
                    frozenset(PRE_POOLED_RUNTIME), frozenset(PRE_EMPLOYER_TELEGRAM_RUNTIME), frozenset(PRE_REMINDERS_RUNTIME), frozenset(PRE_MEETING_NOTICES_RUNTIME), frozenset(PRE_MEETING_LAB_RUNTIME), frozenset(PRE_RECRUITER_COACH_RUNTIME), frozenset(PRE_CALL_CLEANUP_RUNTIME), frozenset(PRE_OBSERVABILITY_RUNTIME), frozenset(PRE_CANDIDATE_CALENDAR_RUNTIME), frozenset(PRE_INTERVIEW_ASSISTANT_RUNTIME), frozenset(PRE_MATERIALS_RUNTIME), frozenset(RUNTIME)}
 RUNTIME_LAYOUTS.add(frozenset(PRE_EMPLOYER_REVIEW_RUNTIME))
 RUNTIME_LAYOUTS.add(frozenset(PRE_MATERIALS_LIFECYCLE_RUNTIME))
+RUNTIME_LAYOUTS.add(frozenset(PRE_RECOMMENDATION_LIFECYCLE_RUNTIME))
 MAX_ARCHIVE = 50 * 1024 * 1024
 MAX_CONTENT = 120 * 1024 * 1024
 
@@ -277,6 +279,10 @@ def resume_materials(active):
 def guard_outbox_runtime(db, source):
     runtime = frozenset(path.relative_to(source).as_posix() for path in source.rglob('*') if path.is_file())
     require(runtime in RUNTIME_LAYOUTS, 'Incomplete recovery API')
+    # rc_auto_vacancies/rc_auto_cursor are additive HR scheduling metadata.
+    # A prior complete API ignores them and retains existing vp/rc results;
+    # paid profile work remains owned by vp_bindings and its existing guard.
+    # Returning to that API pauses automation rather than deleting its state.
     if not RECOMMENDATIONS_RUNTIME <= runtime:
         for table in ('vp_bindings', 'rc_bindings', 'sl_fact_revisions', 'sl_evidence',
                       'sl_recommendation_nominations', 'sl_recommendation_nomination_history',

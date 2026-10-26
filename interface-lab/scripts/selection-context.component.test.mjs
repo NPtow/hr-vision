@@ -92,7 +92,7 @@ test('facts save clears approvals and blocks the previous index before delayed v
   assert.equal(await search.inputValue(), 'Борис');
   assert.equal(await invite.isDisabled(), true);
   assert.equal(await page.locator('.sl-warning').count(), 1);
-  assert.equal(await page.getByRole('button', { name: 'Почему такой индекс', exact: true }).count(), 0);
+  assert.equal(await page.getByRole('button', { name: 'Почему такой балл', exact: true }).count(), 0);
   release();
   await page.getByRole('checkbox', { name: 'Подтвердить неизвестные условия: Борис Соколов', exact: true }).waitFor();
   assert.equal(await page.getByRole('checkbox', { name: 'Подтвердить неизвестные условия: Борис Соколов', exact: true }).isChecked(), false);

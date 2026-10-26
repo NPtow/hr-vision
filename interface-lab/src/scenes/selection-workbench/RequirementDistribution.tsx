@@ -9,7 +9,8 @@ export function RequirementDistribution({ parameter: p }: { parameter: VacancyPa
   return <div className="md-requirement-detail">
     {(levelChanged || importanceChanged) && <p className="md-manual">Для подбора используются уточнённые требования: {levelLabel(p).toLocaleLowerCase('ru')}, важность — {importanceLabel(p.importance).toLocaleLowerCase('ru')}. Ниже сохранён исходный ответ модели.</p>}
     {p.importance === 0 && <p className="md-context">Навык не участвует в подборе. Уточнять уровень не нужно.</p>}
-    {p.importance !== 0 && !p.required_level_id && <p className="md-context">Уточните требуемый уровень в «Изменить требования», чтобы рассчитать соответствие.</p>}
+    {typeof p.importance === 'number' && p.importance > 0 && !p.required_level_id && <p className="md-context">Целевой уровень не задан. Сравнение учитывает навык по правилу «чем выше уровень кандидата, тем выше балл».</p>}
+    {p.importance === 'insufficient_data' && <p className="md-context">Важность навыка не определена. Уточните её в требованиях вакансии для расчёта.</p>}
     <div className="md-pair"><ModelDistribution key={p.parameter_id + '-level'} title="Требуемый уровень" data={raw.level}/><ModelDistribution key={p.parameter_id + '-importance'} title="Важность" data={raw.importance}/></div>
   </div>;
 }

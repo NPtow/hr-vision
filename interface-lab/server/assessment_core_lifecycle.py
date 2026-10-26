@@ -1,4 +1,4 @@
-"""Opt-in, durable reconciliation of ready candidate corpora.
+"""Durable reconciliation of ready candidate corpora.
 
 Runs in the trusted HR backend, independently of browser reads. It owns only
 command/cursor metadata in the HR DB; the assessment service owns model work.
@@ -52,15 +52,22 @@ class Scope:
 
 
 def configured_scope():
-    if os.environ.get('HR_ASSESSMENT_CORE_AUTO_ENABLED') != '1':
+    # Enabling the assessment core now includes automatic processing by
+    # default. Existing explicit disable/restricted scopes retain their meaning.
+    automatic = os.environ.get('HR_ASSESSMENT_CORE_AUTO_ENABLED')
+    core_enabled = bridge_module.enabled()
+    if (automatic not in (None, '1') or automatic is None and not core_enabled):
         return None
     try:
         ids = tuple(sorted(set(x.strip() for x in os.environ.get(
             'HR_ASSESSMENT_CORE_AUTO_CANDIDATE_IDS', '').split(',') if x.strip())))
-        return Scope(ids, os.environ.get('HR_ASSESSMENT_CORE_AUTO_CREATED_SINCE') or None,
+        since = os.environ.get('HR_ASSESSMENT_CORE_AUTO_CREATED_SINCE') or None
+        all_completed = os.environ.get('HR_ASSESSMENT_CORE_AUTO_ALL_COMPLETED_HR')
+        return Scope(ids, since,
                      int(os.environ.get('HR_ASSESSMENT_CORE_AUTO_BATCH_SIZE', '10')),
                      float(os.environ.get('HR_ASSESSMENT_CORE_AUTO_INTERVAL_SECONDS', '60')),
-                     os.environ.get('HR_ASSESSMENT_CORE_AUTO_ALL_COMPLETED_HR') == '1')
+                     all_completed == '1' or
+                     all_completed is None and core_enabled and not ids and not since)
     except (ValueError, TypeError):
         raise Problem('automatic_assessment_scope_configuration_error', 503) from None
 
@@ -176,8 +183,8 @@ class Lifecycle:
     def scan(self):
         """Bounded keyset scan; cursor survives restart and rotates at end.
 
-        Historical enrollment requires the explicit all-completed-HR policy,
-        allowlist, or stable creation cutoff. Corpus validation stays canonical.
+        Historical enrollment follows the resolved all-completed-HR policy,
+        explicit IDs, or stable creation cutoff. Corpus validation stays canonical.
         """
         with self.bridge.lock, self.bridge.connect() as db:
             cursor = db.execute('SELECT candidate_id FROM ac_auto_cursor WHERE scope_hash=?',

@@ -754,6 +754,9 @@ if __name__ == '__main__':
     import recommendations_bridge
     CANDIDATE_PORTAL.recommendation_lifecycle = recommendations_bridge.start_background(
         connect, LOCK, CANDIDATE_PORTAL)
+    import recommendation_lifecycle
+    CANDIDATE_PORTAL.recommendation_automation_lifecycle = recommendation_lifecycle.start_background(
+        connect, LOCK, CANDIDATE_PORTAL)
     import employer_review
     employer_review.start_worker(CANDIDATE_PORTAL)
     candidate_notifications.start_worker(connect, update_handler=CANDIDATE_BOT.handle_update,
@@ -766,6 +769,8 @@ if __name__ == '__main__':
         server.serve_forever()
     finally:
         server.server_close()
+        if CANDIDATE_PORTAL.recommendation_automation_lifecycle is not None:
+            CANDIDATE_PORTAL.recommendation_automation_lifecycle.stop()
         if CANDIDATE_PORTAL.selection_materials_lifecycle is not None:
             CANDIDATE_PORTAL.selection_materials_lifecycle.stop()
         if CANDIDATE_PORTAL.assessment_lifecycle is not None:

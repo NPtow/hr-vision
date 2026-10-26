@@ -193,7 +193,9 @@ class ReceiverTest(unittest.TestCase):
         self.assertEqual(r.PRE_PRODUCT_RECORDINGS_RUNTIME - r.PRE_FULL_CORPUS_RUNTIME, {'assessment_corpus.py', 'assessment_core_bridge.py'})
         self.assertEqual(r.PRE_RECOMMENDATIONS_RUNTIME - r.PRE_EMPLOYER_REVIEW_RUNTIME, {'employer_review.py'})
         self.assertEqual(r.PRE_MATERIALS_LIFECYCLE_RUNTIME - r.PRE_RECOMMENDATIONS_RUNTIME, r.RECOMMENDATIONS_RUNTIME)
-        self.assertEqual(r.RUNTIME - r.PRE_MATERIALS_LIFECYCLE_RUNTIME, {'selection_materials_lifecycle.py'})
+        self.assertEqual(r.PRE_RECOMMENDATION_LIFECYCLE_RUNTIME - r.PRE_MATERIALS_LIFECYCLE_RUNTIME, {'selection_materials_lifecycle.py'})
+        self.assertEqual(r.RUNTIME - r.PRE_RECOMMENDATION_LIFECYCLE_RUNTIME, {'recommendation_lifecycle.py'})
+        self.assertIn(frozenset(r.PRE_RECOMMENDATION_LIFECYCLE_RUNTIME), r.RUNTIME_LAYOUTS)
         self.assertIn(frozenset(r.PRE_MATERIALS_LIFECYCLE_RUNTIME), r.RUNTIME_LAYOUTS)
         self.assertIn(frozenset(r.PRE_RECOMMENDATIONS_RUNTIME), r.RUNTIME_LAYOUTS)
         self.assertEqual(r.PRE_EMPLOYER_REVIEW_RUNTIME - r.PRE_PRODUCT_RECORDINGS_RUNTIME,
@@ -207,7 +209,7 @@ class ReceiverTest(unittest.TestCase):
         self.assertIn(frozenset(r.PRE_PUBLIC_PROFILE_RUNTIME), r.RUNTIME_LAYOUTS)
         self.assertEqual(r.ZOOM_RUNTIME, {'call_providers.py', 'zoom_media.py', 'materials_zoom.py', 'zoom_recording_retention.py'})
         self.assertEqual(len(r.MATERIALS_RUNTIME), 9)
-        for runtime in (r.PRE_MATERIALS_LIFECYCLE_RUNTIME, r.LEGACY_RUNTIME, r.BOT_RUNTIME, r.PRE_IMPORT_RUNTIME, r.PRE_OUTREACH_RUNTIME,
+        for runtime in (r.PRE_RECOMMENDATION_LIFECYCLE_RUNTIME, r.PRE_MATERIALS_LIFECYCLE_RUNTIME, r.LEGACY_RUNTIME, r.BOT_RUNTIME, r.PRE_IMPORT_RUNTIME, r.PRE_OUTREACH_RUNTIME,
                         r.PRE_ACCESS_RUNTIME, r.PRE_CV_RUNTIME, r.PRE_POOLED_RUNTIME, r.PRE_EMPLOYER_TELEGRAM_RUNTIME, r.PRE_REMINDERS_RUNTIME, r.PRE_MEETING_NOTICES_RUNTIME, r.PRE_MEETING_LAB_RUNTIME, r.PRE_RECRUITER_COACH_RUNTIME, r.PRE_CALL_CLEANUP_RUNTIME, r.PRE_OBSERVABILITY_RUNTIME, r.PRE_CANDIDATE_CALENDAR_RUNTIME, r.PRE_INTERVIEW_ASSISTANT_RUNTIME, r.PRE_MATERIALS_RUNTIME, r.PRE_ZOOM_RUNTIME, r.SERVICES_ONLY_RUNTIME, r.ZOOM_ONLY_RUNTIME, r.ASSESSMENT_ONLY_RUNTIME, r.PRE_ASSESSMENT_RUNTIME, r.PRE_ASR_DISPATCH_RUNTIME, r.RUNTIME):
             with self.subTest(count=len(runtime)):
                 a, s, m = self.bundle('service', runtime=runtime)
@@ -451,6 +453,9 @@ class ReceiverTest(unittest.TestCase):
         manifest = r.unpack(fixture / 'release.tgz', stage, 'service')
         self.assertEqual({p[4:] for p in manifest['files'] if p.startswith('api/')}, r.RUNTIME)
         self.assertEqual((stage / 'api' / hook.name).read_bytes(), hook.read_bytes())
+        lifecycle = 'api/recommendation_lifecycle.py'
+        self.assertIn(lifecycle, manifest['files'])
+        self.assertEqual(manifest['files'][lifecycle], r.digest((stage / lifecycle).read_bytes()))
         self.assertEqual(manifest['files']['api/' + hook.name], r.digest(hook.read_bytes()))
         self.assertTrue(all('api/' + name not in manifest['files'] for name in non_runtime))
         self.assertTrue({'ui/call/zoom/client.html', 'ui/call/zoom/left.html', 'ui/call/zoom/client.js', 'ui/call/zoom/client.css'} <= manifest['files'].keys())
@@ -968,6 +973,24 @@ class ReceiverTest(unittest.TestCase):
                     r.guard_outbox_runtime(db, prior)
                 r.guard_outbox_runtime(db, current)
                 self.assertEqual(db.execute('SELECT id FROM ' + table).fetchall(), [('preserved',)])
+
+    def test_prior_complete_api_preserves_additive_automatic_comparison_metadata(self):
+        prior = self.runtime(self.root / 'before-auto-comparison', r.PRE_RECOMMENDATION_LIFECYCLE_RUNTIME)
+        current = self.runtime(self.root / 'automatic-comparison', r.RUNTIME)
+        states = ('processing', 'waiting_profile', 'waiting_assessment', 'waiting_candidates',
+                  'needs_review', 'ready', 'backoff', 'pool_too_large', 'dispatch_unknown',
+                  'outcome_unknown', 'failed', 'inactive', 'input_changed')
+        with sqlite3.connect(':memory:') as db:
+            db.execute('CREATE TABLE rc_auto_vacancies (vacancy_id TEXT PRIMARY KEY, state TEXT)')
+            db.execute('CREATE TABLE rc_auto_cursor (id INTEGER PRIMARY KEY, cursor TEXT)')
+            db.executemany('INSERT INTO rc_auto_vacancies VALUES (?,?)', [(str(i), state) for i, state in enumerate(states)])
+            db.execute("INSERT INTO rc_auto_cursor VALUES (1,'preserved-keyset')")
+            # Prior API has no automatic profile dispatcher: ignoring scheduling
+            # metadata pauses the feature without replaying paid provider work.
+            r.guard_outbox_runtime(db, prior)
+            r.guard_outbox_runtime(db, current)
+            self.assertEqual(tuple(row[0] for row in db.execute('SELECT state FROM rc_auto_vacancies ORDER BY CAST(vacancy_id AS INTEGER)')), states)
+            self.assertEqual(db.execute('SELECT cursor FROM rc_auto_cursor').fetchone(), ('preserved-keyset',))
 
     def test_recommendation_schema_cannot_be_hidden_behind_a_view(self):
         prior = self.runtime(self.root / 'before-recommendation-view', r.PRE_RECOMMENDATIONS_RUNTIME)
