@@ -126,6 +126,86 @@ class FactsTest(unittest.TestCase):
             self.assertFalse(resolved['conflicts'])
             self.assertEqual(resolved['fields']['employment_types'], ['internship'])
 
+    def test_explicit_unknown_resolves_only_marked_conflict(self):
+        with self.connect() as db:
+            self.profile(db, employment_types=['full-time'], work_locations=['ru:moscow'])
+            before = facts.read(db, 'candidate', self.cid)
+            facts.update(db, 'candidate', self.cid, {'revision': before['revision'], 'fields': {
+                **before['fields'], 'employment_types': ['project'], 'work_locations': ['kz:astana']}})
+            self.profile(db, employment_types=['part-time'], work_locations=['kz:almaty'])
+            conflict = facts.read(db, 'candidate', self.cid)
+            self.assertEqual(set(conflict['conflicts']), {'employment_types', 'work_locations'})
+            # The projected null alone cannot express a choice to keep unknown.
+            unchanged = facts.update(db, 'candidate', self.cid, {'revision': conflict['revision'], 'fields': conflict['fields']})
+            self.assertEqual(unchanged['conflicts'], conflict['conflicts'])
+            resolved = facts.update(db, 'candidate', self.cid, {'revision': conflict['revision'],
+                'fields': conflict['fields'], 'resolveConflicts': ['employment_types']})
+            self.assertEqual(set(resolved['conflicts']), {'work_locations'})
+            self.assertIsNone(resolved['fields']['employment_types'])
+            self.assertEqual(resolved['fieldSources']['employment_types']['kind'], 'manual')
+            self.assertNotEqual(resolved['revision'], conflict['revision'])
+            # Another edit must not implicitly resolve the untouched location.
+            next_save = facts.update(db, 'candidate', self.cid, {'revision': resolved['revision'],
+                'fields': {**resolved['fields'], 'industry_months': {'logistics': 6}}})
+            self.assertEqual(next_save['conflicts'], resolved['conflicts'])
+
+    def test_resolving_to_null_source_removes_override(self):
+        with self.connect() as db:
+            self.profile(db, employment_types=['full-time'])
+            before = facts.read(db, 'candidate', self.cid)
+            edited = facts.update(db, 'candidate', self.cid, {'revision': before['revision'],
+                'fields': {**before['fields'], 'employment_types': ['project']}})
+            self.profile(db, employment_types=None)
+            conflict = facts.read(db, 'candidate', self.cid)
+            self.assertIn('employment_types', conflict['conflicts'])
+            with self.assertRaises(Problem) as stale:
+                facts.update(db, 'candidate', self.cid, {'revision': edited['revision'],
+                    'fields': conflict['fields'], 'resolveConflicts': ['employment_types']})
+            self.assertEqual(stale.exception.status, 409)
+            resolved = facts.update(db, 'candidate', self.cid, {'revision': conflict['revision'],
+                'fields': conflict['fields'], 'resolveConflicts': ['employment_types']})
+            self.assertFalse(resolved['conflicts'])
+            self.assertIsNone(resolved['fields']['employment_types'])
+            self.assertEqual(resolved['fieldSources']['employment_types']['kind'], 'candidate_questionnaire')
+            # A later explicit answer must flow through after removing the override.
+            self.profile(db, employment_types=['internship'])
+            fresh = facts.read(db, 'candidate', self.cid)
+            self.assertEqual(fresh['fields']['employment_types'], ['internship'])
+            self.assertFalse(fresh['conflicts'])
+
+    def test_resolution_accepts_only_current_conflict_paths_and_is_atomic(self):
+        with self.connect() as db:
+            self.profile(db, employment_types=['full-time'])
+            before = facts.read(db, 'candidate', self.cid)
+            facts.update(db, 'candidate', self.cid, {'revision': before['revision'],
+                'fields': {**before['fields'], 'employment_types': ['project']}})
+            self.profile(db, employment_types=['part-time'])
+            conflict = facts.read(db, 'candidate', self.cid)
+            rows = db.execute('SELECT COUNT(*) FROM sl_fact_revisions').fetchone()[0]
+            for invalid in ('employment_types', [None], [{}], ['work_locations'],
+                            ['employment_types', 'employment_types'], ['employment.allowed_ids']):
+                with self.subTest(resolve=invalid), self.assertRaises(Problem) as error:
+                    facts.update(db, 'candidate', self.cid, {'revision': conflict['revision'],
+                        'fields': conflict['fields'], 'resolveConflicts': invalid})
+                self.assertEqual(error.exception.status, 400)
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM sl_fact_revisions').fetchone()[0], rows)
+            self.assertEqual(facts.read(db, 'candidate', self.cid)['revision'], conflict['revision'])
+
+    def test_resolution_supports_canonical_vacancy_leaf_path(self):
+        with self.connect() as db:
+            self.vacancy(db, required_fields={'employment': {'required': True}})
+            before = facts.read(db, 'vacancy', self.vid)
+            fields = copy.deepcopy(before['fields'])
+            fields['employment']['required'] = False
+            facts.update(db, 'vacancy', self.vid, {'revision': before['revision'], 'fields': fields})
+            self.vacancy(db, required_fields={'employment': {'required': None}})
+            conflict = facts.read(db, 'vacancy', self.vid)
+            resolved = facts.update(db, 'vacancy', self.vid, {'revision': conflict['revision'],
+                'fields': conflict['fields'], 'resolveConflicts': ['employment.required']})
+            self.assertFalse(resolved['conflicts'])
+            self.assertIsNone(resolved['fields']['employment']['required'])
+            self.assertEqual(resolved['fieldSources']['employment.required']['kind'], 'vacancy_questionnaire')
+
     def test_vacancy_leaf_override_never_freezes_value_or_infers_required(self):
         with self.connect() as db:
             self.vacancy(db, details={'employmentType': 'full-time'})

@@ -248,23 +248,32 @@ def read(db, kind, resource_id):
 
 
 def update(db, kind, resource_id, body, author='manager'):
-    require(isinstance(body, dict) and set(body) == {'revision', 'fields'}, 'Проверьте версию полей.', 400)
+    require(isinstance(body, dict) and {'revision', 'fields'} <= set(body) <= {'revision', 'fields', 'resolveConflicts'},
+            'Проверьте версию полей.', 400)
     fields = validate(kind, body['fields'])
     current = read(db, kind, resource_id)
     require(body['revision'] == current['revision'], 'Поля изменились. Обновите карточку.', 409)
+    resolve = body.get('resolveConflicts', [])
+    require(isinstance(resolve, list) and len(resolve) <= len(_paths(kind)) and
+            all(isinstance(path, str) and path in current['conflicts'] for path in resolve) and
+            len(set(resolve)) == len(resolve), 'Укажите текущие конфликты для разрешения.', 400)
     source, original, sources = _source(db, kind, resource_id)
     _, overrides = _overrides(db, kind, resource_id, source, original, sources)
+    changed = False
     for path in _paths(kind):
         value = _get(fields, path)
         if path == 'industry_months' and value == {}:
             value = None
-        if value == _get(current['fields'], path):
+        # Conflict projection is null; the explicit mask distinguishes choosing
+        # unknown from merely resubmitting the unchanged card.
+        if value == _get(current['fields'], path) and path not in resolve:
             continue
+        changed = True
         if value == _get(original, path):
             overrides.pop(path, None)
         else:
             overrides[path] = {'value': value, 'sourceRevision': sources[path]['sourceRevision'], 'author': author}
-    if not any(_get(fields, path) != _get(current['fields'], path) for path in _paths(kind)):
+    if not changed:
         return current
     saved = {'format': 'field-overrides-v1', 'overrides': overrides}
     identity = digest([kind, resource_id, current['revision'], saved, author])
