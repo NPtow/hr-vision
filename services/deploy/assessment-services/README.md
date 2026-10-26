@@ -103,6 +103,49 @@ outside that immutable release, permitting a later verified return. It does not
 silently bless a release already carrying an invalid manifest. Subsequent updates
 use the guarded wrapper without that flag and with the observed SHA.
 
+For a candidate release that includes the reviewed offline `recover-rejection`
+CLI, one retained `invalid_response` may be reconciled in the same guarded pause:
+
+```sh
+python3 -B /root/assessment-delivery/guarded_upgrade.py /root/candidate.tar.gz \
+  --service candidate --expected-current OBSERVED_FULL_COMMIT \
+  --receiver /ABSOLUTE/REVIEWED/INSTALLED/receiver.py --receiver-sha256 REVIEWED_RECEIVER_SHA256 \
+  --recover-rejection RUN_ID_64_HEX --expected-body-sha256 EXACT_RETAINED_BODY_SHA256
+```
+
+Both recovery arguments are required together, must be lowercase 64-hex hashes,
+and are refused for vacancy/recommendations before any subprocess or HR pause.
+They identify an already received response; they cannot request a new model run.
+The normal guarded install and backup complete first. While HR and material
+writers remain paused, the wrapper acquires the candidate deploy/operation locks,
+verifies the newly installed current pointer and protected manifest using the
+installed operator, and checks candidate readiness/no active work. It stops only
+`hr-vision-assessment-core`, rechecks the queue, then invokes that validated
+release's CLI with fixed argv, its existing database and a minimal environment:
+`PYTHONDONTWRITEBYTECODE=1`, `PYTHONNOUSERSITE=1`, trusted release `PYTHONPATH`.
+No service environment file, credential or provider client is loaded by the CLI.
+
+The offline CLI runs as root against the existing DB; it keeps the DB's owner and
+group and mode 0600. The existing service-created `.owner.lock` must already
+exist privately with the same owner as the database, preventing creation of a
+root-owned replacement that DynamicUser could not open. A new root-private
+`operator-recoveries` audit is for the root operator; the normal service does not
+read it. A read-only SQLite header check requires rollback journaling; WAL mode
+is refused without a SQLite connection or a mode change, preventing root-created
+WAL/SHM sidecars from obstructing DynamicUser. Recovery retains raw rejection bytes and original error, validates exact
+body/plan/response hashes, and derives the result without a provider POST.
+
+After success or a CLI failure, `finally` starts candidate under its normal
+DynamicUser unit and verifies authenticated health/readiness before HR activation,
+origin verification and material resume. A CLI failure still returns operation
+failure after healthy services are restored; it is not retried automatically.
+If candidate readiness cannot be restored, HR stays stopped and material writers
+stay paused. Private phase journal entries distinguish validation, stop, queue
+check, reconciliation, start and readiness; child output and arbitrary errors are
+not copied into the journal. A successful wrapper result includes only the CLI's
+bounded status/hash summary and `provider_posts: 0`, never the candidate corpus
+or assessment. This path performs no other service restart and no new POST.
+
 There are **no credential arguments**. Provider key and explicit loopback SOCKS
 proxy are reused on-host exclusively from the existing mode-0600
 `/etc/hr-vision/assessment-core.env`, keys `ASSESSMENT_CORE_JEV_API_KEY` and

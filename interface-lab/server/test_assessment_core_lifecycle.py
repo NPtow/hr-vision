@@ -5,6 +5,7 @@ ASR, delivery, or production resources are used. The real canonical collector,
 assessment planner, ledger, API, worker and result interpreter participate.
 """
 from copy import deepcopy
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -50,10 +51,14 @@ class FixtureProvider:
             raise JevError('timeout', outcome_unknown=True)
         if outcome == 'invalid':
             raise JevError('invalid_response', received_body=b'PRIVATE INVALID RESPONSE')
-        return {'model': 'jev-1.14.0', 'usage': {'input_tokens': 10, 'output_tokens': 1},
+        response = {'model': 'jev-1.14.0', 'usage': {'input_tokens': 10, 'output_tokens': 1},
                 'answers': {key: {'type': 'choice', 'choice': 'insufficient_data', 'confidence': 1.0,
                     'probabilities': {option: float(option == 'insufficient_data') for option in q['criteria']}}
                     for key, q in request['questions'].items()}}
+        if outcome == 'rejected_valid_response':
+            raise JevError('invalid_response', outcome_unknown=True,
+                           received_body=json.dumps(response).encode())
+        return response
 server = ThreadingHTTPServer(('127.0.0.1', 0), handler(store, 'jev-1.14.0', 'a1'*32))
 Path(address_file).write_text(str(server.server_port))
 if outcome != 'paused':
@@ -160,6 +165,25 @@ class LifecycleTests(unittest.TestCase):
     def calls(self):
         path = self.dir / 'provider-calls'
         return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+
+    def test_operator_recovered_response_is_observed_without_provider_resubmission(self):
+        from assessment_core.runstore import RunStore
+        self.start_core('rejected_valid_response')
+        self.lifecycle.tick()
+        failed = self.await_state({'outcome_unknown'})
+        run_id = failed['work']['run_id']
+        self.stop_core()
+        store = RunStore(self.dir / 'core.db')
+        with store.db() as db:
+            raw = db.execute('SELECT body FROM provider_rejections WHERE run_id=?', (run_id,)).fetchone()[0]
+        store.recover_rejection(run_id, hashlib.sha256(raw).hexdigest())
+        self.start_core('success')
+        with patch('assessment_core_lifecycle.time.time', return_value=time.time() + 301), patch.object(
+                self.bridge.service, 'call', wraps=self.bridge.service.call) as reads:
+            self.lifecycle.process()
+        self.assertEqual(self.lifecycle.candidate_status('c1')['state'], 'completed')
+        self.assertEqual([call.args[0] for call in reads.call_args_list], ['GET'])
+        self.assertEqual(len(self.calls()), 1)
 
     def test_ready_transition_full_corpus_completion_and_no_repeat_after_restart(self):
         owner = self.data.dossier['interviews'][0]

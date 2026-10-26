@@ -157,6 +157,22 @@ def _valid_model(value):
     return isinstance(value, str) and (value in _ALIASES or _VERSION.fullmatch(value) is not None)
 
 
+def is_choice_argmax(choice, probabilities) -> bool:
+    """Preserve provider tie-breaking within four binary floating-point ULPs.
+
+    This is independent of decimal distribution-sum rounding. Neither the
+    chosen option nor the probabilities are rewritten.
+    """
+    if (type(choice) is not str or type(probabilities) is not dict
+            or choice not in probabilities
+            or any(not _finite_number(value) or not 0 <= value <= 1
+                   for value in probabilities.values())):
+        return False
+    maximum = max(probabilities.values())
+    return math.isclose(probabilities[choice], maximum,
+                        rel_tol=0, abs_tol=4 * math.ulp(maximum))
+
+
 def _json_value(value):
     """Reject non-JSON Python values and nonfinite numbers at every depth."""
     if value is None or type(value) in (str, bool):
@@ -280,7 +296,7 @@ def validate_response(payload: dict, response: dict) -> dict:
             else:
                 choice = answer["choice"]
                 if (type(choice) is not str or choice not in expected
-                        or probabilities[choice] != max(probabilities.values())):
+                        or not is_choice_argmax(choice, probabilities)):
                     raise ValueError
     except (KeyError, TypeError, ValueError, OverflowError, RecursionError):
         raise JevError("invalid_response", outcome_unknown=True) from None

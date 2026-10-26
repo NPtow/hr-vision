@@ -254,7 +254,7 @@ class Lifecycle:
         with self.bridge.connect() as db:
             db.row_factory = sqlite3.Row
             work = [dict(row) for row in db.execute('''SELECT * FROM ac_auto_work
-              WHERE state='queued' OR (state='submitted' AND next_poll_at<=?)
+              WHERE state='queued' OR (state IN ('submitted','outcome_unknown') AND next_poll_at<=?)
               ORDER BY updated,id LIMIT ?''', (time.time(), self.scope.batch_size))]
         for item in work:
             cid = item['candidate_id']
@@ -304,7 +304,11 @@ class Lifecycle:
                     if state == 'submitted' and not code and time.time() - item['created'] > 600:
                         code = 'assessment_delayed'
                     self._state(item, state, code, poll_errors=0,
-                                next_poll_at=time.time() + 1, last_poll_at=time.time())
+                                # An operator can reconcile a received response
+                                # in the model service. Recheck its acknowledged
+                                # run with GET only; never resubmit unknown work.
+                                next_poll_at=time.time() + (300 if state == 'outcome_unknown' else 1),
+                                last_poll_at=time.time())
                 except CollectionError:
                     self._state(item, 'superseded', 'sources_changed')
                 except Problem as error:

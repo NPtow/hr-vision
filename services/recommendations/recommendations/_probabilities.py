@@ -37,4 +37,6 @@ def _shared_client():
         name="jev_client")
 
 
-is_choice_probability_distribution = _shared_client().is_choice_probability_distribution
+_shared = _shared_client()
+is_choice_probability_distribution = _shared.is_choice_probability_distribution
+is_choice_argmax = _shared.is_choice_argmax

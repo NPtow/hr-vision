@@ -24,6 +24,10 @@ class GuardFailure(ValueError):
     pass
 
 
+class CandidateRecoveryUnavailable(GuardFailure):
+    """Candidate readiness could not be restored; HR writers must stay paused."""
+
+
 def require(condition, message):
     if not condition:
         raise GuardFailure(message)
@@ -127,7 +131,80 @@ def inspect_journal(path, *, require_root=True):
     return document
 
 
-def execute(receiver, operate, artifact, expected_current, *, service='candidate', legacy=False, run=subprocess.run, journal=None):
+def installed_operator(path):
+    require(path.is_absolute() and path.is_file() and not path.is_symlink(), 'Installed operator file required')
+    require(path.stat().st_uid == 0 and path.stat().st_mode & 0o022 == 0,
+            'Operator must be root owned and protected')
+    spec = importlib.util.spec_from_file_location('reviewed_assessment_operator', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    require(module.SERVICES['candidate']['name'] == 'assessment-core', 'Unexpected candidate service identity')
+    return module
+
+
+def recover_candidate(operate, installed_commit, run_id, body_sha256, *, run, step):
+    """Under deployment locks and HR pause; offline reconciliation of existing bytes."""
+    operator = installed_operator(operate)
+    host = operator.Host('candidate')
+    with host.locked():
+        def validate_runtime():
+            release = host.previous(installed_commit)
+            # The installer validates root ownership and the complete immutable
+            # inventory. Reuse it before executing a module from the new release.
+            host.validate_known(release)
+            require((release / 'release.json').is_file(), 'Manifested candidate release required')
+            require(host.db.is_file() and not host.db.is_symlink(), 'Existing candidate database required')
+            # Do not open a WAL database as root and leave root-owned WAL/SHM
+            # sidecars for DynamicUser. Inspect only the fixed SQLite header;
+            # never change journal mode as part of reconciliation.
+            with host.db.open('rb') as source:
+                header = source.read(20)
+            require(header[:16] == b'SQLite format 3\0' and header[18:20] == b'\x01\x01',
+                    'Offline root recovery requires SQLite rollback journaling')
+            owner_lock = Path(str(host.db) + '.owner.lock')
+            require(owner_lock.is_file() and not owner_lock.is_symlink(), 'Existing candidate runtime lock required')
+            require(owner_lock.stat().st_uid == host.db.stat().st_uid
+                    and owner_lock.stat().st_mode & 0o077 == 0,
+                    'Candidate runtime lock ownership differs from database')
+            host.quiet()
+            host.health()
+            return release
+        try:
+            release = step('candidate_recovery_validate', validate_runtime)
+            step('candidate_recovery_stop', lambda: host.systemctl('stop', host.unit))
+            step('candidate_recovery_quiet', host.quiet)
+            def reconcile():
+                completed = run([sys.executable, '-B', '-s', '-m', 'assessment_core', 'recover-rejection', run_id,
+                                 '--db', str(host.db), '--expected-body-sha256', body_sha256],
+                                cwd=str(release), env={'PATH': '/usr/bin:/bin', 'PYTHONPATH': str(release),
+                                    'PYTHONDONTWRITEBYTECODE': '1', 'PYTHONNOUSERSITE': '1'},
+                                check=True, capture_output=True, text=True, timeout=120)
+                require(len(completed.stdout) <= 16384, 'Candidate recovery summary exceeds limit')
+                summary = json.loads(completed.stdout)
+                fields = {'run_id', 'status', 'provider_posts', 'body_sha256', 'plan_sha256',
+                          'response_sha256', 'audit_phase'}
+                require(type(summary) is dict and set(summary) == fields
+                        and summary['run_id'] == run_id and summary['status'] == 'completed'
+                        and type(summary['provider_posts']) is int and summary['provider_posts'] == 0
+                        and summary['body_sha256'] == body_sha256 and summary['audit_phase'] == 'completed'
+                        and all(type(summary[key]) is str and re.fullmatch('[a-f0-9]{64}', summary[key])
+                                for key in ('plan_sha256', 'response_sha256')),
+                        'Candidate recovery summary does not confirm the requested reconciliation')
+                return summary
+            return step('candidate_recovery_reconcile', reconcile)
+        finally:
+            # Even a failed CLI/stop must return the installed candidate to its
+            # normal owner before the outer wrapper can restore HR admission.
+            try:
+                step('candidate_recovery_start', lambda: host.systemctl('start', host.unit))
+                step('candidate_recovery_health', host.health)
+            except BaseException as error:
+                raise CandidateRecoveryUnavailable(
+                    'Candidate recovery readiness failed; HR and material writers remain paused') from error
+
+
+def execute(receiver, operate, artifact, expected_current, *, service='candidate', legacy=False,
+            recover_rejection=None, expected_body_sha256=None, run=subprocess.run, journal=None):
     """Call under deployment_locks(); injectable subprocess/receiver for isolated tests."""
     record = journal or (lambda *arguments, **keywords: None)
     def step(phase, action):
@@ -141,6 +218,12 @@ def execute(receiver, operate, artifact, expected_current, *, service='candidate
         return result
     require(service in ('candidate', 'vacancy', 'recommendations'), 'Unknown assessment service')
     require(not legacy or service == 'candidate', 'Legacy candidate flag is valid only for candidate service')
+    require((recover_rejection is None) == (expected_body_sha256 is None), 'Recovery run and body hash are required together')
+    if recover_rejection is not None:
+        require(service == 'candidate', 'Rejection recovery is valid only for candidate service')
+        require(type(recover_rejection) is str and re.fullmatch('[a-f0-9]{64}', recover_rejection)
+                and type(expected_body_sha256) is str and re.fullmatch('[a-f0-9]{64}', expected_body_sha256),
+                'Recovery run and body hash must be 64 lowercase hex digits')
     require(SHA.fullmatch(expected_current), 'Observed full service commit required')
     def command(*arguments):
         completed = run([sys.executable, '-B', str(operate), service, *arguments],
@@ -173,6 +256,7 @@ def execute(receiver, operate, artifact, expected_current, *, service='candidate
     record('materials_pause_state', 'passed', details={'paused_units': list(paused)})
     stopped_attempted = False
     safe_to_resume = False
+    selected_service_healthy = True
     try:
         stopped_attempted = True
         step('stop_api', receiver.stop_api)
@@ -181,10 +265,20 @@ def execute(receiver, operate, artifact, expected_current, *, service='candidate
         if legacy:
             arguments.append('--legacy-candidate')
         result = step(service + '_install', lambda: command(*arguments))
-        return {service: result, 'service': service, 'existingUiSha': deployment_sha,
-                'hrApiPointer': previous_api, 'guardedBackups': [tag + '-before', tag + '-stopped']}
+        response = {service: result, 'service': service, 'existingUiSha': deployment_sha,
+                    'hrApiPointer': previous_api, 'guardedBackups': [tag + '-before', tag + '-stopped']}
+        if recover_rejection is not None:
+            require(type(result.get('current')) is str and SHA.fullmatch(result['current']),
+                    'Installed full candidate commit required')
+            try:
+                response['rejectionRecovery'] = recover_candidate(operate, result['current'], recover_rejection,
+                    expected_body_sha256, run=run, step=step)
+            except CandidateRecoveryUnavailable:
+                selected_service_healthy = False
+                raise
+        return response
     finally:
-        if stopped_attempted:
+        if stopped_attempted and selected_service_healthy:
             try:
                 step('restore_api', lambda: receiver.activate_api(previous_api))
                 step('verify_origin', lambda: receiver.check_origin('service', deployment_sha))
@@ -206,6 +300,8 @@ def main():
     parser.add_argument('--expected-current')
     parser.add_argument('--service', choices=('candidate', 'vacancy', 'recommendations'), default='candidate')
     parser.add_argument('--legacy-candidate', action='store_true')
+    parser.add_argument('--recover-rejection', help='Candidate run ID for offline retained-response recovery after install')
+    parser.add_argument('--expected-body-sha256', help='Required exact retained-body hash with --recover-rejection')
     parser.add_argument('--receiver', type=Path)
     parser.add_argument('--receiver-sha256', help='SHA256 of reviewed installed receiver, not a secret')
     args = parser.parse_args()
@@ -227,7 +323,9 @@ def main():
         with deployment_locks():
             journal('acquire_deployment_locks', 'passed')
             result = execute(receiver, operate, args.artifact.resolve(), args.expected_current,
-                             service=args.service, legacy=args.legacy_candidate, journal=journal)
+                             service=args.service, legacy=args.legacy_candidate,
+                             recover_rejection=args.recover_rejection, expected_body_sha256=args.expected_body_sha256,
+                             journal=journal)
         journal('operation', 'passed')
         result['operationJournal'] = str(journal.path)
         print(json.dumps(result, sort_keys=True))
