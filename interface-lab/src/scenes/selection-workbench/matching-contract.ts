@@ -40,6 +40,7 @@ export type RequiredCheck = { field: string; status: 'pass' | 'fail' | 'unknown'
 export type MatchParameter = {
   parameter_id: string; title?: string; excluded: boolean; exclusion_reason: string | null; weight?: number;
   required_level_id?: string; required_position?: number; m?: number;
+  insufficient_data_probability?: number; model_confidence?: number;
   levels?: { level_id: string; position: number; p_raw: number; q: number | null; u: number | null; contribution: number | null }[];
 };
 export type RecommendationItem = {
