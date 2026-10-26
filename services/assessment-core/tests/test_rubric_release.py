@@ -36,6 +36,25 @@ class RubricReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Runtime changed'):
             module.check_release(self.old, self.new, self.db)
 
+    def test_shared_transport_change_addition_or_removal_is_rejected(self):
+        for release in (self.old, self.new):
+            (release / 'jev_client/nested').mkdir(parents=True)
+            (release / 'jev_client/nested/transport.py').write_text('TRANSPORT = 1\n')
+        module.check_release(self.old, self.new, self.db)
+        changed = self.new / 'jev_client/nested/transport.py'
+        changed.write_text('TRANSPORT = 2\n')
+        with self.assertRaisesRegex(ValueError, 'Runtime changed'):
+            module.check_release(self.old, self.new, self.db)
+        changed.unlink()
+        with self.assertRaisesRegex(ValueError, 'Runtime changed'):
+            module.check_release(self.old, self.new, self.db)
+
+    def test_new_shared_package_cannot_be_rubric_only(self):
+        (self.new / 'jev_client').mkdir()
+        (self.new / 'jev_client/__init__.py').write_text('TRANSPORT = 1\n')
+        with self.assertRaisesRegex(ValueError, 'Runtime changed'):
+            module.check_release(self.old, self.new, self.db)
+
     def test_active_job_is_rejected(self):
         with sqlite3.connect(self.db) as db:
             db.execute("INSERT INTO runs VALUES ('sent')")

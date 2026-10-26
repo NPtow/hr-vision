@@ -106,6 +106,23 @@ class RunStore:
             return None
         return plan
 
+    def diagnostics(self):
+        """Read storage/queue metadata without loading corpus or raw answers."""
+        with self.db() as db:
+            counts = dict(db.execute('SELECT status,count(*) FROM runs GROUP BY status'))
+            oldest = db.execute("SELECT min(created) FROM runs WHERE status IN ('queued','sent','response_saved')").fetchone()[0]
+        return {'counts': counts, 'pending': sum(counts.get(s, 0) for s in ('queued', 'sent', 'response_saved')),
+                'oldest_pending_seconds': max(0, time.time() - oldest) if oldest is not None else None,
+                'database_bytes': self.path.stat().st_size, 'queue_limit': 100}
+
+    def ready(self):
+        # Reserve/release the writer lock and exercise schema access. No row is
+        # changed and no model/provider is involved in this readiness check.
+        with self.db() as db:
+            db.execute('BEGIN IMMEDIATE')
+            db.execute('UPDATE runs SET updated=updated WHERE 0')
+        return self.diagnostics()
+
     def recover(self):
         """Startup-only recovery, with exclusive service ownership; no network I/O."""
         with self.db() as db:
@@ -115,7 +132,7 @@ class RunStore:
         for run_id in saved:
             try:
                 self.replay(run_id)
-            except (ValueError, RunUnavailable, JevError):
+            except Exception:
                 with self.db() as db:
                     db.execute("UPDATE runs SET status='failed',error=?,updated=? WHERE id=? AND status='response_saved'",
                                (canonical_json({"code": "invalid_saved_response"}), time.time(), run_id))
@@ -165,7 +182,16 @@ class RunStore:
         with self.db() as db:
             db.execute("UPDATE runs SET status='response_saved',response=?,response_sha256=?,updated=? WHERE id=? AND status='sent'",
                        (canonical_json(response), digest(response), time.time(), expected))
-        return self.replay(expected)
+        try:
+            return self.replay(expected)
+        except (ValueError, TypeError, KeyError, RunUnavailable, JevError):
+            # A provider response was durably saved, but cannot form a valid
+            # assessment. Keep that original response/hash for diagnosis and
+            # publish a terminal error instead of stranding response_saved.
+            with self.db() as db:
+                db.execute("UPDATE runs SET status='failed',error=?,updated=? WHERE id=? AND status='response_saved'",
+                           (canonical_json({'code': 'invalid_saved_response'}), time.time(), expected))
+            raise
 
     def replay(self, run_id):
         """Rebuild from a saved provider response; never evaluate or retry."""

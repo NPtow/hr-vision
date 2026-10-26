@@ -191,9 +191,11 @@ class ReceiverTest(unittest.TestCase):
         self.assertEqual(r.PRE_SELECTION_STATUS_RUNTIME - r.PRE_ASR_DISPATCH_RUNTIME, {'materials_asr_dispatch.py'})
         self.assertEqual(r.PRE_FULL_CORPUS_RUNTIME - r.PRE_SELECTION_STATUS_RUNTIME, {'selection_status.py'})
         self.assertEqual(r.PRE_PRODUCT_RECORDINGS_RUNTIME - r.PRE_FULL_CORPUS_RUNTIME, {'assessment_corpus.py', 'assessment_core_bridge.py'})
+        self.assertEqual(r.PRE_RECOMMENDATIONS_RUNTIME - r.PRE_EMPLOYER_REVIEW_RUNTIME, {'employer_review.py'})
+        self.assertEqual(r.RUNTIME - r.PRE_RECOMMENDATIONS_RUNTIME, r.RECOMMENDATIONS_RUNTIME)
+        self.assertIn(frozenset(r.PRE_RECOMMENDATIONS_RUNTIME), r.RUNTIME_LAYOUTS)
         self.assertEqual(r.PRE_EMPLOYER_REVIEW_RUNTIME - r.PRE_PRODUCT_RECORDINGS_RUNTIME,
                          {'recording_uploads.py', 'canonical_materials.py', 'transcript_bundle.py'})
-        self.assertEqual(r.RUNTIME - r.PRE_EMPLOYER_REVIEW_RUNTIME, {'employer_review.py'})
         self.assertIn(frozenset(r.PRE_EMPLOYER_REVIEW_RUNTIME), r.RUNTIME_LAYOUTS)
         self.assertIn(frozenset(r.PRE_PRODUCT_RECORDINGS_RUNTIME), r.RUNTIME_LAYOUTS)
         self.assertIn(frozenset(r.PRE_FULL_CORPUS_RUNTIME), r.RUNTIME_LAYOUTS)
@@ -948,6 +950,29 @@ class ReceiverTest(unittest.TestCase):
             self.assertEqual(r.pointer(base), 'releases/' + retried['release'])
             with sqlite3.connect(database) as db:
                 self.assertEqual(db.execute('SELECT * FROM ia_assessment_revisions').fetchall(), [('approved-orbit',)])
+
+    def test_recommendation_state_blocks_old_runtime_without_losing_audit(self):
+        prior = self.runtime(self.root / 'before-recommendations', r.PRE_RECOMMENDATIONS_RUNTIME)
+        current = self.runtime(self.root / 'with-recommendations', r.RUNTIME)
+        for table in ('vp_bindings', 'rc_bindings', 'sl_fact_revisions', 'sl_evidence',
+                      'sl_recommendation_nominations', 'sl_recommendation_nomination_history',
+                      'ac_auto_cursor', 'ac_auto_candidates', 'ac_auto_work'):
+            with self.subTest(table=table), sqlite3.connect(':memory:') as db:
+                r.guard_outbox_runtime(db, prior)
+                db.execute('CREATE TABLE ' + table + ' (id TEXT)')
+                r.guard_outbox_runtime(db, prior)
+                db.execute('INSERT INTO ' + table + ' VALUES (?)', ('preserved',))
+                with self.assertRaisesRegex(ValueError, 'Recommendation state.*forward recovery'):
+                    r.guard_outbox_runtime(db, prior)
+                r.guard_outbox_runtime(db, current)
+                self.assertEqual(db.execute('SELECT id FROM ' + table).fetchall(), [('preserved',)])
+
+    def test_recommendation_schema_cannot_be_hidden_behind_a_view(self):
+        prior = self.runtime(self.root / 'before-recommendation-view', r.PRE_RECOMMENDATIONS_RUNTIME)
+        with sqlite3.connect(':memory:') as db:
+            db.execute('CREATE VIEW rc_bindings AS SELECT 1 WHERE 0')
+            with self.assertRaisesRegex(ValueError, 'Cannot verify recommendation schema'):
+                r.guard_outbox_runtime(db, prior)
 
     def test_materials_view_does_not_bypass_old_runtime_guard(self):
         prior = self.runtime(self.root / 'before-materials', r.PRE_MATERIALS_RUNTIME)

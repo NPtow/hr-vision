@@ -1,0 +1,132 @@
+{
+  "observed_at_utc": "2026-10-26T01:40:27.444050+00:00",
+  "commit": "c2cee004c84152f8045ab921f633e23b6a5bfd54",
+  "dirty_worktree": true,
+  "command_process": [
+    "/opt/homebrew/bin/python3",
+    "-m",
+    "unittest",
+    "discover",
+    "-s",
+    "services/tests/assessment-flow",
+    "-k",
+    "ProviderFailureProcessTests",
+    "-v"
+  ],
+  "command_regression": [
+    "/opt/homebrew/bin/python3",
+    "-m",
+    "unittest",
+    "discover",
+    "-s",
+    "services/tests/assessment-flow",
+    "-k",
+    "HTTPFlowTests",
+    "-v"
+  ],
+  "tests": {
+    "process_failure": 3,
+    "original_integration_regression": 10
+  },
+  "result": "PASS",
+  "logs": {
+    "provider-fault-process.log": {
+      "sha256": "26a1a167676cf92d0231ed7ac5f24f32c4d11bb5a03be70461453f92209ebe14",
+      "summary": [
+        "test_malformed_saved_typed_response_is_terminal_raw_retained_after_process_restart (test_http_flow.ProviderFailureProcessTests.test_malformed_saved_typed_response_is_terminal_raw_retained_after_process_restart) ... ok",
+        "test_real_workers_closed_proxy_fail_finitely_and_never_repost_after_restart (test_http_flow.ProviderFailureProcessTests.test_real_workers_closed_proxy_fail_finitely_and_never_repost_after_restart) ... ok",
+        "test_real_workers_silent_socks_handshake_enforces_eight_second_timeout (test_http_flow.ProviderFailureProcessTests.test_real_workers_silent_socks_handshake_enforces_eight_second_timeout) ... ok",
+        "",
+        "----------------------------------------------------------------------",
+        "Ran 3 tests in 30.371s",
+        "",
+        "OK",
+        "{\"closed_proxy_terminal_seconds\":1.0660055409989582,\"error\":\"network_error\",\"same_terminal_row_after_repeated_post_and_restart\":true,\"service\":\"candidate\",\"terminal_status\":\"outcome_unknown\"}",
+        "{\"closed_proxy_terminal_seconds\":1.0367819590010185,\"error\":\"network_error\",\"same_terminal_row_after_repeated_post_and_restart\":true,\"service\":\"vacancy\",\"terminal_status\":\"outcome_unknown\"}",
+        "{\"closed_proxy_terminal_seconds\":9.087437541000327,\"error\":\"timeout\",\"same_terminal_row_after_repeated_post_and_restart\":true,\"service\":\"candidate\",\"terminal_status\":\"outcome_unknown\"}",
+        "{\"closed_proxy_terminal_seconds\":9.07165141600126,\"error\":\"timeout\",\"same_terminal_row_after_repeated_post_and_restart\":true,\"service\":\"vacancy\",\"terminal_status\":\"outcome_unknown\"}"
+      ]
+    },
+    "provider-fault-regression.log": {
+      "sha256": "d84fcf5d018e243a261e96191cd7315c105d45eb6fffc1aaf26535e7ec9fc19f",
+      "summary": [
+        "test_delayed_consent_current_sources_publish_once_with_exact_unknown_approval (test_http_flow.HTTPFlowTests.test_delayed_consent_current_sources_publish_once_with_exact_unknown_approval) ... ok",
+        "test_fact_change_at_final_lock_acquisition_cannot_return_current_invitation (test_http_flow.HTTPFlowTests.test_fact_change_at_final_lock_acquisition_cannot_return_current_invitation) ... ok",
+        "test_fact_edit_and_manual_requirement_override_stale_before_invite (test_http_flow.HTTPFlowTests.test_fact_edit_and_manual_requirement_override_stale_before_invite) ... ok",
+        "test_full_http_flow_frozen_rubric_formula_required_gates_pending_pool (test_http_flow.HTTPFlowTests.test_full_http_flow_frozen_rubric_formula_required_gates_pending_pool) ... ok",
+        "test_independent_process_auth_wrong_tenant_and_atomic_incompatible_profiles (test_http_flow.HTTPFlowTests.test_independent_process_auth_wrong_tenant_and_atomic_incompatible_profiles) ... ok",
+        "test_same_full_corpus_and_vacancy_snapshot_are_preserved_and_reads_do_not_bill (test_http_flow.HTTPFlowTests.test_same_full_corpus_and_vacancy_snapshot_are_preserved_and_reads_do_not_bill) ... ok",
+        "test_transient_service_outage_retries_durable_consent_without_duplicate_publish (test_http_flow.HTTPFlowTests.test_transient_service_outage_retries_durable_consent_without_duplicate_publish) ... ok",
+        "",
+        "----------------------------------------------------------------------",
+        "Ran 10 tests in 8.707s",
+        "",
+        "OK"
+      ]
+    }
+  },
+  "metrics": [
+    {
+      "closed_proxy_terminal_seconds": 1.0660055409989582,
+      "error": "network_error",
+      "same_terminal_row_after_repeated_post_and_restart": true,
+      "service": "candidate",
+      "terminal_status": "outcome_unknown"
+    },
+    {
+      "closed_proxy_terminal_seconds": 1.0367819590010185,
+      "error": "network_error",
+      "same_terminal_row_after_repeated_post_and_restart": true,
+      "service": "vacancy",
+      "terminal_status": "outcome_unknown"
+    },
+    {
+      "closed_proxy_terminal_seconds": 9.087437541000327,
+      "error": "timeout",
+      "same_terminal_row_after_repeated_post_and_restart": true,
+      "service": "candidate",
+      "terminal_status": "outcome_unknown"
+    },
+    {
+      "closed_proxy_terminal_seconds": 9.07165141600126,
+      "error": "timeout",
+      "same_terminal_row_after_repeated_post_and_restart": true,
+      "service": "vacancy",
+      "terminal_status": "outcome_unknown"
+    }
+  ],
+  "source_sha256": {
+    "interface-lab/server/assessment_core_bridge.py": "a32f337467c523c3e0267e97f1a08d16630042048ee26afb588aea2a55976923",
+    "interface-lab/server/recommendations_bridge.py": "dc0642c5b3db0afd1d573e61edb9b81fd83d879d4859c41b115388c68d3b8ad4",
+    "interface-lab/server/selection.py": "cc3a00bf443d82ee9c309639cb918f4b95902c03ba69cd9f04e0edaf7f16bbeb",
+    "interface-lab/server/selection_facts.py": "05faa4bf7ae2db943e0bb83191827da2b467cd5500763b3c2217ef7e9f619e9e",
+    "interface-lab/server/selection_status.py": "64aa4a3bbc4ea034e37bcd5c5de378614688590d48e6f9f707114e19e59ca4e6",
+    "interface-lab/server/vacancy_profile_bridge.py": "7cce8f0ea9e81a2398b756b867610642832deddcb17bb2e13551ed223e39ba11",
+    "packages/assessment-contracts/rubrics/sales-v1.json": "5e0ef3305b1c7eec65ff411d8e1407749a4a0add25560f742d041e0e4aaa216b",
+    "packages/jev-client/jev_client/__init__.py": "0ec0f9e434b8adeb9da75197fb4b5d475dd2f260cf2d12e2792fecb214b99784",
+    "services/assessment-core/assessment_core/__init__.py": "24f984faf871ba294f7544e0ad476a0eb3576e72cad94593be60dcbdddc2f76e",
+    "services/assessment-core/assessment_core/__main__.py": "7a04e2120b449042c46eebc56c67b11a2b1e04aa86fcaf6a45707ce7e0b0032d",
+    "services/assessment-core/assessment_core/api.py": "9e82fae3a09176e5fd04a19e8d793d31343b586978466013a88ddf09aac6c0e8",
+    "services/assessment-core/assessment_core/corpus.py": "7adaff4c028a3307ded44f3db98056b47ac35d2beeddb236fde9f81a29221d25",
+    "services/assessment-core/assessment_core/engine.py": "c4a062fd893a6213a1e8a307a09e63bf849574868acc6108530961d83edbfa99",
+    "services/assessment-core/assessment_core/providers/__init__.py": "58b5acfed745c0748f20d06d71251b8331f30124b27caa809d5115d775e15138",
+    "services/assessment-core/assessment_core/providers/jev.py": "b3830e93e4f096e6f1ed62d4f938a64b574933a41c8ad9d7d33d59f81d44c598",
+    "services/assessment-core/assessment_core/runstore.py": "fe94aab34e7e1f56e4db53e1bf114860886da203b56e1aba3a3c84288f9c9c2f",
+    "services/recommendations/recommendations/__init__.py": "cbdf98b19ff6fa8b1710097fe77ea6ec4500dd4d10c5d4a0eeaf36074de7d0ec",
+    "services/recommendations/recommendations/__main__.py": "8c4a7f37b8c78992fc4e0a3b6832e5ac3e71848c30d875a9a3c132ed43681fa2",
+    "services/recommendations/recommendations/api.py": "e17ca1d63cd7270cca5e85820ac99b13d37e18ce3b36f851b833c41d6d3eb8ad",
+    "services/recommendations/recommendations/engine.py": "c85e93c6c7cb7d24e22e9d680e0dfdcf1f810b739415a6816c954f89c70d2f7e",
+    "services/recommendations/recommendations/store.py": "7a67c1dff8f499cf89153ecb417e482acf817ef8e7eb4d15dd99b93f92ae09b1",
+    "services/tests/assessment-flow/test_http_flow.py": "f2f4029b264798e20e2f6f759c33ef30ddfb09ec35422690c76c53a96f3dbe1c",
+    "services/vacancy-profile/vacancy_profile/__init__.py": "6ea2360e99d0f99664f5661e61c07c69a5dcf3c1517fa795bd9bd5392c2c096a",
+    "services/vacancy-profile/vacancy_profile/__main__.py": "e86807be0bf98ab4fdfdb68c698b74c6ca26d3e201b1121e75122071d86d5000",
+    "services/vacancy-profile/vacancy_profile/api.py": "cbd24a0f05505b45638fa69a8529e080bf47b7d3da2ecdca6cda28a5e1dd2dc2",
+    "services/vacancy-profile/vacancy_profile/engine.py": "2ab8b4e22ae467f70d35ea2ed24fca2451b94847513dd858238fc6ad6ed5eb68",
+    "services/vacancy-profile/vacancy_profile/ops.py": "033e3498e3cf7ff6c32dd2630283482ce1c09fa9e647ca6686448b5ee8a5e20b",
+    "services/vacancy-profile/vacancy_profile/store.py": "6c15b45d865cad93e9834c3df2df0fc0492d8cf10f3bc2a93d37c79d9bc6dc09"
+  },
+  "boundary": "Unmodified candidate/vacancy OS processes, real private HTTP/SQLite/worker/JEV curl transport. Forced SOCKS loopback only; fake API keys. Closed port proves immediate network_error. A listening TCP socket accepts but never reads, replies or forwards SOCKS negotiation; actual8s connect/handshake deadline terminates the call. Accepted connection count remains exactly one per service across repeated POST and restart. Synthetic malformed response_saved proves startup validation/raw retention. No internet/provider/YC/production/delivery. Full provider processing/read deadline not waited; only configured transport/unit-bound evidence for that longer timer.",
+  "previous_observed_at_utc": "2026-10-26T01:33:58.161614+00:00",
+  "portable_fixture": "Actual LISTEN/accept plus silent SOCKS negotiation replaces OS-dependent bound/non-listening behavior. Socket is held until fixture cleanup beyond8s. Executed here on macOS; Ubuntu execution is not claimed.",
+  "regression_note": "Original10 HTTP integration tests passed in provider-fault-regression.log before this timeout-fixture-only change; they were not rerun for this change."
+}

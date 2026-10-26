@@ -1,3 +1,4 @@
+import type { HRInterview } from './matching-contract';
 import { hrRequest } from '../hh-outreach/api';
 import type { AssessmentPresentation } from '../interview-assessment/types';
 import type { FullCorpusRun } from '../interview-assessment/FullCorpusAssessment';
@@ -6,6 +7,7 @@ export type WorkflowState = { state: string; origin?: string | null; revisionId?
 export type Workflow = { interview: WorkflowState; resume: WorkflowState; assessment: WorkflowState; match: WorkflowState };
 export type Readiness = {
   candidateId: string;
+  hrInterview?: HRInterview;
   materials: { state: string; recordings: number | null; transcripts: number | null;
     items: { id: string; kind: string; recordings: number; transcripts: number; transcriptState: string }[] };
   assessment: { state: string; result: Omit<AssessmentPresentation, 'saveFeedback'> | null; match?: WorkflowState;
@@ -28,8 +30,9 @@ export type SelectionPerson = {
   consentReuse: boolean; interviewId: string | null; interviewStatus: string | null;
   resumeAvailable: boolean; inCohort: boolean; canAdd: boolean;
   assessment: Assessment | null; application: { id: string; status: string } | null;
-  nomination: { id: string; state: string } | null; deliveries: { id: string; event: string; channel: string; status: string; error: string | null }[];
+  nomination: { id: string; state: string; error?: string | null; retryAt?: number; attempts?: number } | null; deliveries: { id: string; event: string; channel: string; status: string; error: string | null }[];
   workflow?: Workflow;
+  hrInterview?: HRInterview;
 };
 export type SelectionVacancy = { id: string; title: string; company: string; city: string; salary: string; description: string; status?: string; revision: number; generation: string; workspaceId: string; contentHash: string };
 export type Directory = { candidates: SelectionPerson[]; count: number };
