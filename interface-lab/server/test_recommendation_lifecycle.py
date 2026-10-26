@@ -24,6 +24,7 @@ class RecommendationLifecycleTests(unittest.TestCase):
         self.ready = {self.cid}
         self.profile_lose_ack = self.recommendation_lose_ack = self.unavailable = self.review = False
         self.importance = None
+        self.known_positive_skill = False
         self.f.vp.service = self.f.rb.service = SimpleNamespace(call=self.http)
         self.f.rb.candidate = SimpleNamespace(read=self.candidate_read)
         self.lifecycle = self.make_lifecycle()
@@ -53,6 +54,9 @@ class RecommendationLifecycleTests(unittest.TestCase):
                     value = self.f.call(method, path, body)
                     if self.review:
                         self.f.profile['parameters'][0].update(status='needs_review', importance=self.importance, required_level_id=None)
+                        if self.known_positive_skill:
+                            self.f.profile['parameters'].append({'parameter_id': 'A02', 'status': 'ready',
+                                'importance': 2, 'required_level_id': 'L3'})
                         value['profile'] = deepcopy(self.f.profile)
                     self.accepted_profiles[identity] = value
                 if self.profile_lose_ack:
@@ -132,8 +136,9 @@ class RecommendationLifecycleTests(unittest.TestCase):
         self.assertEqual(self.status()['state'], 'input_changed')
         self.sweep(); self.assertEqual(self.status()['state'], 'ready'); self.assertEqual(len(self.results), 2)
 
-    def test_unknown_importance_blocks_without_busy_loop_unknown_target_is_allowed(self):
+    def test_invalid_profile_requires_review_without_busy_loop_unknown_target_is_allowed(self):
         self.review = True; self.sweep(); self.assertEqual(self.status()['state'], 'needs_review')
+        self.assertEqual(self.status()['errorCode'], 'vacancy_profile_requires_review')
         calls = len(self.reads); self.clock[0] += 300; self.sweep(); self.assertEqual(len(self.reads), calls)
         self.assertEqual(len(self.results), 0)
         self.f.profile['profile_id'] = 'e'*64; self.f.profile['parameters'][0]['importance'] = 2
@@ -141,6 +146,61 @@ class RecommendationLifecycleTests(unittest.TestCase):
             db.execute('UPDATE vp_bindings SET profile_id=?,profile=? WHERE vacancy_id=?',
                        ('e'*64, json.dumps(self.f.profile), self.vid))
         self.sweep(); self.assertEqual(self.status()['state'], 'ready'); self.assertEqual(len(self.results), 1)
+
+    def test_persisted_old_policy_review_resumes_once_after_policy_change_without_model_rerun(self):
+        self.review, self.importance, self.known_positive_skill = True, 'insufficient_data', True
+        self.f.rubric['parameters'].append({'parameter_id': 'A02'})
+        self.f.vp.rubric_hash = selection.digest(self.f.rubric)
+        old_policy = {**matching.POLICY, 'version': 'tanh-higher-v2'}
+        new_policy = {**matching.POLICY, 'version': 'tanh-higher-zero-v3'}
+        # Recreate the prior release's persisted review state through its worker,
+        # rather than an operator command. Its old gate rejected unknown weight.
+        current_comparable = matching.profile_comparable
+        def old_gate(value):
+            return current_comparable(value) and all(type(p.get('importance')) is int
+                for p in (value.get('profile') or {}).get('parameters', []))
+        with patch.object(matching, 'POLICY', old_policy), patch.object(matching, 'profile_comparable', side_effect=old_gate):
+            self.sweep()
+            self.assertEqual(self.status()['state'], 'needs_review')
+            with self.connect() as db:
+                db.execute("UPDATE rc_auto_vacancies SET error_code='importance_required',next_check=?",
+                           (self.clock[0] + 3600,))
+                previous_hash, previous_versions = db.execute('SELECT input_hash,versions FROM rc_auto_vacancies').fetchone()
+            self.assertEqual(json.loads(previous_versions)['policy']['version'], 'tanh-higher-v2')
+        self.assertEqual(len(self.results), 0)
+        provider_posts = len([path for path, body in self.posts if path == '/v1/vacancy-profiles'])
+        self.assertEqual(provider_posts, 1)
+        with self.connect() as db:
+            saved_profile = db.execute('SELECT profile FROM vp_bindings').fetchone()[0]
+        # A restarted worker notices the policy version despite an old future
+        # review deadline, compares automatically, and persists the new hash.
+        with patch.object(matching, 'POLICY', new_policy):
+            self.lifecycle = self.make_lifecycle()
+            self.sweep()
+            self.assertEqual(self.status()['state'], 'ready')
+            self.assertIsNone(self.status()['errorCode'])
+            self.assertEqual(len(self.results), 1)
+            with self.connect() as db:
+                current_hash, versions = db.execute('SELECT input_hash,versions FROM rc_auto_vacancies').fetchone()
+                self.assertNotEqual(current_hash, previous_hash)
+                self.assertEqual(json.loads(versions)['policy'], new_policy)
+                self.assertEqual(db.execute('SELECT profile FROM vp_bindings').fetchone()[0], saved_profile)
+            requests = [body for path, body in self.posts if path == '/v1/recommendations']
+            self.assertEqual(len(requests), 1)
+            self.assertEqual(requests[0]['policy'], new_policy)
+            parameters = requests[0]['vacancy_profile']['parameters']
+            self.assertEqual(parameters[0]['importance'], 'insufficient_data')
+            self.assertEqual(parameters[1]['importance'], 2)
+            calls = len(self.reads)
+            self.clock[0] += 60
+            self.lifecycle = self.make_lifecycle()
+            self.sweep()
+            self.assertEqual(len(self.reads), calls)
+            self.assertEqual(len([path for path, body in self.posts if path == '/v1/vacancy-profiles']), provider_posts)
+            self.assertEqual(len([path for path, body in self.posts if path == '/v1/recommendations']), 1)
+            with self.connect() as db:
+                for table in ('cn_outbox', 'cp_applications', 'sl_recommendation_nominations'):
+                    self.assertEqual(db.execute('SELECT count(*) FROM '+table).fetchone()[0], 0)
 
     def test_1001_full_pool_explicit_refusal_never_truncates_or_calls_http(self):
         ids = ['candidate-%04d'%i for i in range(1001)]

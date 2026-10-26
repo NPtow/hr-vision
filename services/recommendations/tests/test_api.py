@@ -9,7 +9,7 @@ import unittest
 from unittest.mock import patch
 
 from recommendations import api
-from recommendations.engine import HIGHER_POLICY, canonical_json
+from recommendations.engine import AUTO_POLICY, HIGHER_POLICY, canonical_json
 from recommendations.store import ResultStore
 from fixtures import request_fixture, synthetic_rubric, set_distribution, set_importance
 
@@ -93,7 +93,7 @@ class HttpTests(unittest.TestCase):
         status, _, result = self.request("POST", "/v1/recommendations", value)
         self.assertEqual(status, 200)
         item = result["items"][0]
-        self.assertEqual(result["service_version"], "1.1.0")
+        self.assertEqual(result["service_version"], "1.2.0")
         self.assertAlmostEqual(item["score_points"], 50 * (item["score"] + 1))
         self.assertAlmostEqual(sum(p["score_points_contribution"] for p in item["parameters"]), item["score_points"])
         self.assertEqual(item["parameters"][0]["utility_mode"], "higher_level_linear")
@@ -101,6 +101,24 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(self.request("GET", "/v1/recommendations/" + result["recommendation_id"])[2], result)
         value["candidate_profiles"][0]["parameters"][0]["score_points_contribution"] = 100
         self.assertEqual(self.request("POST", "/v1/recommendations", value)[0], 422)
+        self.assertEqual(self.store.metadata()["saved_results"], 1)
+
+    def test_http_v3_unknown_importance_is_excluded_saved_and_repeated_without_global_block(self):
+        value = request_fixture()
+        set_importance(value["vacancy_profile"], 0, "insufficient_data", required=None)
+        for version in ("tanh-v1", "tanh-higher-v2"):
+            value["policy"]["version"] = version
+            status, _, error = self.request("POST", "/v1/recommendations", value)
+            self.assertEqual((status, error), (422, {"error": "clarification_required"}))
+        value["policy"] = dict(AUTO_POLICY)
+        status, _, result = self.request("POST", "/v1/recommendations", value)
+        self.assertEqual(status, 200)
+        parameter = result["items"][0]["parameters"][0]
+        self.assertEqual((parameter["weight"], parameter["exclusion_reason"]), (0, "unknown_importance"))
+        self.assertEqual(self.request("POST", "/v1/recommendations", value)[2], result)
+        self.assertEqual(self.request("GET", "/v1/recommendations/" + result["recommendation_id"])[2], result)
+        with self.store.db() as db:
+            self.assertEqual(json.loads(db.execute("SELECT input FROM recommendations").fetchone()[0]), value)
         self.assertEqual(self.store.metadata()["saved_results"], 1)
 
     def test_auth_is_required_for_results_readiness_and_operator_metadata(self):

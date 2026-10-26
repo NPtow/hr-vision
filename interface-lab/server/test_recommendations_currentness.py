@@ -55,17 +55,35 @@ class CurrentnessTest(unittest.TestCase):
         self.assertEqual(value['state'], 'ready')
         submitted = [body for path, body in self.f.posts if path == '/v1/recommendations'][-1]
         self.assertEqual(submitted['vacancy_profile']['parameters'], [parameter])
-        self.assertEqual(submitted['policy']['version'], 'tanh-higher-v2')
+        self.assertEqual(submitted['policy']['version'], 'tanh-higher-zero-v3')
 
-    def test_unknown_importance_does_not_invent_weight(self):
+    def test_unknown_importance_reaches_calculator_without_rewriting_raw_profile(self):
         first = self.f.start()
-        self.f.profile['parameters'] = [{'parameter_id': 'A01', 'status': 'needs_review',
-            'importance': 'insufficient_data', 'required_level_id': None}]
-        sent = len(self.f.posts)
-        with self.assertRaises(Problem) as error:
-            self.f.rb.start(self.f.vid, first['revision'], [self.f.cid])
-        self.assertEqual(error.exception.status, 409)
-        self.assertEqual(len(self.f.posts), sent)
+        parameter = {'parameter_id': 'A01', 'status': 'needs_review',
+                     'importance': 'insufficient_data', 'required_level_id': None}
+        self.f.profile['parameters'] = [parameter]
+        model_posts = len([p for p, _ in self.f.posts if p == '/v1/vacancy-profiles'])
+        result = self.f.rb.start(self.f.vid, first['revision'], [self.f.cid])
+        self.assertEqual(result['state'], 'ready')
+        submitted = [body for path, body in self.f.posts if path == '/v1/recommendations'][-1]
+        self.assertEqual(submitted['vacancy_profile']['parameters'], [parameter])
+        self.assertEqual(submitted['policy']['version'], 'tanh-higher-zero-v3')
+        self.assertEqual(len([p for p, _ in self.f.posts if p == '/v1/vacancy-profiles']), model_posts)
+        self.assertEqual(self.f.profile['parameters'], [parameter])
+
+    def test_unknown_importance_policy_does_not_accept_malformed_or_incomplete_profiles(self):
+        for importance in (None, True, -1, 4, 1.0, 'I2', 'unknown'):
+            with self.subTest(importance=importance):
+                self.assertFalse(matching.profile_comparable({'state': 'needs_review',
+                    'profile': {'parameters': [{'importance': importance}]}}))
+        for parameters in (None, [], [None], [2], [{}]):
+            with self.subTest(parameters=parameters):
+                self.assertFalse(matching.profile_comparable({'state': 'needs_review',
+                    'profile': {'parameters': parameters}}))
+        for state in ('stale', 'processing', 'queued', 'outcome_unknown', 'error'):
+            with self.subTest(state=state):
+                self.assertFalse(matching.profile_comparable({'state': state,
+                    'profile': {'parameters': [{'importance': 'insufficient_data'}]}}))
 
     def test_materials_changed_during_remote_calculation_cannot_publish_current_result(self):
         with self.f.connect() as db:

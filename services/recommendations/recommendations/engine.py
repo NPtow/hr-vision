@@ -20,6 +20,7 @@ UNKNOWN = "insufficient_data"
 MAX_POOL = 1000
 POLICY = {"version": "tanh-v1", "k": 1, "probability_mode": "conditional_levels"}
 HIGHER_POLICY = {"version": "tanh-higher-v2", "k": 1, "probability_mode": "conditional_levels"}
+AUTO_POLICY = {"version": "tanh-higher-zero-v3", "k": 1, "probability_mode": "conditional_levels"}
 
 
 class InvalidInput(ValueError):
@@ -168,7 +169,7 @@ def choice(answer, options):
         raise InvalidInput()
 
 
-def validate_vacancy(profile, rubric, *, allow_unknown_requirement=False):
+def validate_vacancy(profile, rubric, *, allow_unknown_requirement=False, allow_unknown_importance=False):
     obj(profile, ("contract_version", "profile_id", "run_id", "vacancy_id", "source_revision",
                   "vacancy_sha256", "rubric_id", "rubric_version", "rubric_sha256",
                   "importance_version", "model", "parameters", "usage"), ("revision",))
@@ -216,7 +217,8 @@ def validate_vacancy(profile, rubric, *, allow_unknown_requirement=False):
             if (requirement != (None if raw_level == UNKNOWN else raw_level)
                     or importance != (UNKNOWN if raw_importance == UNKNOWN else int(raw_importance[1:]))):
                 raise InvalidInput()
-        needs_clarification |= (importance == UNKNOWN or status == "needs_review"
+        needs_clarification |= (importance == UNKNOWN and not allow_unknown_importance
+                                or importance != UNKNOWN and importance > 0 and requirement is None
                                 and not allow_unknown_requirement)
     if needs_clarification:
         raise InvalidInput("clarification_required")
@@ -367,7 +369,7 @@ def recommend(value, *, rubric=None):
     obj(value, ("vacancy_profile", "candidate_profiles", "candidate_fields", "vacancy_fields", "policy"))
     policy = value["policy"]
     obj(policy, POLICY)
-    if (policy["version"] not in (POLICY["version"], HIGHER_POLICY["version"])
+    if (policy["version"] not in (POLICY["version"], HIGHER_POLICY["version"], AUTO_POLICY["version"])
             or policy["probability_mode"] != POLICY["probability_mode"]
             or type(policy["k"]) not in (int, float) or policy["k"] != 1 or not math.isfinite(policy["k"])):
         raise InvalidInput("unsupported_policy")
@@ -375,7 +377,8 @@ def recommend(value, *, rubric=None):
     rubric_parameters(rubric)
     vacancy = value["vacancy_profile"]
     vacancy_parameters = validate_vacancy(vacancy, rubric,
-                                         allow_unknown_requirement=policy["version"] == HIGHER_POLICY["version"])
+        allow_unknown_requirement=policy["version"] in (HIGHER_POLICY["version"], AUTO_POLICY["version"]),
+        allow_unknown_importance=policy["version"] == AUTO_POLICY["version"])
     profiles = value["candidate_profiles"]
     if type(profiles) is not list or not 1 <= len(profiles) <= MAX_POOL:
         raise InvalidInput("invalid_pool_size")
@@ -395,9 +398,11 @@ def recommend(value, *, rubric=None):
         for target in rubric["parameters"]:
             pid = target["parameter_id"]
             vp, cp = vacancy_parameters[pid], candidate_parameters[cid][pid]
-            weight = vp["importance"]
+            source_importance = vp["importance"]
+            weight = 0 if source_importance == UNKNOWN else source_importance
             requirement = vp["required_level_id"]
-            excluded = "zero_importance" if weight == 0 else UNKNOWN if cp["status"] == UNKNOWN else None
+            excluded = ("unknown_importance" if source_importance == UNKNOWN else
+                        "zero_importance" if weight == 0 else UNKNOWN if cp["status"] == UNKNOWN else None)
             parameter = {"parameter_id": pid, "title": target["title"], "weight": weight,
                          "required_level_id": requirement, "excluded": excluded is not None,
                          "exclusion_reason": excluded, "m": None, "weighted_contribution": None,
@@ -405,6 +410,8 @@ def recommend(value, *, rubric=None):
                          "numeric_probability_mass": math.fsum(l["probability"] for l in cp["levels"]),
                          "insufficient_data_probability": cp["insufficient_data_probability"],
                          "model_confidence": cp["model_confidence"], "levels": []}
+            if policy["version"] == AUTO_POLICY["version"]:
+                parameter["source_importance"] = source_importance
             if excluded:
                 excluded_weights.append(weight)
                 for position, level in enumerate(cp["levels"], 1):

@@ -103,7 +103,7 @@ class Lifecycle:
             if not matching.profile_comparable(profile):
                 state = {'dispatch_unknown': 'dispatch_unknown', 'outcome_unknown': 'outcome_unknown',
                          'error': 'failed', 'needs_review': 'needs_review'}.get(profile['state'], 'waiting_profile')
-                self._save_current(vid, pool, state, 'importance_required' if state == 'needs_review' else None,
+                self._save_current(vid, pool, state, 'vacancy_profile_requires_review' if state == 'needs_review' else None,
                                    expected_versions=versions)
                 return
             if not pool:

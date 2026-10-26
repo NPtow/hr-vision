@@ -103,3 +103,35 @@ the unavailable protected runner remains the separately accepted exception in
 `AUTOMATION.md`. Independent runtime QA and production acceptance belong to their
 respective workstreams. No production reads/recalculation, provider requests,
 deployments or commits were performed here.
+
+## Version 1.2.0: unknown importance contributes zero effective weight
+
+2026-10-26 20:35 MSK, branch `codex/matching-unknown-importance-zero`, baseline
+`b8c76adefa9db9c99d6668f48ace77be09325644`, uncommitted recommendations-only changes.
+
+Before implementation, the new v3 open tests failed with `unsupported_policy`.
+After implementation, the unchanged full verification command reports
+**64 tests PASS**, 1.897s. `test_auto_policy.py` verifies mixed known/unknown weights,
+distinct unknown vs explicit zero exclusions, all unknown => null/unscored,
+all five direct no-target point values, retained known-target tanh, raw snapshot
+immutability, candidate abstention and unchanged v1/v2 rejection rules.
+
+Real HTTP verifies v1/v2 rejection and v3 success from the same unknown-importance
+snapshot, exact saved input and idempotent POST/GET. An independent process saves
+both all-unknown and partly weighted v3 results, is killed/restarted, and reads the
+same immutable results. A historical 1.1.0 v2 result remains unchanged on GET.
+Only tests' expected current service version moved from 1.1.0 to 1.2.0; legacy
+policy behavior assertions remain in place.
+
+```json
+{"local_hundred_profile_post_seconds":0.245628167,"request_bytes":3915015,"saved_get_seconds":0.08243879200000004}
+```
+
+The v3-only additive `source_importance` records the immutable original importance;
+`weight` is the effective numeric weight. Source unknown maps to effective zero
+with `exclusion_reason:"unknown_importance"`; source explicit zero keeps
+`"zero_importance"`. Null totals remain null. SQLite schema is unchanged.
+
+These open implementation tests and local runtime checks do not claim protected
+isolated coding/build completion. Independent QA is separate. No deployment,
+real-candidate data access, provider/model calls or commits performed here.

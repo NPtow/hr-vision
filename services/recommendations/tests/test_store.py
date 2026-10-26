@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from recommendations.engine import HIGHER_POLICY, InvalidInput, canonical_json, digest
+from recommendations.engine import AUTO_POLICY, HIGHER_POLICY, InvalidInput, canonical_json, digest
 from recommendations.store import ResultStore, StoreUnavailable
 from fixtures import request_fixture, synthetic_rubric, set_importance
 
@@ -135,6 +135,32 @@ class StoreTests(unittest.TestCase):
         with self.assertRaisesRegex(InvalidInput, "clarification_required"):
             self.store.submit(invalid)
         self.assertEqual(self.store.metadata()["saved_results"], 1)
+
+    def test_v3_snapshot_restart_and_prior_v2_version_are_immutable(self):
+        value = deepcopy(self.value)
+        value["policy"] = dict(HIGHER_POLICY)
+        historical = self.store.submit(value)
+        historical["service_version"] = "1.1.0"
+        historical["recommendation_id"] = digest({"service_version": "1.1.0", "input": value})
+        with self.store.db() as db:
+            db.execute("INSERT INTO recommendations VALUES (?,?,?,?,?,?)",
+                       (historical["recommendation_id"], canonical_json(value), canonical_json(historical),
+                        digest(historical), "1.1.0", 1))
+        value["policy"] = dict(AUTO_POLICY)
+        for i in range(2):
+            set_importance(value["vacancy_profile"], i, "insufficient_data", required=None)
+        result = self.store.submit(value)
+        self.assertEqual(result["items"][0]["status"], "unscored")
+        self.assertIsNone(result["items"][0]["score_points"])
+        self.assertEqual(self.store.submit(value), result)
+        restarted = ResultStore(self.path, rubric=self.rubric)
+        with patch("recommendations.store.recommend", side_effect=AssertionError("GET must never recalculate")):
+            self.assertEqual(restarted.get(result["recommendation_id"]), result)
+            self.assertEqual(restarted.get(historical["recommendation_id"]), historical)
+        with restarted.db() as db:
+            snapshot = json.loads(db.execute("SELECT input FROM recommendations WHERE id=?",
+                                            (result["recommendation_id"],)).fetchone()[0])
+        self.assertEqual(snapshot, value)
 
 
 if __name__ == "__main__":
