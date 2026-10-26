@@ -848,7 +848,9 @@ class CandidatePortal:
                        (aid, cid, vacancy['id'], 'accepted' if auto else 'pending', int(auto), iso(now()), iso(now()) if auto else None))
             self.event(db, cid, 'application.proposed', aid)
             import employer_review
-            if not employer_review.enabled():
+            if employer_review.enabled():
+                employer_review.enqueue(db, aid)
+            else:
                 import assessment_jobs
                 assessment_jobs.enqueue(db, 'candidate', cid, vacancy['id'])
 

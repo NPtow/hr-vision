@@ -144,6 +144,7 @@ class Bridge:
         with self.lock, self.connect() as db:
             row = db.execute('''SELECT e.application_id,e.state,e.preparation_id,e.core_run_id,e.source_revision
               FROM er_preparations e JOIN cp_applications a ON a.id=e.application_id
+              JOIN em_reviews r ON r.application_id=a.id
               WHERE e.next_check<=? AND ((e.state='waiting_consent' AND a.status='accepted') OR e.state='preparing')
               ORDER BY e.updated LIMIT 1''', (time.time(),)).fetchone()
             if not row:

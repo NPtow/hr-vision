@@ -124,6 +124,22 @@ class EmployerReviewTests(unittest.TestCase):
         self.assertEqual(set(body['chunks'][0]), {'id', 'text', 'speaker', 'recordingId', 'transcriptId', 'startMs', 'endMs'})
         self.assertEqual([c['recordingId'] for c in body['chunks']], ['part-a', 'part-b'])
 
+    def test_direct_candidate_approval_waits_for_employer_assignment(self):
+        with patch.dict('os.environ', {'HR_EMPLOYER_REVIEW_ENABLED': '1'}):
+            cid = self.person()
+            with self.connect() as db:
+                self.portal.propose_application(db, {'candidateId': cid, 'vacancyId': self.vacancy['id']})
+                aid = db.execute('SELECT id FROM cp_applications WHERE candidate_id=?', (cid,)).fetchone()[0]
+                self.portal.decide_application(db, cid, {'applicationId': aid, 'decision': 'accepted'})
+                self.assertTrue(review.tracked(db, aid))
+            service = Service()
+            bridge = review.Bridge(self.portal, service)
+            self.assertFalse(bridge.tick())
+            self.assertEqual(service.calls, [])
+            self.import_people([cid])
+            with self.connect() as db:
+                self.assertEqual(employer_store.applications(db, 'a'), [])
+
 
 if __name__ == '__main__':
     unittest.main()
