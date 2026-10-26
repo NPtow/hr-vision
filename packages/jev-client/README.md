@@ -13,7 +13,11 @@ The historical `abs(sum(p)-1) <= 1e-5` path still accepts higher precision outpu
 Otherwise every value must lie on the `0.01` grid (scaled floating-point
 tolerance `1e-9`), and `abs(sum(p)-1) <= N*0.005 + 1e-6`. This is accumulated
 serialization error, not an inferred or normalized posterior. Exact option
-keys and exact selected argmax remain mandatory. This exception applies only
+keys and selected argmax remain mandatory. The selected value may differ from
+the maximum by at most four binary floating-point ULPs of that maximum, allowing
+machine-level ties such as `0.33999999999999997` versus `0.34`. This does not use
+the decimal rounding tolerance and never rewrites the provider's choice or
+probabilities. This exception applies only
 to Choice; Score mass and weighted-mean checks retain their original rules.
 
 The bounded rounding policy follows the merged Vercel AI SDK implementation,
@@ -23,7 +27,7 @@ pinned to commit `20c4031d1fc59aab54b67c16679e3981374690ab`:
   declares two decimal places while returning provider probabilities unchanged.
 - [Distribution validator](https://github.com/vercel/ai/blob/20c4031d1fc59aab54b67c16679e3981374690ab/packages/ai/src/decide/validate-decision.ts#L202-L230)
   uses `1e-6 + N * (0.5 * 10**(-decimals))` for the sum bound. The grid gate,
-  positive-mass requirement and retained exact argmax are our stricter guards.
+  positive-mass requirement and argmax check are our stricter guards.
 - [Native TypeSafe OpenAPI](https://api.typesafe.ai/openapi.json), checked
   2026-10-26, says Choice probabilities sum to approximately 1, without an
   explicit precision bound. Thus this is an explicit client interoperability

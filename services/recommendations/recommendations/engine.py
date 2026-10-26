@@ -13,7 +13,7 @@ from pathlib import Path
 import re
 
 from . import __version__
-from ._probabilities import is_choice_probability_distribution
+from ._probabilities import is_choice_argmax, is_choice_probability_distribution
 
 VERSION = "recommendations-v1"
 UNKNOWN = "insufficient_data"
@@ -163,7 +163,7 @@ def choice(answer, options):
     obj(probabilities, options)
     distribution(list(probabilities.values()))
     probability(answer["confidence"])
-    if probabilities[answer["choice"]] != max(probabilities.values()):
+    if not is_choice_argmax(answer["choice"], probabilities):
         raise InvalidInput()
 
 
@@ -259,7 +259,7 @@ def validate_candidate(profile, rubric):
         elif (parameter["status"] != "assessed" or type(chosen) is not str
               or chosen not in probabilities or chosen == UNKNOWN):
             raise InvalidInput()
-        if probabilities[chosen] != max(probabilities.values()):
+        if not is_choice_argmax(chosen, probabilities):
             raise InvalidInput()
         if chosen != UNKNOWN and math.fsum(probabilities[level["level_id"]] for level in target["levels"]) <= 0:
             raise InvalidInput()

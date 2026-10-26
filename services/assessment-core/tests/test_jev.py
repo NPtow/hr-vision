@@ -152,6 +152,25 @@ class ResponseTests(unittest.TestCase):
         with self.assertRaises(JevError):
             validate_response(request_fixture(), response)
 
+    def test_choice_machine_float_tie_preserves_original_answer(self):
+        payload = request_fixture()
+        keys = ['L1', 'L2', 'L3', 'L4', 'L5', 'insufficient_data']
+        payload['questions']['evidence']['criteria'] = dict.fromkeys(keys, 'Level')
+        response = response_fixture()
+        response['answers']['evidence'].update(choice='L3', probabilities=dict(zip(
+            keys, [.04, .14, .33999999999999997, .11, .03, .34])))
+        before = deepcopy(response)
+        self.assertIs(validate_response(payload, response), response)
+        self.assertEqual(response, before)
+
+    def test_choice_real_nonmax_cannot_use_machine_tie_tolerance(self):
+        for difference in (1e-12, .001, .01):
+            response = response_fixture()
+            response['answers']['evidence']['probabilities'] = {
+                'yes': .5 + difference, 'unknown': .5 - difference}
+            with self.subTest(difference=difference), self.assertRaises(JevError):
+                validate_response(request_fixture(), response)
+
     def test_score_distribution_keeps_strict_mass_despite_choice_rounding_policy(self):
         for probabilities in ({"0": .12, "1": .50, "2": .37},
                               {"0": .13, "1": .50, "2": .38}):

@@ -8,15 +8,19 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 import fcntl
+import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import sqlite3
+import tempfile
 import time
 
+from . import __version__
 from .corpus import canonical_json
 from .engine import digest, interpret, validate_plan
-from .providers.jev import JevError
+from .providers.jev import JevError, _decode_response
 
 
 class RunUnavailable(Exception):
@@ -212,3 +216,122 @@ class RunStore:
             db.execute("UPDATE runs SET status='completed', result=?, updated=? WHERE id=? AND status IN ('response_saved','completed')",
                        (canonical_json(result), time.time(), run_id))
         return result
+
+    def recovery_audit(self, run_id):
+        """Private local operator evidence; never exposed through the HTTP API."""
+        if type(run_id) is not str or not re.fullmatch(r"[a-f0-9]{64}", run_id):
+            raise ValueError("invalid run identity")
+        directory = self.path.parent / "operator-recoveries"
+        path = directory / (run_id + ".json")
+        if directory.is_symlink() or path.is_symlink():
+            raise RunUnavailable("recovery_audit_unavailable")
+        if not path.exists():
+            return None
+        with path.open("rb") as source:
+            raw = source.read(65537)
+        if len(raw) > 65536:
+            raise RunUnavailable("recovery_audit_unavailable")
+        audit = json.loads(raw)
+        if (type(audit) is not dict or audit.get("contract_version") != "assessment-rejection-recovery-v1"
+                or audit.get("run_id") != run_id or audit.get("phase") not in ("prepared", "completed")
+                or audit.get("original_status") not in ("failed", "outcome_unknown")
+                or type(audit.get("original_error")) is not dict
+                or audit["original_error"].get("code") != "invalid_response"
+                or any(type(audit.get(key)) is not str or not re.fullmatch(r"[a-f0-9]{64}", audit[key])
+                       for key in ("body_sha256", "plan_sha256", "response_sha256"))):
+            raise RunUnavailable("recovery_audit_unavailable")
+        return audit
+
+    def _save_recovery_audit(self, run_id, audit):
+        directory = self.path.parent / "operator-recoveries"
+        path = directory / (run_id + ".json")
+        if directory.is_symlink() or path.is_symlink():
+            raise RunUnavailable("recovery_audit_unavailable")
+        directory.mkdir(mode=0o700, exist_ok=True)
+        os.chmod(directory, 0o700)
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=directory,
+                                             prefix=".recovery-", delete=False) as output:
+                temporary = Path(output.name)
+                os.chmod(temporary, 0o600)
+                output.write(canonical_json(audit) + "\n")
+                output.flush()
+                os.fsync(output.fileno())
+            os.replace(temporary, path)
+            fd = os.open(directory, os.O_RDONLY)
+            try:
+                os.fsync(fd)
+            finally:
+                os.close(fd)
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
+
+    def recover_rejection(self, run_id, expected_body_sha256):
+        """Promote strictly validated retained bytes, without contacting a provider.
+
+        Offline operator command only. The runtime ownership lock covers frozen
+        plan/raw validation, durable audit, response promotion and local replay.
+        The raw rejection and original error remain available after completion.
+        """
+        if (type(run_id) is not str or not re.fullmatch(r"[a-f0-9]{64}", run_id)
+                or type(expected_body_sha256) is not str
+                or not re.fullmatch(r"[a-f0-9]{64}", expected_body_sha256)):
+            raise ValueError("invalid reconciliation identity")
+        with self.runtime_lock():
+            with self.db() as db:
+                db.execute("BEGIN IMMEDIATE")
+                row = db.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()
+                rejection = db.execute("SELECT * FROM provider_rejections WHERE run_id=?", (run_id,)).fetchone()
+                audit = self.recovery_audit(run_id)
+                if row is None or rejection is None or rejection["code"] != "invalid_response":
+                    raise RunUnavailable("rejection_recovery_unavailable")
+                body = rejection["body"]
+                if (type(body) is not bytes or not body or len(body) > 2 * 1024 * 1024
+                        or hashlib.sha256(body).hexdigest() != expected_body_sha256):
+                    raise RunUnavailable("rejection_body_hash_mismatch")
+                plan = json.loads(row["plan"])
+                validate_plan(plan)
+                if (plan["run_id"] != run_id
+                        or digest({key: value for key, value in plan.items() if key != "run_id"}) != run_id):
+                    raise RunUnavailable("saved_plan_hash_mismatch")
+                error = json.loads(row["error"]) if row["error"] is not None else None
+                plan_hash = hashlib.sha256(row["plan"].encode("utf-8")).hexdigest()
+                if audit is not None and (audit["body_sha256"] != expected_body_sha256
+                                          or audit["plan_sha256"] != plan_hash):
+                    raise RunUnavailable("recovery_audit_hash_mismatch")
+                initial = (row["status"] in ("failed", "outcome_unknown") and type(error) is dict
+                           and error.get("code") == "invalid_response"
+                           and row["response"] is None and row["response_sha256"] is None and row["result"] is None
+                           and (audit is None or audit["phase"] == "prepared"
+                                and audit["original_error"] == error and audit["original_status"] == row["status"]))
+                continuing = (row["status"] in ("response_saved", "completed") and audit is not None
+                              and row["error"] is None)
+                if not initial and not continuing:
+                    raise RunUnavailable("rejection_recovery_state_conflict")
+                response = _decode_response(plan["request"], body)
+                # Both transport and domain validation precede even the audit
+                # write. No incompatible body can alter the original ledger.
+                interpret(plan, response)
+                encoded, response_hash = canonical_json(response), digest(response)
+                if audit is not None and audit["response_sha256"] != response_hash:
+                    raise RunUnavailable("recovery_audit_hash_mismatch")
+                if continuing:
+                    if row["response"] != encoded or row["response_sha256"] != response_hash:
+                        raise RunUnavailable("saved_response_hash_mismatch")
+                else:
+                    if audit is None:
+                        audit = {"contract_version": "assessment-rejection-recovery-v1", "run_id": run_id,
+                                 "body_sha256": expected_body_sha256, "plan_sha256": plan_hash,
+                                 "response_sha256": response_hash, "original_error": error,
+                                 "original_status": row["status"], "phase": "prepared", "actor_uid": os.geteuid(),
+                                 "service_version": __version__, "created_at": time.time()}
+                        self._save_recovery_audit(run_id, audit)
+                    db.execute("""UPDATE runs SET status='response_saved',response=?,response_sha256=?,
+                                  error=NULL,updated=? WHERE id=? AND status IN ('failed','outcome_unknown')""",
+                               (encoded, response_hash, time.time(), run_id))
+            result = self.replay(run_id)
+            if audit["phase"] != "completed":
+                self._save_recovery_audit(run_id, {**audit, "phase": "completed", "completed_at": time.time()})
+            return result

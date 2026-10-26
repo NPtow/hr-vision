@@ -32,6 +32,30 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(result, self.run_result(deepcopy(self.value)))
         self.assertEqual(result["pool"], {"size": 1, "candidate_ids": ["candidate-1"]})
 
+    def test_machine_float_ties_in_both_profiles_preserve_raw_answers(self):
+        values = [.04, .14, .33999999999999997, .11, .03]
+        parameter = self.value['candidate_profiles'][0]['parameters'][0]
+        set_distribution(parameter, values, unknown=.34, selected='L3')
+        answer = self.value['vacancy_profile']['parameters'][0]['raw_answers']['level']
+        answer['probabilities'] = dict(zip(['L1', 'L2', 'L3', 'L4', 'L5', UNKNOWN], values + [.34]))
+        before = deepcopy(self.value)
+        result = self.run_result()
+        self.assertEqual(self.value, before)
+        self.assertEqual(result['items'][0]['parameters'][0]['levels'][2]['p_raw'], values[2])
+
+    def test_true_nonmaximum_is_rejected_on_both_profile_boundaries(self):
+        for boundary in ('candidate', 'vacancy'):
+            value = deepcopy(self.value)
+            values = [.04, .14, .339, .11, .03]
+            if boundary == 'candidate':
+                set_distribution(value['candidate_profiles'][0]['parameters'][0],
+                                 values, unknown=.341, selected='L3')
+            else:
+                answer = value['vacancy_profile']['parameters'][0]['raw_answers']['level']
+                answer['probabilities'] = dict(zip(['L1', 'L2', 'L3', 'L4', 'L5', UNKNOWN], values + [.341]))
+            with self.subTest(boundary=boundary), self.assertRaises(InvalidInput):
+                self.run_result(value)
+
     def test_conditional_numeric_mass_excludes_unknown_without_overwriting_raw(self):
         for parameter in self.value["candidate_profiles"][0]["parameters"]:
             set_distribution(parameter, [0, 0.16, 0.4, 0.24, 0], unknown=0.2)
