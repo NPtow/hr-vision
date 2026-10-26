@@ -736,6 +736,8 @@ if __name__ == '__main__':
     call_cleanup.start_worker(CANDIDATE_PORTAL)
     import assessment_jobs
     assessment_jobs.start_worker(CANDIDATE_PORTAL)
+    import employer_review
+    employer_review.start_worker(CANDIDATE_PORTAL)
     candidate_notifications.start_worker(connect, update_handler=CANDIDATE_BOT.handle_update,
         telegram_renderer=CANDIDATE_BOT.render_notification)
     HH_ROUTES.start_worker()
