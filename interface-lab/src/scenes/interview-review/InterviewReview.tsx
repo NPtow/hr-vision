@@ -10,7 +10,6 @@ import candidateRepeatAsset from '../employer-workspace/assets/candidate-profile
 import { groupTranscriptTurns, parseMeetingTranscript, transcriptInRange } from '../connected-journey/transcript';
 import { CandidateInterviewPlayer } from './CandidateInterviewPlayer';
 import type { InterviewAssistantRequest } from './interview-assistant-api';
-import type { AssessmentPresentation } from '../interview-assessment/types';
 
 export type { InterviewMedia } from './InterviewMediaContext';
 export type InterviewReviewProps = {
@@ -22,8 +21,6 @@ export type InterviewReviewProps = {
 };
 
 export type RecordingChapter = {
-  /** Parsed speech is not a thematic chapter, even when reused by legacy views. */
-  kind?: 'transcript';
   title: string;
   detail: string;
   fragment: string;
@@ -52,10 +49,6 @@ export type RecordingReviewProps = {
   transcriptText?: string;
   /** False when transcript timestamps have not been mapped to this recording. */
   transcriptSeekable?: boolean;
-  recordingId?: string;
-  onEvidenceNavigate?: (evidence: import('../interview-assessment/types').AssessmentEvidence, criterionId: string) => boolean;
-  evidenceRequest?: { recordingId: string; seconds: number; requestId: string;
-    evidence?: import('../interview-assessment/types').AssessmentEvidence; criterionId?: string };
   emptyMessage?: string;
   fullChapters?: RecordingChapter[];
   shortPlaylist?: boolean;
@@ -64,12 +57,7 @@ export type RecordingReviewProps = {
   commentTimestamps?: { seconds: number; count: number }[];
   comments?: { id: string; seconds: number; text: string; createdAt: string }[];
   canComment?: boolean;
-  /** Public profiles retain review modes but do not ask for fragment feedback. */
-  hideFeedbackQuestions?: boolean;
   assistant?: InterviewAssistantRequest;
-  /** Only an authenticated adapter may supply a ready assessment and persistence. */
-  assessment?: AssessmentPresentation;
-  assessmentStatus?: 'loading' | 'unavailable';
 };
 
 /** Parse a source's mm:ss or hh:mm:ss. A missing timestamp is never a seekable chapter. */
