@@ -25,8 +25,6 @@ type Props = {
   historyError: string;
   checkpoint: (snapshot?: NoteSnapshot, reason?: NoteVersion['reason']) => Promise<void>;
   onRestore: (snapshot: NoteSnapshot) => void;
-  restoreVersion?: (id: string) => Promise<void>;
-  hasMoreHistory?: boolean; onMoreHistory?: () => void;
   writable: boolean;
   transcript?: CoachTranscriptTurn[];
   /** Only provide when a recruiter-scoped model endpoint actually exists. */
@@ -35,7 +33,7 @@ type Props = {
 
 export function CoachNotesPanel({
   document, questionNotes, onChange, onSelectQuestion, versions, historyLoading,
-  historyError, checkpoint, onRestore, restoreVersion, hasMoreHistory, onMoreHistory, writable, transcript, onEnhance,
+  historyError, checkpoint, onRestore, writable, transcript, onEnhance,
 }: Props) {
   const [view, setView] = useState<'edit' | 'history' | 'version' | 'enhanced'>('edit');
   const [selected, setSelected] = useState<NoteVersion>();
@@ -66,7 +64,6 @@ export function CoachNotesPanel({
     const base = latest.current.fingerprint;
     setBusy(true); setError('');
     try {
-      if (restoreVersion) { await restoreVersion(version.id); if (mounted.current) setView('edit'); return; }
       await checkpoint(latest.current.snapshot, 'before_restore');
       if (!mounted.current || !latest.current.writable) return;
       if (latest.current.fingerprint !== base) throw new Error('Notes changed');
@@ -146,7 +143,6 @@ export function CoachNotesPanel({
           <span className="rcc-version-dot"/><span><strong>{dateLabel(version.createdAt)}</strong><small>{reasonLabel(version.reason)}{index === 0 ? ' · последняя' : ''}</small>
             <p>{documentText(version.snapshot.document).trim().slice(0, 100) || Object.values(version.snapshot.questionNotes).join(' ').slice(0, 100) || 'Пустая заметка'}</p></span><ChevronRight size={16}/>
         </button>)}
-        {hasMoreHistory && <button disabled={historyLoading} onClick={onMoreHistory}>Показать более ранние</button>}
       </div>}
       {view === 'version' && selected && <>
         <p className="rcc-note-version-date">{dateLabel(selected.createdAt)} · {reasonLabel(selected.reason)}</p>

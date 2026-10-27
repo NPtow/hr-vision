@@ -1,9 +1,0 @@
-<clickhouse>
-  <profiles><default>
-    <max_threads>2</max_threads>
-    <max_memory_usage>200000000</max_memory_usage>
-    <max_execution_time>20</max_execution_time>
-    <log_queries>0</log_queries>
-  </default></profiles>
-  <users><default><networks><ip>::/0</ip></networks></default></users>
-</clickhouse>

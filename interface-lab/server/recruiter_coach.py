@@ -4,16 +4,14 @@ Drafts are supplied by a human-operated agent. Approval is a separate recruiter
 command; an interview pins its approved revision when the recruiter joins.
 All public entry points are called after interview ownership is checked.
 """
-import base64
 import json
-import uuid
 import re
 from urllib.parse import urlsplit
 
 from domain import require, iso, now, text
 
 PATHS = {'/api/hr/recruiter/interview/coach/' + action for action in
-         ('state', 'context', 'pin', 'draft', 'approve', 'progress', 'backup', 'history', 'restore', 'resume')}
+         ('state', 'context', 'pin', 'draft', 'approve', 'progress', 'backup')}
 
 def init(db):
     db.executescript('''
@@ -27,15 +25,6 @@ def init(db):
         script_revision INTEGER, revision INTEGER NOT NULL DEFAULT 0,
         progress TEXT NOT NULL DEFAULT '{}', backup_url TEXT NOT NULL DEFAULT '',
         updated_at TEXT NOT NULL);
-      CREATE TABLE IF NOT EXISTS cp_interview_note_versions (
-        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
-        id TEXT NOT NULL UNIQUE,
-        interview_id TEXT NOT NULL REFERENCES cp_interviews(id),
-        script_revision INTEGER,
-        body TEXT NOT NULL, reason TEXT NOT NULL, created_by TEXT NOT NULL,
-        created_at TEXT NOT NULL);
-      CREATE INDEX IF NOT EXISTS cp_interview_note_history
-        ON cp_interview_note_versions(interview_id, sequence);
     ''')
 
 
@@ -137,7 +126,7 @@ def pin(db, cid, iid):
     return load(db, cid, iid)
 
 
-def save_progress(db, cid, iid, body, actor=""):
+def save_progress(db, cid, iid, body):
     state = load(db, cid, iid)
     require(_revision(body.get('expectedRevision')) == state['revision'],
             'Заметки изменились в другом окне. Скопируйте свой текст и обновите данные.', 409)
@@ -146,7 +135,7 @@ def save_progress(db, cid, iid, body, actor=""):
             body.get('scriptRevision') == (active['revision'] if active else None), 'Версия скрипта изменилась.', 409)
     require(state['interviewStatus'] in ('live', 'completed'), 'Заметки доступны после начала интервью.', 409)
     value = body.get('progress')
-    require(isinstance(value, dict) and set(value) <= {'currentId', 'answers', 'general', 'noteDocument'}, 'Проверьте заметки.', 400)
+    require(isinstance(value, dict) and set(value) <= {'currentId', 'answers', 'general'}, 'Проверьте заметки.', 400)
     ids = {q['id'] for q in active['questions']} if active else set()
     current = value.get('currentId', active['questions'][0]['id'] if active else '')
     require(isinstance(current, str) and (current in ids if ids else current == ''),
@@ -159,16 +148,6 @@ def save_progress(db, cid, iid, body, actor=""):
                 answer.get('status', '') in ('', 'answered', 'skipped'), 'Проверьте ответ.', 400)
         cleaned[qid] = {'status': answer.get('status', ''), 'note': text(answer.get('note', ''), 12000, required=False)}
     progress = {'currentId': current, 'answers': cleaned, 'general': text(value.get('general', ''), 24000, required=False)}
-    if 'noteDocument' in value:
-        progress['noteDocument'] = note_document(value['noteDocument'])
-    elif state['progress'].get('noteDocument') and progress['general'] == state['progress'].get('general', ''):
-        # Older clients may update navigation without knowing about rich notes.
-        progress['noteDocument'] = state['progress']['noteDocument']
-    else:
-        progress['noteDocument'] = plain_document(progress['general'])
-    if _notes_changed(state['progress'], progress):
-        _capture(db, iid, active['revision'] if active else None, state['progress'], actor, 'manual')
-        _capture(db, iid, active['revision'] if active else None, progress, actor, 'manual')
     _state_row(db, iid)
     db.execute('''UPDATE cp_interview_coach SET progress=?,script_revision=?,revision=revision+1,updated_at=?
                   WHERE interview_id=?''',
@@ -217,21 +196,13 @@ def handle(db, cid, iid, action, body, actor):
     fields = {'state': set(), 'context': set(), 'pin': set(),
               'draft': {'expectedRevision', 'questions', 'source'}, 'approve': {'revision'},
               'progress': {'expectedRevision', 'scriptRevision', 'progress'},
-              'backup': {'expectedRevision', 'url'},
-              'history': {'beforeVersionId'}, 'resume': set(),
-              'restore': {'expectedRevision', 'scriptRevision', 'versionId'}}
+              'backup': {'expectedRevision', 'url'}}
     require(action in fields, 'Не найдено.', 404)
     require(set(body) <= common | fields[action], 'Проверьте поля запроса.', 400)
     if action == 'state':
         return load(db, cid, iid)
     if action == 'context':
         return context(db, cid, iid)
-    if action == 'history':
-        return history(db, cid, iid, body.get('beforeVersionId'))
-    if action == 'restore':
-        return restore(db, cid, iid, body, actor)
-    if action == 'resume':
-        return original_resume(db, cid, iid)
     if action == 'pin':
         return pin(db, cid, iid)
     if action == 'draft':
@@ -240,173 +211,4 @@ def handle(db, cid, iid, action, body, actor):
         return approve(db, cid, iid, body, actor)
     if action == 'backup':
         return save_backup(db, cid, iid, body)
-    return save_progress(db, cid, iid, body, actor)
-
-
-def plain_document(value):
-    """Losslessly migrate the old plain note without manufacturing formatting."""
-    return {'type': 'doc', 'content': [
-        {'type': 'paragraph', **({'content': [{'type': 'text', 'text': line}]} if line else {})}
-        for line in value.replace('\r\n', '\n').split('\n')]}
-
-
-def note_document(value):
-    """Only the editor's non-executable text schema, with bounded tree work."""
-    count = 0
-    chars = 0
-    blocks = {'paragraph', 'heading', 'bulletList', 'orderedList', 'blockquote'}
-
-    def visit(node, depth=0):
-        nonlocal count, chars
-        count += 1
-        require(depth <= 16 and count <= 3000, 'Заметка слишком сложная. Разделите её на части.', 400)
-        require(isinstance(node, dict) and set(node) <= {'type', 'content', 'text', 'attrs', 'marks'},
-                'Недопустимый формат заметки.', 400)
-        kind = node.get('type')
-        require(kind in blocks | {'doc', 'listItem', 'text', 'hardBreak'}, 'Недопустимый блок заметки.', 400)
-        attrs = node.get('attrs', {})
-        require(isinstance(attrs, dict), 'Недопустимые свойства заметки.', 400)
-        if kind == 'heading':
-            require(set(attrs) == {'level'} and type(attrs['level']) is int and attrs['level'] in (2, 3),
-                    'Допустимы заголовки второго и третьего уровня.', 400)
-        elif kind == 'orderedList':
-            require(set(attrs) <= {'start', 'type'} and type(attrs.get('start', 1)) is int and
-                    1 <= attrs.get('start', 1) <= 1000000 and attrs.get('type') in (None, '1', 'a', 'A', 'i', 'I'),
-                    'Недопустимая нумерация списка.', 400)
-        else:
-            require(not attrs, 'Недопустимые свойства блока.', 400)
-        marks = node.get('marks', [])
-        require(isinstance(marks, list) and len(marks) <= 2 and (kind in ('text', 'hardBreak') or not marks),
-                'Недопустимое форматирование заметки.', 400)
-        seen = set()
-        for mark in marks:
-            require(isinstance(mark, dict) and set(mark) == {'type'} and mark.get('type') in ('bold', 'italic') and
-                    mark['type'] not in seen, 'Недопустимое форматирование заметки.', 400)
-            seen.add(mark['type'])
-        if kind == 'text':
-            require(isinstance(node.get('text'), str) and len(node['text']) > 0 and 'content' not in node,
-                    'Недопустимый текст заметки.', 400)
-            chars += len(node['text'])
-            require(chars <= 24000, 'Заметка длиннее 24 000 символов.', 400)
-        else:
-            require('text' not in node, 'Недопустимый текст блока.', 400)
-        children = node.get('content', [])
-        require(isinstance(children, list), 'Недопустимое содержимое заметки.', 400)
-        if kind in ('text', 'hardBreak'):
-            require(not children, 'Недопустимое содержимое строки.', 400)
-        elif kind in ('paragraph', 'heading'):
-            require(all(isinstance(child, dict) and child.get('type') in ('text', 'hardBreak') for child in children),
-                    'Недопустимое содержимое абзаца.', 400)
-        elif kind in ('doc', 'blockquote'):
-            require(bool(children) and all(isinstance(child, dict) and child.get('type') in blocks for child in children),
-                    'В заметке должен быть текстовый блок.', 400)
-        elif kind in ('bulletList', 'orderedList'):
-            require(bool(children) and all(isinstance(child, dict) and child.get('type') == 'listItem' for child in children),
-                    'В списке должны быть пункты.', 400)
-        elif kind == 'listItem':
-            require(bool(children) and isinstance(children[0], dict) and children[0].get('type') == 'paragraph' and
-                    all(isinstance(child, dict) and child.get('type') in blocks for child in children),
-                    'Недопустимый пункт списка.', 400)
-        for child in children:
-            visit(child, depth + 1)
-
-    require(isinstance(value, dict) and value.get('type') == 'doc', 'Недопустимый документ заметки.', 400)
-    visit(value)
-    encoded = json.dumps(value, ensure_ascii=False, separators=(',', ':'))
-    require(len(encoded.encode('utf-8')) <= 128000, 'Заметка слишком большая.', 400)
-    return json.loads(encoded)
-
-
-def _note_payload(progress):
-    return {'noteDocument': progress.get('noteDocument') or plain_document(progress.get('general', '')),
-            'general': progress.get('general', ''), 'answers': progress.get('answers', {})}
-
-
-def _notes_key(progress):
-    value = _note_payload(progress)
-    value['answers'] = {qid: answer.get('note', '') for qid, answer in value['answers'].items() if answer.get('note', '')}
-    return json.dumps(value, sort_keys=True, ensure_ascii=False)
-
-
-def _notes_changed(before, after):
-    return _notes_key(before) != _notes_key(after)
-
-
-def _capture(db, iid, script_revision, progress, actor, reason, *, force=False):
-    latest = db.execute('SELECT body FROM cp_interview_note_versions WHERE interview_id=? ORDER BY sequence DESC LIMIT 1',
-                        (iid,)).fetchone()
-    if not force and latest and not _notes_changed(json.loads(latest[0]), progress):
-        return
-    db.execute('''INSERT INTO cp_interview_note_versions
-        (id,interview_id,script_revision,body,reason,created_by,created_at) VALUES (?,?,?,?,?,?,?)''',
-               (uuid.uuid4().hex, iid, script_revision, json.dumps(_note_payload(progress), ensure_ascii=False),
-                reason, actor, iso(now())))
-
-
-def history(db, cid, iid, before=None):
-    interview(db, cid, iid)
-    cursor = None
-    if before is not None:
-        require(isinstance(before, str) and len(before) <= 64, 'Проверьте версию заметки.', 400)
-        cursor = db.execute('SELECT sequence FROM cp_interview_note_versions WHERE id=? AND interview_id=?',
-                            (before, iid)).fetchone()
-        require(cursor, 'Версия заметки не найдена.', 404)
-    rows = db.execute('''SELECT v.id,v.body,v.reason,v.created_by,v.created_at,a.name
-        FROM cp_interview_note_versions v LEFT JOIN rc_accounts a ON a.id=v.created_by
-        WHERE v.interview_id=? AND (? IS NULL OR v.sequence<?) ORDER BY v.sequence DESC LIMIT 101''',
-        (iid, cursor[0] if cursor else None, cursor[0] if cursor else None)).fetchall()
-    versions = []
-    for row in rows[:100]:
-        body = json.loads(row[1])
-        versions.append({'id': row[0], 'scope': iid, 'createdAt': row[4], 'reason': row[2],
-                         'author': {'id': row[3], 'name': row[5] or ''},
-                         'snapshot': {'document': body['noteDocument'],
-                                      'questionNotes': {qid: answer.get('note', '') for qid, answer in body['answers'].items()
-                                                        if answer.get('note', '')}}})
-    return {'versions': versions, 'hasMore': len(rows) > 100,
-            'nextCursor': versions[-1]['id'] if len(rows) > 100 else None}
-
-
-def restore(db, cid, iid, body, actor):
-    state = load(db, cid, iid)
-    require(_revision(body.get('expectedRevision')) == state['revision'],
-            'Заметки изменились в другом окне. Обновите данные перед восстановлением.', 409)
-    active = state['active']
-    active_revision = active['revision'] if active else None
-    require((type(body.get('scriptRevision')) is int if active else body.get('scriptRevision') is None) and
-            body.get('scriptRevision') == active_revision, 'Версия скрипта изменилась.', 409)
-    require(state['interviewStatus'] in ('live', 'completed'), 'Заметки доступны после начала интервью.', 409)
-    version_id = body.get('versionId')
-    require(isinstance(version_id, str) and len(version_id) <= 64, 'Укажите версию заметки.', 400)
-    row = db.execute('SELECT body,script_revision FROM cp_interview_note_versions WHERE id=? AND interview_id=?',
-                     (version_id, iid)).fetchone()
-    require(row, 'Версия заметки не найдена.', 404)
-    require(row[1] is None or row[1] == active_revision, 'Эта версия относится к другому скрипту.', 409)
-    old = json.loads(row[0])
-    ids = {q['id'] for q in active['questions']} if active else set()
-    require(set(old['answers']) <= ids, 'Эта версия относится к другому скрипту.', 409)
-    progress = dict(state['progress'])
-    answers = {qid: dict(answer) for qid, answer in progress.get('answers', {}).items()}
-    for qid in set(answers) | set(old['answers']):
-        answers[qid] = {'status': answers.get(qid, {}).get('status', ''),
-                        'note': old['answers'].get(qid, {}).get('note', '')}
-    progress.update(general=old['general'], noteDocument=note_document(old['noteDocument']), answers=answers)
-    # Both versions and progress are in the caller's BEGIN IMMEDIATE transaction.
-    _capture(db, iid, active_revision, state['progress'], actor, 'before_restore', force=True)
-    _capture(db, iid, active_revision, progress, actor, 'restored', force=True)
-    _state_row(db, iid)
-    db.execute('UPDATE cp_interview_coach SET progress=?,revision=revision+1,updated_at=? WHERE interview_id=?',
-               (json.dumps(progress, ensure_ascii=False), iso(now()), iid))
-    return load(db, cid, iid)
-
-
-def original_resume(db, cid, iid):
-    interview(db, cid, iid)
-    row = db.execute('SELECT filename,mime,content FROM cp_resumes WHERE candidate_id=?', (cid,)).fetchone()
-    if not row:
-        return {'resume': None}
-    require(row[1] in ('application/pdf', 'image/jpeg', 'image/png'),
-            'Оригинал резюме сохранён, но этот формат пока не поддерживается для просмотра. Нужен PDF, JPG или PNG.', 409)
-    require(len(row[2]) <= 20 * 1024 * 1024, 'Файл резюме превышает 20 МБ.', 413)
-    return {'resume': {'filename': row[0], 'mimeType': row[1],
-                       'contentBase64': base64.b64encode(row[2]).decode('ascii')}}
+    return save_progress(db, cid, iid, body)

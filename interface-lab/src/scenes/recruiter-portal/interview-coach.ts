@@ -1,10 +1,9 @@
-import type { JSONContent } from '@tiptap/core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { recruiterRequest } from './api';
 
 export type ScriptQuestion = { id: string; topic: string; question: string; why: string; followups: string[] };
 export type InterviewScript = { revision: number; questions: ScriptQuestion[]; source: string; createdAt: string; approvedAt: string | null; approvedBy: string | null };
-export type CoachProgress = { currentId?: string; answers?: Record<string, { status: '' | 'answered' | 'skipped'; note: string }>; general?: string; noteDocument?: JSONContent };
+export type CoachProgress = { currentId?: string; answers?: Record<string, { status: '' | 'answered' | 'skipped'; note: string }>; general?: string };
 export type CoachState = {
   candidateId: string; interviewId: string; interviewStatus: 'booked' | 'live' | 'completed';
   latest: InterviewScript | null; approved: InterviewScript | null; active: InterviewScript | null;
@@ -82,14 +81,14 @@ export function useInterviewCoach({ candidateId, interviewId, token }: Identity)
     draft.current = next; version.current++; readSequence.current++;
     setProgress(next); setDirty(true);
   }
-  async function command(action: 'draft' | 'approve' | 'backup' | 'pin' | 'restore', body: Record<string, unknown> = {}) {
+  async function command(action: 'draft' | 'approve' | 'backup' | 'pin', body: Record<string, unknown> = {}) {
     if (commandLock.current) return false;
     commandLock.current = true; readSequence.current++;
     try {
       if (!await flush()) return false;
       setBusy(true); setError('');
       // Backup and progress share a revision. Read it after flushing notes.
-      const input = action === 'restore' ? { ...body, expectedRevision: latest.current?.revision ?? 0, scriptRevision: latest.current?.active?.revision ?? null } : action === 'backup' ? { ...body, expectedRevision: latest.current?.revision ?? 0 } : body;
+      const input = action === 'backup' ? { ...body, expectedRevision: latest.current?.revision ?? 0 } : body;
       const next = await request<CoachState>(action, input);
       accept(next, version.current === saved.current);
       return true;
@@ -112,8 +111,7 @@ export function useInterviewCoach({ candidateId, interviewId, token }: Identity)
     return () => clearTimeout(timer);
   }, [progress, dirty, error]);
   return { data, progress, dirty, busy, error, change, flush, command, refresh,
-    context: () => request<CoachContext>('context'),
-    originalResume: () => request<{ resume: { filename: string; mimeType: string; contentBase64: string } | null }>('resume') };
+    context: () => request<CoachContext>('context') };
 }
 
 export type InterviewCoachController = ReturnType<typeof useInterviewCoach>;

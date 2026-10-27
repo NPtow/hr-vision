@@ -1,0 +1,150 @@
+.ems-scene { --ems-ink:#242229; --ems-muted:#77727f; --ems-soft:#f5f4f7; --ems-accent:#6854d8; min-height:100dvh; background:#f4f3f7; }
+.ems-scene .ew-shell,.ems-scene .ew-candidates-view .ew-topbar { background:#f4f3f7; }
+.ems-scene .ew-topbar { padding:0 32px; }
+.ems-scene .esc-workspace { padding-top:8px; }
+.ems-scene .ew-vacancy-header { max-width:1260px; margin:auto; padding-top:24px; padding-bottom:18px; }
+.ems-scene .ew-vacancy-title h1 { font-size:22px; }
+.ems-scene .ew-account { pointer-events:none; }
+.ems-scene .ew-account svg { display:none; }
+.ems-one-person { display:grid; place-items:center; width:36px; height:36px; border-radius:50%; border:2px solid var(--ems-accent); font-size:12px; }
+.ems-scene .esc-person-copy h2 { font-size:28px; }
+.ems-scene .esc-card { gap:28px; }
+/* Local render slot: retain the production stage card and its history, replace only its meeting interior. */
+.ems-scene .esc-materials:has(> .ems-meeting) { padding:0; border-radius:0; background:none; }
+.ems-scene .esc-materials:has(> .ems-meeting) > .esc-materials-heading,
+.ems-scene .esc-materials:has(> .ems-meeting) > .esc-facts { display:none; }
+.ems-scene .esc-interview > .esc-caption { display:none; }
+.ems-lab { position:relative; z-index:5; display:flex; justify-content:space-between; align-items:center; gap:12px 24px; min-height:48px; padding:10px 24px; background:#eae8ef; color:#615a6c; font-size:12px; }
+.ems-lab details { max-width:400px; }
+.ems-lab summary { cursor:pointer; list-style:none; }
+.ems-lab details[open] p { position:absolute; z-index:20; top:45px; left:20px; max-width:390px; padding:18px; border-radius:14px; background:white; box-shadow:0 8px 26px #2d243426; font-size:13px; line-height:1.55; }
+.ems-lab-controls { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+.ems-lab-controls label { display:flex; gap:7px; align-items:center; }
+.ems-lab-controls select { border:0; border-radius:6px; padding:5px 7px; background:#fff9; color:#3c3548; font-size:12px; }
+.ems-lab-controls > button { display:flex; align-items:center; gap:6px; border:0; border-radius:8px; padding:7px 10px; background:#fff; color:#5c4caf; font-size:12px; }
+.ems-lab-controls .ems-reset { background:transparent; padding:7px; }
+.ems-meeting { display:flex; flex-direction:column; gap:22px; min-width:0; }
+.ems-meeting-header { display:flex; align-items:flex-start; gap:20px; justify-content:space-between; }
+.ems-meeting-header > div { display:grid; gap:6px; min-width:0; }
+.ems-scene .ems-meeting-header h3 { font-size:23px; line-height:1.3; font-weight:580; }
+.ems-meeting-header p { font-size:16px; color:#55505e; }
+.ems-meeting-header p span { font-size:13px; color:var(--ems-muted); margin-left:4px; }
+.ems-icon { display:grid; place-items:center; flex:none; height:36px; width:36px; border:0; border-radius:10px; background:none; color:#77717f; }
+.ems-icon:hover { background:var(--ems-soft); }
+.ems-meeting-meta { display:flex; align-items:flex-start; gap:16px; justify-content:space-between; flex-wrap:wrap; }
+.ems-participants { flex:0 1 auto; max-width:100%; }
+.ems-participants summary { display:flex; align-items:center; flex-wrap:wrap; gap:8px; color:#66616e; font-size:14px; cursor:pointer; list-style:none; }
+.ems-participants summary::-webkit-details-marker { display:none; }
+.ems-participants[open] summary > svg { transform:rotate(180deg); }
+.ems-avatar-stack { display:flex; padding-right:5px; }
+.ems-avatar-stack > span { display:grid; place-items:center; width:28px; height:28px; border-radius:50%; border:2px solid white; color:#665f75; font-size:9px; margin-right:-5px; }
+.ems-participant-list { display:grid; gap:16px; padding:18px 20px; margin-top:12px; border-radius:16px; background:var(--ems-soft); min-width:min(390px,100%); }
+.ems-participant-list > p { font-size:13px; color:var(--ems-muted); }
+.ems-participant-list > div { display:flex; gap:12px; align-items:center; }
+.ems-person-dot { display:grid; place-items:center; width:34px; height:34px; border-radius:50%; background:#eeedf2; color:#716981; font-size:11px; flex:none; }
+.ems-participant-list > div > span:nth-child(2) { display:grid; gap:2px; flex:1; }
+.ems-participant-list strong { font-size:14px; font-weight:500; }
+.ems-participant-list small { font-size:12px; color:var(--ems-muted); }
+.ems-participant-list > div > svg { color:#76877d; }
+.ems-status { display:flex; align-items:center; gap:7px; padding-top:4px; white-space:nowrap; font-size:13px; color:var(--ems-muted); }
+.ems-status i { height:5px; width:5px; border-radius:50%; background:#aaa6b1; }
+.ems-status-confirmed i,.ems-status-completed i { background:#6f9c84; }
+.ems-status-live i { background:#f45683; box-shadow:0 0 0 3px #f4568315; }
+.ems-status-pending i { background:#b9a16b; }
+.ems-upcoming { display:flex; align-items:center; justify-content:space-between; gap:24px; padding:26px 28px; border-radius:22px; background:var(--ems-soft); min-height:116px; }
+.ems-upcoming > p { max-width:440px; font-size:16px; line-height:1.6; color:#66616e; }
+.ems-primary { display:inline-flex; align-items:center; justify-content:center; gap:9px; min-height:44px; padding:11px 18px; border:0; border-radius:12px; background:#105aaf url(../employer-workspace/assets/hrds-primary.svg) center/100% 100%; color:#fff; box-shadow:inset 0 0 22px #ffffff33,inset 0 -7px 36px #ffffff26; font-size:14px; font-weight:500; flex:none; cursor:pointer; }
+.ems-primary:hover { filter:brightness(1.07); }
+.ems-primary:disabled { opacity:.4; cursor:default; }
+.ems-text-button { background:transparent; color:#77717f; border:0; min-height:36px; padding:6px 8px; border-radius:8px; font-size:13px; cursor:pointer; }
+.ems-text-button:hover { background:#eceaf0; }
+.ems-menu { z-index:100; padding:7px; border-radius:15px; background:#fff; color:#49414f; min-width:205px; box-shadow:0 5px 28px #32263a29; font-family:'HRDS Roboto Flex',Arial,sans-serif; font-size:14px; }
+.ems-menu [role=menuitem] { padding:11px 13px; border-radius:9px; cursor:pointer; }
+.ems-menu [data-highlighted] { background:#f3f1f7; outline:none; }
+.ems-danger { color:#a3435d!important; }
+.ems-result { padding:24px; background:var(--ems-soft); border-radius:20px; }
+.ems-result-heading { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+.ems-result-heading h4 { font-weight:550; font-size:15px; }
+.ems-result > p { max-width:850px; line-height:1.6; font-size:16px; }
+.ems-result > small { display:block; margin-top:14px; color:var(--ems-muted); font-size:12px; }
+.ems-result textarea,.ems-editor textarea,.ems-comment textarea { width:100%; resize:vertical; border:0; border-radius:12px; padding:12px 14px; background:white; color:var(--ems-ink,#242229); font:inherit; line-height:1.55; }
+.ems-result form { display:grid; gap:14px; }
+.ems-note-empty { display:flex; align-items:center; gap:10px; padding:6px 0; min-height:36px; border:0; background:transparent; color:#77717f; font-size:15px; }
+.ems-recording { min-width:0; }
+.ems-processing { display:flex; align-items:center; gap:12px; min-height:70px; color:var(--ems-muted); font-size:14px; }
+.ems-next { display:flex; justify-content:flex-end; padding-top:2px; }
+.ems-call { border-radius:22px; overflow:hidden; background:#17151b; color:white; }
+.ems-call-grid { display:grid; grid-template-columns:1.4fr 1fr; gap:8px; padding:8px; min-height:360px; }
+.ems-call-person { position:relative; display:grid; place-items:center; background:#302b38; border-radius:15px; min-height:170px; }
+.ems-call-person:first-child { grid-row:span 2; background:linear-gradient(135deg,#342e3e,#211e26); }
+.ems-call-person > span { display:grid; place-items:center; width:68px; height:68px; border-radius:50%; font-size:22px; color:#514a5f; }
+.ems-call-person:first-child > span { width:100px; height:100px; font-size:30px; color:#f4f1f8; }
+.ems-call-person p { position:absolute; bottom:13px; left:16px; font-size:13px; color:#e4e0e9; }
+.ems-call-footer { display:flex; align-items:center; justify-content:space-between; gap:14px; min-height:70px; padding:12px 18px; }
+.ems-call-footer > span { display:flex; gap:7px; align-items:center; font-size:12px; color:#bcb4c6; width:130px; }
+.ems-call-footer > span > i { height:5px; width:5px; border-radius:50%; background:#da7695; }
+.ems-call-footer > div { display:flex; align-items:center; gap:8px; }
+.ems-call-control { display:grid; place-items:center; border:0; width:42px; height:38px; border-radius:11px; background:#37313e; color:white; }
+.ems-call-control[aria-pressed=true] { background:#514050; }
+.ems-call-leave { background:#b44765; }
+.ems-call-finish { border:0; padding:8px 0; background:transparent; color:#bab2c4; font-size:12px; }
+.ems-cancel { display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:#faf3f3; border-radius:14px; padding:16px; }
+.ems-cancel p { flex:1; font-size:14px; }
+.ems-changes { font-size:12px; color:var(--ems-muted); }
+.ems-changes summary { display:inline-flex; gap:5px; align-items:center; cursor:pointer; }
+.ems-changes p { margin-top:8px!important; }
+.ems-dialog-overlay { position:fixed; inset:0; background:#27223248; backdrop-filter:blur(5px); z-index:100; }
+.ems-dialog { position:fixed; z-index:101; top:50%; left:50%; transform:translate(-50%,-50%); width:min(530px,calc(100vw - 32px)); max-height:calc(100dvh - 40px); overflow:auto; padding:30px; border-radius:26px; background:#fff; box-shadow:0 30px 100px #23172b36; }
+.ems-dialog-close { position:absolute; top:18px; right:18px; width:30px; height:30px; display:grid; place-items:center; border:0; border-radius:50%; color:#77717f; background:#f4f3f6; }
+.ems-editor { display:flex; flex-direction:column; gap:21px; }
+.ems-editor h2 { font-size:23px; font-weight:600; padding-right:24px; margin-bottom:4px!important; }
+.ems-editor > label,.ems-editor-time label { display:grid; gap:7px; color:#77717f; font-size:13px; }
+.ems-editor input:not([type=checkbox]),.ems-editor select { width:100%; min-height:46px; padding:10px 14px; border:0; border-radius:12px; background:#f4f3f6; color:#302c35; }
+.ems-editor-time { display:grid; grid-template-columns:1fr 1fr; gap:8px 16px; }
+.ems-editor-time > span { color:#8a8492; font-size:12px; }
+.ems-editor fieldset { border:0; padding:0; margin:0; display:grid; gap:8px; }
+.ems-editor legend { color:#77717f; font-size:13px; padding:0 0 10px; }
+.ems-staff-option { display:flex; gap:10px; align-items:center; font-size:14px; cursor:pointer; }
+.ems-staff-option input { accent-color:#705ad7; width:16px; height:16px; margin:0; }
+.ems-editor-agenda summary { display:flex; gap:5px; align-items:center; color:#77717f; font-size:13px; cursor:pointer; }
+.ems-editor-agenda textarea { margin-top:10px; background:#f4f3f6; }
+.ems-form-actions { display:flex; align-items:center; gap:14px; }
+.ems-comment { display:grid; gap:10px; }
+.ems-comment textarea { background:#f5f4f7; }
+.ems-comment > div { display:flex; justify-content:flex-end; gap:12px; }
+.ems-comment button { border:0; background:transparent; font-size:13px; color:#777; padding:6px; }
+.ems-comment button[type=submit] { color:#6854d8; }
+.ems-comment button:disabled { opacity:.4; }
+@media(max-width:1000px) {
+  .ems-lab { align-items:flex-start; flex-wrap:wrap; padding:10px 16px; }
+  .ems-lab-controls { gap:8px; }
+  .ems-scene .esc-card { padding:26px; }
+}
+@media(max-width:700px) {
+  .ems-lab-controls { width:100%; }
+  .ems-lab-controls label { flex-wrap:wrap; gap:4px; }
+  .ems-scene .ew-vacancy-header { padding-top:12px; padding-bottom:12px; }
+  .ems-scene .esc-card { padding:22px 18px; gap:24px; }
+  .ems-scene .esc-person-copy h2 { font-size:24px; }
+  .ems-scene .esc-stage-tab { width:148px; }
+  .ems-scene .esc-stage-layer img { width:100%; height:auto; }
+  .ems-scene .ems-meeting-header h3 { font-size:21px; }
+  .ems-meeting-header p { font-size:14px; }
+  .ems-upcoming { flex-direction:column; align-items:flex-start; padding:22px; }
+  .ems-meeting-meta { gap:10px; }
+  .ems-status { font-size:12px; }
+  .ems-result { padding:20px; }
+  .ems-result > p { font-size:15px; }
+  .ems-call-grid { min-height:280px; }
+  .ems-call-person { min-height:130px; }
+  .ems-call-person > span { width:46px; height:46px; font-size:15px; }
+  .ems-call-person:first-child > span { width:68px; height:68px; font-size:22px; }
+  .ems-call-footer { flex-wrap:wrap; }
+  .ems-call-footer > span { width:auto; }
+  .ems-call-finish { width:100%; text-align:right; }
+  .ems-next .ems-primary { width:100%; }
+}
+@media(prefers-reduced-motion:no-preference) {
+  .ems-dialog { animation:ems-dialog-enter .17s ease-out; }
+  @keyframes ems-dialog-enter { from { opacity:0; margin-top:6px; } to { opacity:1; margin-top:0; } }
+}

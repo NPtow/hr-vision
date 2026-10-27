@@ -146,7 +146,7 @@ class CandidateHTTPTest(unittest.TestCase):
             'contentBase64': base64.b64encode(resume.encode()).decode()}, cookie=self.cookie)
         self.assertEqual(code, 200, body)
         code, body, _ = self.request('candidate/profile', {'salaryMin': 150000, 'salaryMax': 200000,
-            'latestStartDate': (now() + dt.timedelta(days=30)).date().isoformat(), 'resumeReviewed': True, 'employmentType': 'full-time', 'anyCompany': True}, cookie=self.cookie)
+            'latestStartDate': (now() + dt.timedelta(days=30)).date().isoformat(), 'resumeReviewed': True}, cookie=self.cookie)
         self.assertEqual(code, 200, body)
         status, state, _ = self.request('recruiter/slots', {'start': iso(self.start), 'recruiterName': self.person['id']}, token=self.manager)
         self.assertEqual(status, 200, state)
@@ -239,36 +239,6 @@ class CandidateHTTPTest(unittest.TestCase):
             finally:
                 connection.close()
 
-    def test_coach_notes_body_limit_requires_auth_before_reading_and_is_scoped(self):
-        # No body is sent. Unauthorized/oversized requests must be rejected before read().
-        for path, token, length, expected in (
-            ('recruiter/interview/coach/progress', '', 100000, 401),
-            ('recruiter/interview/coach/restore', '', 100000, 401),
-            ('recruiter/interview/coach/progress?test=1', '', 100000, 401),
-            ('recruiter/interview/coach/progress', self.manager, 256 * 1024 + 1, 413),
-            ('recruiter/interview/coach/restore', self.manager, 256 * 1024 + 1, 413),
-            ('recruiter/interview/coach/state', self.manager, 32769, 413),
-        ):
-            connection = http.client.HTTPConnection('127.0.0.1', self.server.server_port, timeout=3)
-            try:
-                connection.putrequest('POST', '/api/hr/' + path)
-                connection.putheader('Content-Type', 'application/json')
-                if token:
-                    connection.putheader('Authorization', 'Bearer ' + token)
-                connection.putheader('Content-Length', str(length))
-                connection.endheaders()
-                self.assertEqual(connection.getresponse().status, expected, path)
-            finally:
-                connection.close()
-        # A normal Cyrillic note exceeds the former 32KiB transport ceiling but
-        # must reach the coach's ownership/domain validation rather than get 413.
-        payload = {'candidateId': self.person['id'], 'interviewId': 'not-an-interview',
-                   'expectedRevision': 0, 'scriptRevision': None,
-                   'progress': {'general': 'Подтверждён опыт работы с клиентами. ' * 250}}
-        self.assertGreater(len(json.dumps(payload).encode()), 32768)
-        self.assertEqual(self.request('recruiter/interview/coach/progress', payload,
-                                     token=self.manager)[0], 404)
-
     def test_sparse_registration_cv_review_and_owner_download_survive_reload(self):
         status, person, headers = self.request('candidate/register', {
             'email': str(uuid.uuid4()) + '@example.test', 'password': 'correct-passphrase-123',
@@ -290,14 +260,14 @@ class CandidateHTTPTest(unittest.TestCase):
         payload = {'filename': 'anna.txt', 'contentBase64': base64.b64encode(resume.encode()).decode()}
         status, uploaded, _ = self.request('candidate/resume', payload, cookie=cookie)
         self.assertEqual(status, 200, uploaded)
-        self.assertEqual(uploaded['onboarding'], {'step': 'preferences', 'missingFields': ['employmentType', 'preferredCompanies']})
+        self.assertEqual(uploaded['onboarding'], {'step': 'preferences', 'missingFields': []})
         self.assertNotIn('contentBase64', json.dumps(uploaded))
         self.assertEqual(self.request('candidate/resume', cookie=cookie)[1],
             {**payload, 'mime': 'text/plain'})
         self.assertEqual(self.request('candidate/resume', cookie=self.cookie)[0], 404)
         self.assertEqual(self.request('candidate/resume', token=self.manager)[0], 401)
         changes = {'city': 'Санкт-Петербург', 'residence': 'Петроградский район',
-            'employmentType': 'full-time', 'about': 'Работала с клиентами пять лет.', 'resumeReviewed': True, 'anyCompany': True}
+            'employmentType': 'full-time', 'about': 'Работала с клиентами пять лет.', 'resumeReviewed': True}
         status, reviewed, _ = self.request('candidate/profile', changes, cookie=cookie)
         self.assertEqual(status, 200, reviewed)
         persisted = self.request('candidate/state', cookie=cookie)[1]

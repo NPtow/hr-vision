@@ -36,28 +36,6 @@ class EmployerRoutesTest(unittest.TestCase):
         meeting = self.propose(employer, vacancy, aid)
         return employer, vacancy, person, aid, meeting
 
-    def test_core_display_uses_one_snapshot_and_keeps_published_candidate_during_refresh(self):
-        import employer_review
-        employer = self.employer(); vacancy = self.vacancy(employer)
-        _, aid = self.accepted(employer, vacancy)
-        state = self.state(employer, vacancy)
-        scope = {'source': 'screening', 'candidate': aid, 'applicationId': aid,
-                 'vacancyId': vacancy['id'], 'generation': state['generation'], 'recordingId': 'recording'}
-        with patch.dict('os.environ', {'HR_EMPLOYER_REVIEW_ENABLED': '1'}), \
-             patch('assessment_jobs.read_candidate', side_effect=AssertionError('legacy fallback')):
-            self.assertEqual(self.ok('employer/interview-assessment', scope, token=employer['token'])['status'], 'pending')
-            display = {'revisionId': 'core-run', 'criteria': [], 'feedback': []}
-            with self.app.connect() as db:
-                employer_review.enqueue(db, aid)
-                db.execute("UPDATE er_preparations SET state='ready',assessment=?,published=1,input_revision=? WHERE application_id=?",
-                           (json.dumps(display), employer_review.input_revision(db, aid), aid))
-            orbit = self.ok('employer/interview-assessment', scope, token=employer['token'])
-            self.assertEqual(orbit['assessment'], self.state(employer, vacancy)['candidates'][aid]['assessment'])
-            with self.app.connect() as db:
-                db.execute("UPDATE er_preparations SET state='failed',error='provider_unavailable' WHERE application_id=?", (aid,))
-            self.assertIn(aid, self.state(employer, vacancy)['candidates'])
-            self.assertEqual(self.ok('employer/interview-assessment', scope, token=employer['token'])['assessment'], display)
-
     def join(self, employer, vacancy, person, aid, meeting):
         self.ok('candidate/meeting/confirm', self.exact(aid, meeting), cookie=person['cookie'])
         self.ok('employer/room', self.action_body(employer, vacancy, aid, 'meeting.room',

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { FileText, Upload } from 'lucide-react';
 import * as pdfjs from 'pdfjs-dist';
-import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?worker&url';
+import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
 import './original-resume.css';
 
@@ -13,8 +13,6 @@ const STORE = 'originals';
 type Original = { scope: string; name: string; mimeType: string; blob: Blob; savedAt: string };
 export type OriginalResumeViewerProps = {
   scope: string;
-  source?: { name: string; blob: Blob };
-  allowLocalImport?: boolean;
   document?: { url: string; name: string; mimeType?: string };
 };
 
@@ -251,7 +249,7 @@ function OriginalImage({ original }: { original: Original }) {
 }
 
 /** Original bytes only. A local selection is never uploaded by this component. */
-export function OriginalResumeViewer({ scope, document: supplied, source, allowLocalImport = true }: OriginalResumeViewerProps) {
+export function OriginalResumeViewer({ scope, document: supplied }: OriginalResumeViewerProps) {
   const input = useRef<HTMLInputElement>(null);
   const request = useRef<AbortController | null>(null);
   const [original, setOriginal] = useState<Original | null>(null);
@@ -265,25 +263,22 @@ export function OriginalResumeViewer({ scope, document: supplied, source, allowL
     request.current = controller;
     setOriginal(null); setError(''); setStorageError(''); setBusy(true);
     void (async () => {
-      if (source) {
-        const mimeType = await validateOriginal(source.blob, controller.signal);
-        if (!controller.signal.aborted) setOriginal({scope,name:source.name,blob:source.blob,mimeType,savedAt:''});
-      } else if (supplied?.url) {
+      if (supplied?.url) {
         const blob = await loadServerOriginal(supplied.url, controller.signal);
         const mimeType = await validateOriginal(blob, controller.signal);
         if (!controller.signal.aborted) setOriginal({ scope, name: supplied.name, blob, mimeType, savedAt: '' });
-      } else if (allowLocalImport) {
+      } else {
         const saved = await readStored(scope);
         if (!controller.signal.aborted) setOriginal(saved);
       }
     })().catch(cause => {
       if (!controller.signal.aborted) {
-        if (supplied?.url || source) setError(friendlyError(cause));
+        if (supplied?.url) setError(friendlyError(cause));
         else setStorageError('Не удалось прочитать сохранённый файл. Можно выбрать его снова.');
       }
     }).finally(() => { if (!controller.signal.aborted) setBusy(false); });
     return () => { controller.abort(); request.current?.abort(); };
-  }, [scope, supplied?.url, supplied?.name, source, allowLocalImport]);
+  }, [scope, supplied?.url, supplied?.name]);
   async function choose(file: File) {
     request.current?.abort();
     const controller = new AbortController();
@@ -305,7 +300,7 @@ export function OriginalResumeViewer({ scope, document: supplied, source, allowL
       onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void choose(file); }}/>
     {visible ? <>
       <header className="rcc-original-header">
-        {supplied?.url || source || !allowLocalImport ? <span className="rcc-original-filename"><FileText size={16}/><span>{visible.name}</span></span>
+        {supplied?.url ? <span className="rcc-original-filename"><FileText size={16}/><span>{visible.name}</span></span>
           : <button className="rcc-original-filename" title="Выбрать другой файл" aria-label={`Выбрать другой файл. Сейчас: ${visible.name}`} disabled={busy} onClick={() => input.current?.click()}><FileText size={16}/><span>{visible.name}</span></button>}
         {busy && <span className="rcc-original-pending" role="status">Открываем…</span>}
       </header>
@@ -315,7 +310,7 @@ export function OriginalResumeViewer({ scope, document: supplied, source, allowL
     </> : <div className="rcc-original-empty">
       <FileText size={30} strokeWidth={1.5} aria-hidden="true"/>
       <p>{busy ? 'Открываем резюме…' : 'Оригинал резюме не добавлен'}</p>
-      {!busy && allowLocalImport && <button className="rcc-original-choose" onClick={() => input.current?.click()}><Upload size={16}/>Выбрать файл</button>}
+      {!busy && <button className="rcc-original-choose" onClick={() => input.current?.click()}><Upload size={16}/>Выбрать файл</button>}
     </div>}
     {(error || storageError) && <div className="rcc-original-error" role="alert">{error || storageError}</div>}
   </section>;

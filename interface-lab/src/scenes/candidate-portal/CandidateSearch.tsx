@@ -3,7 +3,6 @@ import { LayoutGroup, MotionConfig, motion, useReducedMotion } from 'motion/reac
 import { ArrowRight, ArrowUpRight, CalendarDays, Check, ChevronDown, Clock3, Play, Video } from 'lucide-react';
 import type { CandidateApplication, CandidateOffer, CandidateState, CandidateWorkflowCommand } from './api';
 import { timeZone } from './api';
-import { TelegramHandoff } from './TelegramHandoff';
 import { applicationAfterInterest, applicationGroup, applicationHistory, applicationOffer, applicationRevision, applicationStatus, canReplyToMeeting, currentApplicationMeeting, meetingInterval, validDate, workspaceDateTime, type ApplicationHistoryItem } from './workspace-model';
 import { applicationCardTone, applicationMeetingIsJoinable, expandedSearchApplications, orderedSearchApplications, vacancyCardDetails } from './candidate-search-model';
 import sandboxGirl from '../../assets/candidate/sandbox-girl.png';
@@ -118,7 +117,7 @@ function VacancyDescription({ application }: { application: CandidateApplication
   </div>;
 }
 
-function ApplicationCard({ application, props, scope, example = false }: { application: CandidateApplication; props: CandidateSearchProps; scope: string; example?: boolean }) {
+function ApplicationCard({ application, props, scope }: { application: CandidateApplication; props: CandidateSearchProps; scope: string }) {
   const reduced = useReducedMotion();
   const card = useRef<HTMLElement>(null);
   const title = useRef<HTMLHeadingElement>(null);
@@ -169,7 +168,6 @@ function ApplicationCard({ application, props, scope, example = false }: { appli
     {tone === 'offer' && <span className="cps-offer-spectrum" aria-hidden="true"/>}
     <div className="cps-card-face">
       <div className="cps-card-summary">
-        {example && <span className="cps-example-label">Пример вакансии</span>}
         <motion.h2 layout={reduced ? false : 'position'} id={titleId} ref={title} tabIndex={open ? -1 : undefined}>
           {open ? application.vacancy.title : <button ref={trigger} type="button" className="cps-card-trigger" aria-expanded={false} aria-describedby={statusId} onClick={() => onSelect(application.id)}>{application.vacancy.title}</button>}
         </motion.h2>
@@ -185,25 +183,12 @@ function ApplicationCard({ application, props, scope, example = false }: { appli
           </>}
         </div>
         <div className="cps-card-aside">
-          {example ? <ExampleActions/> : <ApplicationActions key={actionKey} application={application} props={props}/>}
+          <ApplicationActions key={actionKey} application={application} props={props}/>
           {!isNew && <History application={application} onJoin={props.onJoin}/>}
         </div>
       </motion.div>}
     </div>
   </motion.article>;
-}
-
-function ExampleActions() {
-  const [answer, setAnswer] = useState('');
-  return <section className="cps-next cps-next-new"><div className="cps-actions"><ActionButton onClick={() => setAnswer('В настоящей вакансии команда получит ваш отклик.')}>Мне интересно</ActionButton><ActionButton secondary onClick={() => setAnswer('В настоящей вакансии предложение перейдёт в историю.')}>Не подходит</ActionButton></div>{answer && <p className="cps-next-description" role="status">{answer}</p>}</section>;
-}
-
-function CompletedEmpty({ props, scope }: { props: CandidateSearchProps; scope: string }) {
-  const [selectedId, onSelect] = useState('');
-  const channels = props.candidate.channels;
-  const telegram = typeof channels?.telegram === 'object' ? channels.telegram : undefined;
-  const sample: CandidateApplication = { id: 'example-vacancy', status: 'pending', approvedAutomatically: false, meeting: null, vacancy: { id: 'example-vacancy', title: 'Менеджер по продажам', company: 'Пример компании', salary: 'от 120 000 ₽', city: 'Москва', remote: false, format: 'Гибрид', description: 'Развивайте отношения с корпоративными клиентами: от первого разговора до договора.', details: { employmentType: 'full-time', responsibilities: 'Проводить встречи с клиентами, готовить предложения и вести сделки в CRM.', benefits: 'Обучение продукту, поддержка команды и прозрачная премия.' } } };
-  return <><header className="cps-heading"><h1>Встреча завершилась</h1><p className="cps-next-description">Новые вакансии будут появляться здесь.</p></header><div className="cps-example-grid"><ApplicationCard application={sample} props={{ ...props, selectedId, onSelect }} scope={scope} example/></div>{!telegram?.linked && <TelegramHandoff compact available={telegram?.canLink === true || channels?.telegramBindingAvailable === true}/>}</>;
 }
 
 function Paused({ props }: { props: CandidateSearchProps }) {
@@ -298,6 +283,6 @@ export function CandidateSearch(props: CandidateSearchProps) {
     <button type="button" className="cps-waiting-join" disabled={busy} onClick={props.onInterview}><Video size={18} aria-hidden="true"/>Ко встрече</button>
   </section>;
   return <MotionConfig reducedMotion="user" transition={{ duration: reduced ? 0 : .24, ease: [.2, .75, .25, 1] }}><LayoutGroup id={`${scope}-search`}><section className="cps-search cps-feed">
-    {!paused && candidate.interview?.status === 'completed' && candidate.applications.length === 0 ? <CompletedEmpty props={props} scope={scope}/> : <SearchFeed key={candidate.id} props={props} scope={scope}/>}
+    <SearchFeed key={candidate.id} props={props} scope={scope}/>
   </section></LayoutGroup></MotionConfig>;
 }

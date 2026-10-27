@@ -1,7 +1,0 @@
-[
-  {
-    "path": "interface-lab/src/scenes/recruiter-portal/InterviewCoachPanel.tsx",
-    "sha256": "555d1b94fb4bade7c9af15859c451a172200549a4699d8c86f6d7e7606e2003e",
-    "reason": "Only importer was a hasCoach branch below unconditional hasCoach return; active notes editor retained."
-  }
-]

@@ -59,7 +59,7 @@ export function EmployerCandidateWorkspace({ journey, person, source, onResponse
     } finally { setFileBusy(false); }
   }
   return <EmployerCandidateProfile person={person} source={source}
-    interview={header => <EmployerScreening journey={journey} person={person} source={source} appearance="candidate" header={header} enableComments/>}
+    interview={<EmployerScreening journey={journey} person={person} source={source} appearance="candidate" enableComments/>}
     resume={source.resume ? { id: `${person.id}:${source.resume.uploadedAt}`, name: source.resume.filename,
       sizeLabel: `${Math.max(1, Math.ceil(source.resume.size / 1024))} КБ`,
       load: loadResume, onDownload: () => { void downloadResume(); },
