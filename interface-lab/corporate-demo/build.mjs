@@ -17,7 +17,4 @@ for(const [scene,name] of Object.entries(exported)){
 }
 writeFileSync(resolve(root,'dist/lab-manifest.json'),JSON.stringify(manifest,null,2)+'\n');
 if(!existsSync(resolve(root,'dist/lab.html')))throw new Error('Missing lab entry point');
-const revision=spawnSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'});
-if(revision.status!==0)throw new Error('Cannot identify the source revision');
-writeFileSync(resolve(root,'dist/site-version.json'),JSON.stringify({sha:revision.stdout.trim(),builtAt:new Date().toISOString()},null,2)+'\n');
 console.log('Verified Storybook scene IDs:',JSON.stringify(manifest));

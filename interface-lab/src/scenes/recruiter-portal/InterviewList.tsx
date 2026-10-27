@@ -1,12 +1,20 @@
 import { Fragment, useEffect, useId, useState, type ReactNode } from 'react';
-import { CalendarDays } from 'lucide-react';
+import { CalendarDays, Video } from 'lucide-react';
+import { Button } from '../../components/ui/button';
 import type { RecruiterCandidate, Interview } from './api';
+import type { ActiveCall } from './RecruiterCall';
 import './interview-list.css';
 
 type InterviewRow = { candidate: RecruiterCandidate; interview: Interview; start: number; end: number };
 type InterviewListProps = {
   candidates: RecruiterCandidate[];
-  renderDetails: (candidate: RecruiterCandidate) => ReactNode;
+  busy: boolean;
+  videoConfigured: boolean;
+  onDetails: (id: string) => void;
+  onCall: (call: ActiveCall) => void;
+  selectedId?: string;
+  renderDetails?: (candidate: RecruiterCandidate) => ReactNode;
+  readOnly?: boolean;
 };
 
 const minute = 60_000;
@@ -16,9 +24,10 @@ const dayLabel = new Intl.DateTimeFormat('ru-RU', { timeZone: timezone, weekday:
 const monthLabel = new Intl.DateTimeFormat('ru-RU', { timeZone: timezone, month: 'long', year: 'numeric' });
 const dayNumber = new Intl.DateTimeFormat('ru-RU', { timeZone: timezone, day: 'numeric' });
 const weekday = new Intl.DateTimeFormat('ru-RU', { timeZone: timezone, weekday: 'short' });
+const clock = new Intl.DateTimeFormat('ru-RU', { timeZone: timezone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 
 /** Assignment is enforced by the recruiter API, never inferred from a name in the UI. */
-export function InterviewList({ candidates, renderDetails }: InterviewListProps) {
+export function InterviewList({ candidates, busy, videoConfigured, onDetails, onCall, selectedId, renderDetails, readOnly = false }: InterviewListProps) {
   const instanceId = useId();
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
@@ -62,9 +71,28 @@ export function InterviewList({ candidates, renderDetails }: InterviewListProps)
         </time>
       </h3>
       <ol className="rp-interview-rows">
-        {interviews.map(({ candidate, interview }) => <li className="rp-interview-row" key={interview.id}>
-          {renderDetails(candidate)}
-        </li>)}
+        {interviews.map(row => {
+          const { candidate, interview, start, end } = row;
+          const name = candidate.name || candidate.email || candidate.intake?.contactEmail || 'Кандидат';
+          const available = !readOnly && now >= start - 15 * minute && now <= end + 90 * minute;
+          const expanded = selectedId === candidate.id && !!renderDetails;
+          const detailId = `${instanceId}-interview-${interview.id}`;
+          return <li className="rp-interview-row" key={interview.id} data-joinable={available}>
+            <div className="rp-interview-summary">
+              <h4><button type="button" onClick={() => onDetails(candidate.id)} aria-label={`${expanded ? 'Скрыть подробности' : 'Подробнее'}: ${name}`} aria-expanded={renderDetails ? expanded : undefined} aria-controls={expanded ? detailId : undefined}>{name}</button></h4>
+              <p className="rp-interview-time"><time dateTime={interview.start}>{clock.format(start)}</time><span aria-hidden="true">–</span><time dateTime={interview.end}>{clock.format(end)}</time></p>
+            </div>
+            {available && <div className="rp-interview-row-actions">
+                <Button type="button" disabled={busy || !videoConfigured} onClick={() => onCall({
+                  kind: 'interview', candidateId: candidate.id, title: name,
+                  accountActive: candidate.accountActive, recording: interview.recording,
+                })}><Video size={16} aria-hidden="true"/>{interview.status === 'live' ? 'Продолжить' : 'Подключиться'}</Button>
+            </div>}
+            {expanded && <div className="rp-interview-expanded" id={detailId}>
+              {renderDetails?.(candidate)}
+            </div>}
+          </li>;
+        })}
       </ol>
     </section></Fragment>)}
   </section>;

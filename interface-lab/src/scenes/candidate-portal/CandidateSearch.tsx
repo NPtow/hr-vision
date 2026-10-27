@@ -1,27 +1,33 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { LayoutGroup, MotionConfig, motion, useReducedMotion } from 'motion/react';
-import { ArrowRight, ArrowUpRight, CalendarDays, Check, ChevronDown, Clock3, Play, Video } from 'lucide-react';
+import { useId, useRef, useState, type ReactNode } from 'react';
+import { AnimatePresence, LayoutGroup, MotionConfig, motion, useReducedMotion } from 'motion/react';
+import { ArrowRight, ArrowUpRight, BriefcaseBusiness, CalendarDays, Check, CheckCheck, ChevronDown, Clock3, MapPin, Pause, Play, RefreshCw, Video } from 'lucide-react';
 import type { CandidateApplication, CandidateOffer, CandidateState, CandidateWorkflowCommand } from './api';
 import { timeZone } from './api';
-import { TelegramHandoff } from './TelegramHandoff';
-import { applicationAfterInterest, applicationGroup, applicationHistory, applicationOffer, applicationRevision, applicationStatus, canReplyToMeeting, currentApplicationMeeting, meetingInterval, validDate, workspaceDateTime, type ApplicationHistoryItem } from './workspace-model';
-import { applicationCardTone, applicationMeetingIsJoinable, expandedSearchApplications, orderedSearchApplications, vacancyCardDetails } from './candidate-search-model';
+import { applicationAfterInterest, applicationGroup, applicationHistory, applicationOffer, applicationRevision, applicationStatus, canReplyToMeeting, currentApplicationMeeting, meetingInterval, validDate, workspaceDateTime, type ApplicationGroup, type ApplicationHistoryItem } from './workspace-model';
 import sandboxGirl from '../../assets/candidate/sandbox-girl.png';
 import './candidate-search.css';
 
 export type CandidateSearchProps = {
   candidate: CandidateState;
   busy: boolean;
+  filter: ApplicationGroup;
+  setFilter: (filter: ApplicationGroup) => void;
   selectedId: string;
   onSelect: (id: string) => void;
   onDecision: (applicationId: string, decision: 'accepted' | 'declined') => Promise<boolean>;
   onMeetingReply: (application: CandidateApplication, action: 'confirm' | 'decline') => Promise<boolean>;
   onWorkflow: (command: CandidateWorkflowCommand) => Promise<boolean>;
   onJoin: (applicationId: string, meetingId?: string) => void;
+  onRefresh: () => Promise<void>;
   onBookInterview: () => void;
   onInterview: () => void;
+  onProfile: () => void;
   onResumeSearch: () => Promise<boolean>;
 };
+
+const filters: { value: ApplicationGroup; label: string }[] = [{ value: 'new', label: 'Новые' }, { value: 'process', label: 'В процессе' }, { value: 'history', label: 'История' }];
+const initials = (name: string) => name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase() || 'К';
+const countLabel = (value: number) => `${value} ${{ one: 'предложение', few: 'предложения', many: 'предложений', other: 'предложений', zero: 'предложений', two: 'предложения' }[new Intl.PluralRules('ru').select(value)]}`;
 
 function ActionButton({ children, onClick, disabled, secondary = false }: { children: ReactNode; onClick: () => void; disabled?: boolean; secondary?: boolean }) {
   return <button type="button" className={`cps-button${secondary ? ' cps-button-secondary' : ''}`} disabled={disabled} onClick={onClick}>{children}</button>;
@@ -51,7 +57,6 @@ function ApplicationActions({ application, props }: { application: CandidateAppl
   const meeting = currentApplicationMeeting(application);
   const status = applicationStatus(application);
   const history = applicationGroup(application) === 'history';
-  const isNew = applicationGroup(application) === 'new';
   const meetingReplyAvailable = canReplyToMeeting(application);
 
   async function run(action: () => Promise<boolean>, after?: () => void) {
@@ -78,23 +83,22 @@ function ApplicationActions({ application, props }: { application: CandidateAppl
   }
 
   let actions: ReactNode;
-  if (history) actions = null;
-  else if (isNew) actions = <div className="cps-actions"><ActionButton disabled={disabled} onClick={() => void run(() => onDecision(application.id, 'accepted'))}>Мне интересно</ActionButton><ActionButton secondary disabled={disabled} onClick={() => void run(() => onDecision(application.id, 'declined'))}>Не подходит</ActionButton></div>;
+  if (history) actions = <p className={`cps-result${status.positive ? ' cps-result-positive' : ''}`}><CheckCheck size={17}/>{status.positive ? 'Ответ сохранён' : 'Процесс сохранён в истории'}</p>;
   else if (offer?.status === 'sent') actions = offerReply ? <div className="cps-offer-confirm" role="group" aria-label="Подтверждение ответа на оффер"><h4>{offerReply === 'accepted' ? 'Принять оффер на этих условиях?' : 'Отклонить предложение?'}</h4><p>{offer.role} · {application.vacancy.company}. Работодатель получит ваш ответ на версию {offer.version}.</p><div className="cps-actions"><ActionButton disabled={disabled} onClick={() => void workflow({ applicationId: application.id, action: 'offer.reply', version: offer.version, value: offerReply })}>{offerReply === 'accepted' ? 'Да, принимаю' : 'Да, отклоняю'}<Check size={16}/></ActionButton><ActionButton secondary disabled={disabled} onClick={() => setOfferReply(null)}>Вернуться к условиям</ActionButton></div></div>
     : <div className="cps-actions"><ActionButton disabled={disabled} onClick={() => setOfferReply('accepted')}>Принять оффер<ArrowUpRight size={16}/></ActionButton><ActionButton secondary disabled={disabled} onClick={() => setOfferReply('declined')}>Отклонить</ActionButton></div>;
+  else if (application.status === 'pending') actions = <div className="cps-actions"><ActionButton disabled={disabled} onClick={() => void run(() => onDecision(application.id, 'accepted'))}>Хочу участвовать<ArrowRight size={16}/></ActionButton><ActionButton secondary disabled={disabled} onClick={() => void run(() => onDecision(application.id, 'declined'))}>Не подходит</ActionButton></div>;
   else if (meeting?.status === 'pending') actions = meetingReplyAvailable
     ? <div className="cps-actions"><ActionButton disabled={disabled} onClick={() => meetingReply('confirm')}>Подтвердить время<Check size={16}/></ActionButton><ActionButton secondary disabled={disabled} onClick={() => meetingReply('decline')}>Время не подходит</ActionButton></div>
     : <p className="cps-waiting"><Clock3 size={16}/>Ожидаем новое время от команды</p>;
   else if (meeting && ['confirmed', 'live'].includes(meeting.status)) actions = <>
-    {props.candidate.videoConfigured && applicationMeetingIsJoinable(application) ? <div className="cps-actions"><ActionButton disabled={disabled} onClick={() => onJoin(application.id, meeting.id)}>Войти во встречу<Video size={16}/></ActionButton>{meeting.status === 'confirmed' && meetingReplyAvailable && <ActionButton secondary disabled={disabled} onClick={() => meetingReply('decline')}>Время не подходит</ActionButton>}</div>
-      : <><p className="cps-waiting">{!props.candidate.videoConfigured ? 'Видеосвязь пока недоступна. Время встречи сохранено.' : (validDate(meeting.start)?.getTime() ?? 0) > Date.now() ? 'Вход откроется за 15 минут до встречи.' : 'Время встречи закончилось.'}</p>{meeting.status === 'confirmed' && meetingReplyAvailable && <div className="cps-actions"><ActionButton secondary disabled={disabled} onClick={() => meetingReply('decline')}>Время не подходит</ActionButton></div>}</>}
+    {props.candidate.videoConfigured ? <div className="cps-actions"><ActionButton disabled={disabled} onClick={() => onJoin(application.id, meeting.id)}>Войти во встречу<Video size={16}/></ActionButton>{meeting.status === 'confirmed' && meetingReplyAvailable && <ActionButton secondary disabled={disabled} onClick={() => meetingReply('decline')}>Время не подходит</ActionButton>}</div>
+      : <><p className="cps-waiting">Видеосвязь пока недоступна. Время встречи сохранено.</p>{meeting.status === 'confirmed' && meetingReplyAvailable && <div className="cps-actions"><ActionButton secondary disabled={disabled} onClick={() => meetingReply('decline')}>Время не подходит</ActionButton></div>}</>}
   </>;
   else if (meeting?.status === 'completed' && applicationAfterInterest(application) === 'pending') actions = <div className="cps-actions"><ActionButton disabled={disabled} onClick={() => void workflow({ applicationId: application.id, action: 'after', meetingId: meeting.id, value: 'yes' })}>Хочу продолжить<ArrowRight size={16}/></ActionButton><ActionButton secondary disabled={disabled} onClick={() => void workflow({ applicationId: application.id, action: 'after', meetingId: meeting.id, value: 'no' })}>Не продолжать</ActionButton></div>;
-  else actions = null;
+  else actions = <p className="cps-waiting"><Clock3 size={16}/>Ожидаем следующий шаг от команды</p>;
 
-  return <section className={`cps-next${isNew ? ' cps-next-new' : ''}`}>
-    {!isNew && <><span className="cps-eyebrow">{history ? 'Результат' : status.attention ? 'Ваш следующий шаг' : 'Сейчас'}</span><h3>{!history && !meeting && !offer ? 'Ждём команду' : status.label}</h3><p className="cps-next-description">{status.detail}</p></>}
-    {!isNew && !history && offer?.status !== 'sent' && meeting && ['pending', 'confirmed', 'live', 'completed'].includes(meeting.status) && <div className="cps-meeting"><CalendarDays size={19}/><div><strong>{meetingInterval(meeting)}</strong><span>{timeZone()}</span></div></div>}
+  return <section className="cps-next"><span className="cps-eyebrow">{history ? 'Результат' : status.attention ? 'Ваш следующий шаг' : 'Сейчас'}</span><h3>{status.label}</h3><p className="cps-next-description">{status.detail}</p>
+    {!history && meeting && ['pending', 'confirmed', 'live', 'completed'].includes(meeting.status) && <div className="cps-meeting"><CalendarDays size={19}/><div><strong>{meetingInterval(meeting)}</strong><span>{timeZone()}</span></div></div>}
     {actions}{pending && <p className="cps-feedback" role="status">Сохраняем ответ…</p>}{error && <p className="cps-error" role="alert">{error}</p>}
   </section>;
 }
@@ -108,102 +112,27 @@ function History({ application, onJoin }: { application: CandidateApplication; o
   return <details className="cps-history"><summary><span>История процесса</span><ChevronDown size={15}/></summary>{dated.length > 0 && <div className="cps-history-section"><h4>События</h4><ol>{dated.map(event)}</ol></div>}{snapshots.length > 0 && <div className="cps-history-section cps-history-snapshots"><h4>Состояние процесса</h4><ol>{snapshots.map(event)}</ol></div>}</details>;
 }
 
-function VacancyDescription({ application }: { application: CandidateApplication }) {
-  const { description, facts, sections } = vacancyCardDetails(application.vacancy);
-  return <div className="cps-vacancy-description">
-    {facts.length > 0 && <dl className="cps-vacancy-facts">{facts.map(fact => <div key={fact.label}><dt>{fact.label}</dt><dd>{fact.value}</dd></div>)}</dl>}
-    {description && <section className="cps-about"><h3>О работе</h3><p>{description}</p></section>}
-    {sections.length > 0 && <div className="cps-vacancy-sections">{sections.map(section => <section className="cps-about" key={section.title}><h3>{section.title}</h3><p>{section.text}</p></section>)}</div>}
-    {!description && !facts.length && !sections.length && <p className="cps-empty-description">Описание вакансии пока не добавлено.</p>}
-  </div>;
-}
-
-function ApplicationCard({ application, props, scope, example = false }: { application: CandidateApplication; props: CandidateSearchProps; scope: string; example?: boolean }) {
+function ApplicationCard({ application, props, scope }: { application: CandidateApplication; props: CandidateSearchProps; scope: string }) {
   const reduced = useReducedMotion();
-  const card = useRef<HTMLElement>(null);
-  const title = useRef<HTMLHeadingElement>(null);
-  const trigger = useRef<HTMLButtonElement>(null);
-  const restoreFocus = useRef(false);
+  const status = applicationStatus(application);
   const offer = applicationOffer(application);
   const open = props.selectedId === application.id;
-  const tone = applicationCardTone(application);
-  const isNew = applicationGroup(application) === 'new';
   const contentId = `${scope}-${application.id}`;
-  const titleId = `${contentId}-title`;
-  const statusId = `${contentId}-status`;
   const actionKey = `${application.id}:${applicationRevision(application)}:${application.status}:${offer?.id}:${offer?.version}:${offer?.status}:${application.archivedAt || ''}`;
-  const onSelect = props.onSelect;
-
-  useLayoutEffect(() => {
-    if (open) title.current?.focus({ preventScroll: true });
-    else if (restoreFocus.current) {
-      trigger.current?.focus({ preventScroll: true });
-      restoreFocus.current = false;
-    }
-  }, [open]);
-  useEffect(() => {
-    if (!open) return;
-    function clickOutside(event: MouseEvent) {
-      const target = event.target;
-      // A synchronous action can replace its own button before the document handler.
-      // The original event path still identifies that click as inside this card.
-      if (!(target instanceof Node) || event.composedPath().includes(card.current!) || card.current?.contains(target)) return;
-      // Another card opens itself; closing here would overwrite that same click.
-      if (target instanceof Element && target.closest('.cps-card-trigger')) return;
-      onSelect('');
-    }
-    function escape(event: KeyboardEvent) {
-      if (event.key !== 'Escape' || event.defaultPrevented) return;
-      event.preventDefault();
-      restoreFocus.current = true;
-      onSelect('');
-    }
-    document.addEventListener('click', clickOutside);
-    document.addEventListener('keydown', escape);
-    return () => { document.removeEventListener('click', clickOutside); document.removeEventListener('keydown', escape); };
-  }, [open, onSelect]);
-
-  return <motion.article ref={card} layout={!reduced} initial={{ opacity: 0, y: reduced ? 0 : 8 }} animate={{ opacity: 1, y: 0 }}
-    transition={{ layout: { type: 'spring', stiffness: 380, damping: 38, mass: .8 } }}
-    style={{ borderRadius: 28 }} className={`cps-card cps-tone-${tone}${open ? ' is-open' : ''}${tone === 'offer' && offer?.status === 'sent' ? ' cps-offer-shimmer' : ''}`} aria-labelledby={titleId}>
-    {tone === 'offer' && <span className="cps-offer-spectrum" aria-hidden="true"/>}
-    <div className="cps-card-face">
-      <div className="cps-card-summary">
-        {example && <span className="cps-example-label">Пример вакансии</span>}
-        <motion.h2 layout={reduced ? false : 'position'} id={titleId} ref={title} tabIndex={open ? -1 : undefined}>
-          {open ? application.vacancy.title : <button ref={trigger} type="button" className="cps-card-trigger" aria-expanded={false} aria-describedby={statusId} onClick={() => onSelect(application.id)}>{application.vacancy.title}</button>}
-        </motion.h2>
-        <motion.p layout={reduced ? false : 'position'} className="cps-company-name">{application.vacancy.company}</motion.p>
-        <motion.p layout={reduced ? false : 'position'} className="cps-salary">{application.vacancy.salary?.trim() || 'Зарплата не указана'}</motion.p>
-        <span id={statusId} className="cps-sr-only">{applicationStatus(application).label}</span>
-      </div>
-      {open && <motion.div id={contentId} className="cps-card-body" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: reduced ? 0 : .18, delay: reduced ? 0 : .08 }}>
-        <div className="cps-card-description">
-          {isNew ? <VacancyDescription application={application}/> : <>
-            {offer && !['withdrawn', 'superseded'].includes(offer.status) && <OfferTerms offer={offer}/>}
-            <details className="cps-job-details"><summary>О вакансии<ChevronDown size={15} aria-hidden="true"/></summary><VacancyDescription application={application}/></details>
-          </>}
-        </div>
-        <div className="cps-card-aside">
-          {example ? <ExampleActions/> : <ApplicationActions key={actionKey} application={application} props={props}/>}
-          {!isNew && <History application={application} onJoin={props.onJoin}/>}
-        </div>
-      </motion.div>}
-    </div>
+  return <motion.article layout={reduced ? false : 'position'} className={`cps-card${open ? ' is-open' : ''}`}>
+    <button type="button" className="cps-card-trigger" aria-expanded={open} aria-controls={contentId} onClick={() => props.onSelect(open ? '' : application.id)}>
+      <span className="cps-card-top"><span className="cps-company-mark" aria-hidden="true">{initials(application.vacancy.company)}</span><ArrowUpRight size={19}/></span>
+      <span className="cps-company-name">{application.vacancy.company}</span><span className="cps-role">{application.vacancy.title}</span>
+      <span className="cps-facts">{application.vacancy.city && <span><MapPin size={14}/>{application.vacancy.city}</span>}{application.vacancy.remote && <span><BriefcaseBusiness size={14}/>Удалённо</span>}</span>
+      <span className={`cps-status${status.attention ? ' cps-status-attention' : ''}${status.positive ? ' cps-status-positive' : ''}`}><span/>{status.label}</span>
+    </button>
+    <AnimatePresence initial={false}>{open && <motion.div id={contentId} key="details" className="cps-card-reveal" initial={{ height: reduced ? 'auto' : 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: reduced ? 'auto' : 0, opacity: 0 }} transition={{ duration: reduced ? 0 : .22 }}><div className="cps-card-body">
+      <section className="cps-about"><h3>О работе</h3><p>{application.vacancy.description || 'Описание вакансии пока не добавлено.'}</p></section>
+      {offer && <OfferTerms offer={offer}/>}
+      <ApplicationActions key={actionKey} application={application} props={props}/>
+      <History application={application} onJoin={props.onJoin}/>
+    </div></motion.div>}</AnimatePresence>
   </motion.article>;
-}
-
-function ExampleActions() {
-  const [answer, setAnswer] = useState('');
-  return <section className="cps-next cps-next-new"><div className="cps-actions"><ActionButton onClick={() => setAnswer('В настоящей вакансии команда получит ваш отклик.')}>Мне интересно</ActionButton><ActionButton secondary onClick={() => setAnswer('В настоящей вакансии предложение перейдёт в историю.')}>Не подходит</ActionButton></div>{answer && <p className="cps-next-description" role="status">{answer}</p>}</section>;
-}
-
-function CompletedEmpty({ props, scope }: { props: CandidateSearchProps; scope: string }) {
-  const [selectedId, onSelect] = useState('');
-  const channels = props.candidate.channels;
-  const telegram = typeof channels?.telegram === 'object' ? channels.telegram : undefined;
-  const sample: CandidateApplication = { id: 'example-vacancy', status: 'pending', approvedAutomatically: false, meeting: null, vacancy: { id: 'example-vacancy', title: 'Менеджер по продажам', company: 'Пример компании', salary: 'от 120 000 ₽', city: 'Москва', remote: false, format: 'Гибрид', description: 'Развивайте отношения с корпоративными клиентами: от первого разговора до договора.', details: { employmentType: 'full-time', responsibilities: 'Проводить встречи с клиентами, готовить предложения и вести сделки в CRM.', benefits: 'Обучение продукту, поддержка команды и прозрачная премия.' } } };
-  return <><header className="cps-heading"><h1>Встреча завершилась</h1><p className="cps-next-description">Новые вакансии будут появляться здесь.</p></header><div className="cps-example-grid"><ApplicationCard application={sample} props={{ ...props, selectedId, onSelect }} scope={scope} example/></div>{!telegram?.linked && <TelegramHandoff compact available={telegram?.canLink === true || channels?.telegramBindingAvailable === true}/>}</>;
 }
 
 function Paused({ props }: { props: CandidateSearchProps }) {
@@ -213,77 +142,28 @@ function Paused({ props }: { props: CandidateSearchProps }) {
   async function resume() {
     if (locked.current || props.busy) return;
     locked.current = true; setPending(true); setError('');
-    try { if (!await props.onResumeSearch()) setError('Не удалось возобновить поиск. Попробуйте снова.'); }
+    try { if (await props.onResumeSearch()) props.setFilter('new'); else setError('Не удалось возобновить поиск. Попробуйте снова.'); }
     catch (cause) { setError(cause instanceof Error ? cause.message : 'Не удалось возобновить поиск.'); }
     finally { locked.current = false; setPending(false); }
   }
-  return <header className="cps-heading cps-paused"><h1>Зарабатываю в классной компании.</h1><ActionButton disabled={pending || props.busy} onClick={() => void resume()}>{pending ? 'Возобновляем…' : 'Снова искать работу'}<Play size={15}/></ActionButton>{error && <p className="cps-error" role="alert">{error}</p>}</header>;
-}
-
-const headings = ['Посмотрим, что нашлось.', 'А что, если это оно?', 'Следующая глава — здесь.', 'Ваша следующая работа?', 'Кажется, есть кое-что интересное.'];
-function entryHeading(candidateId: string) {
-  let previous = '';
-  try { previous = sessionStorage.getItem(`hrv-search-heading:${candidateId}`) || ''; } catch { /* Storage can be unavailable in private browsing. */ }
-  const choices = headings.filter(heading => heading !== previous);
-  return choices[Math.floor(Math.random() * choices.length)];
-}
-
-function SearchFeed({ props, scope }: { props: CandidateSearchProps; scope: string }) {
-  const { candidate } = props;
-  const [heading] = useState(() => entryHeading(candidate.id));
-  const guideKey = `hrv-search-glow-guide:v2:${candidate.id}`;
-  const [showGuide, setShowGuide] = useState(() => {
-    try { return localStorage.getItem(guideKey) !== 'seen'; } catch { return true; }
-  });
-  const firstCard = useRef<HTMLDivElement>(null);
-  const [columns, setColumns] = useState(3);
-  const ordered = orderedSearchApplications(candidate.applications);
-  const [selectionOrder, setSelectionOrder] = useState(() => ordered.map(application => application.id));
-  // A saved answer may change priority. Keep the open card in place until it closes.
-  const positions = new Map(selectionOrder.map((id, index) => [id, index]));
-  const stable = props.selectedId ? [...ordered].sort((left, right) => (positions.get(left.id) ?? Infinity) - (positions.get(right.id) ?? Infinity)) : ordered;
-  const items = expandedSearchApplications(stable, props.selectedId, columns);
-  const cardProps = { ...props, onSelect: (id: string) => {
-    setSelectionOrder(ordered.map(application => application.id));
-    props.onSelect(id);
-  } };
-  useLayoutEffect(() => {
-    const grid = firstCard.current;
-    if (!grid) return;
-    const resize = () => {
-      const width = grid.getBoundingClientRect().width;
-      setColumns(width <= 600 ? 1 : width <= 1030 ? 2 : 3);
-    };
-    resize();
-    const observer = new ResizeObserver(resize);
-    observer.observe(grid);
-    return () => observer.disconnect();
-  }, [candidate.applications.length]);
-  const paused = candidate.searching === false;
-  useEffect(() => {
-    try { sessionStorage.setItem(`hrv-search-heading:${candidate.id}`, heading); } catch { /* The heading still works without storage. */ }
-  }, [candidate.id, heading]);
-  function dismissGuide() {
-    setShowGuide(false);
-    try { localStorage.setItem(guideKey, 'seen'); } catch { /* Keep dismissal for this visit. */ }
-    firstCard.current?.querySelector<HTMLButtonElement>('.cps-card-trigger')?.focus({ preventScroll: true });
-  }
-  return <>
-    {paused ? <Paused props={props}/> : <header className="cps-heading"><h1>{items.length ? heading : 'Подбираем то, что вам подойдёт.'}</h1></header>}
-    {showGuide && !paused && items.length > 0 && <aside className="cps-glow-guide" aria-label="Как читать карточки">
-      <p>Свечение подскажет, что происходит.</p>
-      <ul><li><i className="cps-guide-new" aria-hidden="true"/>Новое</li><li><i className="cps-guide-action" aria-hidden="true"/>Ваш ход</li><li><i className="cps-guide-progress" aria-hidden="true"/>Ждём команду</li><li><i className="cps-guide-closed" aria-hidden="true"/>Завершено</li><li><i className="cps-guide-offer" aria-hidden="true"/>Оффер</li></ul>
-      <button type="button" onClick={dismissGuide}>Понятно<Check size={16} aria-hidden="true"/></button>
-    </aside>}
-    {items.length > 0 && <div className="cps-grid" ref={firstCard} aria-label="Предложения работы">{items.map(application => <ApplicationCard key={application.id} application={application} props={cardProps} scope={scope}/>)}</div>}
-  </>;
+  return <section className="cps-paused"><div className="cps-paused-art" aria-hidden="true"><span/><span/><span><Check size={34}/></span></div><span className="cps-eyebrow">В своём темпе</span><h1>Зарабатываю в классной компании.</h1><p>Можно выдохнуть. Поиск остановлен, все процессы сохранены в истории. Захотите перемен — начнём снова.</p><div className="cps-actions"><ActionButton disabled={pending || props.busy} onClick={() => void resume()}>{pending ? 'Возобновляем…' : 'Вернуться к поиску'}<Play size={15}/></ActionButton><ActionButton secondary disabled={pending || props.busy} onClick={() => props.setFilter('history')}>Посмотреть историю</ActionButton></div>{error && <p className="cps-error" role="alert">{error}</p>}</section>;
 }
 
 export function CandidateSearch(props: CandidateSearchProps) {
-  const { candidate, busy } = props;
+  const { candidate, filter, setFilter, busy, onRefresh, onProfile } = props;
   const scope = useId();
   const reduced = useReducedMotion();
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState('');
+  const refreshLock = useRef(false);
+  const items = candidate.applications.filter(application => applicationGroup(application) === filter);
   const paused = candidate.searching === false;
+  async function refresh() {
+    if (refreshLock.current || busy) return;
+    refreshLock.current = true; setRefreshing(true); setRefreshError('');
+    try { await onRefresh(); } catch (cause) { setRefreshError(cause instanceof Error ? cause.message : 'Не удалось обновить предложения.'); }
+    finally { refreshLock.current = false; setRefreshing(false); }
+  }
   if (!candidate.interview && !paused) return <section className="cps-search cps-interview-start" aria-labelledby={`${scope}-interview-title`}>
     <h1 id={`${scope}-interview-title`}>Начнём со знакомства</h1>
     <button type="button" className="cps-interview-choice" disabled={busy} onClick={props.onBookInterview}>
@@ -297,7 +177,25 @@ export function CandidateSearch(props: CandidateSearchProps) {
     <p className="cps-waiting-time"><time dateTime={candidate.interview.start}>{meetingInterval(candidate.interview)}</time></p>
     <button type="button" className="cps-waiting-join" disabled={busy} onClick={props.onInterview}><Video size={18} aria-hidden="true"/>Ко встрече</button>
   </section>;
-  return <MotionConfig reducedMotion="user" transition={{ duration: reduced ? 0 : .24, ease: [.2, .75, .25, 1] }}><LayoutGroup id={`${scope}-search`}><section className="cps-search cps-feed">
-    {!paused && candidate.interview?.status === 'completed' && candidate.applications.length === 0 ? <CompletedEmpty props={props} scope={scope}/> : <SearchFeed key={candidate.id} props={props} scope={scope}/>}
+  return <MotionConfig reducedMotion="user" transition={{ duration: reduced ? 0 : .24, ease: [.2, .75, .25, 1] }}><LayoutGroup id={`${scope}-search`}><section className="cps-search">
+    <div className="cps-tabs" role="tablist" aria-label="Вакансии по статусу">{filters.map((item, index) => <button type="button" key={item.value} role="tab" id={`${scope}-tab-${item.value}`} aria-selected={filter === item.value} aria-controls={`${scope}-results`} tabIndex={filter === item.value ? 0 : -1} onClick={() => setFilter(item.value)} onKeyDown={event => {
+      let next = index;
+      if (event.key === 'ArrowRight') next = (index + 1) % filters.length;
+      else if (event.key === 'ArrowLeft') next = (index + filters.length - 1) % filters.length;
+      else if (event.key === 'Home') next = 0;
+      else if (event.key === 'End') next = filters.length - 1;
+      else return;
+      event.preventDefault(); setFilter(filters[next].value);
+      (event.currentTarget.parentElement?.querySelectorAll('button')[next] as HTMLButtonElement | undefined)?.focus();
+    }}><span>{item.label}</span><span className="cps-tab-count">{candidate.applications.filter(application => applicationGroup(application) === item.value).length}</span>{filter === item.value && <motion.span layoutId="search-tab" className="cps-tab-indicator"/>}</button>)}</div>
+    <div id={`${scope}-results`} role="tabpanel" aria-labelledby={`${scope}-tab-${filter}`}>
+      {paused && filter !== 'history' ? <Paused props={props}/> : <>
+        <header className="cps-heading"><div><span className="cps-eyebrow">Поиск работы</span><h1>{filter === 'new' ? 'Место для нового.' : filter === 'process' ? 'На шаг ближе.' : 'Ваш пройденный путь.'}</h1><p>{items.length ? countLabel(items.length) : filter === 'new' ? 'Предложения появятся здесь.' : filter === 'process' ? 'Здесь продолжатся ваши знакомства.' : 'Здесь сохраняются завершённые процессы.'}</p></div><button type="button" className="cps-refresh" disabled={busy || refreshing} aria-label="Обновить вакансии" onClick={() => void refresh()}><RefreshCw size={18} className={refreshing ? 'is-refreshing' : ''}/></button></header>
+        {refreshError && <p className="cps-error" role="alert">{refreshError}</p>}
+        {paused && <div className="cps-paused-note"><Pause size={16}/><span>Поиск приостановлен. История сохранена.</span><button type="button" onClick={() => setFilter('new')}>Вернуться к поиску<ArrowRight size={14}/></button></div>}
+        {candidate.autoApprove && !paused && <p className="cps-auto-note">Автосогласование вакансий включено. Время каждой встречи подтверждаете вы. <button type="button" onClick={onProfile}>Настроить</button></p>}
+        {items.length ? <div className="cps-grid">{items.map(application => <ApplicationCard key={application.id} application={application} props={props} scope={scope}/>)}</div> : <div className="cps-empty"><BriefcaseBusiness size={28}/><h2>{filter === 'new' ? 'Возможности ещё впереди' : filter === 'process' ? 'Всё начинается с интереса' : 'История пока чиста'}</h2><p>{filter === 'new' ? 'Когда появятся новые вакансии, вы сможете изучить их и решить, хотите ли участвовать.' : filter === 'process' ? 'Выберите «Хочу участвовать» в новой вакансии. Все следующие шаги будут здесь.' : 'Завершённые и приостановленные процессы останутся в этой вкладке.'}</p>{filter === 'process' && candidate.applications.some(application => applicationGroup(application) === 'new') ? <ActionButton secondary onClick={() => setFilter('new')}>Посмотреть предложения<ArrowRight size={15}/></ActionButton> : filter === 'new' && <ActionButton secondary onClick={onProfile}>Мои предпочтения<ArrowRight size={15}/></ActionButton>}</div>}
+      </>}
+    </div>
   </section></LayoutGroup></MotionConfig>;
 }

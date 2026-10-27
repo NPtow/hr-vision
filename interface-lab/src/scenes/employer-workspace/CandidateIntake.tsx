@@ -59,10 +59,7 @@ export function CandidateIntake({ token, scope, onBack, onSaved }: { token: stri
   </section>;
 }
 
-export function IntakeDetail({ person, token, vacancyId, onArchived, onResponseStart, onResponded }: {
-  person: IntakePerson; token: string; vacancyId?: string; onArchived: () => void;
-  onResponseStart?: () => void; onResponded?: () => void;
-}) {
+export function IntakeDetail({ person, token, onArchived }: { person: IntakePerson; token: string; onArchived: () => void }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState(false);
@@ -72,10 +69,9 @@ export function IntakeDetail({ person, token, vacancyId, onArchived, onResponseS
     catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   }
   return <div className="ew-intake-detail">
-    {(person.preparedProfile || !!vacancyId) ? <PreparedIntakeProfile key={person.id} person={person} token={token} vacancyId={vacancyId} onUpdated={onArchived}
-      onResponseStart={onResponseStart} onResponded={onResponded}/> : <>
+    {person.preparedProfile ? <PreparedIntakeProfile key={person.id} person={person} token={token}/> : <>
       <header className="ew-person-heading"><div><span className="ew-status">{person.archived ? 'В архиве' : 'Добавлен вручную'}</span><h2>{person.name}</h2><p>{person.role || 'Должность не указана'}</p></div></header><section className="ew-detail-card"><h3>Резюме</h3>{person.files.map(f => <button className="ew-file-row" key={f.id} onClick={() => { void downloadResume(token, f).catch(e => setError(e.message)); }}><FileText size={20}/><span><strong>{f.name}</strong><small>{Math.ceil(f.size / 1024)} КБ</small></span><span>Скачать</span></button>)}{person.link && <a className="ew-file-row" href={person.link} target="_blank" rel="noreferrer"><Link2 size={18}/>Открыть резюме ↗</a>}{!person.link && !person.files.length && <p>Резюме ещё не добавлено.</p>}{person.contact && <><h3>Контакт</h3><p>{person.contact}</p></>}{person.note && <><h3>Заметка</h3><p className="ew-prewrap">{person.note}</p></>}</section><div className="ew-empty-recording"><FileText size={24}/><div><h3>Интервью ещё нет</h3><p>Здесь появятся запись и ключевые моменты.</p></div></div><p className="ew-form-note">Для назначения встречи нужно согласие кандидата и его свободное время.</p>
     </>}
-    {(!person.preparedProfile || person.archived) && !person.reviewResponse && <details className="ew-extra" open={confirm} onToggle={e => setConfirm(e.currentTarget.open)}><summary>Действия с карточкой</summary><Button variant="ghost" disabled={busy} onClick={archive}><Trash2 size={15}/>{person.archived ? 'Восстановить кандидата' : 'Убрать в архив'}</Button></details>}{error && <p className="ew-inline-error" role="alert">{error}</p>}
+    <details className="ew-extra" open={confirm} onToggle={e => setConfirm(e.currentTarget.open)}><summary>Действия с карточкой</summary><Button variant="ghost" disabled={busy} onClick={archive}><Trash2 size={15}/>{person.archived ? 'Восстановить кандидата' : 'Убрать в архив'}</Button></details>{error && <p className="ew-inline-error" role="alert">{error}</p>}
   </div>;
 }

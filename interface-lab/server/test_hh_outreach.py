@@ -245,8 +245,7 @@ class OutreachTest(unittest.TestCase):
             booking.handle('POST', '/api/hr/booking/state', headers, {'token': token}, '127.0.0.1')
         for _ in range(2):
             result, _ = booking.handle('POST', '/api/hr/booking/book', headers,
-                {'token': token, 'slotId': slot['id'], 'requestId': 'request1',
-                 'email': 'booking@example.test', 'consentProfile': True}, '127.0.0.1')
+                {'token': token, 'slotId': slot['id'], 'requestId': 'request1'}, '127.0.0.1')
             self.assertEqual('booked', result['status'])
         stats = self.engine.detail(cid)['stats']
         self.assertEqual((1, 1), (stats['pageLoaded'], stats['booked']))

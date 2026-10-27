@@ -87,10 +87,6 @@ def init(db):
     ]
     for statement in statements:
         db.execute(statement)
-    if 'invitation_requested_at' not in {row[1] for row in db.execute('PRAGMA table_info(em_reviews)')}:
-        db.execute('ALTER TABLE em_reviews ADD COLUMN invitation_requested_at TEXT')
-    if 'invitation_meeting_id' not in {row[1] for row in db.execute('PRAGMA table_info(em_reviews)')}:
-        db.execute('ALTER TABLE em_reviews ADD COLUMN invitation_meeting_id TEXT REFERENCES cp_meetings(id)')
 
 
 def _workspace(db, workspace_id):
@@ -395,8 +391,6 @@ def import_batch(db, workspace_id, vacancy_id, body, portal=None):
                                batch_id=bid, rank=item['rank'], reason=item['reason'])
                 outcome = 'added'
                 result['addedApplicationIds'].append(aid)
-                import employer_review
-                employer_review.enqueue(db, aid)
             else:
                 require(review[0] == workspace_id, 'Кандидат не найден.', 404)
                 outcome = 'existing'
@@ -407,8 +401,6 @@ def import_batch(db, workspace_id, vacancy_id, body, portal=None):
         db.execute('UPDATE em_batches SET result=? WHERE id=?', (_dump(result), bid))
         if result['addedApplicationIds']:
             bump_revision(db, workspace_id, vacancy_id)
-        import employer_notifications
-        employer_notifications.collect(db)
         return result
 
 
@@ -416,7 +408,7 @@ def _application_row(db, workspace_id, application_id):
     _workspace(db, workspace_id)
     row = db.execute('''SELECT a.id,a.candidate_id,a.vacancy_id,a.status,a.approved_automatically,
       r.state,r.queue_order,r.skip_count,r.source,r.source_version,r.batch_id,r.rank,r.reason,
-      r.selected_at,r.rejected_at,p.profile,r.created_at,r.updated_at,a.archived_at,r.invitation_requested_at
+      r.selected_at,r.rejected_at,p.profile,r.created_at,r.updated_at,a.archived_at
       FROM cp_applications a JOIN em_reviews r ON r.application_id=a.id
       JOIN em_vacancies v ON v.vacancy_id=a.vacancy_id JOIN cp_candidates p ON p.id=a.candidate_id
       WHERE a.id=? AND r.workspace_id=? AND v.workspace_id=? AND v.archived_at IS NULL''',
@@ -426,20 +418,17 @@ def _application_row(db, workspace_id, application_id):
 
 
 def application(db, workspace_id, application_id, include_rejected=False, include_unapproved=False):
-    from candidate_availability import project
     row = _application_row(db, workspace_id, application_id)
-    profile = project(json.loads(row[15]))
+    profile = json.loads(row[15])
     require(include_rejected or row[5] != 'rejected', 'Кандидат не найден.', 404)
     require(include_unapproved or (row[3] == 'accepted' and profile.get('consentReuse') is True),
             'Кандидат не найден.', 404)
-    import employer_review
-    require(include_unapproved or employer_review.ready(db, application_id), 'Кандидат не найден.', 404)
     return {'applicationId': row[0], 'candidateId': row[1], 'vacancyId': row[2],
             'status': row[3], 'approvedAutomatically': bool(row[4]), 'reviewState': row[5],
             'queueOrder': row[6], 'skipCount': row[7], 'source': row[8], 'sourceVersion': row[9],
             'batchId': row[10], 'rank': row[11], 'reason': row[12], 'selectedAt': row[13],
             'rejectedAt': row[14], 'profile': {key: profile[key] for key in PROFILE_FIELDS if key in profile},
-            'createdAt': row[16], 'updatedAt': row[17], 'archivedAt': row[18], 'invitationRequestedAt': row[19]}
+            'createdAt': row[16], 'updatedAt': row[17], 'archivedAt': row[18]}
 
 
 def require_active(app):
@@ -459,10 +448,8 @@ def applications(db, workspace_id, view='all', vacancy_id=None):
       AND (? IS NULL OR a.vacancy_id=?) AND r.state!='rejected'
       ORDER BY r.queue_order,r.created_at,a.id''',
                       (workspace_id, workspace_id, vacancy_id, vacancy_id)).fetchall()
-    import employer_review
     return [application(db, workspace_id, row[0]) for row in rows
             if row[1] == 'accepted' and json.loads(row[2]).get('consentReuse') is True
-            and employer_review.ready(db, row[0])
             and (view == 'all' or row[3] == view)]
 
 
@@ -506,33 +493,6 @@ def reject(db, workspace_id, application_id, request_id=None, expected_revision=
             bump_revision(db, workspace_id, app['vacancyId'])
         result = {'applicationId': application_id, 'reviewState': 'rejected'}
         _remember(db, workspace_id, request_id, 'review.reject', digest, result)
-        return result
-
-
-def request_invitation(db, workspace_id, application_id, *, request_id, expected_revision):
-    """Record interest in meeting, without creating a meeting or candidate state."""
-    import employer_workflow as workflow
-    with _atomic(db):
-        app = application(db, workspace_id, application_id, include_rejected=True)
-        require_active(app)
-        payload = {'applicationId': application_id, 'expectedRevision': expected_revision}
-        saved, digest = _command(db, workspace_id, request_id, 'review.invite', payload)
-        if saved is not None:
-            return saved
-        ensure_open(db, workspace_id, app['vacancyId'])
-        workflow.check_revision(db, application_id, expected_revision)
-        require(app['reviewState'] == 'proposed' and not app['invitationRequestedAt'],
-                'Ответ по кандидату уже сохранён.', 409)
-        require(workflow.review_response(db, application_id) is None and
-                workflow.load(db, application_id)['decision'] != 'declined',
-                'Ответ по кандидату уже сохранён.', 409)
-        stamp = iso(now())
-        db.execute('UPDATE em_reviews SET invitation_requested_at=?,updated_at=? WHERE application_id=?',
-                   (stamp, stamp, application_id))
-        bump_revision(db, workspace_id, app['vacancyId'])
-        workflow.review_changed(db, application_id)
-        result = {'decision': 'invite', 'createdAt': stamp}
-        _remember(db, workspace_id, request_id, 'review.invite', digest, result)
         return result
 
 

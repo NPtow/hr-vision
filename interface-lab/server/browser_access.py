@@ -4,22 +4,9 @@ import hmac
 from http.cookies import SimpleCookie, CookieError
 import secrets
 import time
-from urllib.parse import urlsplit
 
 COOKIE = '__Host-hr-vision-access'
 LIFETIME = 30 * 86400
-
-
-def allowed_origins(primary, aliases=()):
-    """Explicit product origins during migration, without enabling cross-site CORS."""
-    origins = frozenset([primary, *aliases])
-    for origin in origins:
-        parsed = urlsplit(origin)
-        if (parsed.scheme not in ('http', 'https') or not parsed.hostname or
-                parsed.username or parsed.password or '*' in origin or
-                parsed.path or parsed.query or parsed.fragment):
-            raise ValueError('Configure complete HTTP(S) origins without paths or wildcards')
-    return origins
 
 
 def signature(value, key):

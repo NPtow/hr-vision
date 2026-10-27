@@ -126,8 +126,7 @@ class RecruiterNotificationsTest(unittest.TestCase):
         with self.connect() as db:
             status = notifications.public_status(db, 'r-a', self.config)
         self.assertEqual(status['email']['address'], 'a***@example.test')
-        self.assertEqual(status['email']['status'], 'ready')
-        self.assertFalse(status['email']['verified'])
+        self.assertEqual(status['email']['status'], 'unverified')
         self.assertEqual(status['telegram']['status'], 'unbound')
         self.assertNotIn('not-real', json.dumps(status))
         self.assertNotIn('telegram_chat_id', json.dumps(status))
@@ -158,28 +157,10 @@ class RecruiterNotificationsTest(unittest.TestCase):
         with self.connect() as db:
             self.assertEqual(db.execute('SELECT count(*) FROM rn_channels').fetchone()[0], 0)
 
-    def test_provisioned_recruiter_gets_email_without_channel_setup(self):
-        self.assertEqual([r['status'] for r in self.enqueue()], ['pending', 'unbound'])
-        self.assertEqual(self.process()['delivered'], 1)
-        self.assertEqual(self.transport.email[0]['recipient'], 'a@example.test')
-        self.assertEqual(self.transport.telegram, [])
-        with self.connect() as db:
-            self.assertEqual(db.execute('SELECT email_verified FROM rn_channels').fetchone()[0], 0)
-            self.assertEqual(db.execute('SELECT count(*) FROM rn_tokens').fetchone()[0], 0)
+    def test_unverified_and_unbound_do_not_send(self):
+        self.assertEqual([r['status'] for r in self.enqueue()], ['unverified', 'unbound'])
         self.assertEqual(self.process()['delivered'], 0)
-
-    def test_missing_smtp_does_not_claim_delivery_or_replay_old_events(self):
-        result = self.enqueue(config=replace(self.config, smtp_host=''))
-        self.assertEqual(result[0]['status'], 'disabled')
-        self.assertEqual(self.process()['delivered'], 0)
-        self.assertEqual(self.transport.email, [])
-
-    def test_old_unverified_events_are_not_replayed_after_upgrade(self):
-        self.enqueue()
-        with self.connect() as db:
-            db.execute("UPDATE rn_outbox SET status='unverified' WHERE channel='email'")
-        self.assertEqual(self.process()['delivered'], 0)
-        self.assertEqual(self.transport.email, [])
+        self.assertEqual(self.transport.email + self.transport.telegram, [])
 
     def test_booked_message_contains_real_time_source_and_minimal_profile(self):
         self.verify_fixture()
@@ -187,8 +168,7 @@ class RecruiterNotificationsTest(unittest.TestCase):
         self.enqueue()
         self.assertEqual(self.process()['delivered'], 2)
         content = self.transport.email[-1]['content']
-        for expected in ('Анна Миронова', '14.10.2099 16:00–16:30 МСК', 'Длительность: 30 минут',
-                         'Источник: HH', 'workspace=recruiter'):
+        for expected in ('Анна Миронова', '14.10.2099 16:00–16:30 МСК', 'Источник: HH', 'workspace=recruiter'):
             self.assertIn(expected, content)
         for private in ('private CV details', '100000', 'c-a'):
             self.assertNotIn(private, content)

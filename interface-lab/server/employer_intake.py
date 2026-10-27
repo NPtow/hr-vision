@@ -10,7 +10,6 @@ import binascii
 from dataclasses import dataclass
 import hashlib
 import json
-import math
 from pathlib import PurePath
 import re
 import secrets
@@ -20,9 +19,7 @@ from urllib.parse import quote, urlsplit
 
 from candidate_resume import MAX_BYTES, MAX_ENCODED, parse_upload
 from domain import Problem, iso, now, require, text
-from dsa_panel import SOURCE as DSA_PANEL_SOURCE
 import employer_store as store
-import employer_workflow as workflow
 
 MAX_BATCH_BYTES = 8 * 1024 * 1024
 MAX_STORAGE_BYTES = 128 * 1024 * 1024
@@ -67,14 +64,6 @@ def init(db):
           name TEXT NOT NULL, mime TEXT NOT NULL, content BLOB NOT NULL,
           text_content TEXT NOT NULL, extracted TEXT NOT NULL, parse_status TEXT NOT NULL
           CHECK(parse_status IN ('parsed','unsupported')))''',
-        '''CREATE TABLE IF NOT EXISTS em_intake_review_events (
-          id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES em_workspaces(id),
-          vacancy_id TEXT NOT NULL REFERENCES cp_vacancies(id),
-          candidate_id TEXT NOT NULL REFERENCES em_intake_candidates(id),
-          kind TEXT NOT NULL CHECK(kind IN ('comment','rejection')),
-          body TEXT NOT NULL, created_at TEXT NOT NULL)''',
-        '''CREATE INDEX IF NOT EXISTS em_intake_review_scope
-          ON em_intake_review_events(workspace_id,vacancy_id,candidate_id)''',
     ):
         db.execute(statement)
 
@@ -167,241 +156,7 @@ def list_candidates(db, workspace_id, vacancy_id):
     _check_scope(db, workspace_id, vacancy_id)
     rows = db.execute('''SELECT body FROM em_intake_candidates WHERE workspace_id=? AND vacancy_id=?
       ORDER BY rowid DESC''', (workspace_id, vacancy_id)).fetchall()
-    events = {}
-    for cid, kind, body in db.execute('''SELECT candidate_id,kind,body FROM em_intake_review_events
-      WHERE workspace_id=? AND vacancy_id=? ORDER BY rowid''', (workspace_id, vacancy_id)):
-        events.setdefault(cid, []).append((kind, json.loads(body)))
-    people = [json.loads(row[0]) for row in rows]
-    import employer_intake_review
-    if employer_intake_review.exists(db):
-        for person in people:
-            if not person.get('archived'):
-                value = employer_intake_review.projection(db, workspace_id, vacancy_id, person['id'])
-                if value['assessment']:
-                    person['assessment'] = value['assessment']
-    return {'candidates': [_review_projection(person, events.get(person['id'], [])) for person in people]}
-
-
-def _recordings(person):
-    profile = person.get('preparedProfile')
-    recordings = profile.get('recordings') if isinstance(profile, dict) else None
-    return recordings if isinstance(recordings, list) else []
-
-
-def _recording_fingerprint(recording):
-    # The identity is derived only from persisted source metadata. A filename or
-    # a chapter title can be edited without moving comments to another source.
-    if recording.get('source') == 'core':
-        return recording['id']
-    source = {key: recording.get(key) for key in
-              ('publicUrl', 'mime', 'size', 'id', 'sha256', 'checksum', 'version')}
-    if recording.get('source') == 'dsa-panel':
-        source.update(source='dsa-panel', sourceCandidateId=recording.get('sourceCandidateId'))
-    return 'intake-recording:' + hashlib.sha256(_dump(source).encode()).hexdigest()
-
-
-def _stored_recording(person, index):
-    require(type(index) is int and 0 <= index < 10, 'Выберите запись.', 400)
-    recordings = _recordings(person)
-    require(index < len(recordings) and isinstance(recordings[index], dict), 'Запись не найдена.', 404)
-    recording = recordings[index]
-    url, mime = recording.get('publicUrl', ''), recording.get('mime', '')
-    if recording.get('source') == 'core':
-        require(isinstance(recording.get('id'), str) and re.fullmatch(r'[a-f0-9]{32}', recording['id']) and
-                isinstance(recording.get('sha256'), str) and re.fullmatch(r'[a-f0-9]{64}', recording['sha256']),
-                'Запись ещё не сохранена.', 422)
-    elif recording.get('source') == 'dsa-panel':
-        source_id = recording.get('sourceCandidateId')
-        source = (person.get('preparedProfile') or {}).get('source') or {}
-        require(isinstance(source, dict) and source.get('kind') == 'dsa-panel' and
-                source.get('example') is True and source.get('candidateId') == source_id and
-                isinstance(source_id, str) and re.fullmatch(r'\d{1,12}', source_id) and
-                len(recordings) == 1 and url == DSA_PANEL_SOURCE + '/api/video/' + source_id,
-                'Не удалось открыть исходную запись.', 422)
-    else:
-        require(isinstance(url, str) and re.fullmatch(r'https://disk\.yandex\.ru/[id]/[A-Za-z0-9_-]{8,120}', url),
-                'Не удалось открыть исходную запись.', 422)
-    require(isinstance(mime, str) and mime.startswith(('video/', 'audio/')), 'Этот файл не является записью.', 422)
-    return recording
-
-
-def _review_projection(person, events):
-    sources = {}
-    for index in range(min(len(_recordings(person)), 10)):
-        try:
-            sources[index] = _recording_fingerprint(_stored_recording(person, index))
-        except Problem:
-            # An unavailable/replaced source does not make old comments belong
-            # to the current video. The append-only rows remain in history.
-            continue
-    comments = [value for kind, value in events if kind == 'comment' and
-                sources.get(value['recordingIndex']) == value['recordingId']]
-    rejections = [value for kind, value in events if kind == 'rejection']
-    response = ({'decision': 'reject', 'createdAt': rejections[-1]['createdAt']} if rejections else
-                {'decision': 'invite', 'createdAt': person['invitationRequestedAt']}
-                if person.get('invitationRequestedAt') else None)
-    if response and response['decision'] == 'invite' and person.get('invitationMeeting'):
-        response.update(meetingStart=person['invitationMeeting']['start'], meetingStatus='draft')
-    # This opaque 52-bit token is exactly representable in JavaScript. Binding
-    # it to the current sources prevents a stale index from targeting a newly
-    # replaced recording, even before the first comment exists. GET stays read-only.
-    version = {'id': person['id'], 'archived': bool(person.get('archived')),
-               'sources': sources, 'events': len(events)}
-    if person.get('invitationRequestedAt'):
-        version['invitationRequestedAt'] = person['invitationRequestedAt']
-    if person.get('invitationMeeting'):
-        version['invitationMeeting'] = person['invitationMeeting']
-    revision = int(hashlib.sha256(_dump(version).encode()).hexdigest()[:13], 16)
-    return {**person, 'screeningComments': comments,
-            'reviewRejection': rejections[-1] if rejections else None,
-            'reviewResponse': response, 'reviewRevision': revision}
-
-
-def _review_person(db, workspace_id, vacancy_id, body):
-    _check_scope(db, workspace_id, vacancy_id, body)
-    row = db.execute('''SELECT body FROM em_intake_candidates
-      WHERE id=? AND workspace_id=? AND vacancy_id=?''', (body['id'], workspace_id, vacancy_id)).fetchone()
-    require(row is not None, 'Кандидат не найден.', 404)
-    events = [(kind, json.loads(value)) for kind, value in db.execute('''SELECT kind,body
-      FROM em_intake_review_events WHERE workspace_id=? AND vacancy_id=? AND candidate_id=? ORDER BY rowid''',
-        (workspace_id, vacancy_id, body['id']))]
-    person = json.loads(row[0])
-    return person, _review_projection(person, events)
-
-
-def _review_body(body, *, comment):
-    common = {'vacancyId', 'id', 'requestId', 'expectedRevision'}
-    fields = {'recordingIndex', 'seconds', 'chapterTitle', 'text'} if comment else {'rejectionAnswers'}
-    required = common | (fields - {'chapterTitle'} if comment else fields)
-    require(isinstance(body, dict) and required <= set(body) <= common | fields,
-            'Проверьте данные отзыва.', 400)
-    return _review_identity(body)
-
-
-def _review_identity(body):
-    require(isinstance(body['id'], str) and re.fullmatch(r'[a-f0-9]{24}', body['id']),
-            'Кандидат не найден.', 404)
-    require(isinstance(body['vacancyId'], str) and bool(body['vacancyId']), 'Выберите вакансию.', 400)
-    require(type(body['expectedRevision']) is int and 0 <= body['expectedRevision'] < 2 ** 53,
-            'Обновите карточку кандидата.', 400)
-    request_id = text(body['requestId'], 160)
-    require(not any(ord(ch) < 32 or ord(ch) == 127 for ch in request_id), 'Некорректный запрос.', 400)
-    return request_id
-
-
-def _review_text(value, limit=4000, *, required=True):
-    result = text(value, limit, required=required)
-    require(not any((ord(ch) < 32 and ch not in '\n\r\t') or ord(ch) == 127 for ch in result),
-            'Проверьте текст отзыва.', 400)
-    return result
-
-
-def _require_review_writable(db, workspace_id, vacancy_id, person, projected, expected_revision):
-    require(projected['reviewRevision'] == expected_revision,
-            'Карточка изменилась. Обновите её перед сохранением.', 409)
-    store.ensure_open(db, workspace_id, vacancy_id)
-    require(not person.get('archived'), 'Кандидат уже в архиве.', 409)
-
-
-def _require_unanswered(projected):
-    require(projected['reviewResponse'] is None, 'Ответ по этому кандидату уже сохранён.', 409)
-
-
-def screening_comment(db, workspace_id, vacancy_id, body):
-    """Append one private note to the exact persisted intake recording."""
-    request_id = _review_body(body, comment=True)
-    index, seconds = body['recordingIndex'], body['seconds']
-    require(type(index) is int and 0 <= index < 10, 'Выберите запись.', 400)
-    require(type(seconds) in (int, float) and 0 <= seconds <= 14400 and math.isfinite(seconds),
-            'Проверьте время комментария.', 400)
-    note = _review_text(body['text'])
-    title = _review_text(body.get('chapterTitle', ''), 240, required=False)
-    payload = {**body, 'requestId': request_id, 'text': note, 'chapterTitle': title}
-    with store._atomic(db):
-        person, projected = _review_person(db, workspace_id, vacancy_id, body)
-        previous, digest = store._command(db, workspace_id, request_id, 'intake.comment', payload)
-        if previous is not None:
-            # Recompute, rather than return a saved profile snapshot: old retry
-            # responses must not reattach a comment after its source changed.
-            return list_candidates(db, workspace_id, vacancy_id)
-        _require_review_writable(db, workspace_id, vacancy_id, person, projected, body['expectedRevision'])
-        recording = _stored_recording(person, index)
-        for field in ('duration', 'durationSeconds'):
-            duration = recording.get(field)
-            if type(duration) in (int, float) and 0 <= duration <= 14400 and math.isfinite(duration):
-                require(seconds <= duration, 'Комментарий находится за пределами записи.', 400)
-        created_at = iso(now())
-        event = {'id': secrets.token_hex(12), 'recordingIndex': index,
-                 'recordingId': _recording_fingerprint(recording), 'seconds': seconds,
-                 'chapterTitle': title, 'text': note, 'createdAt': created_at}
-        db.execute('INSERT INTO em_intake_review_events VALUES (?,?,?,?,?,?,?)',
-                   (event['id'], workspace_id, vacancy_id, person['id'], 'comment', _dump(event), created_at))
-        store._remember(db, workspace_id, request_id, 'intake.comment', digest, {'eventId': event['id']})
-        return list_candidates(db, workspace_id, vacancy_id)
-
-
-def review_reject(db, workspace_id, vacancy_id, body):
-    """Keep the rejection answers and archive the draft in one transaction."""
-    request_id = _review_body(body, comment=False)
-    answers = workflow.rejection_answers(body['rejectionAnswers'])
-    payload = {**body, 'requestId': request_id, 'rejectionAnswers': answers}
-    with store._atomic(db):
-        person, projected = _review_person(db, workspace_id, vacancy_id, body)
-        previous, digest = store._command(db, workspace_id, request_id, 'intake.reject', payload)
-        if previous is not None:
-            return list_candidates(db, workspace_id, vacancy_id)
-        _require_review_writable(db, workspace_id, vacancy_id, person, projected, body['expectedRevision'])
-        _require_unanswered(projected)
-        created_at = iso(now())
-        event = {**answers, 'id': secrets.token_hex(12), 'createdAt': created_at}
-        db.execute('INSERT INTO em_intake_review_events VALUES (?,?,?,?,?,?,?)',
-                   (event['id'], workspace_id, vacancy_id, person['id'], 'rejection', _dump(event), created_at))
-        person['archived'] = True
-        db.execute('UPDATE em_intake_candidates SET body=? WHERE id=? AND workspace_id=? AND vacancy_id=?',
-                   (_dump(person), person['id'], workspace_id, vacancy_id))
-        store._remember(db, workspace_id, request_id, 'intake.reject', digest, {'eventId': event['id']})
-        return list_candidates(db, workspace_id, vacancy_id)
-
-
-def review_respond(db, workspace_id, vacancy_id, body):
-    """Persist private employer intent; this never creates a candidate or meeting."""
-    require(isinstance(body, dict) and body.get('decision') in ('invite', 'reject'),
-            'Выберите ответ по кандидату.', 400)
-    fields = {'vacancyId', 'id', 'decision', 'requestId', 'expectedRevision'}
-    if body['decision'] == 'reject':
-        fields.add('rejectionAnswers')
-    optional = {'meetingStart'} if body['decision'] == 'invite' else set()
-    require(fields <= set(body) <= fields | optional, 'Проверьте данные ответа.', 400)
-    request_id = _review_identity(body)
-    if body['decision'] == 'reject':
-        result = review_reject(db, workspace_id, vacancy_id, {key: value for key, value in body.items() if key != 'decision'})
-    else:
-        payload = {**body, 'requestId': request_id}
-        if 'meetingStart' in body:
-            payload['meetingStart'] = workflow.review_meeting_start(body['meetingStart'], private=True)
-        with store._atomic(db):
-            person, projected = _review_person(db, workspace_id, vacancy_id, body)
-            previous, digest = store._command(db, workspace_id, request_id, 'intake.invite', payload)
-            if previous is None:
-                _require_review_writable(db, workspace_id, vacancy_id, person, projected, body['expectedRevision'])
-                response = projected['reviewResponse']
-                adding_time = ('meetingStart' in payload and response and response['decision'] == 'invite' and
-                               'meetingStart' not in response)
-                require(response is None or adding_time, 'Ответ по этому кандидату уже сохранён.', 409)
-                stamp = iso(now())
-                if 'meetingStart' in payload:
-                    start = workflow.review_meeting_start(payload['meetingStart'], future=True, private=True)
-                    person['invitationMeeting'] = {'start': start, 'createdAt': stamp}
-                person['invitationRequestedAt'] = person.get('invitationRequestedAt') or stamp
-                db.execute('UPDATE em_intake_candidates SET body=? WHERE id=? AND workspace_id=? AND vacancy_id=?',
-                           (_dump(person), person['id'], workspace_id, vacancy_id))
-                store._remember(db, workspace_id, request_id, 'intake.invite', digest,
-                                {'decision': 'invite', 'createdAt': person['invitationRequestedAt'],
-                                 **({'meetingStart': payload['meetingStart'], 'meetingStatus': 'draft'}
-                                    if 'meetingStart' in payload else {})})
-            result = list_candidates(db, workspace_id, vacancy_id)
-    saved = next(person for person in result['candidates'] if person['id'] == body['id'])
-    return {**result, 'response': saved['reviewResponse'], 'reviewRejection': saved['reviewRejection']}
+    return {'candidates': [json.loads(row[0]) for row in rows]}
 
 
 def existing(db, workspace_id, vacancy_id, body):
@@ -451,8 +206,6 @@ def add(db, workspace_id, vacancy_id, body, prepared=None):
                 person['files'].append({'id': secrets.token_hex(12), 'name': file['name'], 'size': len(file['content'])})
             db.execute('INSERT INTO em_intake_candidates VALUES (?,?,?,?,?)',
                        (person['id'], workspace_id, vacancy_id, prepared.batch, _dump(person)))
-            import assessment_jobs
-            assessment_jobs.enqueue(db, 'intake', person['id'], vacancy_id, workspace_id)
             if file:
                 db.execute('INSERT INTO em_intake_files VALUES (?,?,?,?,?,?,?,?)',
                            (person['files'][0]['id'], person['id'], file['name'], file['mime'], file['content'],
@@ -492,22 +245,24 @@ def file(db, workspace_id, file_id):
 
 
 def recording_source(db, workspace_id, body):
-    require(isinstance(body, dict) and {'id', 'index'} <= set(body) <= {'id', 'index', 'vacancyId'},
-            'Выберите запись.', 400)
-    require('vacancyId' not in body or (isinstance(body['vacancyId'], str) and bool(body['vacancyId'])),
-            'Выберите вакансию.', 400)
+    require(isinstance(body, dict) and set(body) == {'id', 'index'}, 'Выберите запись.', 400)
     cid, index = body.get('id'), body.get('index')
     require(isinstance(cid, str) and re.fullmatch(r'[a-f0-9]{24}', cid)
             and type(index) is int and 0 <= index < 10, 'Выберите запись.', 400)
     row = db.execute('SELECT vacancy_id,body FROM em_intake_candidates WHERE id=? AND workspace_id=?',
                      (cid, workspace_id)).fetchone()
     require(row is not None, 'Запись не найдена.', 404)
-    _check_scope(db, workspace_id, row[0], body)
-    recording = _stored_recording(json.loads(row[1]), index)
-    source = {'publicUrl': recording['publicUrl'], 'mime': recording['mime']}
-    if recording.get('source') == 'dsa-panel':
-        source.update(source='dsa-panel', sourceCandidateId=recording['sourceCandidateId'])
-    return source
+    store.vacancy(db, workspace_id, row[0])
+    profile = json.loads(row[1]).get('preparedProfile') or {}
+    recordings = profile.get('recordings', [])
+    require(isinstance(recordings, list) and index < len(recordings), 'Запись не найдена.', 404)
+    recording = recordings[index]
+    url = recording.get('publicUrl', '')
+    require(isinstance(url, str) and re.fullmatch(r'https://disk\.yandex\.ru/[id]/[A-Za-z0-9_-]{8,120}', url),
+            'Не удалось открыть исходную запись.', 422)
+    mime = recording.get('mime', '')
+    require(isinstance(mime, str) and mime.startswith(('video/', 'audio/')), 'Этот файл не является записью.', 422)
+    return {'publicUrl': url, 'mime': mime}
 
 
 class _NoRecordingRedirect(urllib.request.HTTPRedirectHandler):
@@ -517,15 +272,6 @@ class _NoRecordingRedirect(urllib.request.HTTPRedirectHandler):
 
 def resolve_recording(recording):
     """Use the fixed public API, never fetch a caller-supplied host or a video file."""
-    if recording.get('source') == 'dsa-panel':
-        source_id = recording.get('sourceCandidateId')
-        require(isinstance(source_id, str) and re.fullmatch(r'\d{1,12}', source_id) and
-                recording.get('publicUrl') == DSA_PANEL_SOURCE + '/api/video/' + source_id and
-                isinstance(recording.get('mime'), str) and recording['mime'].startswith(('video/', 'audio/')),
-                'Не удалось открыть исходную запись.', 422)
-        # DSA's existing Range-capable proxy handles its private storage URL.
-        # Do not resolve it as a Yandex public key or copy/download the media.
-        return {'url': recording['publicUrl'], 'mime': recording['mime']}
     url = 'https://cloud-api.yandex.net/v1/disk/public/resources/download?' + urllib.parse.urlencode({
         'public_key': recording['publicUrl'],
     })

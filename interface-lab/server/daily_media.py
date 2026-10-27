@@ -1,18 +1,11 @@
 """Daily rooms are recoverable across retries and expired invitation links."""
-import observability
 import json
-import http.client
-import logging
 import time
 from concurrent.futures import ThreadPoolExecutor
 import urllib.error
 import urllib.parse
 import urllib.request
 from domain import Problem, require, iso, now
-from media_runtime import current_deadline, provider_budget, provider_timeout
-
-
-log = logging.getLogger(__name__)
 
 
 class ProviderError(Problem):
@@ -30,49 +23,27 @@ class DailyMedia:
     def configured(self):
         return bool(self.key and self.enabled)
 
-    @observability.operation("daily.request")
     def request(self, path, body=None, method=None):
-        started = time.monotonic()
-        try:
-            return self._request(path, body, method)
-        except Problem as error:
-            status = getattr(error, 'provider_status', error.status)
-            if status != 404:  # Missing/expired rooms are a normal recovery path.
-                segments = path.partition('?')[0].strip('/').split('/')
-                operation = segments[0] if segments[0] in ('rooms', 'recordings', 'transcript', 'meeting-tokens') else 'api'
-                if segments[-1] in ('start', 'stop', 'presence', 'eject', 'access-link'):
-                    operation += '.' + segments[-1]
-                log.warning('daily_request_failed operation=%s status=%s elapsed_ms=%d',
-                            operation, status, int((time.monotonic() - started) * 1000))
-            raise
-
-    def _request(self, path, body=None, method=None):
         require(self.configured, 'Видеосервис ещё не подключён. Нужна настройка Daily для команды.', 503)
         req = urllib.request.Request('https://api.daily.co/v1' + path,
             data=None if body is None else json.dumps(body).encode(),
             headers={'Authorization': 'Bearer ' + self.key, 'Content-Type': 'application/json'},
             method=method or ('GET' if body is None else 'POST'))
         try:
-            with urllib.request.urlopen(req, timeout=provider_timeout()) as response:
-                content = response.read(2 * 1024 * 1024 + 1)
-            require(len(content) <= 2 * 1024 * 1024, 'Видеосервис вернул слишком большой ответ.', 502)
-            result = json.loads(content)
-            require(isinstance(result, dict), 'Видеосервис вернул неверный ответ. Повторите попытку.', 502)
-            return result
+            with urllib.request.urlopen(req, timeout=18) as response:
+                return json.load(response)
         except urllib.error.HTTPError as error:
             # Provider bodies can contain credentials/account details.
             raise ProviderError(error.code) from None
-        except (OSError, http.client.HTTPException):
+        except (urllib.error.URLError, TimeoutError):
             raise Problem('Видеосервис не отвечает. Попробуйте ещё раз.', 502) from None
-        except ValueError:
-            raise Problem('Видеосервис вернул неверный ответ. Повторите попытку.', 502) from None
 
-    def room(self, meeting_id, *, recordable=True, screenshare=False):
+    def room(self, meeting_id, *, recordable=True):
         name = 'hrv-' + meeting_id
         path = '/rooms/' + urllib.parse.quote(name, safe='')
         properties = {
             'exp': int(time.time()) + 3600, 'eject_at_room_exp': True, 'max_participants': 2,
-            'enable_prejoin_ui': True, 'enable_screenshare': bool(screenshare), 'enable_chat': False,
+            'enable_prejoin_ui': True, 'enable_screenshare': False, 'enable_chat': False,
             'enable_knocking': False, 'enforce_unique_user_ids': True,
             'enable_transcription_storage': bool(recordable),
             'enable_live_captions_ui': bool(recordable),
@@ -161,7 +132,7 @@ class DailyMedia:
                 'Не удалось определить участников звонка.', 502)
         return participants
 
-    def materials(self, room, known=None, *, include_metadata=False):
+    def materials(self, room, known=None):
         """Read the two provider channels independently, without storing media URLs.
 
         `known` must be trusted metadata already bound to this exact room. It is
@@ -170,22 +141,15 @@ class DailyMedia:
         """
         require(isinstance(room, dict) and room.get('name') and room.get('id'), 'Комната не найдена.', 409)
         known = known or {}
-        with provider_budget():
-            deadline = current_deadline()
-            with ThreadPoolExecutor(max_workers=2) as pool:
-                video = pool.submit(self._bounded_channel, deadline, room, 'video', known.get('recordings', []), include_metadata)
-                transcript = pool.submit(self._bounded_channel, deadline, room, 'transcription', known.get('transcripts', []), include_metadata)
-                recordings, video_state = video.result()
-                transcripts, transcript_state = transcript.result()
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            video = pool.submit(self._material_channel, room, 'video', known.get('recordings', []))
+            transcript = pool.submit(self._material_channel, room, 'transcription', known.get('transcripts', []))
+            recordings, video_state = video.result()
+            transcripts, transcript_state = transcript.result()
         return {'recordings': recordings, 'transcripts': transcripts,
                 'video': video_state, 'transcription': transcript_state, 'checkedAt': iso(now())}
 
-    def _bounded_channel(self, deadline, *args):
-        # Thread-local request budgets must be carried into both executor workers.
-        with provider_budget(deadline=deadline):
-            return self._material_channel(*args)
-
-    def _material_channel(self, room, kind, known, include_metadata=False):
+    def _material_channel(self, room, kind, known):
         video = kind == 'video'
         label = 'видео' if video else 'расшифровку'
         identifier, room_key = ('id', 'room_name') if video else ('transcriptId', 'roomId')
@@ -195,8 +159,7 @@ class DailyMedia:
         errors, candidates, pending = [], {}, False
         for item in known[:20]:
             if isinstance(item, dict) and isinstance(item.get('id'), str) and 0 < len(item['id']) <= 200:
-                candidates[item['id']] = {'id': item['id'], 'duration': item.get('duration'),
-                                          'providerMetadata': item.get('providerMetadata', {})}
+                candidates[item['id']] = {'id': item['id'], 'duration': item.get('duration')}
         try:
             result = self.request(path)
             require(isinstance(result, dict) and isinstance(result.get('data'), list), 'Неверный ответ видеосервиса.', 502)
@@ -208,15 +171,7 @@ class DailyMedia:
                 rid = row.get(identifier)
                 if status in ('finished', 't_finished'):
                     require(isinstance(rid, str) and 0 < len(rid) <= 200, 'Не удалось определить файл.', 502)
-                    metadata = {}
-                    if isinstance(row.get('mtgSessionId'), str) and len(row['mtgSessionId']) <= 200:
-                        metadata['meetingSessionId'] = row['mtgSessionId']
-                    if video and type(row.get('start_ts')) in (int, float) and 0 < row['start_ts'] < 4102444800:
-                        metadata['startTs'] = row['start_ts']
-                    for field in ('created_at', 'updated_at') if not video else ():
-                        if isinstance(row.get(field), str) and len(row[field]) <= 80:
-                            metadata[field] = row[field]
-                    candidates[rid] = {'id': rid, 'duration': row.get('duration'), 'providerMetadata': metadata}
+                    candidates[rid] = {'id': rid, 'duration': row.get('duration')}
                 elif status in ('failed', 'error', 't_failed', 't_error', 'canceled', 'cancelled'):
                     errors.append('Видеосервис сообщил об ошибке обработки.')
                 else:
@@ -226,7 +181,6 @@ class DailyMedia:
         files = []
         for rid, item in list(candidates.items())[:20]:
             try:
-                provider_timeout()
                 access_path = ('/recordings/' if video else '/transcript/') + urllib.parse.quote(rid, safe='') + '/access-link'
                 access = self.request(access_path)
                 require(isinstance(access, dict), 'Неверный ответ видеосервиса.', 502)
@@ -238,16 +192,12 @@ class DailyMedia:
                     files.append({'id': rid, 'url': url, 'duration': item.get('duration'),
                                   'expires': expires if type(expires) is int and expires > 0 else None})
                 else:
-                    with urllib.request.urlopen(url, timeout=provider_timeout()) as response:
+                    with urllib.request.urlopen(url, timeout=18) as response:
                         content = response.read(1024 * 1024 + 1)
                     require(len(content) <= 1024 * 1024, 'Расшифровка слишком большая.', 502)
                     files.append({'id': rid, 'text': content.decode('utf-8')})
-                if include_metadata:
-                    files[-1]['providerMetadata'] = item.get('providerMetadata', {})
-            except (Problem, OSError, http.client.HTTPException, ValueError, TypeError):
+            except (Problem, OSError, TimeoutError, ValueError, TypeError):
                 errors.append(f'Не удалось получить {label}. Попробуйте ещё раз.')
         state = 'ready' if files else 'error' if errors else 'processing' if pending else 'absent'
         return files, {'status': state, 'ids': list(candidates)[:20],
-                       **({'complete': bool(files and not errors and not pending and len(files) == len(candidates))}
-                          if include_metadata else {}),
                        **({'error': ' '.join(dict.fromkeys(errors))} if errors else {})}

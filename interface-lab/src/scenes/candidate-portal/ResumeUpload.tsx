@@ -1,5 +1,5 @@
 import { useRef, useState, type ChangeEvent, type FormEvent } from 'react';
-import { Download, FileText, LoaderCircle, Upload } from 'lucide-react';
+import { Download, FileText, Upload } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { candidateRequest, type CandidateResume } from './api';
 
@@ -63,15 +63,15 @@ export function ResumeUpload({ resume, busy, onUpload, compact = false }: {
   return <section className={`cp-resume ${compact ? 'cp-resume-compact' : ''}`}>
     {compact && <h2>Резюме</h2>}
     {resume && <div className="cp-resume-current"><FileText size={23}/><div><strong>{resume.filename}</strong><span>{fileSize(resume.size)}</span></div><Button variant="ghost" size="icon" aria-label="Скачать резюме" disabled={downloading} onClick={download}><Download size={18}/></Button></div>}
-    <form onSubmit={upload} aria-busy={working}>
+    <form onSubmit={upload}>
       <input ref={input} className="cp-file-input" type="file" hidden accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" aria-label="Файл резюме" onChange={choose} disabled={working}/>
       <div className={`cp-upload-area ${file ? 'has-file' : ''}`}>
-        {!compact && <span className="cp-large-icon">{working ? <LoaderCircle className="animate-spin motion-reduce:animate-none" size={26}/> : file ? <FileText size={26}/> : <Upload size={26}/>}</span>}
+        {!compact && <span className="cp-large-icon">{file ? <FileText size={26}/> : <Upload size={26}/>}</span>}
         {file ? <div className="cp-upload-selected"><strong>{file.name}</strong><span>{fileSize(file.size)}</span></div> : !compact && <p>PDF, DOCX или TXT · до 5 МБ</p>}
         <Button type="button" variant="secondary" disabled={working} onClick={() => input.current?.click()}>{file ? 'Выбрать другой файл' : resume ? 'Заменить резюме' : 'Выбрать файл'}</Button>
       </div>
       {error && <p className="cp-error" role="alert">{error}</p>}
-      {file && <div className="cp-form-actions"><Button type="submit" disabled={working}><span role={working ? 'status' : undefined}>{working ? 'Разбираем резюме…' : compact ? 'Сохранить резюме' : 'Продолжить'}</span></Button></div>}
+      {file && <div className="cp-form-actions"><Button type="submit" disabled={working}>{working ? 'Загружаем резюме…' : compact ? 'Сохранить резюме' : 'Продолжить'}</Button></div>}
     </form>
   </section>;
 }

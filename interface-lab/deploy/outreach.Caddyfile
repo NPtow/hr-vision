@@ -8,40 +8,9 @@ http://:8381 {
 	bind 127.0.0.1 10.130.0.18
 	@trusted {
 		remote_ip 127.0.0.1 10.130.0.28
-		host hr-vision.158-160-179-53.sslip.io mashadasha.tech
+		host hr-vision.158-160-179-53.sslip.io
 	}
 	handle @trusted {
-		@recruiterLegacy {
-			host mashadasha.tech
-			path /iframe.html
-			query workspace=recruiter
-		}
-		redir @recruiterLegacy "https://hr-vision.158-160-179-53.sslip.io{uri}" 302
-		redir /employer "/iframe.html?id=hr-vision-product--manager&viewMode=story&auth=login" 302
-		redir /account/candidate "/iframe.html?id=hr-vision-product--candidate&viewMode=story" 302
-		redir /candidate/ /candidate 308
-		@publicPages {
-			host mashadasha.tech
-			path / /candidate
-			not query path=*
-		}
-		handle @publicPages {
-			root * /srv/hr-vision-company-demo/current
-			rewrite * /index.html
-			encode zstd gzip
-			header Cache-Control "no-cache"
-			file_server
-		}
-		@publicAssets {
-			host mashadasha.tech
-			path /site-assets/* /assets/hr-vision.svg /assets/play.svg /assets/roboto-flex.ttf /favicon.ico /favicon.svg /favicon-32.png /favicon-48.png /apple-touch-icon.png /safari-pinned-tab.svg
-		}
-		handle @publicAssets {
-			root * /srv/hr-vision-company-demo/current
-			encode zstd gzip
-			header Cache-Control "no-cache"
-			file_server
-		}
 		@mockupStory {
 			path /iframe.html
 			not query id=hr-vision-product--start id=hr-vision-product--manager id=hr-vision-product--candidate
@@ -106,14 +75,6 @@ http://:8381 {
 		host hr-vision-lab.158-160-179-53.sslip.io
 	}
 	handle @mockups {
-		redir /demos/company-v1 /demos/company-v1/ 308
-		handle_path /demos/company-v1/* {
-			root * /srv/hr-vision-company-demo/current
-			encode zstd gzip
-			header Cache-Control "no-cache"
-			header X-Robots-Tag "noindex, nofollow"
-			file_server
-		}
 		handle /api/* {
 			respond "No API on the mockup site" 404
 		}

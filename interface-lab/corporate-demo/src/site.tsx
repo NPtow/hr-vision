@@ -61,8 +61,8 @@ function Intro({ progress }: { progress: MotionValue<number> }) {
     <motion.div className="intro-orbit" style={{ scale: haloScale, opacity: haloOpacity }} aria-hidden="true"><div/><div/><div/></motion.div>
     <motion.div className="intro-message first" style={{ opacity: firstOpacity, y: firstY }}><h1>Никто не хочет<br/><span className="crossed">нанимать<motion.i style={{ scaleX: lineScale }}/></span><br/>сотрудника.</h1></motion.div>
     <motion.div className="intro-message second" style={{ opacity: secondOpacity, y: secondY }}><h2>Все хотят решить<br/><span>проблему<br className="mobile-only"/> бизнеса.</span></h2></motion.div>
-
-
+    
+    
   </>;
 }
 
@@ -308,7 +308,7 @@ export function CompanySite() {
   }, []);
   return <MotionConfig reducedMotion="user"><div className={`company-site ${reduced ? 'reduced-motion motion-paused' : ''}`}>
     <a className="skip-link" href="#needs">Перейти к задаче</a>
-    <header className="site-header"><a className="brand" href="#top" aria-label="HR Vision — в начало"><img src={LOGO_URL} width="150" height="24" alt="HR Vision"/></a><nav aria-label="Выберите, что вы ищете"><a className="employer-login" href="/candidate">Ищу работу</a><SiteCountdownButton startAtSection="calendar" onStart={startHiring} label="Ищу сотрудника"/></nav></header>
+    <header className="site-header"><a className="brand" href="#top" aria-label="HR Vision — в начало"><img src={LOGO_URL} width="150" height="24" alt="HR Vision"/></a><nav aria-label="Кабинет работодателя"><a className="employer-login" href={employerEntryUrl('login')}>Войти</a><SiteCountdownButton startAtSection="calendar" onStart={startHiring}/></nav></header>
     <main>
       <Chapter id="top" className="intro-chapter">{p=><Intro progress={p}/>}</Chapter>
       <Chapter id="needs" className="needs-chapter">{p=><Needs progress={p} need={need} setNeed={editNeed} onNext={startHiring} nextLabel="Начать подбор"/>}</Chapter>

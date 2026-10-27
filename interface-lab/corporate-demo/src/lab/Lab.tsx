@@ -94,7 +94,7 @@ export function CompanyMotionLab() {
       <div className="motion-lab-view"><div className="motion-lab-stage" ref={stage} data-device={device}>
         {source&&<iframe key={`${scene}-${variant.id}-${device}-${connectionRun}`} ref={iframe} className="motion-lab-frame" title={`${active.title} — интерактивная сцена`} src={`./storybook/iframe.html?id=${encodeURIComponent(source)}&viewMode=story&lab=1`} style={{width,height,transform:`translate(-50%,-50%) scale(${scale})`}}/>}
         {!ready&&<div className="motion-lab-loading" role="status">{error||'Открываем сцену…'}{error&&<button onClick={()=>{if(!manifest){location.reload();return;}setError('');setConnectionRun(v=>v+1);}}>Повторить</button>}</div>}
-
+        
         {fullscreen&&<button className="motion-lab-close" onClick={()=>setFullscreen(false)} aria-label="Закрыть полный экран"><X size={19}/></button>}
       </div>
       <div className="motion-lab-player" aria-label="Управление анимацией"><div className="motion-lab-play-buttons">

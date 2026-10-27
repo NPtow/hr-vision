@@ -27,9 +27,6 @@ class CandidateBotHTTPTest(unittest.TestCase):
     SECRET = 'test-webhook-secret-01234567890123456789'
 
     def setUp(self):
-        generation = patch('candidate_resume_model.ResumeModel.generate', side_effect=lambda resume, *_: resume)
-        generation.start()
-        self.addCleanup(generation.stop)
         self.data = tempfile.TemporaryDirectory(prefix='hr-candidate-bot-http-')
         self.addCleanup(self.data.cleanup)
         self.environment = patch.dict(os.environ, {
@@ -378,22 +375,6 @@ class CandidateBotHTTPTest(unittest.TestCase):
             decisions = dict(db.execute('SELECT id,status FROM cp_applications'))
         self.assertEqual(decisions[accepted['id']], 'accepted')
         self.assertEqual(decisions[declined['id']], 'declined')
-
-    def test_meetings_includes_primary_interview_for_own_authenticated_candidate(self):
-        owner, other = self.register(10001), self.register(10002)
-        self.completed_interview(owner)
-        self.completed_interview(other)
-        with self.app.connect() as db:
-            db.execute("UPDATE cp_interviews SET status='booked',completed_at=NULL")
-        self.sent.clear()
-        self.message(10001, '/meetings')
-        self.drain()
-        replies = [body for method, body in self.sent if method == 'sendMessage']
-        primary = [body for body in replies if 'Первичное интервью:' in body['text']]
-        self.assertEqual(len(primary), 1)
-        self.assertEqual(primary[0]['chat_id'], '10001')
-        self.assertIn('МСК', primary[0]['text'])
-        self.assertIn('hr-vision-product--candidate', primary[0]['reply_markup']['inline_keyboard'][0][0]['url'])
 
     def test_meeting_callback_confirms_exact_id_and_time_without_touching_other_meeting(self):
         owner, other = self.register(10001), self.register(10002)

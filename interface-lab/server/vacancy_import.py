@@ -21,7 +21,7 @@ import urllib.request
 from domain import Problem, iso, now, require, text
 
 
-PACK_VERSION = '2026-10-16.2'
+PACK_VERSION = '2026-10-13.3'
 TEMPLATE = 'vacancy.extract-facts'
 ROLE = 'extractor'
 MAX_TEXT = 24000
@@ -63,9 +63,6 @@ an unrelated document, a resume/CV, or several different vacancies with no singl
 Never invent, infer missing requirements, recommend, write a job advertisement, or fill typical defaults.
 Every nonempty fact requires chunk_id and an EXACT supporting quote (at most 1200 characters) from that chunk.
 Text values MUST be verbatim contiguous excerpts of their quote. Keep source language. No summaries.
-Quotes must preserve letter case too; do not capitalize the start of an excerpt.
-Company names are text too: preserve the spelling, punctuation and quotation marks in the source.
-Do not expand a company name or replace its quotation marks with a more familiar spelling.
 You may emit several facts for responsibilities, requirements, niceToHave, benefits, schedule or description.
 For schedule, working days and working hours may be separate facts; each must carry its own exact quote.
 Prefer concise individual bullets; do not repeat the entire source in description.
@@ -168,20 +165,6 @@ def digest(value):
 
 def _dump(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
-
-
-class ValidationFailure(ValueError):
-    """Only schema-owned field names may enter the repair prompt or diagnostics."""
-    def __init__(self, code, field_name=None):
-        super().__init__(code)
-        self.field_name = field_name if field_name in FACT_FIELDS else None
-
-
-class ImportFailure(Problem):
-    """Private metadata contains codes/hashes/counts, never source or model text."""
-    def __init__(self, message, status, diagnostic):
-        super().__init__(message, status)
-        self.diagnostic = diagnostic
 
 
 def init(db):
@@ -320,7 +303,8 @@ def _numbers(quote):
     return result
 
 
-def _decode_response(raw):
+def validate_response(raw, selected):
+    """Strict, extractive grounding, not a lenient JSON-repair or prose parser."""
     if not isinstance(raw, str) or len(raw) > 60000 or INJECTION.search(raw):
         raise ValueError('invalid_output')
     def unique(pairs):
@@ -334,75 +318,6 @@ def _decode_response(raw):
     if not isinstance(output, dict) or set(output) != {'supported', 'facts'} or type(output['supported']) is not bool or \
             not isinstance(output['facts'], list) or len(output['facts']) > 80:
         raise ValueError('invalid_schema')
-    return output
-
-
-def _evidence_index(value):
-    """Index simple case/spacing changes back to literal source character spans.
-
-    Do not fold punctuation, spelling, accents or multi-character case mappings
-    (for example, German sharp s must never become two different source letters).
-    """
-    units, starts, ends = [], [], []
-    for index, char in enumerate(value):
-        if char.isspace():
-            if units and units[-1] == ' ':
-                ends[-1] = index + 1
-                continue
-            unit = ' '
-        else:
-            lower = char.lower()
-            unit = lower if len(lower) == 1 else char
-        units.append(unit)
-        starts.append(index)
-        ends.append(index + 1)
-    return ''.join(units), starts, ends
-
-
-def repair_evidence(raw, selected):
-    """Restore only a unique literal source slice; the strict validator follows.
-
-    This never accepts a fuzzy quote or invents a value. A wrong chunk reference
-    or changed letter case/spacing can be repaired only when one source span
-    identifies the same characters unambiguously across the bounded input.
-    """
-    output = _decode_response(raw)
-    by_id = {chunk['chunk_id']: chunk['text'] for chunk in selected}
-    indexes = {cid: _evidence_index(value) for cid, value in by_id.items()}
-    repairs = []
-    for fact in output['facts']:
-        if not isinstance(fact, dict) or set(fact) != {'field', 'value', 'chunk_id', 'quote'} or \
-                any(not isinstance(value, str) for value in fact.values()):
-            continue
-        key, cid, quote = (fact[name] for name in ('field', 'chunk_id', 'quote'))
-        if key not in FACT_FIELDS or cid not in by_id or not (1 <= len(quote) <= 1200) or quote in by_id[cid]:
-            continue
-        needle = _evidence_index(quote)[0].strip()
-        if not needle:
-            continue
-        matches = []
-        for source_id, (normalized, starts, ends) in indexes.items():
-            position = normalized.find(needle)
-            while position >= 0 and len(matches) < 2:
-                matches.append((source_id, starts[position], ends[position + len(needle) - 1]))
-                position = normalized.find(needle, position + 1)
-            if len(matches) > 1:
-                break
-        if len(matches) != 1:
-            continue
-        source_id, start, end = matches[0]
-        literal = by_id[source_id][start:end]
-        if len(literal) > 1200:
-            continue
-        fact.update(chunk_id=source_id, quote=literal)
-        repairs.append({'field': key, 'fromChunk': cid, 'chunk': source_id,
-                        'kind': 'chunk' if literal == quote else 'case_or_spacing'})
-    return (_dump(output) if repairs else raw), repairs
-
-
-def validate_response(raw, selected):
-    """Strict, extractive grounding, not a lenient JSON-repair or prose parser."""
-    output = _decode_response(raw)
     if not output['supported']:
         if output['facts']:
             raise ValueError('facts_without_support')
@@ -415,9 +330,9 @@ def validate_response(raw, selected):
             raise ValueError('invalid_fact')
         key, value, cid, quote = (fact[k] for k in ('field', 'value', 'chunk_id', 'quote'))
         if key not in FACT_FIELDS or not value or not (1 <= len(quote) <= 1200) or cid not in by_id or quote not in by_id[cid]:
-            raise ValidationFailure('unsupported_evidence', key)
+            raise ValueError('unsupported_evidence')
         if key in values and key not in LIST_FIELDS:
-            raise ValidationFailure('duplicate_field', key)
+            raise ValueError('duplicate_field')
         if key in ENUM_FIELDS:
             pattern = NORMALIZATIONS.get(value, r'(?!)')
             matches = list(re.finditer(pattern, quote, re.I))
@@ -430,7 +345,7 @@ def validate_response(raw, selected):
                 and (not match[0][0].isalnum() or not (offset + match.start()) or not chunk[offset + match.start() - 1].isalnum())
                 for offset in offsets)]
             if value not in ENUM_FIELDS[key] or not positive:
-                raise ValidationFailure('unsupported_enum', key)
+                raise ValueError('unsupported_enum')
         elif key.startswith('details.salary'):
             chunk = by_id[cid]
             contexts = [chunk[chunk.rfind('\n', 0, m.start()) + 1:
@@ -438,10 +353,10 @@ def validate_response(raw, selected):
                 for m in re.finditer(re.escape(quote), chunk)]
             if not re.fullmatch(r'[1-9]\d{0,8}', value) or int(value) not in _numbers(quote) or \
                     not any(int(value) in _numbers(context) for context in contexts):
-                raise ValidationFailure('unsupported_amount', key)
+                raise ValueError('unsupported_amount')
             value = int(value)
         elif _normal(value) not in _normal(quote) or len(value) > TEXT_FIELDS[key]:
-            raise ValidationFailure('unsupported_text', key)
+            raise ValueError('unsupported_text')
         if key in LIST_FIELDS and key in values:
             separator = '; ' if key == 'details.schedule' else '\n'
             if value not in values[key].split(separator):
@@ -454,7 +369,7 @@ def validate_response(raw, selected):
     result = empty_fields()
     for key, value in values.items():
         if key in TEXT_FIELDS and len(value) > TEXT_FIELDS[key]:
-            raise ValidationFailure('field_too_long', key)
+            raise ValueError('field_too_long')
         if key.startswith('details.'):
             result['details'][key.split('.', 1)[1]] = value
         else:
@@ -495,61 +410,33 @@ def extract(selected, config, iid):
     messages = [{'role': 'system', 'content': SYSTEM}, {'role': 'user', 'content': content}]
     started = time.monotonic()
     usage = {'prompt_tokens': 0, 'completion_tokens': 0}
-    failures = []
-    grounding_repairs = []
-    diagnostics = {
-        'unsupported_evidence': 'A quote was not found inside its cited chunk. Copy the exact quote and its correct chunk_id; preserve spelling and quotation marks.',
-        'duplicate_field': 'A scalar field was repeated. Return it only once.',
-        'unsupported_text': 'A text value was not a verbatim excerpt of its quote. Copy the source exactly.',
-        'unsupported_enum': 'A normalized choice was not explicitly supported by its source. Omit that choice.',
-        'unsupported_amount': 'A salary amount was not supported by its source units. Check the multiplier or omit it.',
-        'field_too_long': 'A field exceeded its limit. Return a shorter verbatim excerpt.',
-    }
-    safe_codes = set(diagnostics) | {'invalid_output', 'duplicate_key', 'invalid_schema', 'facts_without_support',
-                                   'invalid_fact', 'invalid_salary_range', 'incomplete_or_refused'}
-
-    def metadata():
-        return {'template': TEMPLATE, 'version': PACK_VERSION, 'modelAlias': ROLE,
-                'model': config.model, 'promptHash': digest(SYSTEM + _dump(selected)), 'schemaHash': digest(_dump(schema)),
-                'usage': usage.copy(), 'latencyMs': round((time.monotonic() - started) * 1000),
-                'retries': min(1, len(failures)), 'validationFailures': list(failures),
-                'groundingRepairs': list(grounding_repairs)}
-
     for attempt in range(2):
         payload = {'model': config.model, 'messages': messages, 'stream': False,
                    'max_completion_tokens': MAX_OUTPUT,
                    'response_format': {'type': 'json_schema', 'json_schema': {'name': 'vacancy_facts', 'strict': True, 'schema': schema}}}
-        try:
-            response = _provider(config, payload, iid)
-        except Problem as error:
-            raise ImportFailure(error.message, error.status,
-                {**metadata(), 'failure': {'stage': 'provider', 'code': 'provider_unavailable'}}) from None
+        response = _provider(config, payload, iid)
         try:
             for key in usage:
                 usage[key] += int((response.get('usage') or {}).get(key, 0))
             choice = response['choices'][0]
             if choice.get('finish_reason') != 'stop' or choice['message'].get('refusal'):
                 raise ValueError('incomplete_or_refused')
-            raw, repairs = repair_evidence(choice['message']['content'], selected)
-            grounding_repairs.extend({**repair, 'attempt': attempt + 1} for repair in repairs)
-            fields, evidence = validate_response(raw, selected)
-            return fields, evidence, metadata()
+            fields, evidence = validate_response(choice['message']['content'], selected)
+            return fields, evidence, {'template': TEMPLATE, 'version': PACK_VERSION, 'modelAlias': ROLE,
+                'model': config.model, 'promptHash': digest(SYSTEM + _dump(selected)), 'schemaHash': digest(_dump(schema)),
+                'usage': usage, 'latencyMs': round((time.monotonic() - started) * 1000), 'retries': attempt}
         except (ValueError, KeyError, TypeError, IndexError) as error:
-            code = str(error) if str(error) in safe_codes else 'invalid_schema'
-            field_name = error.field_name if isinstance(error, ValidationFailure) else None
-            failure = {'stage': 'validation', 'code': code, 'attempt': attempt + 1}
-            if field_name:
-                failure['field'] = field_name
-            failures.append(failure)
             if attempt:
-                raise ImportFailure('Не удалось надёжно разобрать вакансию. Попробуйте другой источник или заполните поля вручную.',
-                                    422, {**metadata(), 'failure': failure}) from None
-            # Never replay model text: only a constant code and a schema-owned
-            # field identify what the single repair needs to fix or omit.
-            diagnostic = diagnostics.get(code, 'The result did not match the schema or evidence.')
-            target = ' for field ' + field_name if field_name else ''
-            messages.append({'role': 'user', 'content': 'Validation failed' + target + '. ' + diagnostic +
-                ' Return the complete schema. If you cannot find exact supporting source text for that field, omit it. Do not invent a replacement.'})
+                raise Problem('Не удалось надёжно разобрать вакансию. Попробуйте другой источник или заполните поля вручную.', 422)
+            # Constant diagnostic only, never echo untrusted output into the retry prompt.
+            diagnostic = {
+                'unsupported_evidence': 'A quote was not found inside its cited chunk. Copy the exact quote and its correct chunk_id.',
+                'duplicate_field': 'A scalar field was repeated. Return it only once.',
+                'unsupported_text': 'A text value was not a verbatim excerpt of its quote. Copy the source exactly.',
+                'unsupported_enum': 'A normalized choice was not explicitly supported by its source. Omit that choice.',
+                'unsupported_amount': 'A salary amount was not supported by its source units. Check the multiplier or omit it.',
+            }.get(str(error), 'The result did not match the schema or evidence.')
+            messages.append({'role': 'user', 'content': 'Validation failed. ' + diagnostic + ' Return only the schema. Omit unsupported fields.'})
 
 
 def finish(db, principal, iid, prepared, selected, fields, evidence, metadata, redacted, lease):
@@ -564,12 +451,9 @@ def finish(db, principal, iid, prepared, selected, fields, evidence, metadata, r
     return result
 
 
-def fail(db, iid, lease, transient=False, error=None):
-    diagnostic = error.diagnostic if isinstance(error, ImportFailure) else None
-    if error is not None and diagnostic is None:
-        diagnostic = {'failure': {'stage': 'request', 'code': 'request_rejected' if isinstance(error, Problem) else 'unexpected_error'}}
-    db.execute("UPDATE em_vacancy_imports SET status=?,metadata=?,updated_at=? WHERE id=? AND status='running' AND lease=?",
-               ('retryable' if transient else 'error', _dump(diagnostic) if diagnostic else None, iso(now()), iid, lease))
+def fail(db, iid, lease, transient=False):
+    db.execute("UPDATE em_vacancy_imports SET status=?,updated_at=? WHERE id=? AND status='running' AND lease=?",
+               ('retryable' if transient else 'error', iso(now()), iid, lease))
 
 
 def source_for(db, workspace_id, iid):

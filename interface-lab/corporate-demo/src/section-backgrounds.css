@@ -1,0 +1,102 @@
+/* Each edge shares an exact colour with its neighbour. The transition is
+   painted in the section background, so sticky scenes remain unobstructed. */
+.company-site {
+  --chapter-opening: #f7f7f2;
+  --chapter-pool: #f4f5f1;
+  --chapter-graph: #f2f4f9;
+  --chapter-interview: #f6f5f1;
+  --chapter-calendar: #f8f4ed;
+  --chapter-meeting: #edf4f5;
+  --chapter-offer: #edeef8;
+  --chapter-finish: #f3f3e8;
+}
+
+.company-site > main > section {
+  --chapter-surface: var(--chapter-interview);
+  --chapter-enter: var(--chapter-surface);
+  --chapter-exit: var(--chapter-surface);
+  --chapter-atmosphere: linear-gradient(transparent, transparent);
+
+  /* The 48% cap prevents the two fades from overlapping in natural-height
+     mobile and reduced-motion scenes. No extra scroll distance is added. */
+  background:
+    linear-gradient(
+      to bottom,
+      var(--chapter-enter) 0%,
+      color-mix(in srgb, var(--chapter-enter) 94%, transparent) 20%,
+      color-mix(in srgb, var(--chapter-enter) 68%, transparent) 40%,
+      color-mix(in srgb, var(--chapter-enter) 32%, transparent) 60%,
+      color-mix(in srgb, var(--chapter-enter) 6%, transparent) 80%,
+      transparent 100%
+    ) top / 100% min(48%, 84svh) no-repeat,
+    linear-gradient(
+      to top,
+      var(--chapter-exit) 0%,
+      color-mix(in srgb, var(--chapter-exit) 94%, transparent) 20%,
+      color-mix(in srgb, var(--chapter-exit) 68%, transparent) 40%,
+      color-mix(in srgb, var(--chapter-exit) 32%, transparent) 60%,
+      color-mix(in srgb, var(--chapter-exit) 6%, transparent) 80%,
+      transparent 100%
+    ) bottom / 100% min(48%, 84svh) no-repeat,
+    var(--chapter-atmosphere),
+    var(--chapter-surface);
+}
+
+.company-site > main > .intro-chapter {
+  --chapter-surface: var(--chapter-opening);
+}
+
+.company-site > main > .needs-chapter {
+  --chapter-enter: var(--chapter-opening);
+  --chapter-surface: #f6f6f2;
+  --chapter-exit: var(--chapter-pool);
+}
+
+.company-site > main > .pool-section {
+  --chapter-surface: var(--chapter-pool);
+}
+
+.company-site > main > .connections-chapter {
+  --chapter-enter: var(--chapter-pool);
+  --chapter-surface: #f3f5f6;
+  --chapter-exit: var(--chapter-graph);
+}
+
+.company-site > main > .site-interest {
+  --chapter-enter: var(--chapter-graph);
+  --chapter-surface: #f6f6f2;
+  --chapter-exit: var(--chapter-interview);
+  --chapter-atmosphere: radial-gradient(ellipse at 50% 70%, #fffaf5 0, transparent 65%);
+}
+
+.company-site > main > .site-interview {
+  --chapter-surface: var(--chapter-interview);
+  --chapter-exit: var(--chapter-calendar);
+}
+
+.company-site > main > .calendar-chapter {
+  --chapter-enter: var(--chapter-calendar);
+  --chapter-surface: #f3f4f0;
+  --chapter-exit: var(--chapter-meeting);
+}
+
+.company-site > main > .meeting-chapter {
+  --chapter-surface: var(--chapter-meeting);
+}
+
+.company-site > main > .site-feedback {
+  --chapter-enter: var(--chapter-meeting);
+  --chapter-surface: var(--chapter-interview);
+  --chapter-exit: var(--chapter-offer);
+  --chapter-atmosphere: radial-gradient(ellipse at 50% 57%, #f0f3f8 0, transparent 62%);
+}
+
+.company-site > main > .offer-chapter {
+  --chapter-enter: var(--chapter-offer);
+  --chapter-surface: #f0f1f0;
+  --chapter-exit: var(--chapter-finish);
+}
+
+.company-site > main > .finish-section {
+  --chapter-surface: var(--chapter-finish);
+}

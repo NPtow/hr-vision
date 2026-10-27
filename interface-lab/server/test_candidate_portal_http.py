@@ -21,15 +21,10 @@ from test_candidate_portal import FakeMedia
 class CandidateHTTPTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.generation = patch('candidate_resume_model.ResumeModel.generate', side_effect=lambda resume, *_: resume)
-        cls.generation.start()
-        cls.addClassCleanup(cls.generation.stop)
         cls.data = tempfile.TemporaryDirectory(prefix='hr-candidate-http-')
         cls.env = patch.dict(os.environ, {'HR_DATA_DIR': cls.data.name, 'HR_TEAM_KEY': 'http-test-team-only',
             'HR_VIDEO_ENABLED': '0', 'DAILY_API_KEY': '', 'HR_NOTIFICATIONS_ENABLED': '0',
-            'HR_HH_ENABLED': '0', 'HR_HH_SENDING_ENABLED': '0',
-            'HR_ADDITIONAL_ORIGINS': 'https://legacy.example.test',
-            'HR_RECRUITER_ORIGIN': 'https://legacy.example.test'})
+            'HR_HH_ENABLED': '0', 'HR_HH_SENDING_ENABLED': '0'})
         cls.env.start()
         spec = importlib.util.spec_from_file_location('candidate_http_isolated_app', Path(__file__).with_name('app.py'))
         cls.app = importlib.util.module_from_spec(spec)
@@ -83,14 +78,6 @@ class CandidateHTTPTest(unittest.TestCase):
         self.assertEqual(self.request('candidate/state', token=self.manager)[0], 401)
         self.assertEqual(self.request('candidate/state')[0], 401)
         self.assertEqual(self.request('candidate/session')[1]['authenticated'], False)
-
-    def test_recruiter_activation_stays_on_explicit_legacy_origin(self):
-        status, result, _ = self.request('recruiter/accounts', {
-            'email': str(uuid.uuid4()) + '@example.test', 'name': 'Recruiter migration test'
-        }, token=self.manager)
-        self.assertEqual(status, 200, result)
-        self.assertTrue(result['activationUrl'].startswith('https://legacy.example.test/iframe.html?'))
-        self.assertIn('workspace=recruiter', result['activationUrl'])
 
     def test_real_notification_hooks_are_durable_but_never_fake_delivery(self):
         state = self.request('candidate/notifications', cookie=self.cookie)[1]
@@ -146,7 +133,7 @@ class CandidateHTTPTest(unittest.TestCase):
             'contentBase64': base64.b64encode(resume.encode()).decode()}, cookie=self.cookie)
         self.assertEqual(code, 200, body)
         code, body, _ = self.request('candidate/profile', {'salaryMin': 150000, 'salaryMax': 200000,
-            'latestStartDate': (now() + dt.timedelta(days=30)).date().isoformat(), 'resumeReviewed': True, 'employmentType': 'full-time', 'anyCompany': True}, cookie=self.cookie)
+            'latestStartDate': (now() + dt.timedelta(days=30)).date().isoformat(), 'resumeReviewed': True}, cookie=self.cookie)
         self.assertEqual(code, 200, body)
         status, state, _ = self.request('recruiter/slots', {'start': iso(self.start), 'recruiterName': self.person['id']}, token=self.manager)
         self.assertEqual(status, 200, state)
@@ -239,36 +226,6 @@ class CandidateHTTPTest(unittest.TestCase):
             finally:
                 connection.close()
 
-    def test_coach_notes_body_limit_requires_auth_before_reading_and_is_scoped(self):
-        # No body is sent. Unauthorized/oversized requests must be rejected before read().
-        for path, token, length, expected in (
-            ('recruiter/interview/coach/progress', '', 100000, 401),
-            ('recruiter/interview/coach/restore', '', 100000, 401),
-            ('recruiter/interview/coach/progress?test=1', '', 100000, 401),
-            ('recruiter/interview/coach/progress', self.manager, 256 * 1024 + 1, 413),
-            ('recruiter/interview/coach/restore', self.manager, 256 * 1024 + 1, 413),
-            ('recruiter/interview/coach/state', self.manager, 32769, 413),
-        ):
-            connection = http.client.HTTPConnection('127.0.0.1', self.server.server_port, timeout=3)
-            try:
-                connection.putrequest('POST', '/api/hr/' + path)
-                connection.putheader('Content-Type', 'application/json')
-                if token:
-                    connection.putheader('Authorization', 'Bearer ' + token)
-                connection.putheader('Content-Length', str(length))
-                connection.endheaders()
-                self.assertEqual(connection.getresponse().status, expected, path)
-            finally:
-                connection.close()
-        # A normal Cyrillic note exceeds the former 32KiB transport ceiling but
-        # must reach the coach's ownership/domain validation rather than get 413.
-        payload = {'candidateId': self.person['id'], 'interviewId': 'not-an-interview',
-                   'expectedRevision': 0, 'scriptRevision': None,
-                   'progress': {'general': 'Подтверждён опыт работы с клиентами. ' * 250}}
-        self.assertGreater(len(json.dumps(payload).encode()), 32768)
-        self.assertEqual(self.request('recruiter/interview/coach/progress', payload,
-                                     token=self.manager)[0], 404)
-
     def test_sparse_registration_cv_review_and_owner_download_survive_reload(self):
         status, person, headers = self.request('candidate/register', {
             'email': str(uuid.uuid4()) + '@example.test', 'password': 'correct-passphrase-123',
@@ -290,14 +247,14 @@ class CandidateHTTPTest(unittest.TestCase):
         payload = {'filename': 'anna.txt', 'contentBase64': base64.b64encode(resume.encode()).decode()}
         status, uploaded, _ = self.request('candidate/resume', payload, cookie=cookie)
         self.assertEqual(status, 200, uploaded)
-        self.assertEqual(uploaded['onboarding'], {'step': 'preferences', 'missingFields': ['employmentType', 'preferredCompanies']})
+        self.assertEqual(uploaded['onboarding'], {'step': 'preferences', 'missingFields': []})
         self.assertNotIn('contentBase64', json.dumps(uploaded))
         self.assertEqual(self.request('candidate/resume', cookie=cookie)[1],
             {**payload, 'mime': 'text/plain'})
         self.assertEqual(self.request('candidate/resume', cookie=self.cookie)[0], 404)
         self.assertEqual(self.request('candidate/resume', token=self.manager)[0], 401)
         changes = {'city': 'Санкт-Петербург', 'residence': 'Петроградский район',
-            'employmentType': 'full-time', 'about': 'Работала с клиентами пять лет.', 'resumeReviewed': True, 'anyCompany': True}
+            'employmentType': 'full-time', 'about': 'Работала с клиентами пять лет.', 'resumeReviewed': True}
         status, reviewed, _ = self.request('candidate/profile', changes, cookie=cookie)
         self.assertEqual(status, 200, reviewed)
         persisted = self.request('candidate/state', cookie=cookie)[1]
@@ -314,28 +271,6 @@ class CandidateHTTPTest(unittest.TestCase):
         self.assertEqual(self.request('candidate/profile', {'id': 'anna'}, cookie=self.cookie)[0], 400)
         self.assertEqual(self.request('candidate/application/decision', {'applicationId': 'another-candidate-app', 'decision': 'accepted'}, cookie=self.cookie)[0], 404)
         self.assertEqual(self.request('candidate/telegram/webhook', {'update_id': 1})[0], 403)
-
-    def test_explicit_legacy_origin_keeps_candidate_login_working(self):
-        for origin in (self.app.ORIGIN, 'https://legacy.example.test'):
-            status, person, _ = self.request('candidate/login', {
-                'email': self.payload['email'], 'password': self.payload['password']},
-                extra_headers={'Origin': origin, 'Sec-Fetch-Site': 'same-origin'})
-            self.assertEqual(status, 200, person)
-            self.assertEqual(person['id'], self.person['id'])
-        for origin in ('https://legacy.example.test.attacker.test', 'https://unlisted.example.test'):
-            self.assertEqual(self.request('candidate/login', self.payload,
-                extra_headers={'Origin': origin})[0], 403)
-        self.assertEqual(self.request('candidate/login', self.payload,
-            extra_headers={'Origin': 'https://legacy.example.test', 'Sec-Fetch-Site': 'cross-site'})[0], 403)
-
-    def test_explicit_legacy_origin_preserves_employer_csrf_guard(self):
-        for origin in (self.app.ORIGIN, 'https://legacy.example.test'):
-            status, response, _ = self.request('employer/login', {
-                'email': self.payload['email'], 'password': self.payload['password']},
-                extra_headers={'Origin': origin, 'Sec-Fetch-Site': 'same-origin'})
-            self.assertEqual(status, 401, response)
-        self.assertEqual(self.request('employer/login', {},
-            extra_headers={'Origin': 'https://legacy.example.test', 'Sec-Fetch-Site': 'cross-site'})[0], 403)
 
     def test_forwarded_ip_requires_explicit_trust_and_loopback_peer(self):
         source = {'X-HR-Client-IP': '203.0.113.9', 'X-Forwarded-For': '198.51.100.9'}

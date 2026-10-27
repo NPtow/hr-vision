@@ -94,25 +94,6 @@ class BrowserServiceTest(unittest.TestCase):
         self.engine.queue(self.campaign['id'])
         self.engine.control(self.campaign['id'], 'resume')
 
-    def test_uncalibrated_browser_does_not_claim_another_account(self):
-        self.browser.status = lambda: {'configured': True, 'loggedIn': False, 'accountId': '',
-            'selectorsCalibrated': False, 'error': 'selectors_not_calibrated'}
-        state = self.service.browser_state()
-        self.assertTrue(state['configured'])
-        self.assertFalse(state['loggedIn'])
-        self.assertFalse(state['calibrationReady'])
-        self.assertIn('Нужно проверить элементы HH', state['error'])
-        self.queued()
-        self.service.tick()
-        self.assertEqual([], self.browser.sent)
-
-    def test_calibrated_browser_rejects_an_observed_different_account(self):
-        self.browser.status = lambda: {'loggedIn': True, 'accountId': 'other-account',
-            'selectorsCalibrated': True}
-        state = self.service.browser_state()
-        self.assertFalse(state['loggedIn'])
-        self.assertIn('другой аккаунт HH', state['error'])
-
     def test_worker_snapshot_to_send_to_booking_and_owner(self):
         self.queued()
         self.service.tick()
@@ -127,8 +108,7 @@ class BrowserServiceTest(unittest.TestCase):
                        (slot['id'], slot['start'], slot['end'], slot['recruiterName']))
             assign_fixture_slot(db, slot)
         token = parse_qs(urlsplit(url).fragment)['booking'][0]
-        body = {'token': token, 'slotId': 'slot-one', 'requestId': 'test-request-booking-123',
-                'email': 'booking@example.test', 'consentProfile': True}
+        body = {'token': token, 'slotId': 'slot-one', 'requestId': 'test-request-booking-123'}
         result, _ = self.booking.handle('POST', '/api/hr/booking/book', {'Content-Type': 'application/json'}, body, '127.0.0.1')
         retry, _ = self.booking.handle('POST', '/api/hr/booking/book', {'Content-Type': 'application/json'}, body, '127.0.0.1')
         self.assertEqual(result['booking']['id'], retry['booking']['id'])

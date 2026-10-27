@@ -25,12 +25,7 @@ def _salary(profile):
 def _profile(db, candidate_id, profile, portal):
     row = db.execute('SELECT body FROM cp_internal_profiles WHERE candidate_id=?', (candidate_id,)).fetchone()
     internal = json.loads(row[0]) if row else {}
-    resume = db.execute('''SELECT text_content,filename,mime,length(content),uploaded_at
-      FROM cp_resumes WHERE candidate_id=?''', (candidate_id,)).fetchone()
-    account = db.execute('SELECT email,profile FROM cp_candidates WHERE id=?', (candidate_id,)).fetchone()
-    saved_profile = json.loads(account[1]) if account else {}
-    contact_values = {'email': account[0] if account and account[0] else saved_profile.get('email'),
-                      'phone': saved_profile.get('phone'), 'telegram': saved_profile.get('telegram')}
+    resume = db.execute('SELECT text_content FROM cp_resumes WHERE candidate_id=?', (candidate_id,)).fetchone()
     interview = portal.interview(db, candidate_id)
     fields = [
         ('Город', profile.get('city')), ('Место проживания', profile.get('residence')),
@@ -52,9 +47,6 @@ def _profile(db, candidate_id, profile, portal):
         'shortSummary': internal.get('summary', ''),
         'profile': [{'label': label, 'value': str(value)} for label, value in fields if value],
         'cv': resume[0] if resume else '',
-        'resume': {'filename': resume[1], 'mime': resume[2], 'size': resume[3], 'uploadedAt': resume[4]} if resume else None,
-        'contacts': [{'kind': kind, 'value': value.strip()} for kind, value in contact_values.items()
-                     if isinstance(value, str) and value.strip()],
         'conclusion': [internal['evaluation']] if internal.get('evaluation') else [],
         'questions': [],
     }
@@ -95,11 +87,12 @@ def _free_slots(db, candidate_id, workspace_id, profile):
     return sorted(slots)
 
 
-def _safe_meeting(db, principal, portal, aid, meeting_id, saved):
-    meeting = portal.meeting(db, aid, meeting_id)
+def person(db, principal, portal, record, vacancy):
+    aid, cid = record['applicationId'], record['candidateId']
+    profile = record['profile']
+    state = workflow.load(db, aid, actor='manager', vacancy_id=vacancy['id'])
+    meeting = portal.meeting(db, aid)
     if meeting:
-        meeting.update(portal.calls.describe(db, meeting['id'], meeting['room'],
-                                           'workspace:' + principal['workspaceId'], completed=meeting['status'] == 'completed'))
         meeting.pop('room', None)
         # A declined proposal is an ended appointment in the existing component.
         if meeting['status'] == 'declined':
@@ -111,27 +104,10 @@ def _safe_meeting(db, principal, portal, aid, meeting_id, saved):
                                 (meeting['id'], aid, principal['workspaceId'])).fetchone()
             if joined and joined[0]:
                 meeting.update(joined=['manager'], startedAt=joined[0])
+        saved = state.get('meeting') or {}
         for key in ('questionnaire', 'feedbackDraft'):
             if key in saved:
                 meeting[key] = saved[key]
-    return meeting
-
-
-def person(db, principal, portal, record, vacancy):
-    import employer_review
-    aid, cid = record['applicationId'], record['candidateId']
-    profile = record['profile']
-    state = workflow.load(db, aid, actor='manager', vacancy_id=vacancy['id'])
-    # The archive remains in canonical storage; only current product stages are
-    # projected. Known old deep links can be restored without accepting foreign IDs.
-    archived_stage_ids = [stage['id'] for stage in state['stages'] if stage['kind'] in workflow.ARCHIVED_STAGE_KINDS]
-    stages = [stage for stage in state['stages'] if stage['kind'] not in workflow.ARCHIVED_STAGE_KINDS]
-    for stage in stages:
-        if stage['kind'] == 'meeting':
-            stage['meeting'] = _safe_meeting(db, principal, portal, aid, stage['meetingId'], stage['meeting'])
-    meetings = [stage['meeting'] for stage in stages if stage['kind'] == 'meeting']
-    latest = state.get('meeting')
-    meeting = next((item for item in meetings if latest and item['id'] == latest['id']), None)
     messages = [{**message, 'actor': 'manager' if message['actor'] == 'manager' else aid}
                 for message in state['messages']]
     return {
@@ -142,47 +118,13 @@ def person(db, principal, portal, record, vacancy):
         'sourceProfile': _profile(db, cid, profile, portal),
         'reviewState': record['reviewState'], 'queueOrder': record['queueOrder'],
         'matchingReason': record['reason'], 'matchingSource': record['source'],
-        'assessment': (employer_review.projection(db, aid) or {}).get('assessment'),
         'interest': record['status'], 'auto': bool(profile.get('autoApprove')),
         'slots': [], 'busy': [],
         'freeSlots': _free_slots(db, cid, principal['workspaceId'], profile),
         'meeting': meeting, 'feedback': state['feedback'],
-        'screeningComments': state['screeningComments'], 'meetingComments': state['meetingComments'],
-        'reviewRejection': state['reviewRejection'],
-        'reviewResponse': workflow.review_response(db, aid),
-        'meetings': meetings, 'stages': stages, 'archivedStageIds': archived_stage_ids, 'offers': state['offers'],
         'afterInterest': state['afterInterest'], 'decision': state['decision'],
         'offer': state['offer'], 'messages': messages, 'workflowRevision': state['revision'],
     }
-
-
-def review_responses(db, workspace_id):
-    """Read back the employer's own answers without re-opening private profiles.
-
-    Receipts deliberately contain no CV, contacts, interview, recordings or stage
-    data. A refusal or later candidate consent withdrawal does not erase the
-    employer's own decision, nor make the candidate eligible again.
-    """
-    rows = db.execute('''SELECT r.application_id,a.candidate_id,a.vacancy_id,c.profile
-      FROM em_reviews r JOIN cp_applications a ON a.id=r.application_id
-      JOIN em_vacancies v ON v.vacancy_id=a.vacancy_id
-      JOIN cp_candidates c ON c.id=a.candidate_id
-      WHERE r.workspace_id=? AND v.workspace_id=? AND
-        (r.invitation_requested_at IS NOT NULL OR r.rejected_at IS NOT NULL OR
-         EXISTS (SELECT 1 FROM cp_review_rejections q WHERE q.application_id=r.application_id))
-      ORDER BY r.updated_at,r.application_id''', (workspace_id, workspace_id))
-    result = {}
-    for aid, cid, vid, profile_json in rows:
-        response = workflow.review_response(db, aid)
-        if response:
-            profile = json.loads(profile_json)
-            name = profile.get('name', '')
-            result['application:' + aid] = {
-                'source': 'application', 'id': aid, 'applicationId': aid, 'candidateId': cid,
-                'vacancyId': vid, 'name': name if isinstance(name, str) else '', **response,
-                'reviewRejection': workflow.review_rejection(db, aid) if response['decision'] == 'reject' else None,
-            }
-    return result
 
 
 def build_state(db, principal, portal, media, vacancy_id=None):
@@ -229,9 +171,6 @@ def build_state(db, principal, portal, media, vacancy_id=None):
         'workspaceName': db.execute('SELECT name FROM em_workspaces WHERE id=?', (wid,)).fetchone()[0],
         'closedBy': closed_by, 'videoConfigured': media.configured,
         'vacancy': selected, 'vacancies': vacancies, 'candidates': current,
-        'reviewResponses': review_responses(db, wid),
         'meetings': meetings, 'offerCandidates': [p for p in people if p['offer'] or p['decision'] == 'pool'],
-        'invitationRequests': [p for p in people if p['reviewState'] == 'proposed' and
-                               p['reviewResponse'] and p['reviewResponse']['decision'] == 'invite'],
         'pendingFeedback': pending_feedback,
     }

@@ -4,7 +4,7 @@ Integration: construct CandidateBooking(portal) after CandidatePortal, mount
 handles() before generic routes, and optionally set event_sink to the campaign
 engine's transactional event writer. Public routes accept POST JSON only:
   /api/hr/booking/state {token}
-  /api/hr/booking/book  {token, slotId, requestId, email, consentProfile:true}
+  /api/hr/booking/book  {token, slotId, requestId}
   /api/hr/booking/call  {token} -> a separate existing-domain guest URL
 
 The trusted campaign engine calls issue(db, candidate_id, campaign_id,
@@ -15,11 +15,9 @@ checks; the engine separately checks campaign/audience/browser state.
 
 Invitation rows contain a digest only. A private per-database HMAC key allows
 the trusted issuer to recover the same URL; keep the database/backups private,
-as with the existing HH outbox. The personal capability exposes only the name and
-booking contact, not the CV, internal profile, campaign identifiers or media tokens.
-Public booking records only explicit
-CV-profile preparation consent and contact email; it creates no account and grants
-no recording, reuse or automatic-vacancy consent. Existing call rules remain in force.
+as with the existing HH outbox. Public DTOs never expose CV, contacts, internal
+profile, campaign identifiers or media tokens. Public booking does not create
+an account or record consent. Existing call consent/time rules remain in force.
 """
 import base64
 import datetime as dt
@@ -28,14 +26,9 @@ import hmac
 import json
 import re
 import secrets
-from urllib.parse import parse_qs, quote, urlencode, urlsplit
+from urllib.parse import parse_qs, quote, urlsplit
 
 import candidate_invites as invites
-import candidate_notifications as notifications
-import interview_scheduler
-from candidate_notifications import _email as delivery_email
-from candidate_portal import email_value, profile_value
-from candidate_resume import extract_preferences, start_date_value
 from domain import Problem, iso, now, require, timestamp
 
 
@@ -43,9 +36,6 @@ PREFIX = '/api/hr/booking/'
 TOKEN_RE = re.compile(r'^[A-Za-z0-9_-]{43}$')
 ID_RE = re.compile(r'^[A-Za-z0-9_.:-]{1,160}$')
 TTL_SECONDS = 7 * 86400
-PROFILE_CONSENT_VERSION = 'hh-cv-profile-v1'
-CV_PROFILE_FIELDS = frozenset(('name', 'city', 'desiredRole', 'about', 'residence',
-                               'employmentType', 'salaryMin', 'salaryMax', 'latestStartDate'))
 
 
 def _id(value):
@@ -75,42 +65,13 @@ def init(db):
           request_id TEXT NOT NULL, slot_id TEXT NOT NULL REFERENCES cp_recruiter_slots(id),
           interview_id TEXT NOT NULL REFERENCES cp_interviews(id), created_at TEXT NOT NULL,
           PRIMARY KEY(invitation_id,request_id))''',
-        '''CREATE TABLE IF NOT EXISTS cp_booking_profile_consents (
-          interview_id TEXT PRIMARY KEY REFERENCES cp_interviews(id),
-          candidate_id TEXT NOT NULL REFERENCES cp_candidates(id),
-          invitation_id TEXT NOT NULL REFERENCES cp_booking_invitations(id),
-          contact_email TEXT NOT NULL, consent_version TEXT NOT NULL,
-          consent_at TEXT NOT NULL, profile_prepared_at TEXT NOT NULL)''',
         '''CREATE TABLE IF NOT EXISTS cp_booking_call_links (
           interview_id TEXT PRIMARY KEY REFERENCES cp_interviews(id),
           call_invitation_id TEXT NOT NULL REFERENCES cp_invitations(id),
           url TEXT NOT NULL, expires_at TEXT NOT NULL)''',
-        '''CREATE TABLE IF NOT EXISTS cp_booking_manual_sources (
-          candidate_id TEXT PRIMARY KEY REFERENCES cp_candidates(id),
-          campaign_id TEXT NOT NULL, recipient_id TEXT NOT NULL,
-          cv_sha256 TEXT NOT NULL, created_at TEXT NOT NULL,
-          UNIQUE(campaign_id,recipient_id))''',
-        '''CREATE TABLE IF NOT EXISTS cp_booking_manual_events (
-          event_key TEXT PRIMARY KEY, invitation_id TEXT NOT NULL REFERENCES cp_booking_invitations(id),
-          kind TEXT NOT NULL, interview_id TEXT REFERENCES cp_interviews(id), created_at TEXT NOT NULL)''',
     ):
         db.execute(statement)
-    if 'request_hash' not in {row[1] for row in db.execute('PRAGMA table_info(cp_booking_requests)')}:
-        db.execute('ALTER TABLE cp_booking_requests ADD COLUMN request_hash TEXT')
     db.execute('INSERT OR IGNORE INTO cp_booking_config VALUES (1,?)', (secrets.token_bytes(32),))
-
-
-CALL_GRACE_SECONDS = 90 * 60
-
-
-def profile_consent(db, candidate_id, interview_id):
-    """Trusted exact-person/interview lookup; never exposes contacts publicly."""
-    if not db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='cp_booking_profile_consents'").fetchone():
-        return None
-    row = db.execute('''SELECT contact_email,consent_version,consent_at,profile_prepared_at
-      FROM cp_booking_profile_consents WHERE candidate_id=? AND interview_id=?''',
-                     (candidate_id, interview_id)).fetchone()
-    return dict(zip(('email', 'consentVersion', 'consentAt', 'profilePreparedAt'), row)) if row else None
 
 
 class CandidateBooking:
@@ -118,7 +79,6 @@ class CandidateBooking:
         self.portal, self.event_sink = portal, event_sink
         with portal.connect() as db:
             init(db)
-            notifications.init(db)
         portal.booking_invitation_lookup = self.existing_invitation
         portal.booking_invitation_store = self.remember_invitation
 
@@ -136,34 +96,8 @@ class CandidateBooking:
     def _prepared(db, candidate_id):
         return db.execute('''SELECT 1 FROM cp_candidates c JOIN cp_intake t ON t.candidate_id=c.id
           JOIN cp_resumes r ON r.candidate_id=c.id
-          WHERE c.id=? AND (t.source='hh' OR (t.source='manual' AND EXISTS
-            (SELECT 1 FROM cp_booking_manual_sources m WHERE m.candidate_id=c.id)))
-          AND length(r.content)>0 AND length(trim(r.text_content))>0''',
+          WHERE c.id=? AND t.source='hh' AND length(r.content)>0 AND length(trim(r.text_content))>0''',
                           (candidate_id,)).fetchone() is not None
-
-    def issue_manual(self, db, resume, campaign_id, recipient_id):
-        """Trusted operator entry. The caller supplies a model-validated CV.
-
-        No account, consent, booking or outgoing message is created here.
-        The same campaign/recipient/file always returns the same invitation.
-        """
-        for value in (campaign_id, recipient_id):
-            _id(value)
-        digest = hashlib.sha256(resume['content']).hexdigest()
-        old = db.execute('''SELECT candidate_id,cv_sha256 FROM cp_booking_manual_sources
-          WHERE campaign_id=? AND recipient_id=?''', (campaign_id, recipient_id)).fetchone()
-        if old:
-            require(old[1] == digest, 'Для этого получателя уже использовано другое резюме.', 409)
-            cid = old[0]
-        else:
-            key = 'manual-outreach:' + hashlib.sha256(
-                json.dumps([campaign_id, recipient_id], separators=(',', ':')).encode()).hexdigest()
-            cid = invites.create_prepared(db, profile_value(resume['fields']), source='manual',
-                                          external_key=key, cv=resume)
-            db.execute('INSERT INTO cp_booking_manual_sources VALUES (?,?,?,?,?)',
-                       (cid, campaign_id, recipient_id, digest, iso(now())))
-        issued = self.issue(db, cid, campaign_id, recipient_id)
-        return {'candidateId': cid, **issued}
 
     def issue(self, db, candidate_id, campaign_id, recipient_id, *, ttl_seconds=TTL_SECONDS):
         """Trusted only; caller owns authorization and the SQLite transaction."""
@@ -182,7 +116,7 @@ class CandidateBooking:
             require(not old[3] and old[2] > int(now().timestamp()), 'Приглашение истекло или отозвано.', 410)
             identifier, expires = old[0], old[2]
         else:
-            require(self._prepared(db, candidate_id), 'Сначала подготовьте профиль и резюме.', 409)
+            require(self._prepared(db, candidate_id), 'Сначала подготовьте профиль и резюме из HH.', 409)
             require(not db.execute('SELECT 1 FROM cp_interviews WHERE candidate_id=?', (candidate_id,)).fetchone(),
                     'Кандидат уже записан на интервью.', 409)
             identifier, expires = 'booking_' + secrets.token_hex(16), int(now().timestamp()) + ttl_seconds
@@ -190,13 +124,9 @@ class CandidateBooking:
             db.execute('INSERT INTO cp_booking_invitations VALUES (?,?,?,?,?,?,NULL,?)',
                        (identifier, hashlib.sha256(token.encode()).hexdigest(), candidate_id,
                         campaign_id, recipient_id, expires, iso(now())))
-        source = db.execute('SELECT source FROM cp_intake WHERE candidate_id=?', (candidate_id,)).fetchone()[0]
         return {'invitationId': identifier,
                 'url': self.portal.origin.rstrip('/') + '/iframe.html?id=hr-vision-product--candidate'
-                       '&viewMode=story&cp=invite-booking&' + urlencode({
-                           'utm_source': 'hh' if source == 'hh' else 'personal',
-                           'utm_medium': 'outreach', 'utm_campaign': campaign_id})
-                       + '#booking=' + quote(self._token(db, identifier)),
+                       '&viewMode=story&cp=invite-booking#booking=' + quote(self._token(db, identifier)),
                 'expiresAt': iso(dt.datetime.fromtimestamp(expires, dt.timezone.utc))}
 
     @staticmethod
@@ -267,14 +197,6 @@ class CandidateBooking:
         return dict(zip(('id', 'candidateId', 'campaignId', 'recipientId', 'expires', 'revokedAt'), row))
 
     def _event(self, db, event, invitation, *, interview_id=None, key):
-        manual = db.execute('''SELECT candidate_id FROM cp_booking_manual_sources
-          WHERE campaign_id=? AND recipient_id=?''',
-                            (invitation['campaignId'], invitation['recipientId'])).fetchone()
-        if manual:
-            require(manual[0] == invitation['candidateId'], 'Получатель не совпадает с приглашением.', 409)
-            db.execute('INSERT OR IGNORE INTO cp_booking_manual_events VALUES (?,?,?,?,?)',
-                       (key, invitation['id'], event, interview_id, iso(now())))
-            return
         if self.event_sink:
             self.event_sink(db, event, invitation['recipientId'], campaign_id=invitation['campaignId'],
                             invitation_id=invitation['id'], interview_id=interview_id, event_key=key)
@@ -289,7 +211,7 @@ class CandidateBooking:
             return None
         return {'id': row[0], 'slotId': row[1], 'status': row[2], 'start': row[3], 'end': row[4],
                 'recruiterName': row[5], 'canOpenCall': bool(row[6] == 1 and row[2] in ('booked', 'live')
-                  and timestamp(row[4]) + dt.timedelta(seconds=CALL_GRACE_SECONDS) > now())}
+                  and timestamp(row[4]) + dt.timedelta(minutes=90) > now())}
 
     def _state(self, db, invitation):
         cid = invitation['candidateId']
@@ -297,143 +219,47 @@ class CandidateBooking:
         slots = []
         if not booking:
             require(self._prepared(db, cid), 'Резюме пока недоступно. Свяжитесь с командой HR Vision.', 409)
-            slots = self.portal.booking_slots(db)
-        # Only contact details needed for this personal invitation, never the CV.
+            slots = [slot for slot in self.portal.slots(db)
+                     if timestamp(slot['end']) - timestamp(slot['start']) == dt.timedelta(minutes=30)]
+        # The capability needs no profile projection; only the person's name.
         row = db.execute('SELECT profile FROM cp_candidates WHERE id=?', (cid,)).fetchone()
         require(row, 'Приглашение не найдено.', 404)
         name = json.loads(row[0]).get('name', '')
         return {'status': 'booked' if booking else 'available', 'candidateName': name,
-                'contactEmail': self._contact_email(db, cid),
                 'timezone': 'Europe/Moscow', 'slots': slots,
-                'profileReady': bool(booking and profile_consent(db, cid, booking['id'])),
-                'delivery': notifications.booking_delivery_status(db, cid, invitation['id']),
-                'booking': booking}
-
-    @staticmethod
-    def _contact_email(db, cid):
-        row = db.execute('''SELECT t.contact_email,r.text_content FROM cp_intake t
-          LEFT JOIN cp_resumes r ON r.candidate_id=t.candidate_id WHERE t.candidate_id=?''', (cid,)).fetchone()
-        if not row:
-            return ''
-        if row[0]:
-            try:
-                return delivery_email(email_value(row[0]))
-            except Problem:
-                pass
-        # Explicit email only. Multiple different contacts in a CV are ambiguous.
-        addresses = set()
-        for value in re.findall(r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", row[1] or ''):
-            try:
-                addresses.add(delivery_email(value))
-            except Problem:
-                pass
-        return next(iter(addresses)) if len(addresses) == 1 else ''
-
-    @staticmethod
-    def _prepare_profile(db, cid):
-        """Fill missing imported CV facts once; preserve the same person and edits."""
-        row = db.execute('''SELECT c.profile,r.text_content,r.extracted FROM cp_candidates c
-          JOIN cp_resumes r ON r.candidate_id=c.id WHERE c.id=?''', (cid,)).fetchone()
-        require(row, 'Сначала подготовьте резюме.', 409)
-        profile = json.loads(row[0])
-        # Reviewed blank fields may be intentional. Never overwrite an edited profile.
-        if profile.get('resumeReviewed'):
-            return
-        raw = re.sub(r'^Резюме из HH · [^\n]+\n\n', '', row[1], count=1)
-        extracted = json.loads(row[2])
-        source = db.execute('SELECT source FROM cp_intake WHERE candidate_id=?', (cid,)).fetchone()
-        facts = extracted if source and source[0] == 'manual' else extract_preferences(raw)
-        if isinstance(extracted, dict) and (not source or source[0] != 'manual'):
-            facts = {**{key: value for key, value in extracted.items() if key in CV_PROFILE_FIELDS}, **facts}
-        patch = {key: value for key, value in facts.items() if key in CV_PROFILE_FIELDS
-                 and not profile.get(key) and value not in ('', None)}
-        if 'latestStartDate' in patch:
-            try:
-                start_date_value(patch['latestStartDate'], future=True)
-            except Problem:
-                patch.pop('latestStartDate')  # An older CV date must not block today's booking.
-        # An edited salary boundary outranks the older CV's opposite boundary.
-        minimum, maximum = patch.get('salaryMin', profile.get('salaryMin')), patch.get('salaryMax', profile.get('salaryMax'))
-        if minimum is not None and maximum is not None and minimum > maximum:
-            patch.pop('salaryMin', None)
-            patch.pop('salaryMax', None)
-        if patch:
-            merged = profile_value(patch, profile)
-            db.execute('UPDATE cp_candidates SET profile=?,updated_at=? WHERE id=?',
-                       (json.dumps(merged, ensure_ascii=False, separators=(',', ':')), iso(now()), cid))
+                'booking': {key: value for key, value in booking.items() if key != 'slotId'} if booking else None}
 
     def _book(self, db, invitation, body):
         slot_id, request_id = _id(body.get('slotId')), _id(body.get('requestId'))
-        email = delivery_email(email_value(body.get('email')))
-        consent = body.get('consentProfile')
-        require(type(consent) is bool, 'Подтвердите создание профиля из резюме.', 400)
-        fingerprint = hashlib.sha256(json.dumps({'slotId': slot_id, 'email': email, 'consentProfile': consent},
-                                               sort_keys=True, separators=(',', ':')).encode()).hexdigest()
-        previous = db.execute('''SELECT slot_id,request_hash FROM cp_booking_requests
-          WHERE invitation_id=? AND request_id=?''', (invitation['id'], request_id)).fetchone()
+        previous = db.execute('''SELECT slot_id FROM cp_booking_requests WHERE invitation_id=? AND request_id=?''',
+                              (invitation['id'], request_id)).fetchone()
         if previous:
-            require(previous[1] == fingerprint if previous[1] is not None else previous[0] == slot_id,
-                    'Этот запрос уже использован с другими данными.', 409)
-        cid = invitation['candidateId']
-        existing = self._interview(db, cid)
-        saved = profile_consent(db, cid, existing['id']) if existing else None
-        if saved:
-            require(consent and saved['email'] == email, 'Данные для этого интервью уже подтверждены.', 409)
-        require(consent is True, 'Согласитесь на создание профиля из резюме, чтобы выбрать время.', 400)
-        if previous and previous[1] is not None:
+            require(previous[0] == slot_id, 'Этот запрос уже использован для другого времени.', 409)
             return self._state(db, invitation)
-        person = db.execute('SELECT email FROM cp_candidates WHERE id=?', (cid,)).fetchone()
-        require(person and (person[0] is None or person[0] == email),
-                'Профиль уже связан с другой почтой. Свяжитесь с командой HR Vision.', 409)
-        # A meeting contact is not a login identity. Never merge accounts or change
-        # credentials merely because an invitation uses an already known email.
-        require(self._prepared(db, cid), 'Сначала подготовьте резюме.', 409)
+        existing = self._interview(db, invitation['candidateId'])
         if existing:
-            require(interview_scheduler.same_window(db, slot_id, existing['slotId']),
-                    'Вы уже записаны. Для переноса свяжитесь с командой.', 409)
+            require(existing['slotId'] == slot_id, 'Вы уже записаны. Для переноса свяжитесь с командой.', 409)
             interview_id = existing['id']
         else:
-            self.portal.book(db, cid, {'slotId': slot_id}, prepared=True, pooled=True)
-            interview_id = self._interview(db, cid)['id']
+            # Unlike legacy prepared booking, a public link cannot choose an unowned slot.
+            available = next((slot for slot in self.portal.slots(db) if slot['id'] == slot_id), None)
+            require(available and timestamp(available['end']) - timestamp(available['start']) == dt.timedelta(minutes=30),
+                    'Это время уже недоступно. Выберите другое.', 409)
+            require(self._prepared(db, invitation['candidateId']), 'Сначала подготовьте резюме.', 409)
+            self.portal.book(db, invitation['candidateId'], {'slotId': slot_id}, prepared=True)
+            interview_id = self._interview(db, invitation['candidateId'])['id']
             db.execute('INSERT INTO cp_booking_attribution VALUES (?,?,?,?,?)',
                        (interview_id, invitation['id'], invitation['campaignId'], invitation['recipientId'], iso(now())))
             self._event(db, 'booking.created', invitation, interview_id=interview_id, key='booking:' + interview_id)
-        if not saved:
-            self._prepare_profile(db, cid)
-            prepared_at = iso(now())
-            source = db.execute('SELECT source FROM cp_intake WHERE candidate_id=?', (cid,)).fetchone()
-            version = 'manual-cv-profile-v1' if source and source[0] == 'manual' else PROFILE_CONSENT_VERSION
-            db.execute('INSERT INTO cp_booking_profile_consents VALUES (?,?,?,?,?,?,?)',
-                       (interview_id, cid, invitation['id'], email, version, prepared_at, prepared_at))
-            db.execute('UPDATE cp_intake SET contact_email=? WHERE candidate_id=?', (email, cid))
-        if previous:
-            # Legacy booking rows acquire the new payload fingerprint only after
-            # explicitly completing the new consent step, never on a page read.
-            db.execute('UPDATE cp_booking_requests SET request_hash=? WHERE invitation_id=? AND request_id=?',
-                       (fingerprint, invitation['id'], request_id))
-        else:
-            db.execute('''INSERT INTO cp_booking_requests
-              (invitation_id,request_id,slot_id,interview_id,created_at,request_hash) VALUES (?,?,?,?,?,?)''',
-                       (invitation['id'], request_id, self._interview(db, cid)['slotId'], interview_id, iso(now()), fingerprint))
+        db.execute('INSERT INTO cp_booking_requests VALUES (?,?,?,?,?)',
+                   (invitation['id'], request_id, slot_id, interview_id, iso(now())))
         # A booking can lie beyond the initial invitation window. Keep this same
         # personal page available through the meeting without rotating its URL.
-        booked = self._interview(db, cid)
-        retain_until = int(timestamp(booked['end']).timestamp()) + 90 * 60
+        booking = self._interview(db, invitation['candidateId'])
+        retain_until = int(timestamp(booking['end']).timestamp()) + 90 * 60
         db.execute('UPDATE cp_booking_invitations SET expires=MAX(expires,?) WHERE id=?',
                    (retain_until, invitation['id']))
-        if not saved and booked['status'] in ('booked', 'live'):
-            link = self.issue(db, cid, invitation['campaignId'], invitation['recipientId'])['url']
-            notifications.enqueue_booking_confirmation(db, cid, invitation['id'], interview_id, email, link)
         return self._state(db, invitation)
-
-    def _telegram(self, db, invitation):
-        cid = invitation['candidateId']
-        booking = self._interview(db, cid)
-        require(booking and profile_consent(db, cid, booking['id']), 'Сначала подтвердите запись на интервью.', 409)
-        original = db.execute('''SELECT b.id,b.campaign_id,b.recipient_id FROM cp_booking_profile_consents c
-          JOIN cp_booking_invitations b ON b.id=c.invitation_id WHERE c.interview_id=?''', (booking['id'],)).fetchone()
-        link = self.issue(db, cid, original[1], original[2])['url']
-        return notifications.create_booking_telegram_link(db, cid, original[0], link)
 
     def _call(self, db, invitation):
         cid = invitation['candidateId']
@@ -459,14 +285,13 @@ class CandidateBooking:
 
     def handle(self, method, raw_path, headers, body, ip):
         parsed = urlsplit(raw_path)
-        require(parsed.path in (PREFIX + 'state', PREFIX + 'book', PREFIX + 'call', PREFIX + 'telegram'), 'Не найдено.', 404)
+        require(parsed.path in (PREFIX + 'state', PREFIX + 'book', PREFIX + 'call'), 'Не найдено.', 404)
         require(method == 'POST', 'Откройте персональную ссылку.', 405)
         require(not parsed.query and not parsed.fragment, 'Передайте ссылку в теле запроса.', 400)
-        allowed = getattr(self.portal, 'origins', frozenset((self.portal.origin,)))
-        require((headers.get('Origin') is None or headers.get('Origin') in allowed)
+        require(headers.get('Origin') in (None, self.portal.origin)
                 and headers.get('Sec-Fetch-Site') != 'cross-site', 'Другой источник запроса.', 403)
         require(headers.get('Content-Type', '').split(';', 1)[0].strip() == 'application/json', 'Нужен JSON.', 415)
-        expected = {'token', 'slotId', 'requestId', 'email', 'consentProfile'} if parsed.path.endswith('/book') else {'token'}
+        expected = {'token', 'slotId', 'requestId'} if parsed.path.endswith('/book') else {'token'}
         require(isinstance(body, dict) and set(body) == expected, 'Проверьте поля запроса.', 400)
         self.portal.rate_limit('booking-ip:' + str(ip), 120, 60)
         with self.portal.lock, self.portal.connect() as db:
@@ -477,8 +302,6 @@ class CandidateBooking:
                 self._event(db, 'booking.page_loaded', invitation, key='booking.page_loaded:' + invitation['id'])
             elif parsed.path.endswith('/book'):
                 result = self._book(db, invitation, body)
-            elif parsed.path.endswith('/telegram'):
-                result = self._telegram(db, invitation)
             else:
                 result = self._call(db, invitation)
             return result, {'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer'}

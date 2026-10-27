@@ -5,7 +5,6 @@ campaign drafts and booking; no network or sender thread starts at import time.
 Only an operator's explicit discovery request installs a recurring applicant
 source. A campaign must also be running before its source or sender is polled.
 """
-import observability
 import json
 import os
 import re
@@ -103,7 +102,7 @@ class OutreachBrowserService:
             state['calibrationReady'] = observed.get('selectorsCalibrated') is True
             state['lastCheckedAt'] = observed.get('lastCheckedAt')
             code = observed.get('error')
-            if state['calibrationReady'] and state['loggedIn'] and observed.get('accountId') != self.account_id:
+            if observed.get('accountId') != self.account_id:
                 state['loggedIn'], code = False, 'account_mismatch'
             if code:
                 state['error'] = safe_error(code)
@@ -395,8 +394,7 @@ class OutreachBrowserService:
             if row['room'] and self.portal.media.configured:
                 try:
                     result = self.portal.materials(row['candidate_id'], meeting_id=row['interview_id'])
-                except Exception as telemetry_error:
-                    observability.capture_exception(telemetry_error, "worker.hh_outreach_worker")
+                except Exception:
                     continue
             else:
                 result = json.loads(row['body']) if row['body'] else {}
@@ -438,8 +436,7 @@ class OutreachBrowserService:
             while not self.stop.wait(5):
                 try:
                     self.tick()
-                except Exception as telemetry_error:
-                    observability.capture_exception(telemetry_error, "worker.hh_outreach_worker")
+                except Exception:
                     # Error details may carry private message text. Never log them.
                     self.last_error = 'worker_check_required'
         self.thread = threading.Thread(target=run, name='hh-browser-outreach', daemon=True)

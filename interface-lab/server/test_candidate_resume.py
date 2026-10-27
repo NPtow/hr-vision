@@ -9,7 +9,6 @@ import sqlite3
 import tempfile
 import threading
 import unittest
-from unittest.mock import patch
 import zipfile
 
 from candidate_portal import CandidatePortal, ClosingConnection, dump
@@ -129,9 +128,6 @@ class ResumeExtractionTest(unittest.TestCase):
 
 class CandidateCVOnboardingTest(unittest.TestCase):
     def setUp(self):
-        generation = patch('candidate_resume_model.ResumeModel.generate', side_effect=lambda resume, *_: resume)
-        generation.start()
-        self.addCleanup(generation.stop)
         self.tmp = tempfile.TemporaryDirectory(prefix='hr-cv-onboarding-')
         self.path = Path(self.tmp.name) / 'private.sqlite3'
         self.lock = threading.RLock()
@@ -190,9 +186,9 @@ class CandidateCVOnboardingTest(unittest.TestCase):
         self.problem(409, 'book', {'slotId': slot['id']}, self.cookie)
         self.call('profile', {'salaryMin': None, 'salaryMax': None, 'latestStartDate': ''}, self.cookie)
         state, _ = self.call('resume', upload(TEXT + '\nЖелаемая зарплата: 120000 ₽'), self.cookie)
-        self.assertEqual(state['onboarding']['missingFields'], ['employmentType', 'preferredCompanies'])
+        self.assertEqual(state['onboarding']['missingFields'], ['salaryMax', 'latestStartDate'])
         self.problem(409, 'book', {'slotId': slot['id']}, self.cookie)
-        state, _ = self.call('profile', {'salaryMax': None, 'latestStartDate': '', 'employmentType': 'full-time', 'anyCompany': True, 'resumeReviewed': True}, self.cookie)
+        state, _ = self.call('profile', {'salaryMax': 180000, 'latestStartDate': self.date, 'resumeReviewed': True}, self.cookie)
         self.assertEqual(state['salaryMin'], 120000)
         self.assertEqual(state['onboarding']['step'], 'complete')
         state, _ = self.call('book', {'slotId': slot['id']}, self.cookie)
@@ -204,12 +200,12 @@ class CandidateCVOnboardingTest(unittest.TestCase):
         self.call('profile', {'availability': availability, 'about': 'Saved older personal text',
             'geographies': ['Москва'], 'autoApprove': True}, self.cookie)
         state, _ = self.call('resume', upload(TEXT + f'\nЖелаемая зарплата: 120000–180000 ₽\nДата выхода: {self.date}'), self.cookie)
-        self.assertEqual(state['onboarding'], {'step': 'preferences', 'missingFields': ['employmentType', 'preferredCompanies']})
+        self.assertEqual(state['onboarding'], {'step': 'preferences', 'missingFields': []})
         self.assertFalse(state['resumeReviewed'])
         self.assertEqual(state['availability'], availability)
         self.assertIn('пять лет занималась', state['about'])
         self.assertTrue(state['autoApprove'])
-        state, _ = self.call('profile', {'salaryMax': 200000, 'anyCompany': True, 'resumeReviewed': True, 'about': 'Моё уточнение по опыту',
+        state, _ = self.call('profile', {'salaryMax': 200000, 'resumeReviewed': True, 'about': 'Моё уточнение по опыту',
             'city': 'Химки', 'residence': 'Левобережный район', 'employmentType': 'full-time'}, self.cookie)
         self.assertEqual(state['onboarding']['step'], 'complete')
         self.assertEqual(state['salaryMin'], 120000)
@@ -235,21 +231,6 @@ class CandidateCVOnboardingTest(unittest.TestCase):
             self.assertNotIn('contentBase64', dump(state))
             self.assertNotIn('text_content', dump(state))
             self.assertNotIn(TEXT, dump(state))
-
-    def test_minimum_salary_and_company_choices_persist_without_start_date(self):
-        self.call('resume', upload(), self.cookie)
-        values = {'salaryMin': 120000, 'salaryMax': None, 'employmentType': 'full-time',
-                  'preferredCompanies': ['Яндекс', 'Т-Банк'], 'anyCompany': False, 'resumeReviewed': True}
-        self.call('profile', values, self.cookie)
-        state, _ = self.call('state', cookie=self.cookie)
-        self.assertEqual(['Яндекс', 'Т-Банк'], state['preferredCompanies'])
-        self.assertIsNone(state['salaryMax'])
-        self.assertEqual('', state['latestStartDate'])
-        self.assertEqual('complete', state['onboarding']['step'])
-        self.problem(400, 'profile', {'anyCompany': True}, self.cookie)
-        self.problem(400, 'profile', {'preferredCompanies': [], 'resumeReviewed': True}, self.cookie)
-        state, _ = self.call('profile', {'anyCompany': True, 'preferredCompanies': []}, self.cookie)
-        self.assertTrue(state['anyCompany'])
 
     def test_invalid_ranges_dates_and_internal_profile_edits_rejected(self):
         for body in ({'salaryMin': -1}, {'salaryMax': True}, {'salaryMin': 200000, 'salaryMax': 100000},

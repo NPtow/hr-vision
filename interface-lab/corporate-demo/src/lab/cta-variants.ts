@@ -9,3 +9,4 @@ export const ctaVariants = [
 export type CtaVariant = typeof ctaVariants[number]['id'];
 export const ctaVariantById = (id?: string) => ctaVariants.find(v => v.id === id) ?? ctaVariants[0];
 export const ctaSteps = [[0, '50% · Первые 10 с'], [.25, '30% · Таймер 00:30'], [.75, '30% · Осталось 10 с'], [1, 'Скидка закончилась']] as const;
+
