@@ -77,7 +77,6 @@ export function makeFixture() {
     if (action.endsWith('/profile')) return profileEnvelope;
     if (action.endsWith('/recommendations')) return recommendations;
     if (action.endsWith('/required-fields')) return action.startsWith('vacancies/') ? required : candidateFacts[action.split('/')[1]];
-    if (action.endsWith('/interviews')) return { candidateId: action.split('/')[1], interviews: [] };
     if (action.endsWith('/readiness')) {
       const id = action.split('/')[1], p = people.find(p => p.id === id);
       return { candidateId: id, hrInterview: p.hrInterview, materials: { state: 'ready', recordings: p.hrInterview?.recordingCount ?? null, transcripts: p.hrInterview?.transcriptCount ?? null, items: [] }, assessment: assessment[id] };

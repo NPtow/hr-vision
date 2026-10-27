@@ -178,31 +178,3 @@ only after the loopback collector is healthy; the default is disabled. See
 кэшируется в рамках запроса. В приватном `ia_calls.metadata` сохраняются alias,
 запрошенная и фактическая модели, usage, версия, hashes, latency и число повторов.
 Ключи только в `/etc/hr-vision/api.env`, никогда не в UI или архиве релиза.
-
-
-## Popup интервью кандидата: `selection_interviews.py`
-
-Перед выпуском отдельно установить reviewed receiver, экспортированный из того же
-проверенного commit, через `services/deploy/assessment-services/install_receiver.py`.
-Новый API-пакет содержит ровно действующий полный набор плюс
-`selection_interviews.py`. Предыдущий полный набор сохранён как
-`PRE_SELECTION_INTERVIEWS_RUNTIME`; partial/hybrid-наборы остаются запрещены.
-Модуль read-only, не создаёт схемы или durable-состояния, поэтому предыдущий полный
-API остаётся совместимым с данными. При откате исчезает только новый reader/маршрут;
-обычные проверки outbox/runtime, живых встреч, backup и origin остаются обязательны.
-
-Порядок выпуска: root проверяет окончательный commit и QA, экспортирует receiver
-из commit и сверяет новый SHA256, затем отдельно разрешает atomic-install с точным
-наблюдаемым прежним hash. Installer держит оба deploy-lock, сохраняет root-private
-backup старого receiver и не перезапускает службы. Только после этого merge/защищённый
-CI выпускает HR/UI из точного main SHA. Assessment-сервисы для этого popup не
-обновляются. Сервисный Storybook по-прежнему содержит только start/manager/candidate.
-
-Проверка локально: `python3 -B -m unittest discover -s interface-lab/deploy/ci -p test_receiver.py -q`.
-Тесты запускают настоящий JS producer с Python receiver, проверяют bytes/hash нового
-модуля, исключают соседние tests/docs, сохраняют предыдущий полный runtime и отвергают
-partial-наборы. Добавление и удаление reader определяется как API change. Все helpers
-запускать с `python3 -B`; не импортировать immutable runtime с созданием `.pyc`.
-Исходный runtime проверяется до паузы; лишние generated-файлы не игнорируются и не
-удаляются автоматически. Установленный receiver, production playback и браузерная
-приёмка этим локальным тестом не подтверждаются.

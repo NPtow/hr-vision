@@ -28,9 +28,10 @@ function nearestAngle(current: number, target: number) {
 
 const scoreRadius = (value: number) => INNER_RADIUS + (value - 1) / 4 * (OUTER_RADIUS - INNER_RADIUS);
 
-/** Rotation chooses a skill; only the radial length encodes its score. */
+/** Rotation chooses an evidenced skill; only the radial length encodes its score. */
 export function OrbitGraph({ criteria, selectedId, onSelect, onEvidence }: AssessmentGraphProps) {
-  const available = criteria.filter(criterion => criterion.state !== 'not_applicable');
+  const evidenced = criteria.filter(criterion => criterion.evidence.length > 0);
+  const available = evidenced.length ? evidenced : criteria.filter(criterion => criterion.state !== 'not_applicable');
   const activeIndex = Math.max(0, available.findIndex(criterion => criterion.id === selectedId));
   const active = available[activeIndex];
   const value = active ? graphValue(active) : null;

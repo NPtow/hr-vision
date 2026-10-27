@@ -736,44 +736,9 @@ if __name__ == '__main__':
     call_cleanup.start_worker(CANDIDATE_PORTAL)
     import assessment_jobs
     assessment_jobs.start_worker(CANDIDATE_PORTAL)
-    import assessment_core_lifecycle
-    import selection_materials_lifecycle
-
-    def authorize_assessment_candidate(candidate_id):
-        # Background reconciliation has no browser session. Its configured
-        # allowlist/creation cursor scopes work; ownership is the HR backend's
-        # canonical candidate directory, never an arbitrary caller-supplied ID.
-        with connect() as db:
-            require(db.execute('SELECT 1 FROM cp_candidates WHERE id=?',
-                               (candidate_id,)).fetchone(), 'Кандидат не найден.', 404)
-
-    CANDIDATE_PORTAL.selection_materials_lifecycle = selection_materials_lifecycle.configured(
-        connect, LOCK, authorize_assessment_candidate)
-    CANDIDATE_PORTAL.assessment_lifecycle = assessment_core_lifecycle.start_background(
-        connect, LOCK, authorize_assessment_candidate)
-    import recommendations_bridge
-    CANDIDATE_PORTAL.recommendation_lifecycle = recommendations_bridge.start_background(
-        connect, LOCK, CANDIDATE_PORTAL)
-    import recommendation_lifecycle
-    CANDIDATE_PORTAL.recommendation_automation_lifecycle = recommendation_lifecycle.start_background(
-        connect, LOCK, CANDIDATE_PORTAL)
-    import employer_review
-    employer_review.start_worker(CANDIDATE_PORTAL)
     candidate_notifications.start_worker(connect, update_handler=CANDIDATE_BOT.handle_update,
         telegram_renderer=CANDIDATE_BOT.render_notification)
     HH_ROUTES.start_worker()
     OUTREACH_BROWSER.start_worker()
     CANDIDATE_ACCESS.start_worker()
-    server = ThreadingHTTPServer(('127.0.0.1', int(os.environ.get('HR_PORT', '8391'))), Handler)
-    try:
-        server.serve_forever()
-    finally:
-        server.server_close()
-        if CANDIDATE_PORTAL.recommendation_automation_lifecycle is not None:
-            CANDIDATE_PORTAL.recommendation_automation_lifecycle.stop()
-        if CANDIDATE_PORTAL.selection_materials_lifecycle is not None:
-            CANDIDATE_PORTAL.selection_materials_lifecycle.stop()
-        if CANDIDATE_PORTAL.assessment_lifecycle is not None:
-            CANDIDATE_PORTAL.assessment_lifecycle.stop()
-        if CANDIDATE_PORTAL.recommendation_lifecycle is not None:
-            CANDIDATE_PORTAL.recommendation_lifecycle.stop()
+    ThreadingHTTPServer(('127.0.0.1', int(os.environ.get('HR_PORT', '8391'))), Handler).serve_forever()

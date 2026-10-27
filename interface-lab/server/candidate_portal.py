@@ -31,7 +31,6 @@ import employer_workflow
 import recruiter_access
 import recruiter_notifications
 import recruiter_coach
-import selection_facts
 from core_source_client import SourceMedia, meeting_token
 from call_providers import CallProviders
 
@@ -40,7 +39,7 @@ SESSION_SECONDS = 30 * 86400
 MEDIA_WAIT_SECONDS = 30 * 60
 PROFILE_FIELDS = {'name', 'city', 'desiredRole', 'about', 'telegram', 'geographies',
                   'availability', 'consentReuse', 'autoApprove', 'desiredSalary', 'workMode',
-                  'salaryMin', 'salaryMax', 'latestStartDate', 'residence', 'employmentType', 'resumeReviewed', 'timezone', 'availabilitySchedule', 'preferredCompanies', 'anyCompany', 'work_locations', 'employment_types', 'industry_months'}
+                  'salaryMin', 'salaryMax', 'latestStartDate', 'residence', 'employmentType', 'resumeReviewed', 'timezone', 'availabilitySchedule', 'preferredCompanies', 'anyCompany'}
 
 
 class ClosingConnection(sqlite3.Connection):
@@ -255,20 +254,6 @@ def profile_value(body, previous=None):
         result[key] = salary_value(body.get(key, old.get(key)))
     require(result['salaryMin'] is None or result['salaryMax'] is None or result['salaryMin'] <= result['salaryMax'],
             'Верхняя граница зарплаты должна быть не меньше нижней.', 400)
-    for key in selection_facts.CANDIDATE:
-        if key in body:
-            value = body[key]
-            require(selection_facts.valid_field('candidate', key, value), 'Проверьте структурированные условия работы.', 400)
-            result[key] = value
-        elif key in old:
-            result[key] = old[key]
-    # A CV update can replace a raw value, but cannot inherit its confirmation.
-    if selection_facts.PROFILE_SOURCE_KEY in old:
-        sources = dict(old[selection_facts.PROFILE_SOURCE_KEY])
-        for key in selection_facts.PROFILE_INPUTS & set(body):
-            if key in sources and old.get(key) != result.get(key):
-                sources[key] = {**sources[key], 'kind': 'unconfirmed_source_change'}
-        result[selection_facts.PROFILE_SOURCE_KEY] = sources
     result['latestStartDate'] = start_date_value(body.get('latestStartDate', old.get('latestStartDate', '')),
                                                 future='latestStartDate' in body)
     return result
@@ -706,7 +691,6 @@ class CandidatePortal:
                 'Не удалось создать аккаунт. Если вы уже регистрировались, войдите.', 409)
         profile = profile_value({key: value for key, value in body.items() if key in PROFILE_FIELDS})
         require(profile['consentReuse'], 'Подтвердите использование интервью для подбора вакансий.', 400)
-        selection_facts.confirm_profile(profile, body)
         cid, created = uid('person'), iso(now())
         db.execute('INSERT INTO cp_candidates(id,email,password_hash,profile,created_at,updated_at) VALUES (?,?,?,?,?,?)',
                    (cid, email, password_hash(body.get('password')), dump(profile), created, created))
@@ -723,7 +707,6 @@ class CandidatePortal:
         if body.get('resumeReviewed'):
             require(self.resume_metadata(db, cid), 'Сначала загрузите резюме.', 409)
             require(not self.missing_preferences(profile), 'Укажите должность, зарплату, локацию, занятость, формат работы и компании.', 400)
-        selection_facts.confirm_profile(profile, body)
         changed = any(profile[key] != previous[key] for key in ('consentReuse', 'autoApprove'))
         db.execute('UPDATE cp_candidates SET profile=?,updated_at=? WHERE id=?', (dump(profile), iso(now()), cid))
         if changed:
@@ -864,12 +847,8 @@ class CandidatePortal:
             db.execute('INSERT INTO cp_applications(id,candidate_id,vacancy_id,status,approved_automatically,created_at,decided_at) VALUES (?,?,?,?,?,?,?)',
                        (aid, cid, vacancy['id'], 'accepted' if auto else 'pending', int(auto), iso(now()), iso(now()) if auto else None))
             self.event(db, cid, 'application.proposed', aid)
-            import employer_review
-            if employer_review.enabled():
-                employer_review.enqueue(db, aid)
-            else:
-                import assessment_jobs
-                assessment_jobs.enqueue(db, 'candidate', cid, vacancy['id'])
+            import assessment_jobs
+            assessment_jobs.enqueue(db, 'candidate', cid, vacancy['id'])
 
     def decide_application(self, db, cid, body):
         with meeting_transaction(db):
@@ -1059,7 +1038,6 @@ class CandidatePortal:
         profile = profile_value({**edits, 'consentReuse': True}, person)
         if profile.get('resumeReviewed'):
             require(not self.missing_preferences(profile), 'Укажите должность, зарплату, локацию, занятость, формат работы и компании.', 400)
-        selection_facts.confirm_profile(profile, edits)
         hashed = password_hash(body.get('password'))
         changed = iso(now())
         db.execute('UPDATE cp_candidates SET email=?,password_hash=?,profile=?,updated_at=? WHERE id=?',

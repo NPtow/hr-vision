@@ -4,7 +4,6 @@ The list reports saved state. Opening a person verifies the current materials
 through the existing Core API. A closed room is not evidence of a conversation.
 """
 import os
-import time
 from urllib.parse import quote
 
 from domain import Problem
@@ -147,89 +146,3 @@ def verified_assessment(db, candidate_id, vacancy_id=None):
                      'running': 'processing', 'failed': 'error', 'cancelled': 'cancelled',
                      'expired': 'expired'}.get(value.get('status'), 'unknown'), 'result': None,
             'match': {'state': 'no_vacancy' if not vacancy_id else 'waiting_assessment'}}
-
-
-def init_evidence(db):
-    db.execute('''CREATE TABLE IF NOT EXISTS sl_evidence (
-        candidate_id TEXT PRIMARY KEY,source_revision TEXT NOT NULL,corpus_revision TEXT,
-        body TEXT NOT NULL,checked REAL NOT NULL)''')
-
-
-EVIDENCE_VERSION = 'hr-interview-readiness-v1'
-EVIDENCE_MAX_AGE_SECONDS = 120
-
-
-def unavailable_evidence(*, checked=None, error='materials_unverified'):
-    return {'state': 'unavailable', 'recordingCount': None, 'transcriptCount': None,
-            'allPartsReady': False, 'contractVersion': EVIDENCE_VERSION,
-            'materialsRevision': None, 'checkedAt': checked, 'errorCode': error}
-
-
-def invalidate_evidence(db, cid, *, error='materials_unavailable'):
-    """Replace previously ready evidence after a failed canonical verification.
-
-    Caller must authorize first; no raw exception/source text is accepted.
-    """
-    # Machine codes are deliberately bounded; never persist exception strings.
-    if error not in ('materials_unavailable', 'materials_changed', 'materials_configuration_unavailable'):
-        error = 'materials_unavailable'
-    return save_evidence(db, cid, {'manifest': {}, 'errorCode': error})
-
-
-def save_evidence(db, cid, snapshot):
-    """Durable metadata projection refreshed by canonical source reads/scan."""
-    import json
-    import selection
-    init_evidence(db)
-    conversations = snapshot.get('manifest', {}).get('conversations', [])
-    interviews = [i for i in conversations if i.get('owner_kind') == 'interview']
-    relevant = [i for i in interviews if i.get('recordings') or i.get('status') not in ('not_conducted', 'not_recorded')]
-    recordings = [r for i in relevant for r in i.get('recordings', [])]
-    videos = [r for r in recordings if r.get('kind') == 'video']
-    selected = [r for r in recordings if (r.get('selection') or {}).get('status') == 'ready'
-                and r.get('transcript_id')]
-    ready = bool(videos and relevant and all(i.get('status') == 'ready'
-        and i.get('lifecycle_status') == 'completed' and i.get('primary_status') == 'ready' for i in relevant)
-        and len(selected) == len(recordings))
-    checked = time.time()
-    value = {'state': 'ready' if ready else 'incomplete' if recordings else 'processing' if relevant else 'missing',
-             'recordingCount': len(videos), 'transcriptCount': len(selected), 'allPartsReady': ready,
-             'contractVersion': EVIDENCE_VERSION, 'materialsRevision': snapshot.get('revision'),
-             'checkedAt': checked,
-             'items': [{'ownerId': item.get('owner_id'), 'state': item.get('status'),
-                        'lifecycleStatus': item.get('lifecycle_status'),
-                        'primaryStatus': item.get('primary_status'),
-                        'parts': [{'recordingId': part.get('recording_id'), 'sourceId': part.get('source_id'),
-                                   'kind': part.get('kind'), 'selection': part.get('selection'),
-                                   'transcriptId': part.get('transcript_id'),
-                                   'contentSha256': part.get('content_sha256')}
-                                  for part in item.get('recordings', [])]}
-                       for item in interviews]}
-    if 'conversations' not in snapshot.get('manifest', {}):
-        value = unavailable_evidence(checked=checked, error=snapshot.get('errorCode', 'materials_unavailable'))
-    # Standalone bridge consumers can use a minimal identity directory.
-    # Their successful assessment must not require the portal's optional schema.
-    if not {'cp_interviews', 'cp_resumes', 'cp_intake'} <= tables(db):
-        return value
-    p = selection.person(db, cid)
-    db.execute('INSERT INTO sl_evidence VALUES (?,?,?,?,?) ON CONFLICT(candidate_id) DO UPDATE SET source_revision=excluded.source_revision,corpus_revision=excluded.corpus_revision,body=excluded.body,checked=excluded.checked',
-               (cid, p['sourceRevision'], snapshot.get('revision'), json.dumps(value), checked))
-    return value
-
-
-def evidence(db, candidate):
-    import json
-    init_evidence(db)
-    row = db.execute('SELECT source_revision,body,checked,corpus_revision FROM sl_evidence WHERE candidate_id=?', (candidate['id'],)).fetchone()
-    if row and row[0] == candidate['sourceRevision']:
-        if not 0 <= time.time() - row[2] <= EVIDENCE_MAX_AGE_SECONDS:
-            return unavailable_evidence(checked=row[2], error='materials_verification_expired')
-        try:
-            value = json.loads(row[1])
-            if not isinstance(value, dict):
-                raise ValueError()
-            return {**value, 'checkedAt': row[2], 'materialsRevision': row[3],
-                    'contractVersion': value.get('contractVersion', EVIDENCE_VERSION)}
-        except (ValueError, TypeError):
-            pass
-    return unavailable_evidence()

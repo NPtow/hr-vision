@@ -19,9 +19,9 @@ const originLink = (workspace: string) => {
   ['vacancyId', 'tab', 'candidateId'].forEach(key => url.searchParams.delete(key)); return url.pathname + url.search;
 };
 
-export function SelectionWorkbench({ outreachHref }: { outreachHref?: string }) {
+export function SelectionWorkbench() {
   const auth = useOperatorSession();
-  return <main className="sl-root"><header className="sl-topbar"><img src={logo} alt="HR Vision"/><span>Верстак</span><a href={outreachHref || originLink('outreach')}>Рассылка<ArrowUpRight size={15}/></a></header>
+  return <main className="sl-root"><header className="sl-topbar"><img src={logo} alt="HR Vision"/><span>Верстак</span><a href={originLink('outreach')}>Рассылка<ArrowUpRight size={15}/></a></header>
     {auth.status === 'ready' ? <Workbench key={auth.token} token={auth.token} expire={auth.expire}/> : <section className="sl-access"><h1>{auth.status === 'checking' ? 'Проверяем доступ…' : 'Вход для команды'}</h1>{auth.status !== 'checking' && <><p>{auth.error || 'Откройте рабочую ссылку команды HR Vision.'}</p><button onClick={() => void auth.check()}>Проверить доступ</button></>}</section>}
   </main>;
 }
@@ -39,9 +39,6 @@ function Workbench({ token, expire }: { token: string; expire: () => void }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [editError, setEditError] = useState('');
-  const [candidateInputRevision, setCandidateInputRevision] = useState(0);
-  const matchingInputsChanged = useCallback(() => setCandidateInputRevision(value => value + 1), []);
   const generation = useRef(0);
   const saving = useRef(false);
   const load = useCallback(async () => {
@@ -63,7 +60,7 @@ function Workbench({ token, expire }: { token: string; expire: () => void }) {
   useEffect(() => {
     const url = new URL(location.href); url.searchParams.set('tab', tab);
     if (tab === 'vacancies' && vid) url.searchParams.set('vacancyId', vid); else url.searchParams.delete('vacancyId');
-    if (detail) url.searchParams.set('candidateId', detail); else url.searchParams.delete('candidateId');
+    if (tab === 'candidates' && detail) url.searchParams.set('candidateId', detail); else url.searchParams.delete('candidateId');
     history.replaceState(history.state, '', url);
   }, [tab, vid, detail]);
   const rows = useMemo(() => people.filter(p =>
@@ -77,25 +74,19 @@ function Workbench({ token, expire }: { token: string; expire: () => void }) {
   const activeFilters = Object.values(filters).filter(value => value !== 'all').length;
   const person = people.find(p => p.id === detail);
   const vacancy = vacancies.find(v => v.id === vid);
-  const openPerson = (id: string) => { setDetail(id); };
+  const openPerson = (id: string) => { setDetail(id); setTab('candidates'); setSearch(''); };
   async function save(p: SelectionPerson, fields: Partial<Pick<SelectionPerson, 'name' | 'desiredRole' | 'city' | 'about'>>) {
-    if (saving.current) return; saving.current = true; setBusy(true); setEditError('');
-    try {
-      const value = await selectionRequest<{ candidate: SelectionPerson }>('candidates/update', token, { candidateId: p.id, revision: p.revision, fields });
-      if (value.candidate?.id !== p.id) throw new Error('Получена карточка другого кандидата.');
-      // Directory spelling is editable without remounting the active shortlist.
-      setPeople(current => current.map(person => person.id === p.id ? { ...person, ...value.candidate } : person));
-    }
-    catch (cause) { if (cause instanceof OutreachError && [401, 403].includes(cause.status)) expire(); else setEditError((cause as Error).message); }
+    if (saving.current) return; saving.current = true; setBusy(true); setError('');
+    try { await selectionRequest('candidates/update', token, { candidateId: p.id, revision: p.revision, fields }); await load(); }
+    catch (cause) { if (cause instanceof OutreachError && [401, 403].includes(cause.status)) expire(); else setError((cause as Error).message); }
     finally { saving.current = false; setBusy(false); }
   }
   return <div className="sl-workspace">
-    {!(tab === 'vacancies' && vacancy) && <div className="sl-heading"><h1>База подбора</h1></div>}
+    <div className="sl-heading"><h1>База подбора</h1></div>
     <nav className="sl-tabs" aria-label="Разделы базы">{(['candidates', 'vacancies'] as const).map(key => <button key={key} aria-current={key === tab ? 'page' : undefined} onClick={() => { setTab(key); setDetail(''); setVid(''); setSearch(''); }}>{key === 'candidates' ? 'Кандидаты' : 'Вакансии'}<span>{loading || error ? '—' : key === 'candidates' ? people.filter(hasHRInterview).length : vacancies.length}</span></button>)}</nav>
     {error && <p className="sl-error" role="alert">{error}</p>}
-    {editError && <p className="sl-error" role="alert">{editError}</p>}
     {tab === 'vacancies' && vid && !loading && !error ? vacancy
-      ? <VacancyDetail key={vid} vacancy={vacancy} people={people} token={token} expire={expire} onBack={() => setVid('')} onCandidate={openPerson} candidateInputRevision={candidateInputRevision}/>
+      ? <VacancyDetail key={vid} vacancy={vacancy} people={people} token={token} expire={expire} onBack={() => setVid('')} onCandidate={openPerson}/>
       : <div className="sl-empty"><p>Вакансия недоступна.</p><button onClick={() => setVid('')}>К вакансиям</button></div>
       : <section className="sl-surface" aria-label={tab === 'candidates' ? 'Кандидаты' : 'Вакансии'} aria-busy={loading || busy}>
         <div className="sl-toolbar"><label className="sl-search"><Search size={17}/><span className="sl-sr">Поиск</span><input placeholder={tab === 'vacancies' ? 'Найти вакансию' : 'Найти кандидата'} value={search} onChange={e => setSearch(e.target.value)}/></label>
@@ -113,13 +104,13 @@ function Workbench({ token, expire }: { token: string; expire: () => void }) {
           <td><button className="sl-person" onClick={() => openPerson(p.id)}>{p.name || 'Без имени'}</button></td>
           <td><InlineCell label={`Роль: ${p.name}`} value={p.desiredRole} disabled={busy} onSave={value => void save(p, { desiredRole: value })}/></td>
           <td><InlineCell label={`Город: ${p.name}`} value={p.city} disabled={busy} onSave={value => void save(p, { city: value })}/></td>
-          <td><HRInterviewBadge person={p}/><button className="sl-open" aria-label={`Интервью: ${p.name}`} onClick={() => openPerson(p.id)}>Интервью</button></td>
+          <td><HRInterviewBadge person={p}/></td>
           <td><AssessmentEntry person={p} onOpen={() => openPerson(p.id)}/></td>
           <td><span className={'sl-status ' + (p.telegramConnected ? 'sl-green' : '')}>{p.telegramConnected ? 'Подключён' : 'Не подключён'}</span></td>
           <td><span className={'sl-status ' + (p.emailConnected ? 'sl-green' : '')}>{p.emailConnected ? 'Подключена' : 'Не подключена'}</span></td>
         </tr>)}</tbody></table></div><footer className="sl-table-footer"><span>{rows.length} в таблице · всего {people.length}</span></footer></>
         : <div className="sl-empty"><Table2 size={24}/><h2>Нет кандидатов по выбранным фильтрам</h2>{people.some(p => !p.hrInterview || p.hrInterview.state === 'unavailable') && <p>Для части базы готовность HR-интервью пока не подтверждена.</p>}<button onClick={() => { setFilters({ ...defaultFilters, interview: 'all' }); setSearch(''); }}>Показать всех кандидатов</button></div>}
       </section>}
-    {!loading && !error && person && <CandidateDetail key={person.id} person={person} token={token} expire={expire} busy={busy} onClose={() => setDetail('')} onSave={fields => void save(person, fields)} onMatchingInputsChanged={matchingInputsChanged}/>}
+    {tab === 'candidates' && !loading && !error && person && <CandidateDetail key={person.id} person={person} token={token} expire={expire} busy={busy} onClose={() => setDetail('')} onSave={fields => void save(person, fields)}/>}
   </div>;
 }

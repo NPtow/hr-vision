@@ -5,8 +5,6 @@ import { selectionRequest, verdicts, states, reasons, criterionNames, type Selec
 import { RequiredFieldsEditor } from './RequiredFieldsEditor';
 import { ReviewState } from './review-state';
 import { startReadinessPolling } from './readiness-poll';
-import { CandidateInterviews } from './CandidateInterviews';
-import './candidate-interviews.css';
 
 export function InlineCell({ value, label, disabled, onSave }: { value: string; label: string; disabled: boolean; onSave: (value: string) => void }) {
   const [editing, setEditing] = useState(false); const [draft, setDraft] = useState(value);
@@ -20,13 +18,9 @@ export function ModalPanel({ className, titleId, onClose, children }: { classNam
   const close = useRef(onClose); close.current = onClose;
   useEffect(() => {
     const before = document.activeElement as HTMLElement | null;
-    const overflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
     panel.current?.focus();
     const key = (e: KeyboardEvent) => {
-      // Informational tooltips prevent Escape's default while dismissing themselves.
-      // This dialog still owns Escape; a nested dialog owns its own focused events.
-      if (e.key === 'Escape' && panel.current && (e.target as Element | null)?.closest('[role="dialog"]') === panel.current) { e.preventDefault(); close.current(); }
+      if (e.key === 'Escape') close.current();
       if (e.key === 'Tab' && panel.current) {
         const items = [...panel.current.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),select:not(:disabled),a[href],textarea:not(:disabled),summary')].filter(item => item.getClientRects().length > 0);
         const first = items[0], last = items.at(-1);
@@ -34,14 +28,13 @@ export function ModalPanel({ className, titleId, onClose, children }: { classNam
         else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
       }
     };
-    document.addEventListener('keydown', key); return () => { document.removeEventListener('keydown', key); document.body.style.overflow = overflow; if (before?.isConnected) before.focus(); };
+    document.addEventListener('keydown', key); return () => { document.removeEventListener('keydown', key); before?.focus(); };
   }, []);
   return <section ref={panel} tabIndex={-1} className={className} role="dialog" aria-modal="true" aria-labelledby={titleId}>{children}</section>;
 }
 
-export function CandidateDetail({ person: p, token, expire, busy, onClose, onSave, onMatchingInputsChanged }: {
+export function CandidateDetail({ person: p, token, expire, busy, onClose, onSave }: {
   person: SelectionPerson; token: string; expire: () => void; busy: boolean; onClose: () => void;
-  onMatchingInputsChanged?: () => void;
   onSave: (fields: Partial<Pick<SelectionPerson, 'name' | 'desiredRole' | 'city' | 'about'>>) => void;
 }) {
   const [readiness, setReadiness] = useState<Readiness | null>(null);
@@ -66,7 +59,6 @@ export function CandidateDetail({ person: p, token, expire, busy, onClose, onSav
       const value = await selectionRequest<{ candidateId: string; assessment: Readiness['assessment'] }>(
         'candidates/' + encodeURIComponent(p.id) + '/assessment', token, { revision: p.revision });
       if (value.candidateId !== p.id) throw new Error('Получена карточка другого кандидата.');
-      onMatchingInputsChanged?.();
       setReadiness(current => current ? { ...current, assessment: value.assessment } : current);
       setRetry(value => value + 1);
     } catch (cause) {
@@ -75,10 +67,9 @@ export function CandidateDetail({ person: p, token, expire, busy, onClose, onSav
     } finally { setStarting(false); }
   }
   return <div className="sl-overlay sl-drawer-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-    <ModalPanel className="sl-drawer md-wide-drawer sl-interview-drawer" titleId="sl-person-title" onClose={onClose}>
+    <ModalPanel className="sl-drawer" titleId="sl-person-title" onClose={onClose}>
       <button className="sl-close" aria-label="Закрыть карточку" onClick={onClose}><X size={20}/></button>
       <h2 id="sl-person-title">{p.name}</h2><p className="sl-muted">{p.desiredRole}</p>
-      <CandidateInterviews key={p.id} candidateId={p.id} name={p.name} token={token} expire={expire}/>
       <div className="sl-detail-fields"><label>Имя<InlineCell value={p.name} label="Имя" disabled={busy} onSave={name => onSave({ name })}/></label><label>Город<InlineCell value={p.city} label="Город" disabled={busy} onSave={city => onSave({ city })}/></label></div>
       {p.about && <p className="sl-about">{p.about}</p>}
       <ReviewState person={p} readiness={readiness} loading={loading} error={error}/>
@@ -96,7 +87,7 @@ export function CandidateDetail({ person: p, token, expire, busy, onClose, onSav
           <td>{c.failed_processing ? 'Обработка не завершена' : states[c.state] || c.state}{c.reason_codes?.map(r => <small key={r}>{reasons[r] || r}</small>)}</td>
         </tr>)}</tbody></table></div><p>{p.assessment.model} · {new Date(p.assessment.createdAt).toLocaleString('ru-RU')}</p><p className="sl-hash">{p.assessment.documentHash}</p>
       </details>}
-      <RequiredFieldsEditor kind="candidate" id={p.id} token={token} expire={expire} onSaved={() => { onMatchingInputsChanged?.(); setRetry(v => v + 1); }}/>
+      <RequiredFieldsEditor kind="candidate" id={p.id} token={token} expire={expire} onSaved={() => setRetry(v => v + 1)}/>
       <h3>Приглашения</h3>{p.deliveries.length ? <div>{p.deliveries.map(d => <p key={d.id}>{d.event === 'selection.invitation' ? 'Профиль · ' : 'Вакансия · '}{d.channel === 'email' ? 'Почта' : 'Telegram'}: {({ delivered: 'Принято сервисом', pending: 'В очереди', sending: 'Отправляется', disabled: 'Не настроено', unbound: 'Нет контакта', unverified: 'Адрес не подтверждён', error: 'Ошибка' } as Record<string, string>)[d.status] || d.status}</p>)}</div> : <p className="sl-muted">Ещё не отправлялись</p>}
     </ModalPanel>
   </div>;

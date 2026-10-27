@@ -77,7 +77,7 @@ export function ReviewState({ person, readiness, loading, error }: {
   const displayAssessment = { ...assessment, state: coreRun ? assessment.state : assessmentStatus(assessment.state, automation) };
   const showResult = !loading && !error && !['stale', 'unavailable', 'error', 'expired', 'cancelled'].includes(assessment.state);
   return <>
-    <details className="md-materials" open={loading || !!error || !showResult || !coreRun || coreRun.status !== 'completed' ? true : undefined}><summary>Материалы и состояние<span>{loading ? 'Проверяем…' : coreRun && showResult ? fullCorpusStatusLabels[coreRun.status] : assessmentLabels[displayAssessment.state] ?? 'Статус неизвестен'}</span></summary><dl className="sl-readiness">
+    <dl className="sl-readiness">
       <div><dt>HR-интервью</dt><dd><HRInterviewBadge person={readiness?.hrInterview ? { ...person, hrInterview: readiness.hrInterview } : person}/></dd>
         <small>Нужны запись и готовый основной текст всех частей HR-интервью.</small></div>
       <div><dt>Резюме</dt><dd>{person.resumeAvailable ? 'Есть в базе' : 'Не загружено'}</dd></div>
@@ -89,7 +89,7 @@ export function ReviewState({ person, readiness, loading, error }: {
         {assessment.state === 'insufficient_data' && <small>В материалах недостаточно оснований для оценки. Это не нулевой балл.</small>}
         {assessment.state === 'not_started' && !automation && <small>Просмотр карточки не запускает расчёт.</small>}</div>
       {!loading && !error && <AutomationState automation={automation}/>}
-    </dl></details>
+    </dl>
     {error && <p className="sl-error" role="alert">{error}</p>}
     {coreRun && showResult && <FullCorpusAssessment run={coreRun} candidateId={person.id}/>}
     {result && !coreRun && showResult && <section aria-label="Сохранённая оценка навыков">

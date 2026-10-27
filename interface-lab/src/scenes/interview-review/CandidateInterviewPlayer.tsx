@@ -31,15 +31,6 @@ export function CandidateInterviewPlayer({ sourceId, name, header, media, chapte
   const hasAssessmentTab = !!assessment || !!assessmentStatus;
   const root = useRef<HTMLDivElement>(null);
   const video = useRef<HTMLVideoElement>(null);
-  const currentMedia = useRef(media); currentMedia.current = media;
-  const bindVideo = useCallback((node: HTMLVideoElement | null) => {
-    const previous = video.current;
-    if (previous && previous !== node) { previous.pause(); previous.removeAttribute('src'); previous.load(); }
-    video.current = node;
-    // StrictMode may detach and reattach this same DOM node. Reinstall its source.
-    const src = currentMedia.current?.src;
-    if (node && src && node.getAttribute('src') !== src) node.setAttribute('src', src);
-  }, []);
   const side = useRef<HTMLElement>(null);
   const transcriptList = useRef<HTMLDivElement>(null);
   const lastFocus = useRef<HTMLElement | null>(null);
@@ -134,7 +125,7 @@ export function CandidateInterviewPlayer({ sourceId, name, header, media, chapte
   useEffect(() => {
     const pauseOther = (event: Event) => { if ((event as CustomEvent).detail !== video.current) video.current?.pause(); };
     window.addEventListener('hr-vision-interview-play', pauseOther);
-    return () => window.removeEventListener('hr-vision-interview-play', pauseOther);
+    return () => { video.current?.pause(); window.removeEventListener('hr-vision-interview-play', pauseOther); };
   }, []);
   useEffect(() => () => {
     clearTimeout(hideTimer.current); clearTimeout(toastTimer.current);
@@ -184,8 +175,7 @@ export function CandidateInterviewPlayer({ sourceId, name, header, media, chapte
     return () => document.removeEventListener('fullscreenchange', changed);
   }, []);
   useEffect(() => {
-    // A containing dialog owns the page scroll lock, including its cleanup.
-    if (!full || root.current?.closest('[role="dialog"]')) return;
+    if (!full) return;
     const old = document.body.style.overflow; document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = old; };
   }, [full]);
@@ -244,7 +234,7 @@ export function CandidateInterviewPlayer({ sourceId, name, header, media, chapte
     <div className="iv-workspace">
       <section className={`iv-player${!playing || controls || menu ? ' iv-controls-visible' : ''}`} tabIndex={0} aria-label={`Интервью — ${name}`}
         onPointerMove={revealControls} onPointerLeave={() => { if (playing) setControls(false); }}>
-        {media ? <video ref={bindVideo} src={media.src} preload="metadata" playsInline aria-label={`Видеозапись: ${name}`}
+        {media ? <video ref={video} src={media.src} preload="metadata" playsInline aria-label={`Видеозапись: ${name}`}
           onClick={togglePlay} onDoubleClick={toggleFull} onLoadedMetadata={event => {
             const player = event.currentTarget;
             setDuration(Number.isFinite(player.duration) ? player.duration : 0); setResolution(`${player.videoWidth} × ${player.videoHeight}`);

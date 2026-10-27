@@ -1,8 +1,7 @@
 """Manager-authorized adapter to the independent full-corpus assessment service.
 
-Reuse the canonical corpus collector and ServiceHTTP. GET only reads; explicit
-commands and the opt-in durable lifecycle use the same start method.
-No vacancy scoring, invitations or ASR here.
+Reuse the canonical corpus collector and ServiceHTTP. GET only reads; POST is
+the explicit evaluation command. No vacancy scoring, invitations or ASR here.
 """
 import hashlib
 import json
@@ -44,33 +43,12 @@ def init(db):
     db.execute('CREATE INDEX IF NOT EXISTS ac_candidate ON ac_bindings(candidate_id,created DESC)')
     if 'request_format' not in {row[1] for row in db.execute('PRAGMA table_info(ac_bindings)')}:
         db.execute("ALTER TABLE ac_bindings ADD COLUMN request_format TEXT NOT NULL DEFAULT 'expanded-provenance-v1'")
-    db.execute('''CREATE TABLE IF NOT EXISTS ac_current_bindings (
-      candidate_id TEXT PRIMARY KEY REFERENCES cp_candidates(id), binding_id TEXT NOT NULL)''')
-    # One-time migration of existing candidates. Subsequent historical polling
-    # changes receipts, never this explicit selection.
-    db.execute('''INSERT OR IGNORE INTO ac_current_bindings
-      SELECT candidate_id,id FROM ac_bindings b WHERE id=(SELECT id FROM ac_bindings x
-        WHERE x.candidate_id=b.candidate_id ORDER BY created DESC,id DESC LIMIT 1)''')
-
-
-def select_current(db, cid, identity):
-    db.execute('''INSERT INTO ac_current_bindings VALUES (?,?) ON CONFLICT(candidate_id)
-      DO UPDATE SET binding_id=excluded.binding_id''', (cid, identity))
 
 
 def latest(db, cid):
     if not db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='ac_bindings'").fetchone():
         return None
-    has_pointer = (db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='ac_current_bindings'").fetchone()
-                   and db.execute('SELECT 1 FROM ac_current_bindings WHERE candidate_id=?', (cid,)).fetchone())
-    if has_pointer:
-        cursor = db.execute('''SELECT b.* FROM ac_current_bindings c JOIN ac_bindings b ON b.id=c.binding_id
-          WHERE c.candidate_id=?''', (cid,))
-    else:
-        # Legacy writers may create a binding after schema initialization and
-        # have no explicit selection yet. An existing pointer, including one
-        # to newly queued work without a binding, must never use this fallback.
-        cursor = db.execute('SELECT * FROM ac_bindings WHERE candidate_id=? ORDER BY created DESC,id DESC LIMIT 1', (cid,))
+    cursor = db.execute('SELECT * FROM ac_bindings WHERE candidate_id=? ORDER BY created DESC,id DESC LIMIT 1', (cid,))
     row = cursor.fetchone()
     return dict(zip([d[0] for d in cursor.description], row)) if row else None
 
@@ -134,21 +112,16 @@ class Bridge:
             require(receipt.get('assessment') is None, 'Незавершённый результат ядра.', 502)
         return receipt
 
-    def identity(self, cid, source_revision):
-        return digest([cid, source_revision, self.rubric_hash, self.model, REQUEST_FORMAT])
-
-    def start(self, cid, *, expected_revision=None):
+    def start(self, cid):
         self.authorize(cid)
         try:
             snapshot = self.collector.collect(cid)
             require(snapshot['status'] == 'ready',
                     'Не все материалы готовы: ' + ', '.join(i['code'] for i in snapshot['manifest']['issues']), 409)
             snapshot = self.collector.revalidate(snapshot)
-            require(expected_revision is None or snapshot['revision'] == expected_revision,
-                    'Материалы изменились до отправки оценки.', 409)
         except CollectionError:
             raise Problem('Материалы изменились или недоступны. Обновите карточку.', 409) from None
-        identity = self.identity(cid, snapshot['revision'])
+        identity = digest([cid, snapshot['revision'], self.rubric_hash, self.model, REQUEST_FORMAT])
         with self.lock, self.connect() as db:
             self.authorize(cid)
             init(db)
@@ -158,7 +131,6 @@ class Bridge:
               (identity, cid, snapshot['revision'], self.rubric_hash, self.model,
                dump(snapshot['manifest']), time.time(), time.time(), REQUEST_FORMAT))
             old = db.execute('SELECT run_id FROM ac_bindings WHERE id=?', (identity,)).fetchone()[0]
-            select_current(db, cid, identity)
         # This POST is safe to repeat after an uncertain HTTP result: the core
         # derives the same run ID from the exact full input and never re-bills it.
         receipt = self.service.call('GET', '/v1/assessments/' + old) if old else self.service.call(
@@ -173,35 +145,22 @@ class Bridge:
             db.execute('UPDATE ac_bindings SET run_id=?,status=?,receipt=?,updated=? WHERE id=?',
                        (receipt['run_id'], receipt['status'], dump(receipt), time.time(), identity))
 
-    def save_source_evidence(self, cid, snapshot):
-        # Portal-owned readiness metadata; model services never read this DB.
-        import selection_status
-        with self.lock, self.connect() as db:
-            self.authorize(cid)
-            selection_status.save_evidence(db, cid, snapshot)
-
     def read(self, cid):
         self.authorize(cid)
         with self.connect() as db:
-            historical = db.execute('SELECT 1 FROM ac_bindings WHERE candidate_id=? LIMIT 1', (cid,)).fetchone() if db.execute(
-                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='ac_bindings'").fetchone() else None
+            row = latest(db, cid)
         base = {'state': 'not_started', 'result': None, 'match': {'state': 'not_compared'}, **self.options()}
-        if historical is None:
+        if row is None:
             return base
-        try:
-            # Resolve exact current input, including A -> B -> A and rubric
-            # rollback. No timestamp or historical receipt determines currency.
-            current = self.collector.collect(cid)
-            if current['status'] != 'ready':
-                return {**base, 'state': 'stale'}
-            current = self.collector.revalidate(current)
-        except CollectionError:
+        if (row['rubric_hash'] != self.rubric_hash or row['model'] != self.model
+                or row['request_format'] != REQUEST_FORMAT):
             return {**base, 'state': 'stale'}
-        with self.connect() as db:
-            cursor = db.execute('SELECT * FROM ac_bindings WHERE id=?', (self.identity(cid, current['revision']),))
-            value = cursor.fetchone()
-            row = dict(zip([d[0] for d in cursor.description], value)) if value else None
-        if row is None or row['request_format'] != REQUEST_FORMAT:
+        try:
+            current = self.collector.revalidate({'candidate_id': cid, 'revision': row['source_revision']})
+        except CollectionError:
+            with self.lock, self.connect() as db:
+                self.authorize(cid)
+                db.execute("UPDATE ac_bindings SET status='stale' WHERE id=?", (row['id'],))
             return {**base, 'state': 'stale'}
         if not row['run_id']:
             # GET never retries an unacknowledged POST. An explicit press of the

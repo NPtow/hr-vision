@@ -20,8 +20,6 @@ export type FieldEvidence = { sourceRevision?: string; fieldSources?: Record<str
 export type RequiredFieldsResponse = FieldEvidence & { vacancyId: string; revision: string; fields: VacancyFields; options?: FieldOptions };
 export type CandidateFieldsResponse = FieldEvidence & { candidateId: string; revision: string; fields: CandidateFields; options?: FieldOptions };
 export type Importance = 0 | 1 | 2 | 3 | 'insufficient_data';
-export const isSupportedImportance = (value: unknown): value is Importance => value === 'insufficient_data'
-  || typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 3;
 export type VacancyParameter = {
   parameter_id: string; title: string;
   levels: { level_id: string; label: string; description: string }[];
@@ -41,15 +39,12 @@ export type ProfileEnvelope = {
 export type RequiredCheck = { field: string; status: 'pass' | 'fail' | 'unknown'; reason: string };
 export type MatchParameter = {
   parameter_id: string; title?: string; excluded: boolean; exclusion_reason: string | null; weight?: number;
-  required_level_id?: string | null; required_position?: number | null; m?: number | null;
-  utility_mode?: 'required_level_tanh' | 'higher_level_linear' | null;
-  weight_share?: number | null; score_points_contribution?: number | null;
-  insufficient_data_probability?: number; model_confidence?: number;
+  required_level_id?: string; required_position?: number; m?: number;
   levels?: { level_id: string; position: number; p_raw: number; q: number | null; u: number | null; contribution: number | null }[];
 };
 export type RecommendationItem = {
   candidate_id: string; eligibility: 'pass' | 'fail' | 'unknown'; required_checks: RequiredCheck[];
-  score: number | null; score_points?: number | null; status: 'scored' | 'unscored' | 'filtered'; rank: number | null;
+  score: number | null; status: 'scored' | 'unscored' | 'filtered'; rank: number | null;
   parameters: MatchParameter[];
   coverage: { total_parameters: number; included_parameters: number; excluded_parameters: number; included_weight: number; excluded_weight: number; total_weight: number };
 };
@@ -59,34 +54,20 @@ export type RecommendationResult = {
   policy: { version: string; k: number; probability_mode: string }; items: RecommendationItem[];
 };
 export type InvitationGate = { candidateId: string; canInvite: boolean; reason: string | null; channels: ('email' | 'telegram')[] };
-export type MatchingAutomation = { state: string; errorCode?: string | null; retryAt?: number | null; updatedAt?: number | null };
 export type RecommendationsEnvelope = {
   vacancyId: string; revision: string; state: string; stale: boolean; staleReasons: string[]; canRun: boolean;
   recommendationId: string | null; result: RecommendationResult | null; candidateIds: string[];
-  pendingCandidates: { candidateId: string; state: string }[]; invitationEligibility: InvitationGate[]; automation?: MatchingAutomation;
+  pendingCandidates: { candidateId: string; state: string }[]; invitationEligibility: InvitationGate[];
 };
 export type PublishReceipt = { added: string[]; waitingProfile: string[]; proposed: string[]; pendingVerification?: string[] };
 export const matchingLabels: Record<string, string> = {
   not_started: 'Ещё не рассчитано', missing: 'Ещё не рассчитано', queued: 'В очереди', sent: 'Считается',
   processing: 'Считается', running: 'Считается', response_saved: 'Сохраняется результат', ready: 'Готово',
-  completed: 'Готово', needs_review: 'Ожидает автоматического обновления сравнения', stale: 'Результат устарел',
+  completed: 'Готово', needs_review: 'Нужно уточнить требования', stale: 'Результат устарел',
   failed: 'Ошибка расчёта', error: 'Ошибка расчёта', unavailable: 'Не удалось проверить',
   outcome_unknown: 'Исход расчёта неизвестен', dispatch_unknown: 'Проверьте запуск',
-  waiting_profile: 'Ожидает требования вакансии', waiting_vacancy_profile: 'Ожидает требования вакансии',
-  waiting_candidates: 'Ожидает оценки кандидатов', not_enrolled: 'Ожидает автоматического запуска',
-  dispatching: 'Запускается сравнение', dependency_unavailable: 'Сервис временно недоступен',
-  source_unavailable: 'Материалы временно недоступны', pool_limit: 'Превышен размер пула',
-  no_candidates: 'Нет кандидатов с готовым HR-интервью', pool_too_large: 'Превышен размер пула кандидатов',
-  backoff: 'Сервис временно недоступен, ожидает повторной проверки', input_changed: 'Входные данные изменились, ожидает пересчёта',
-  inactive: 'Автоматическое сравнение недоступно для этой вакансии',
   waiting_sources: 'Ждёт материалы', waiting_assessment: 'Ожидает оценки', unscored: 'Недостаточно данных',
 };
 export const indexLabel = (value: number | null) => value === null || !Number.isFinite(value) ? '—'
   : new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 3, signDisplay: 'exceptZero' }).format(value);
 export const percentLabel = (value: number | null) => value === null ? '—' : new Intl.NumberFormat('ru-RU', { style: 'percent', maximumFractionDigits: 1 }).format(value);
-
-/** Only format the owner result. Legacy raw indices remain explicitly labelled. */
-export const pointsLabel = (value: number | null | undefined) => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100
-  ? new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(value) : '—';
-export const scoreLabel = (item: Pick<RecommendationItem, 'score' | 'score_points'>) => item.score_points !== undefined
-  ? `${pointsLabel(item.score_points)} / 100` : item.score === null ? '—' : `Индекс ${indexLabel(item.score)}`;

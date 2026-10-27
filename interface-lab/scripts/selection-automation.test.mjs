@@ -15,8 +15,6 @@ const built = await build({ stdin: { contents: `
 export * from './src/scenes/selection-workbench/assessment-automation';
 export * from './src/scenes/selection-workbench/readiness-poll';
 export * from './src/scenes/selection-workbench/review-state';
-export { ModelDistribution } from './src/scenes/selection-workbench/ModelDistribution';
-export { FullCorpusAssessment } from './src/scenes/interview-assessment/FullCorpusAssessment';
 export { FieldConflicts } from './src/scenes/selection-workbench/RequiredFieldsEditor';
 export * from './src/scenes/selection-workbench/required-fields-values';
 export { recommendationCandidateIds } from './src/scenes/selection-workbench/directory';
@@ -84,26 +82,8 @@ test('a ready full-corpus result keeps all 16 parameters and raw probabilities d
   const original = assessment.coreRun.assessment.parameters;
   assessment.coreRun.assessment.parameters = Array.from({ length: 16 }, (_, i) => ({ ...original[i % original.length], parameter_id: 'param-' + i, title: 'Параметр ' + (i + 1) }));
   const html = ui.render(ui.ReviewState, { person: fixture.people[0], readiness: readiness({ state: 'processing_delayed' }, assessment), loading: false, error: '' });
-  for (let i = 1; i <= 16; i++) assert.ok(html.includes('<strong>Параметр ' + i + '</strong>'));
-  // The overview deliberately collapses distributions. Inspect the actual
-  // children supplied to each disclosure, then render those same components.
-  const views = [];
-  const visit = element => {
-    if (Array.isArray(element)) { element.forEach(visit); return; }
-    if (!element || typeof element !== 'object') return;
-    if (element.type === ui.ModelDistribution) views.push(element);
-    visit(element.props?.children);
-  };
-  visit(ui.FullCorpusAssessment({ run: assessment.coreRun, candidateId: 'candidate-1' }));
-  assert.equal(views.length, 16);
-  views.forEach((view, i) => {
-    const parameter = assessment.coreRun.assessment.parameters[i];
-    assert.deepEqual(view.props.data.options.map(o => o.probability),
-      [...parameter.levels.map(l => l.probability), parameter.insufficient_data_probability]);
-    assert.equal(view.props.data.choice, parameter.status === 'insufficient_data' ? 'insufficient_data' : parameter.selected_level_id);
-    assert.equal(view.props.data.confidence, parameter.model_confidence);
-  });
-  assert.match(ui.render(ui.ModelDistribution, views[0].props), /20\s?%/);
+  assert.equal((html.match(/class="fc-parameter"/g) ?? []).length, 16);
+  assert.match(html, /Параметр 16/); assert.match(html, /20\s?%/);
   assert.match(html, /Расчёт завершён/); assert.match(html, /Ожидает результат/);
 });
 

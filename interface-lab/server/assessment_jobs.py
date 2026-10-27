@@ -36,8 +36,6 @@ def init(db):
 
 def enqueue(db, kind, owner_id, vacancy_id=None, workspace_id=None):
     # Small insert in the same transaction as the product event. No network or model.
-    if kind == 'intake' and os.environ.get('HR_EMPLOYER_REVIEW_ENABLED') == '1':
-        return  # The cabinet's core adapter discovers these owned cards itself.
     init(db)
     identity = kind + ':' + owner_id
     db.execute('''INSERT OR IGNORE INTO as_bindings
@@ -226,8 +224,7 @@ class Bridge:
 
     def tick(self):
         with self.connect() as db:
-            cursor = db.execute("SELECT * FROM as_bindings WHERE next_check<=? AND (kind!='intake' OR ?=0) ORDER BY next_check,updated LIMIT 1",
-                                (time.time(), os.environ.get('HR_EMPLOYER_REVIEW_ENABLED') == '1'))
+            cursor = db.execute('SELECT * FROM as_bindings WHERE next_check<=? ORDER BY next_check,updated LIMIT 1', (time.time(),))
             found = cursor.fetchone()
             if not found:
                 return self.tick_match()
@@ -291,8 +288,7 @@ class Bridge:
 
     def tick_match(self):
         with self.connect() as db:
-            cursor = db.execute("SELECT * FROM as_matches WHERE next_check<=? AND (?=0 OR binding_id NOT IN (SELECT id FROM as_bindings WHERE kind='intake')) ORDER BY next_check LIMIT 1",
-                                (time.time(), os.environ.get('HR_EMPLOYER_REVIEW_ENABLED') == '1'))
+            cursor = db.execute('SELECT * FROM as_matches WHERE next_check<=? ORDER BY next_check LIMIT 1', (time.time(),))
             found = cursor.fetchone()
             if not found:
                 return False

@@ -12,8 +12,6 @@ import sys
 
 def runtime_files(release):
     files = list((release / 'assessment_core').rglob('*.py'))
-    # Shared transport is part of the runtime, including its addition/removal.
-    files.extend((release / 'jev_client').rglob('*.py'))
     files.append(release / 'deploy/hr-vision-assessment-core.service')
     return {str(p.relative_to(release)): hashlib.sha256(p.read_bytes()).hexdigest()
             for p in files}
@@ -44,7 +42,7 @@ def main():
     if release.parent != root / 'releases' or not re.fullmatch('[a-f0-9]{40}', release.name):
         raise SystemExit('Immutable commit release required')
     current = root / 'current'
-    with open('/run/lock/hr-vision-assessment-core.deploy.lock', 'w') as lock:
+    with open('/run/lock/hr-vision-assessment-core-rubric.lock', 'w') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         previous = current.resolve(strict=True)
         if previous.name != args.expected_current:

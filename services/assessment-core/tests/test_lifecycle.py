@@ -71,30 +71,13 @@ class LifecycleTests(unittest.TestCase):
         class Client:
             def evaluate(inner, request):
                 return self.response()
-        # A process interruption bypasses the normal invalid-response handler.
-        with patch("assessment_core.runstore.interpret", side_effect=SystemExit("interrupted")):
-            with self.assertRaises(SystemExit):
+        with patch("assessment_core.runstore.interpret", side_effect=ValueError("interrupted")):
+            with self.assertRaises(ValueError):
                 self.store.execute(self.plan, Client())
         self.assertEqual(self.store.get(self.plan["run_id"])["status"], "response_saved")
         with self.store.runtime_lock():
             self.store.recover()
         self.assertEqual(self.store.get(self.plan["run_id"])["status"], "completed")
-
-    def test_semantically_invalid_response_is_terminal_and_raw_answer_survives(self):
-        class Client:
-            def evaluate(inner, request):
-                return self.response()
-        with patch('assessment_core.runstore.interpret', side_effect=ValueError('PRIVATE PROVIDER TEXT')):
-            with self.assertRaises(ValueError):
-                self.store.execute(self.plan, Client())
-        failed = self.store.get(self.plan['run_id'])
-        self.assertEqual(failed['status'], 'failed')
-        self.assertEqual(failed['error'], {'code': 'invalid_saved_response'})
-        self.assertEqual(failed['response'], self.response())
-        self.assertTrue(failed['response_sha256'])
-        self.assertIsNone(self.store.next_queued())
-        self.assertEqual(self.store.submit(self.plan)['status'], 'failed')
-        self.assertNotIn('PRIVATE PROVIDER TEXT', str(self.store.diagnostics()))
 
     def test_corrupted_queued_plan_fails_without_repeated_worker_calls(self):
         self.store.submit(self.plan)

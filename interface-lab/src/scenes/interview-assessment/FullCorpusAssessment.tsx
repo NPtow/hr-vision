@@ -1,6 +1,4 @@
 import './full-corpus-assessment.css';
-import { ModelDistribution, SkillDisclosure } from '../selection-workbench/ModelDistribution';
-import { probability } from '../selection-workbench/distribution-data';
 
 /** Private assessment-core/API.md, full-corpus-level-choice-v1.
  * The authorised portal adapter supplies a current run; this view never starts
@@ -27,6 +25,7 @@ export const fullCorpusStatusLabels: Record<FullCorpusRun['status'], string> = {
   queued: 'В очереди', sent: 'Считается', response_saved: 'Сохраняется результат',
   completed: 'Расчёт завершён', failed: 'Ошибка расчёта', outcome_unknown: 'Исход расчёта неизвестен',
 };
+const percentage = (value: number) => new Intl.NumberFormat('ru-RU', { style: 'percent', maximumFractionDigits: 1 }).format(value);
 
 export function FullCorpusAssessment({ run, candidateId }: { run: FullCorpusRun; candidateId: string }) {
   const result = run.assessment;
@@ -40,17 +39,21 @@ export function FullCorpusAssessment({ run, candidateId }: { run: FullCorpusRun;
       result.contract_version !== 'full-corpus-level-choice-v1') {
     return <p className="fc-error" role="alert">Не удалось подтвердить версию оценки. Обновите карточку.</p>;
   }
-  return <section className="fc-assessment md-candidate-skills" aria-label="Оценка по параметрам">
-    <h3>Оценка навыков</h3>
+  return <section className="fc-assessment" aria-label="Оценка по параметрам">
     {result.parameters.map(parameter => {
       const selected = parameter.levels.find(level => level.level_id === parameter.selected_level_id);
-      return <SkillDisclosure key={parameter.parameter_id} name={`candidate-skills-${candidateId}`} summary={<span><strong>{parameter.title}</strong><small>{parameter.status === 'insufficient_data' ? 'Недостаточно данных' : selected?.label ?? 'Уровень не подтверждён'}</small></span>}>
-        <ModelDistribution title="Уровень кандидата" data={{
-          options: [...parameter.levels.map(level => ({ id: level.level_id, label: level.label, description: level.description, probability: probability(level.probability) })), { id: 'insufficient_data', label: 'Недостаточно данных', probability: probability(parameter.insufficient_data_probability), unknown: true }],
-          choice: parameter.status === 'insufficient_data' ? 'insufficient_data' : parameter.selected_level_id,
-          confidence: probability(parameter.model_confidence),
-        }}/>
-      </SkillDisclosure>;
+      return <article key={parameter.parameter_id} className="fc-parameter">
+        <h4>{parameter.title}</h4>
+        <p className="fc-level">{parameter.status === 'insufficient_data' ? 'Недостаточно данных' : selected?.label ?? 'Уровень не подтверждён'}</p>
+        <details><summary>Вероятности уровней</summary>
+          <dl>{parameter.levels.map(level => <div key={level.level_id} data-selected={parameter.status === 'assessed' && level.level_id === parameter.selected_level_id}>
+            <dt>{level.label}<small>{level.description}</small></dt><dd>{percentage(level.probability)}</dd>
+          </div>)}
+            <div data-selected={parameter.status === 'insufficient_data'}><dt>Недостаточно данных</dt><dd>{percentage(parameter.insufficient_data_probability)}</dd></div>
+          </dl>
+          <p className="fc-confidence">Уверенность модели в ответе: {percentage(parameter.model_confidence)}</p>
+        </details>
+      </article>;
     })}
     <details className="fc-version"><summary>Версия и состав материалов</summary>
       <p>Шкала: {result.rubric_version} · модель: {result.model}</p>

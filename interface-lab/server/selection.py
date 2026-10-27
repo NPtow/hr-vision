@@ -15,11 +15,6 @@ from domain import Problem, iso, now, require, text
 import employer_store as employers
 import selection_status
 import assessment_core_bridge
-import assessment_core_lifecycle
-import selection_materials_lifecycle
-import selection_facts
-import vacancy_profile_bridge
-import recommendations_bridge
 
 PREFIX = '/api/hr/selection/'
 HEADERS = {'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer'}
@@ -36,10 +31,6 @@ def digest(value):
 
 
 def init(db):
-    selection_facts.init(db)
-    vacancy_profile_bridge.init(db)
-    recommendations_bridge.init(db)
-    selection_status.init_evidence(db)
     for sql in (
         '''CREATE TABLE IF NOT EXISTS sl_core_results (
           id TEXT PRIMARY KEY, candidate_id TEXT NOT NULL REFERENCES cp_candidates(id),
@@ -111,7 +102,8 @@ def vacancy(db, vid):
     row = db.execute('SELECT workspace_id FROM em_vacancies WHERE vacancy_id=? AND archived_at IS NULL', (vid,)).fetchone()
     require(row, 'Вакансия не найдена.', 404)
     value = employers.vacancy(db, row[0], vid)
-    substantive = json.loads(db.execute('SELECT body FROM cp_vacancies WHERE id=?', (vid,)).fetchone()[0])
+    substantive = {key: value.get(key) for key in ('id', 'title', 'company', 'description', 'details',
+                   'problem', 'expectations', 'salary', 'format', 'city', 'remote')}
     return {**value, 'workspaceId': row[0], 'contentHash': digest(substantive)}
 
 
@@ -252,19 +244,12 @@ def import_match(db, body):
     return {'id': seal, 'partition': partition, 'existing': bool(old)}
 
 
-def directory(db, vid=None, *, offset=0, limit=200, candidate_ids=None):
+def directory(db, vid=None):
     if vid:
         vacancy(db, vid)
     people = []
     cohort = {row[0] for row in db.execute('SELECT candidate_id FROM sl_cohort WHERE vacancy_id=?', (vid,))} if vid else set()
-    match_map = recommendations_bridge.projections(db, vid) if vid and assessment_core_bridge.enabled() else {}
-    total = db.execute('SELECT COUNT(*) FROM cp_candidates').fetchone()[0]
-    if candidate_ids is None:
-        candidate_rows = db.execute('SELECT id FROM cp_candidates ORDER BY created_at DESC,id LIMIT ? OFFSET ?', (limit, offset)).fetchall()
-    else:
-        candidate_rows = db.execute('SELECT id FROM cp_candidates WHERE id IN (' + ','.join('?' for _ in candidate_ids) + ') ORDER BY created_at DESC,id', tuple(candidate_ids)).fetchall()
-        total = len(candidate_rows)
-    for (cid,) in candidate_rows:
+    for (cid,) in db.execute('SELECT id FROM cp_candidates ORDER BY created_at DESC LIMIT 1000').fetchall():
         item = person(db, cid)
         item['assessment'] = result(db, item, vid)
         item['inCohort'] = cid in cohort
@@ -283,26 +268,11 @@ def directory(db, vid=None, *, offset=0, limit=200, candidate_ids=None):
             item['interviewStatus'] == 'completed' and item['assessment'] and
             item['assessment']['recommendation'] == 'ranked' and not item['application'] and not nominated)
         item['workflow'] = selection_status.overview(db, item, vid)
-        item['workflow']['automation'] = assessment_core_lifecycle.public_candidate_status(db, cid)
         # A newer assessment pipeline supersedes an engine-v1 recommendation.
         # Until its matching adapter is connected, it cannot authorize sending.
         item['canAdd'] = item['canAdd'] and item['workflow']['match']['state'] == 'ranked'
-        item['requiredFields'] = selection_facts.read(db, 'candidate', cid)
-        item['hrInterview'] = selection_status.evidence(db, item)
-        if assessment_core_bridge.enabled() and vid:
-            match = match_map.get(cid, {'state': 'not_compared', 'origin': 'recommendations'})
-            item['workflow']['match'] = match
-            item['canAdd'] = bool(item['searching'] and item['hrInterview']['state'] == 'ready' and
-                match.get('state') == 'compared' and match.get('status') == 'scored' and
-                match.get('eligibility') != 'fail' and not item['application'] and not nominated)
-            newnom = db.execute('SELECT id,state,error,retry_at,attempts,recommendation_id FROM sl_recommendation_nominations WHERE candidate_id=? AND vacancy_id=?', (cid,vid)).fetchone()
-            if newnom:
-                item['nomination'] = {'id':newnom[0], 'state':newnom[1], 'error':newnom[2],
-                                      'retryAt':newnom[3], 'attempts':newnom[4]}
-                item['canAdd'] = item['canAdd'] and newnom[1] == 'blocked' and newnom[5] != match.get('recommendationId')
         people.append(item)
-    return {'candidates': people, 'count': total, 'offset': offset, 'limit': limit,
-            'nextOffset': offset + len(people) if offset + len(people) < total else None}
+    return {'candidates': people, 'count': len(people)}
 
 
 def edit(db, body):
@@ -363,8 +333,6 @@ def _profile_link(db, cid, origin):
 def enqueue_invitation(db, nomination_id, origin):
     import candidate_notifications as notices
     row = db.execute('SELECT candidate_id FROM sl_nominations WHERE id=?', (nomination_id,)).fetchone()
-    if not row:
-        row = db.execute('SELECT candidate_id FROM sl_recommendation_nominations WHERE id=?', (nomination_id,)).fetchone()
     require(row, 'Приглашение не найдено.', 404)
     cid, config, tick = row[0], notices.settings(), int(time.time())
     link, invitation = _profile_link(db, cid, origin)
@@ -383,10 +351,6 @@ def prepare_invitation(db, row, config, tick):
     """Called under the normal outbox claim, before any provider request."""
     payload = json.loads(row['payload_json'])
     nomination = db.execute('SELECT candidate_id,state FROM sl_nominations WHERE id=?', (payload.get('nominationId'),)).fetchone()
-    if not nomination:
-        nomination = db.execute('SELECT candidate_id,state FROM sl_recommendation_nominations WHERE id=?', (payload.get('nominationId'),)).fetchone()
-        if nomination and not recommendation_nomination_current(db, payload.get('nominationId')):
-            return 'error', 'recommendation_stale'
     if not nomination or nomination[0] != row['candidate_id'] or nomination[1] not in ('waiting_profile', 'waiting_consent'):
         return 'error', 'invitation_no_longer_needed'
     p = person(db, row['candidate_id'])
@@ -420,7 +384,6 @@ def reconcile_nominations(db, portal, cid):
     """
     if not db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='sl_nominations'").fetchone():
         return
-    reconcile_recommendation_nominations(db, portal, cid)
     p = person(db, cid)
     if not p['accountActive'] or not p['consentReuse'] or not p['searching']:
         return
@@ -458,7 +421,7 @@ def nominate(db, portal, body):
             return json.loads(old[1])
         v = vacancy(db, body['vacancyId'])
         employers.ensure_open(db, v['workspaceId'], v['id'])
-        rows = {p['id']: p for p in directory(db, v['id'], candidate_ids=body['candidateIds'])['candidates']}
+        rows = {p['id']: p for p in directory(db, v['id'])['candidates']}
         require(all(cid in rows and rows[cid]['canAdd'] for cid in body['candidateIds']),
                 'Нужны актуальная рекомендация ядра и завершённое интервью.', 409)
         receipt = {'added': [], 'waitingProfile': [], 'proposed': []}
@@ -494,119 +457,14 @@ class SelectionRoutes:
     def handle(self, method, raw_path, headers, body, actor):
         parsed = urlsplit(raw_path)
         query = parse_qs(parsed.query, keep_blank_values=True)
-        require(set(query) <= {'vacancyId', 'offset', 'limit'} and all(len(v) == 1 for v in query.values()), 'Проверьте фильтр.', 400)
+        require(set(query) <= {'vacancyId'} and all(len(v) == 1 for v in query.values()), 'Проверьте фильтр.', 400)
         require(next((v for k, v in headers.items() if k.lower() == 'sec-fetch-site'), '') != 'cross-site',
                 'Другой источник запроса.', 403)
         action = parsed.path[len(PREFIX):].strip('/')
-        if action == 'status':
-            with self.connect() as db:
-                require(actor(db) == 'manager', 'Доступ только для команды HR Vision.', 403)
-                require(method == 'GET', 'Действие не найдено.', 404)
-            status = {}
-            for name, attribute in (('materials', 'selection_materials_lifecycle'),
-                                    ('assessment', 'assessment_lifecycle'),
-                                    ('recommendations', 'recommendation_automation_lifecycle')):
-                runtime = getattr(self.portal, attribute, None)
-                status[name] = runtime.status() if runtime is not None else {'enabled': False, 'running': False}
-            status['ok'] = all(not value.get('enabled') or
-                (value.get('running') and value.get('healthy', True) and not value.get('error'))
-                for value in status.values())
-            return status, dict(HEADERS)
-        if action in ('review-tasks', 'review-prepare', 'review-retry'):
-            import employer_review
-            with self.lock, self.connect() as db:
-                require(actor(db) == 'manager', 'Доступ только для команды HR Vision.', 403)
-                if method == 'GET' and action == 'review-tasks':
-                    return employer_review.tasks(db), dict(HEADERS)
-            require(method == 'POST' and action != 'review-tasks' and isinstance(body, dict), 'Проверьте запрос.', 400)
-            if action == 'review-retry' and 'intakeId' in body:
-                require(set(body) == {'intakeId', 'requestId'} and isinstance(body['intakeId'], str), 'Проверьте запрос.', 400)
-                require(employer_review.enabled(), 'Подготовка цитат ещё не подключена.', 503)
-                import employer_intake_review
-                return employer_intake_review.Bridge(self.portal).retry(body['intakeId'], body['requestId']), dict(HEADERS)
-            keys = {'applicationId', 'preferredParameterIds' if action == 'review-prepare' else 'requestId'}
-            require(set(body) == keys and isinstance(body['applicationId'], str), 'Проверьте запрос.', 400)
-            if action == 'review-retry':
-                require(isinstance(body['requestId'], str) and 0 < len(body['requestId']) <= 100, 'Проверьте запрос.', 400)
-            require(employer_review.enabled(), 'Подготовка цитат ещё не подключена.', 503)
-            bridge = employer_review.Bridge(self.portal)
-            result = (bridge.prepare(body['applicationId'], body['preferredParameterIds']) if action == 'review-prepare'
-                      else bridge.retry(body['applicationId'], body['requestId']))
-            return result, dict(HEADERS)
         def authorize_core(cid):
             with self.lock, self.connect() as db:
                 require(actor(db) == 'manager', 'Доступ только для команды HR Vision.', 403)
                 person(db, cid)
-        def authorize_vacancy(vid):
-            with self.lock, self.connect() as db:
-                require(actor(db) == 'manager', 'Доступ только для команды HR Vision.', 403)
-                vacancy(db, vid)
-        parts = action.split('/')
-        if len(parts) in (3, 5) and parts[0] == 'candidates' and parts[2] == 'interviews':
-            require(method == 'GET' and (len(parts) == 3 or parts[4] == 'materials'),
-                    'Действие не найдено.', 404)
-            cid = parts[1]
-            authorize_core(cid)
-            import selection_interviews
-            reader = selection_interviews.configured(self.connect, authorize_core)
-            value = reader.list(cid) if len(parts) == 3 else reader.materials(cid, parts[3])
-            return value, dict(HEADERS)
-        if len(parts) == 3 and parts[0] in ('vacancies', 'candidates') and parts[2] == 'required-fields':
-            kind = 'vacancy' if parts[0] == 'vacancies' else 'candidate'
-            (authorize_vacancy if kind == 'vacancy' else authorize_core)(parts[1])
-            with self.lock, self.connect() as db:
-                require(actor(db) == 'manager', 'Доступ только для команды HR Vision.', 403)
-                require(method in ('GET', 'POST'), 'Действие не найдено.', 404)
-                value = selection_facts.read(db, kind, parts[1]) if method == 'GET' else selection_facts.update(db, kind, parts[1], body)
-            return value, dict(HEADERS)
-        if len(parts) in (3, 4) and parts[0] == 'vacancies' and parts[2] in ('profile', 'recommendations'):
-            vid = parts[1]
-            authorize_vacancy(vid)
-            require(method in ('GET', 'POST'), 'Действие не найдено.', 404)
-            if parts[2] == 'profile':
-                bridge = vacancy_profile_bridge.configured(self.connect, self.lock, authorize_vacancy)
-                if len(parts) == 4:
-                    require(parts[3] == 'revisions' and method == 'POST', 'Действие не найдено.', 404)
-                    value = bridge.revise(vid, body)
-                elif method == 'POST':
-                    require(isinstance(body, dict) and set(body) == {'revision'}, 'Проверьте запрос профиля.', 400)
-                    value = bridge.start(vid, body['revision'])
-                else:
-                    value = bridge.read(vid)
-                with self.connect() as db:
-                    value['requiredFields'] = selection_facts.read(db, 'vacancy', vid)
-                    value['options'] = selection_facts.OPTIONS
-                value['stale'] = value['state'] == 'stale'
-            else:
-                require(len(parts) == 3, 'Действие не найдено.', 404)
-                bridge = recommendations_bridge.configured(self.connect, self.lock, authorize_vacancy, authorize_core)
-                if method == 'POST':
-                    require(isinstance(body, dict) and set(body) == {'revision', 'candidateIds'}, 'Проверьте запрос расчёта.', 400)
-                    value = bridge.start(vid, body['revision'], body['candidateIds'])
-                else:
-                    value = bridge.read(vid)
-            return value, dict(HEADERS)
-        if len(parts) == 3 and parts[0] == 'nominations' and parts[2] == 'retry' and method == 'POST':
-            require(isinstance(body, dict) and set(body) == {'revision', 'recommendationId'}, 'Проверьте версию повтора.', 400)
-            with self.connect() as db:
-                require(actor(db) == 'manager', 'Доступ только для команды HR Vision.', 403)
-                row = db.execute('SELECT vacancy_id FROM sl_recommendation_nominations WHERE id=?', (parts[1],)).fetchone()
-                require(row, 'Приглашение не найдено.', 404)
-                vid = row[0]
-            bridge = recommendations_bridge.configured(self.connect, self.lock, authorize_vacancy, authorize_core)
-            verified = bridge.read(vid)
-            with self.lock, self.connect() as db:
-                require(actor(db) == 'manager', 'Доступ только для команды HR Vision.', 403)
-                value = retry_recommendation_nomination(db, parts[1], body, verified)
-            return value, dict(HEADERS)
-        if method == 'POST' and action == 'publish' and assessment_core_bridge.enabled():
-            require(isinstance(body, dict) and 'vacancyId' in body, 'Проверьте публикацию.', 400)
-            bridge = recommendations_bridge.configured(self.connect, self.lock, authorize_vacancy, authorize_core)
-            verified = bridge.read(body['vacancyId'])
-            with self.lock, self.connect() as db:
-                require(actor(db) == 'manager', 'Доступ только для команды HR Vision.', 403)
-                value = nominate_recommendation(db, self.portal, body, verified)
-            return value, dict(HEADERS)
         if method == 'POST' and action.startswith('candidates/') and action.endswith('/assessment'):
             parts = action.split('/')
             require(len(parts) == 3 and isinstance(body, dict) and set(body) == {'revision'},
@@ -628,7 +486,6 @@ class SelectionRoutes:
                     vacancy(db, vid)
             # External reads cannot hold the shared application lock. Opening a
             # drawer may verify saved sources, but never starts ASR, a model or invitations.
-            selection_materials_lifecycle.refresh_candidate(self.connect, self.lock, authorize_core, cid)
             sources = selection_status.materials(cid)
             if assessment_core_bridge.enabled():
                 try:
@@ -646,21 +503,11 @@ class SelectionRoutes:
                 require(actor(db) == 'manager', 'Доступ только для команды HR Vision.', 403)
                 require(person(db, cid)['sourceRevision'] == initial['sourceRevision'],
                         'Материалы кандидата изменились. Обновите карточку.', 409)
-                hr_interview = selection_status.evidence(db, person(db, cid))
-                required_fields = selection_facts.read(db, 'candidate', cid)
-                automation = assessment_core_lifecycle.public_candidate_status(db, cid)
-            return {'candidateId': cid, 'materials': sources, 'assessment': assessment,
-                    'hrInterview': hr_interview, 'requiredFields': required_fields,
-                    'automation': automation}, dict(HEADERS)
+            return {'candidateId': cid, 'materials': sources, 'assessment': assessment}, dict(HEADERS)
         with self.lock, self.connect() as db:
             require(actor(db) == 'manager', 'Доступ только для команды HR Vision.', 403)
             if method == 'GET' and action == 'candidates':
-                try:
-                    offset, limit = int(query.get('offset', ['0'])[0]), int(query.get('limit', ['200'])[0])
-                except ValueError:
-                    raise Problem('Проверьте страницу каталога.', 400) from None
-                require(offset >= 0 and 1 <= limit <= 500, 'Проверьте страницу каталога.', 400)
-                result = directory(db, query.get('vacancyId', [None])[0], offset=offset, limit=limit)
+                result = directory(db, query.get('vacancyId', [None])[0])
             elif method == 'GET' and action == 'vacancies':
                 result = {'vacancies': [vacancy(db, row[0]) for row in db.execute(
                     'SELECT vacancy_id FROM em_vacancies WHERE archived_at IS NULL ORDER BY created_at DESC').fetchall()]}
@@ -684,119 +531,8 @@ class SelectionRoutes:
                             import assessment_jobs
                             assessment_jobs.enqueue(db, 'candidate', cid, body['vacancyId'])
                 result = directory(db, body['vacancyId'])
-                result['cohortCandidateIds'] = [r[0] for r in db.execute('SELECT candidate_id FROM sl_cohort WHERE vacancy_id=? ORDER BY candidate_id', (body['vacancyId'],))]
             elif method == 'POST' and action == 'publish':
                 result = nominate(db, self.portal, body)
             else:
                 raise Problem('Действие не найдено.', 404)
             return result, dict(HEADERS)
-
-
-def recommendation_nomination_current(db, nid):
-    row = db.execute('SELECT candidate_id,vacancy_id,binding_id,recommendation_id,unknown_approval FROM sl_recommendation_nominations WHERE id=?', (nid,)).fetchone()
-    if not row:
-        return False
-    current = recommendations_bridge.latest(db, row[1])
-    if not current or current['id'] != row[2] or current['recommendation_id'] != row[3]:
-        return False
-    if recommendations_bridge.local_versions(db, row[1], json.loads(current['candidate_ids'])) != json.loads(current['input_versions']):
-        return False
-    match = recommendations_bridge.projection(db, row[1], row[0])
-    return bool(match.get('status') == 'scored' and match.get('eligibility') != 'fail'
-                and (match.get('eligibility') != 'unknown' or row[4]))
-
-
-def reconcile_recommendation_nominations(db, portal, cid):
-    """Consent transaction records work; the worker verifies sources outside it."""
-    if 'sl_recommendation_nominations' not in selection_status.tables(db):
-        return
-    p = person(db, cid)
-    rows = db.execute("SELECT id FROM sl_recommendation_nominations WHERE candidate_id=? AND state IN ('waiting_profile','waiting_consent')", (cid,)).fetchall()
-    for (nid,) in rows:
-        if not recommendation_nomination_current(db, nid):
-            state = 'blocked'
-        elif p['searching'] and p['accountActive'] and p['consentReuse']:
-            state = 'pending_verification'
-        else:
-            continue
-        db.execute('UPDATE sl_recommendation_nominations SET state=?,updated_at=? WHERE id=?', (state,iso(now()),nid))
-
-
-def nominate_recommendation(db, portal, body, verified):
-    required = {'vacancyId', 'candidateIds', 'requestId', 'recommendationId', 'revision'}
-    require(isinstance(body, dict) and required <= set(body) <= required | {'unknownApprovals'}, 'Проверьте версию рекомендации.', 400)
-    ids, approvals = body['candidateIds'], body.get('unknownApprovals', [])
-    require(isinstance(ids, list) and 1 <= len(ids) <= 100 and all(isinstance(x, str) for x in ids)
-            and len(ids) == len(set(ids)) and isinstance(approvals, list) and all(isinstance(x, str) for x in approvals)
-            and len(approvals) == len(set(approvals)) and set(approvals) <= set(ids), 'Выберите кандидатов и подтверждения.', 400)
-    require(verified['state'] == 'ready' and not verified['staleReasons'] and
-            verified['recommendationId'] == body['recommendationId'] and verified['revision'] == body['revision'],
-            'Рекомендация изменилась. Пересчитайте подборку.', 409)
-    request_id = text(body['requestId'], 120)
-    hashed = digest({**body, 'candidateIds': sorted(ids), 'unknownApprovals': sorted(approvals)})
-    with employers._atomic(db):
-        old = db.execute('SELECT payload_hash,result FROM sl_commands WHERE request_id=?', (request_id,)).fetchone()
-        if old:
-            require(old[0] == hashed, 'Запрос уже использован для другой подборки.', 409)
-            return json.loads(old[1])
-        vid = body['vacancyId']
-        v = vacancy(db, vid)
-        employers.ensure_open(db, v['workspaceId'], vid)
-        binding = recommendations_bridge.latest(db, vid)
-        require(binding and binding['recommendation_id'] == body['recommendationId'] and
-            recommendations_bridge.local_versions(db, vid, json.loads(binding['candidate_ids'])) == json.loads(binding['input_versions']),
-            'Исходные данные изменились.', 409)
-        items = {i['candidate_id']: i for i in verified['result']['items']}
-        unknown = {cid for cid in ids if items.get(cid, {}).get('eligibility') == 'unknown'}
-        require(set(approvals) == unknown, 'Явно подтвердите каждый неизвестный обязательный факт.', 409)
-        for cid in ids:
-            p = person(db, cid)
-            item = items.get(cid)
-            require(item and item['status'] == 'scored' and item['eligibility'] in ('pass', 'unknown')
-                and p['searching'] and selection_status.evidence(db, p)['state'] == 'ready', 'Нужны текущий расчёт и материалы HR-интервью.', 409)
-            old_nomination = db.execute('SELECT id,state,recommendation_id FROM sl_recommendation_nominations WHERE candidate_id=? AND vacancy_id=?', (cid,vid)).fetchone()
-            if old_nomination and old_nomination[1] == 'blocked' and old_nomination[2] != body['recommendationId']:
-                cursor = db.execute('SELECT * FROM sl_recommendation_nominations WHERE id=?', (old_nomination[0],))
-                archived = dict(zip([d[0] for d in cursor.description],cursor.fetchone()))
-                db.execute('INSERT INTO sl_recommendation_nomination_history VALUES (?,?,?)', (archived['id'],dump(archived),time.time()))
-                db.execute('DELETE FROM sl_recommendation_nominations WHERE id=?', (old_nomination[0],))
-            require(not db.execute('SELECT 1 FROM cp_applications WHERE candidate_id=? AND vacancy_id=? AND archived_at IS NULL', (cid,vid)).fetchone()
-                and not db.execute('SELECT 1 FROM sl_recommendation_nominations WHERE candidate_id=? AND vacancy_id=?', (cid,vid)).fetchone()
-                and not db.execute('SELECT 1 FROM sl_nominations WHERE candidate_id=? AND vacancy_id=?', (cid,vid)).fetchone(), 'Кандидат уже добавлен.', 409)
-        receipt = {'added': [], 'waitingProfile': [], 'proposed': [], 'pendingVerification': []}
-        for cid in ids:
-            p = person(db, cid)
-            nid = 'nomination_' + secrets.token_hex(12)
-            approval = dump({'actor': 'manager', 'recommendationId': body['recommendationId'],
-                'inputVersions': json.loads(binding['input_versions']), 'at': iso(now())}) if cid in unknown else None
-            db.execute('INSERT INTO sl_recommendation_nominations (id,candidate_id,vacancy_id,recommendation_id,binding_id,unknown_approval,state,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)',
-                (nid, cid, vid, body['recommendationId'], binding['id'], approval,
-                 'waiting_consent' if p['accountActive'] else 'waiting_profile', iso(now()), iso(now())))
-            receipt['added'].append(cid)
-            reconcile_recommendation_nominations(db, portal, cid)
-            state = db.execute('SELECT state FROM sl_recommendation_nominations WHERE id=?', (nid,)).fetchone()[0]
-            if state == 'proposed':
-                receipt['proposed'].append(cid)
-            elif state == 'pending_verification':
-                receipt['pendingVerification'].append(cid)
-            else:
-                enqueue_invitation(db, nid, portal.origin)
-                receipt['waitingProfile'].append(cid)
-        db.execute('INSERT INTO sl_commands VALUES (?,?,?)', (request_id, hashed, dump(receipt)))
-    return receipt
-
-
-def retry_recommendation_nomination(db, nid, body, verified):
-    require(verified['state'] == 'ready' and not verified['staleReasons'] and
-            verified['recommendationId'] == body['recommendationId'] and verified['revision'] == body['revision'],
-            'Рекомендация изменилась. Нужны новый расчёт и подтверждение.',409)
-    row = db.execute('SELECT state,recommendation_id,candidate_id,vacancy_id FROM sl_recommendation_nominations WHERE id=?',(nid,)).fetchone()
-    require(row and row[0] == 'verification_failed' and row[1] == body['recommendationId'] and recommendation_nomination_current(db,nid),
-            'Повтор недоступен для этой версии.',409)
-    p = person(db,row[2])
-    v = vacancy(db,row[3])
-    employers.ensure_open(db,v['workspaceId'],row[3])
-    require(p['searching'] and p['accountActive'] and p['consentReuse'] and selection_status.evidence(db,p)['state'] == 'ready',
-            'Согласие или материалы изменились.',409)
-    db.execute("UPDATE sl_recommendation_nominations SET state='pending_verification',attempts=0,retry_at=0,error=NULL,updated_at=? WHERE id=?",(iso(now()),nid))
-    return {'nominationId':nid,'state':'pending_verification'}

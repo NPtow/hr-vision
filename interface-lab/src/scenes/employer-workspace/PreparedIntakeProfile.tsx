@@ -5,6 +5,7 @@ import { parseMeetingTranscript } from '../connected-journey/transcript';
 import type { CallMaterials } from '../candidate-portal/api';
 import type { RecordingReviewProps } from '../interview-review/InterviewReview';
 import { evidenceRecording, orderedRecordings, selectedTranscript, transcriptStatusMessage } from '../interview-review/recording-transcript';
+import { RecordingUpload } from '../interview-review/RecordingUpload';
 import { SourceScreeningReview } from '../interview-review/InterviewReview';
 import { interviewAssistant } from '../interview-review/interview-assistant-api';
 import { downloadResume, loadResumeFile, type IntakePerson, type PreparedProfile } from './intake';
@@ -22,9 +23,9 @@ function webUrl(value: string) {
 }
 
 type CommentValues = { recordingIndex: number; seconds: number; chapterTitle: string; text: string; expectedRevision: number; requestId: string };
-function PreparedInterview({ person, profile, index, token, vacancyId, busy, onComment, header }: {
+function PreparedInterview({ person, profile, index, token, vacancyId, busy, onComment, header, onUploaded }: {
   person: IntakePerson; profile: PreparedProfile; index: number; token: string; vacancyId?: string; busy: boolean;
-  onComment: (values: CommentValues) => Promise<boolean>; header?: ReactNode;
+  onComment: (values: CommentValues) => Promise<boolean>; header?: ReactNode; onUploaded?: () => void;
 }) {
   const [materials, setMaterials] = useState<CallMaterials | null>(null);
   const [selectedId, setSelectedId] = useState('');
@@ -63,9 +64,9 @@ function PreparedInterview({ person, profile, index, token, vacancyId, busy, onC
   const transcript = selectedTranscript(materials, source?.id)?.text || '';
   const materialIdentity = JSON.stringify([materials?.transcription.status,
     materials?.transcripts.map(item => [item.recordingId, item.id, item.selectionRevision, item.text])]);
-  const assessment = useInterviewAssessment(token, vacancyId ?
+  const assessment = useInterviewAssessment(token, vacancyId && source && materials?.transcription.status === 'ready' ?
     { source: 'intake', id: person.id, index: 0, vacancyId } : null, materialIdentity);
-  const chapters = recordings.length === 1 && materials?.chapters?.length ? materials.chapters : parseMeetingTranscript(transcript);
+  const chapters = parseMeetingTranscript(transcript);
   const canComment = !!vacancyId && !!source && !person.archived;
   const commentCounts = new Map<number, number>();
   for (const item of person.screeningComments || []) {
@@ -81,6 +82,7 @@ function PreparedInterview({ person, profile, index, token, vacancyId, busy, onC
   return <>
     {assessment.error && <div className="ew-inline-error" role="alert"><p>{assessment.error}</p><Button type="button" variant="ghost" onClick={assessment.retry}>Повторить загрузку оценки</Button></div>}
     {error && <div className="ew-inline-error" role="alert"><p>{error}</p><Button type="button" variant="ghost" onClick={() => { void refresh(); }}>Повторить загрузку</Button></div>}
+    {vacancyId && !person.archived && <RecordingUpload token={token} scope={{ source: 'intake', vacancyId, id: person.id }} onUploaded={() => { void refresh(); onUploaded?.(); }}/>}
     {recordings.length > 1 && <label>Часть интервью <select aria-label="Часть интервью" value={source?.id || ''} onChange={event => { setSelectedId(event.target.value); setEvidenceRequest(undefined); }}>
       {recordings.map((recording, part) => <option key={recording.id} value={recording.id}>Запись {part + 1}</option>)}
     </select></label>}
@@ -95,7 +97,6 @@ function PreparedInterview({ person, profile, index, token, vacancyId, busy, onC
       }}
       name={person.name} header={header} chapters={chapters} fullChapters={chapters} transcriptText={transcript}
       assessment={assessment.assessment}
-      assessmentStatus={assessment.error || assessment.status === 'failed' ? 'unavailable' : 'loading'}
       assistant={vacancyId && transcript ? interviewAssistant(token, { source: 'intake', id: person.id, index: selectedIndex, vacancyId }) : undefined}
       media={source && webUrl(source.url) ? { src: webUrl(source.url), label: source.name || 'Интервью' } : undefined}
       renderChapterComment={chapter => chapter.seconds === null ? null : comment(chapter.seconds, chapter.title)}
@@ -166,7 +167,7 @@ export function PreparedIntakeProfile({ person, token, vacancyId, onUpdated, onR
       }, onDownload: () => { window.open(resumeUrl, '_blank', 'noopener,noreferrer'); } } : undefined}
     interview={header => <>
       {current.files.slice(1).map(file => <button key={file.id} type="button" className="ew-file-row" onClick={() => download(file)}>{file.name}</button>)}
-      <PreparedInterview key={`${current.id}:${vacancyId}:${token}`} person={current} profile={profile} index={0} token={token} vacancyId={vacancyId} busy={busy} header={header} onComment={values => mutate('comment', values)}/>
+      <PreparedInterview key={`${current.id}:${vacancyId}:${token}`} person={current} profile={profile} index={0} token={token} vacancyId={vacancyId} busy={busy} header={header} onUploaded={onUpdated} onComment={values => mutate('comment', values)}/>
     </>}
     onRespond={vacancyId && !current.archived ? respond : undefined}
     meetingOptions={{ mode: 'proposal' }}

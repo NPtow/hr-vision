@@ -205,10 +205,9 @@ class RunStoreTests(unittest.TestCase):
             self.store.execute(self.plan, self.client)
         self.assertEqual(raised.exception.code, "invalid_response")
         row = RunStore(self.path).get(self.plan["run_id"])
-        self.assertEqual(row["status"], "failed")
-        self.assertEqual(row['error'], {'code': 'invalid_saved_response'})
+        self.assertEqual(row["status"], "response_saved")
         self.assertEqual(row["response"], response)
-        with self.assertRaises(RunUnavailable):
+        with self.assertRaises(JevError):
             self.store.execute(self.plan, self.client)
         self.client.evaluate.assert_called_once()
 
