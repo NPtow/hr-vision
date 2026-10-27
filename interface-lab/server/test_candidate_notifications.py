@@ -34,7 +34,7 @@ class FakeTransport:
         self.updates = []
         self.requests = []
 
-    def send_email(self, recipient, subject, content, message_id, *, html=None):
+    def send_email(self, recipient, subject, content, message_id):
         self.email.append({'recipient': recipient, 'subject': subject, 'content': content, 'id': message_id})
         if self.email_failure:
             raise self.email_failure
@@ -120,8 +120,6 @@ class CandidateNotificationsTest(unittest.TestCase):
         self.assertNotIn('never-a-real', json.dumps(notifications.configuration_public(self.config)))
         self.assertFalse(replace(self.config, smtp_security='none').email_configured)
         self.assertFalse(replace(self.config, public_url='http://example.test').email_configured)
-        self.assertFalse(replace(self.config, public_url='https://example.test/#fragment').email_configured)
-        self.assertFalse(replace(self.config, public_url='https://example.test/#fragment').telegram_configured)
 
     def test_default_link_preserves_candidate_story(self):
         config = notifications.settings({'HR_ORIGIN': 'https://hr.example.test/'})

@@ -1,0 +1,85 @@
+.co-orbit {
+  --co-blue: #3268b6;
+  --co-ink: #18283c;
+  --co-muted: #68788b;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 600px;
+  width: 100%;
+  padding: 18px 24px 52px;
+  box-sizing: border-box;
+  background: #fff;
+  color: var(--co-ink);
+  text-align: center;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  container-type: inline-size;
+}
+.co-orbit *, .co-orbit *::before, .co-orbit *::after { box-sizing: border-box; }
+.co-orbit button { font: inherit; -webkit-tap-highlight-color: transparent; }
+.co-orbit-art {
+  position: relative;
+  display: block;
+  width: min(100%, 590px);
+  margin: 0 0 -4px;
+  padding: 0;
+  border: 0;
+  border-radius: 26px;
+  background: transparent;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.co-orbit-picture { display: block; width: 100%; aspect-ratio: 600 / 350; }
+.co-orbit-picture > svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.co-orbit-replay {
+  position: absolute;
+  inset-inline-end: 20px;
+  bottom: 14px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  color: #8b9bb0;
+  border-radius: 50%;
+  background: #f7f9fc;
+  transition: color 160ms ease, background 160ms ease;
+}
+.co-orbit-replay svg { width: 16px; height: 16px; }
+.co-orbit-art:hover .co-orbit-replay { color: var(--co-blue); background: #eaf1fb; }
+.co-orbit-art:active .co-orbit-replay { background: #dbe8fa; }
+.co-orbit-copy { width: 100%; max-width: 620px; }
+.co-orbit-eyebrow { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; line-height: 1.4; color: #5e7b73; }
+.co-orbit-eyebrow > span { width: 6px; height: 6px; border-radius: 50%; background: #6db395; }
+.co-orbit h2 { margin: 15px 0 15px; font-size: clamp(27px, 4.2cqi, 40px); line-height: 1.16; font-weight: 620; letter-spacing: -1.3px; }
+.co-orbit h2 span { color: var(--co-blue); }
+.co-orbit p { max-width: 360px; margin: 0 auto; font-size: 14px; line-height: 1.65; color: var(--co-muted); text-wrap: balance; }
+.co-orbit-actions { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-top: 27px; }
+.co-orbit-resume { display: inline-flex; align-items: center; justify-content: center; gap: 17px; min-height: 46px; padding: 12px 21px; border: 1px solid var(--co-blue); border-radius: 13px; background: var(--co-blue); color: #fff; font-size: 13px !important; font-weight: 550 !important; line-height: 1.4; cursor: pointer; box-shadow: 0 4px 10px #3268b61c; transition: background 140ms ease, box-shadow 140ms ease; }
+.co-orbit-resume svg { width: 17px; height: 17px; }
+.co-orbit-resume:hover { background: #285ba6; box-shadow: 0 5px 16px #3268b629; }
+.co-orbit-resume:active { background: #224e8d; }
+.co-orbit-processes { min-height: 44px; padding: 9px 16px; border: 0; border-radius: 11px; background: transparent; color: #67778b; font-size: 12px !important; line-height: 1.4; cursor: pointer; }
+.co-orbit-processes:hover { color: var(--co-blue); background: #f6f8fc; }
+.co-orbit button:focus-visible { outline: 3px solid #8ab5f2; outline-offset: 4px; }
+.co-orbit--portfolio .co-orbit-art { margin-top: -9px; margin-bottom: 5px; }
+@container (max-width: 450px) {
+  .co-orbit-art { width: calc(100% + 18px); margin-inline: -9px; margin-bottom: 10px; }
+  .co-orbit-replay { inset-inline-end: 8px; bottom: 2px; }
+  .co-orbit h2 { letter-spacing: -0.95px; }
+  .co-orbit p { max-width: 270px; font-size: 13px; }
+  .co-orbit-eyebrow { font-size: 11px; }
+  .co-orbit--portfolio .co-orbit-art { margin-top: 0; margin-bottom: 14px; }
+  .co-orbit-actions { margin-top: 25px; }
+}
+@media (max-width: 480px) {
+  .co-orbit { min-height: 610px; padding: 22px 20px 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .co-orbit *, .co-orbit *::before, .co-orbit *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+@media (prefers-contrast: more) {
+  .co-orbit { --co-muted: #394a60; }
+  .co-orbit-processes { color: #394a60; }
+  .co-orbit-replay { color: #394a60; border: 1px solid currentColor; }
+}

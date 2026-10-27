@@ -1,7 +1,6 @@
 """Explicit recruiter-issued candidate access, using the existing canonical profile.
 
-An explicit recruiter action or the candidate's completed-call continuation may
-enqueue this mail. The latter never accepts a recipient or candidate ID.
+Only a button on the candidate's own recruiter's interview may enqueue this mail.
 Booking consent fixes the destination for a prepared HH profile; an existing
 account receives a sign-in reminder and its password is never reset. Nothing in
 init, state or enqueue sends mail. The worker uses the same TLS SMTP settings and
@@ -14,7 +13,6 @@ memory for hashing/delivery. Repeated clicks and known-failure retries preserve
 the same credentials. Before SMTP we durably mark the operation as sending; a
 crash, timeout or ambiguous provider outcome becomes unknown, never auto-retry.
 """
-import observability
 import base64
 import hashlib
 import hmac
@@ -75,11 +73,6 @@ def init(db):
         'CREATE INDEX IF NOT EXISTS cp_access_ready ON cp_access_outbox(status,created_at)',
     ):
         db.execute(statement)
-    db.execute('''CREATE TABLE IF NOT EXISTS cp_email_access (
-      candidate_id TEXT PRIMARY KEY REFERENCES cp_candidates(id), id TEXT UNIQUE NOT NULL,
-      recipient TEXT NOT NULL, token_hash TEXT UNIQUE NOT NULL, expires INTEGER NOT NULL,
-      status TEXT NOT NULL, created_at TEXT NOT NULL, account_email TEXT,
-      consumed_at TEXT, lease_until INTEGER, last_error TEXT)''')
     db.execute("INSERT OR IGNORE INTO cp_access_config VALUES ('password_key',?)",
                (secrets.token_hex(32),))
 
@@ -122,140 +115,6 @@ class CandidateAccess:
     def config(self):
         return self._config if self._config is not None else delivery.settings()
 
-    def _email_target(self, db, cid, iid=None):
-        person = db.execute('SELECT email FROM cp_candidates WHERE id=?', (cid,)).fetchone()
-        require(person, 'Кандидат не найден.', 404)
-        if person[0]:
-            return person[0]
-        if iid:
-            consent = self._consent(db, cid, iid)
-            if consent:
-                return consent['email']
-        # Only explicit recruiter contact, never an address parsed out of a CV.
-        row = db.execute("SELECT contact_email FROM cp_intake WHERE candidate_id=? AND source='manual'", (cid,)).fetchone()
-        return row[0] if row and row[0] else None
-
-    def _email_token(self, db, row):
-        key = db.execute("SELECT value FROM cp_access_config WHERE name='password_key'").fetchone()[0]
-        return base64.urlsafe_b64encode(hmac.new(bytes.fromhex(key), ('candidate-email-login-v1\0' + row['id']).encode(), hashlib.sha256).digest()).decode().rstrip('=')
-
-    def enqueue_link(self, db, cid, target):
-        """Durable single-use email proof; never activate before the inbox click."""
-        target = delivery._email(target)
-        require(not db.execute('SELECT 1 FROM cp_candidates WHERE lower(email)=? AND id<>?', (target, cid)).fetchone(),
-                'Эта почта уже связана с другим профилем. Обратитесь к рекрутеру.', 409)
-        existing = _row(db.execute('SELECT * FROM cp_email_access WHERE candidate_id=?', (cid,)))
-        tick = int(time.time())
-        if existing and not existing['consumed_at'] and existing['expires'] > tick and existing['status'] in ('queued', 'sending', 'sent', 'unknown'):
-            require(existing['recipient'] == target, 'Письмо уже отправлено на указанную почту.', 409)
-            return
-        require(not existing or existing['status'] != 'sending', 'Письмо уже отправляется.', 409)
-        current = db.execute('SELECT email FROM cp_candidates WHERE id=?', (cid,)).fetchone()[0]
-        require(current is None or current == target, 'Почта профиля изменилась.', 409)
-        row = {'id': 'login_' + secrets.token_hex(24)}
-        digest = hashlib.sha256(self._email_token(db, row).encode()).hexdigest()
-        db.execute('''INSERT INTO cp_email_access (candidate_id,id,recipient,token_hash,expires,status,created_at,account_email)
-          VALUES (?,?,?,?,?,'queued',?,?) ON CONFLICT(candidate_id) DO UPDATE SET
-          id=excluded.id,recipient=excluded.recipient,token_hash=excluded.token_hash,expires=excluded.expires,
-          status='queued',created_at=excluded.created_at,account_email=excluded.account_email,
-          consumed_at=NULL,lease_until=NULL,last_error=NULL''',
-          (cid, row['id'], target, digest, tick + 86400, iso(now()), current))
-
-    def continuation(self, db, capability, *, send=False, email=None):
-        cid, iid = capability['candidateId'], capability['interviewId']
-        require(db.execute("SELECT 1 FROM cp_interviews WHERE id=? AND candidate_id=? AND status='completed'", (iid, cid)).fetchone(),
-                'Дождитесь завершения интервью рекрутером.', 409)
-        target = self._email_target(db, cid, iid)
-        row = _row(db.execute('SELECT * FROM cp_email_access WHERE candidate_id=?', (cid,)))
-        if row and not row['consumed_at'] and row['expires'] > time.time():
-            target = target or row['recipient']
-        if email is not None:
-            supplied = delivery._email(email)
-            require(not target or supplied == target, 'Используйте почту, указанную при записи.', 409)
-            target = supplied
-        if send:
-            require(target, 'Укажите почту.', 400)
-            require(self.config().email_configured, 'Отправка писем временно недоступна.', 503)
-            self.enqueue_link(db, cid, target)
-            row = _row(db.execute('SELECT * FROM cp_email_access WHERE candidate_id=?', (cid,)))
-        live = row and not row['consumed_at'] and row['expires'] > time.time()
-        status = row['status'] if live else 'not_requested'
-        masked = None
-        if target:
-            local, domain = target.split('@')
-            masked = local[:2] + '•••@' + domain
-        return {'status': status, 'needsEmail': not target, 'emailHint': masked,
-                'canSend': bool(self.config().email_configured) and status in ('not_requested', 'failed'),
-                'blockedReason': None if self.config().email_configured else 'email_not_configured'}
-
-    def completed(self, db, cid, iid):
-        person = db.execute('SELECT email FROM cp_candidates WHERE id=?', (cid,)).fetchone()
-        if not person or person[0]:
-            return  # Registered candidates already have the ordinary cabinet notification.
-        target = self._email_target(db, cid, iid)
-        if target:
-            try:
-                self.enqueue_link(db, cid, target)
-            except Problem as error:
-                if error.status not in (400, 409):
-                    raise
-                # Completion must not fail on a missing/changed/duplicate contact.
-
-    def consume_link(self, db, token):
-        require(isinstance(token, str) and re.fullmatch(r'[A-Za-z0-9_-]{43}', token), 'Ссылка недействительна.', 410)
-        row = _row(db.execute('SELECT * FROM cp_email_access WHERE token_hash=?', (hashlib.sha256(token.encode()).hexdigest(),)))
-        require(row and not row['consumed_at'] and row['expires'] > time.time(), 'Ссылка истекла или уже использована. Запросите новое письмо.', 410)
-        cid, target = row['candidate_id'], row['recipient']
-        person = db.execute('SELECT email FROM cp_candidates WHERE id=?', (cid,)).fetchone()
-        require(person and person[0] == row['account_email'], 'Почта профиля изменилась. Запросите новое письмо.', 409)
-        require(not db.execute('SELECT 1 FROM cp_candidates WHERE lower(email)=? AND id<>?', (target, cid)).fetchone(),
-                'Эта почта уже связана с другим профилем. Обратитесь к рекрутеру.', 409)
-        if person[0] is None:
-            # Passwordless account; existing password accounts keep their credentials.
-            db.execute('UPDATE cp_candidates SET email=?,updated_at=? WHERE id=?', (target, iso(now()), cid))
-        db.execute('UPDATE cp_email_access SET consumed_at=? WHERE id=?', (iso(now()), row['id']))
-        db.execute("UPDATE cp_invitations SET revoked_at=? WHERE candidate_id=? AND scope='claim'", (iso(now()), cid))
-        if self.portal.notifications:
-            self.portal.notifications.set_email(db, cid, target, verified=True)
-        return cid
-
-    def dispatch_link_once(self):
-        config = self.config()
-        with self.lock, self.connect() as db:
-            db.execute('BEGIN IMMEDIATE')
-            db.execute("UPDATE cp_email_access SET status='unknown',last_error='delivery_interrupted' WHERE status='sending' AND lease_until<=?", (int(time.time()),))
-            if not config.email_configured:
-                return None
-            row = _row(db.execute("SELECT * FROM cp_email_access WHERE status='queued' ORDER BY created_at LIMIT 1"))
-            if not row:
-                return None
-            person = db.execute('SELECT email FROM cp_candidates WHERE id=?', (row['candidate_id'],)).fetchone()
-            if not person or person[0] != row['account_email'] or row['expires'] <= time.time() or row['consumed_at']:
-                db.execute("UPDATE cp_email_access SET status='failed',last_error='link_unavailable' WHERE id=?", (row['id'],))
-                return {'status': 'failed'}
-            token = self._email_token(db, row)
-            db.execute("UPDATE cp_email_access SET status='sending',lease_until=? WHERE id=?", (int(time.time()) + LEASE_SECONDS, row['id']))
-        parsed = urllib.parse.urlsplit(_portal_url(config))
-        query = dict(urllib.parse.parse_qsl(parsed.query)); query['cp'] = 'email-access'
-        url = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path, urllib.parse.urlencode(query), 'access=' + token))
-        content = 'Откройте ваш кабинет МашаДаша:\n' + url + '\n\nСсылка действует 24 часа и только один раз. Не пересылайте её.'
-        import html
-        markup = '<html><body style="font-family:Arial,sans-serif;color:#222;padding:32px"><h1 style="font-size:28px">Ваш кабинет готов</h1><p>Проверьте резюме и условия поиска.</p><p style="margin:32px 0"><a style="display:inline-block;background:#252429;color:white;padding:16px 24px;border-radius:14px;text-decoration:none" href="' + html.escape(url, quote=True) + '">Открыть кабинет</a></p><p style="color:#777;font-size:13px">Ссылка действует 24 часа. Не пересылайте это письмо.</p></body></html>'
-        status, error = 'sent', None
-        try:
-            transport = self._transport or delivery.Transport(config, email_role='candidate')
-            provider = transport.send_email(row['recipient'], 'Ваш кабинет МашаДаша', content, row['id'], html=markup)
-            if provider != 'smtp_accepted':
-                status, error = 'unknown', 'smtp_delivery_uncertain'
-        except delivery.DeliveryFailure as failure:
-            status, error = ('failed', failure.code) if failure.code in KNOWN_FAILURES else ('unknown', 'smtp_delivery_uncertain')
-        except Exception as failure:
-            observability.capture_exception(failure, 'worker.candidate_email_access')
-            status, error = 'unknown', 'smtp_delivery_uncertain'
-        with self.lock, self.connect() as db:
-            db.execute("UPDATE cp_email_access SET status=?,last_error=?,lease_until=NULL WHERE id=? AND status='sending'", (status, error, row['id']))
-        return {'status': status}
-
     @staticmethod
     def _owned_interview(db, cid, principal):
         require(isinstance(principal, dict) and not principal.get('legacy')
@@ -284,7 +143,7 @@ class CandidateAccess:
         else:
             consent = self._consent(db, cid, interview['id'])
             intake = db.execute('SELECT source FROM cp_intake WHERE candidate_id=?', (cid,)).fetchone()
-            if not consent or not intake or intake[0] not in ('hh', 'manual'):
+            if not consent or not intake or intake[0] != 'hh':
                 return person, 'credentials', None, 'booking_consent_required'
             if not db.execute('SELECT 1 FROM cp_resumes WHERE candidate_id=? AND length(content)>0', (cid,)).fetchone():
                 return person, 'credentials', None, 'resume_required'
@@ -413,9 +272,6 @@ class CandidateAccess:
 
     def dispatch_once(self):
         """Send at most one explicitly queued email, outside every SQLite lock."""
-        magic = self.dispatch_link_once()
-        if magic is not None:
-            return magic
         config = self.config()
         with self.lock, self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
@@ -444,7 +300,7 @@ class CandidateAccess:
         content += '\n\nНе пересылайте это письмо другим людям.'
         outcome, error = 'sent', None
         try:
-            provider = (self._transport or delivery.Transport(config, email_role='candidate')).send_email(
+            provider = (self._transport or delivery.Transport(config)).send_email(
                 row['recipient'], 'Доступ к кабинету HR Vision', content, row['id'])
             if provider != 'smtp_accepted':
                 outcome, error = 'unknown', 'smtp_delivery_uncertain'
@@ -454,8 +310,7 @@ class CandidateAccess:
                 outcome, error = 'failed', failure.code
             else:
                 outcome, error = 'unknown', 'smtp_delivery_uncertain'
-        except Exception as telemetry_error:
-            observability.capture_exception(telemetry_error, "worker.candidate_access")
+        except Exception:
             outcome, error = 'unknown', 'smtp_delivery_uncertain'
         with self.lock, self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
@@ -483,8 +338,7 @@ class CandidateAccess:
                         return
                     try:
                         self.dispatch_once()
-                    except Exception as telemetry_error:
-                        observability.capture_exception(telemetry_error, "worker.candidate_access")
+                    except Exception:
                         # Exceptions can contain addresses or credentials. HTTP
                         # status and durable outbox expose outcomes without logs.
                         pass

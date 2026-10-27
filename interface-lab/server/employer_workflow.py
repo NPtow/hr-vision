@@ -19,8 +19,6 @@ import urllib.parse
 from domain import Problem, iso, now, require, text, timestamp
 from feedback import questionnaire
 
-ARCHIVED_STAGE_KINDS = frozenset({'test'})
-
 
 def _json(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
@@ -75,13 +73,6 @@ def init(db):
       created_by TEXT NOT NULL, created_at TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS cp_screening_comments_application
       ON cp_screening_comments(application_id,interview_id);
-    CREATE TABLE IF NOT EXISTS cp_meeting_comments (
-      id TEXT PRIMARY KEY, application_id TEXT NOT NULL REFERENCES cp_applications(id),
-      meeting_id TEXT NOT NULL REFERENCES cp_meetings(id), recording_id TEXT, seconds REAL NOT NULL,
-      chapter_title TEXT NOT NULL DEFAULT '', text TEXT NOT NULL,
-      created_by TEXT NOT NULL, created_at TEXT NOT NULL);
-    CREATE INDEX IF NOT EXISTS cp_meeting_comments_application
-      ON cp_meeting_comments(application_id,meeting_id);
     CREATE TABLE IF NOT EXISTS cp_review_rejections (
       application_id TEXT PRIMARY KEY REFERENCES cp_applications(id),
       answers TEXT NOT NULL, created_by TEXT NOT NULL, created_at TEXT NOT NULL);
@@ -228,81 +219,17 @@ def screening_comments(db, application_id):
     return [dict(zip(keys, row)) for row in rows]
 
 
-def meeting_comments(db, application_id):
-    """Employer-only annotations, scoped independently from screening comments."""
-    rows = db.execute('''SELECT id,meeting_id,recording_id,seconds,chapter_title,text,created_at
-      FROM cp_meeting_comments WHERE application_id=? ORDER BY rowid''', (application_id,))
-    keys = ('id', 'meetingId', 'recordingId', 'seconds', 'chapterTitle', 'text', 'createdAt')
-    return [dict(zip(keys, row)) for row in rows]
-
-
 def review_rejection(db, application_id):
     row = db.execute('SELECT answers,created_at FROM cp_review_rejections WHERE application_id=?',
                      (application_id,)).fetchone()
     return {**json.loads(row[0]), 'createdAt': row[1]} if row else None
 
 
-def rejection_answers(value):
-    """The same private rejection form for canonical and intake profiles."""
+def _rejection_answers(value):
     require(isinstance(value, dict) and set(value) <= {'reason', 'missing', 'improve'},
             'Проверьте ответы о причине отказа.', 400)
-    result = {key: text(value.get(key, ''), 4000, required=key == 'reason')
-              for key in ('reason', 'missing', 'improve')}
-    require(not any((ord(ch) < 32 and ch not in '\n\r\t') or ord(ch) == 127
-                    for answer in result.values() for ch in answer), 'Проверьте текст отзыва.', 400)
-    return result
-
-
-def review_response(db, application_id):
-    """Initial employer answer, independent of a later meeting/outcome.
-
-    Imported and older canonical rows need no backfill: an existing refusal has
-    its own real timestamp; a selected meeting is never an invented invitation.
-    """
-    invitation_at = rejected_at = meeting_id = None
-    if _table_exists(db, 'em_reviews'):
-        columns = {row[1] for row in db.execute('PRAGMA table_info(em_reviews)')}
-        if {'invitation_requested_at', 'rejected_at'} <= columns:
-            row = db.execute('SELECT invitation_requested_at,rejected_at FROM em_reviews WHERE application_id=?',
-                             (application_id,)).fetchone()
-            if row:
-                invitation_at, rejected_at = row
-            if 'invitation_meeting_id' in columns:
-                row = db.execute('SELECT invitation_meeting_id FROM em_reviews WHERE application_id=?',
-                                 (application_id,)).fetchone()
-                meeting_id = row[0] if row else None
-    rejection = review_rejection(db, application_id)
-    if invitation_at:
-        result = {'decision': 'invite', 'createdAt': invitation_at}
-        if meeting_id:
-            meeting = _meeting(db, application_id, meeting_id)
-            result.update(meetingStart=meeting['start'], meetingStatus=meeting['status'])
-        return result
-    if rejection or rejected_at:
-        return {'decision': 'reject', 'createdAt': rejection['createdAt'] if rejection else rejected_at}
-    return None
-
-
-def review_meeting_start(value, *, future=False, private=False):
-    """Normalize the exact proposed time; availability is checked by the portal.
-
-    Parsing happens before idempotency lookup, while time-sensitive validation
-    happens only for a new write so a committed retry remains valid tomorrow.
-    A private draft is an employer preference, never candidate availability.
-    """
-    try:
-        start = timestamp(text(value, 80))
-    except Problem:
-        raise Problem('Выберите дату и время встречи.', 400)
-    require(start.microsecond == 0, 'Выберите время из календаря.', 400)
-    if private:
-        require(start.minute in (0, 30) and start.second == 0,
-                'Выберите время с шагом 30 минут.', 400)
-    if future:
-        tick = now()
-        require(tick < start <= tick + dt.timedelta(days=180),
-                'Выберите будущее время в пределах 180 дней.', 400)
-    return iso(start)
+    return {key: text(value.get(key, ''), 4000, required=key == 'reason')
+            for key in ('reason', 'missing', 'improve')}
 
 
 def _screening_comment_source(db, info, body):
@@ -336,57 +263,6 @@ def _screening_comment_source(db, info, body):
     else:
         require(not recordings, 'Выберите запись для комментария.', 400)
     return interview_id, recording_id, seconds
-
-
-def _meeting_comment_recordings(db, meeting_id, room):
-    # Catalogue IDs are provider-neutral and are the IDs returned by
-    # MaterialsService. Do not require a Daily cache for owned/Zoom media.
-    if _table_exists(db, 'media_sources') and _table_exists(db, 'media_assets'):
-        catalogued = db.execute('SELECT 1 FROM media_sources WHERE meeting_id=? LIMIT 1',
-                               (meeting_id,)).fetchone()
-        if catalogued:
-            rows = db.execute('''SELECT a.id,a.metadata,s.metadata FROM media_assets a
-              JOIN media_sources s ON s.id=a.source_id
-              WHERE s.meeting_id=? AND a.kind='video' AND a.state IN ('ready','available')''',
-              (meeting_id,))
-            return [{'id': asset_id, 'duration': json.loads(asset_metadata).get('capture', {}).get('metadata', {}).get('duration')}
-                    for asset_id, asset_metadata, source_metadata in rows
-                    if not json.loads(source_metadata).get('capture_disabled')]
-    # Legacy owners without a catalogue retain the same exact-room check used
-    # by screening. A retired catalogue source must never fall back to this.
-    if room and _table_exists(db, 'cp_media_state'):
-        cached = db.execute('SELECT room_id,body FROM cp_media_state WHERE meeting_id=? AND kind=?',
-                            (meeting_id, 'meeting')).fetchone()
-        if cached and json.loads(cached[0]) == {'id': room['id'], 'name': room['name']}:
-            return json.loads(cached[1]).get('recordings', [])
-    return []
-
-
-def _meeting_comment_source(db, info, body):
-    meeting_id = text(body.get('meetingId'), 160)
-    # An earlier completed meeting remains annotatable after a newer one is
-    # scheduled. Never resolve by candidate alone or silently use the latest.
-    row = db.execute('SELECT status,room FROM cp_meetings WHERE id=? AND application_id=?',
-                     (meeting_id, info['applicationId'])).fetchone()
-    require(row is not None, 'Встреча не найдена.', 404)
-    require(row[0] == 'completed', 'Комментарии доступны после встречи.', 409)
-    seconds = body.get('seconds')
-    require(type(seconds) in (int, float) and math.isfinite(seconds) and 0 <= seconds <= 14400,
-            'Проверьте таймкод комментария.', 400)
-    recording_id = body.get('recordingId')
-    if recording_id is not None:
-        recording_id = text(recording_id, 240)
-    room = json.loads(row[1]) if row[1] else None
-    recordings = _meeting_comment_recordings(db, meeting_id, room)
-    if recording_id is not None:
-        recording = next((item for item in recordings if item.get('id') == recording_id), None)
-        require(recording is not None, 'Запись изменилась. Откройте встречу ещё раз.', 409)
-        duration = recording.get('duration')
-        if type(duration) in (int, float) and math.isfinite(duration) and duration >= 0:
-            require(seconds <= duration, 'Таймкод выходит за пределы записи.', 400)
-    else:
-        require(not recordings, 'Выберите запись для комментария.', 400)
-    return meeting_id, recording_id, seconds
 
 
 def _test(db, app_id, test_id):
@@ -485,23 +361,6 @@ def _stage(db, app_id, stage_id):
     return stage
 
 
-def require_current_stage_action(db, application_id, action, body):
-    """Retire test assignments at the public employer boundary without erasing them.
-
-    The authenticated adapter calls this after application/workspace ownership is
-    checked, before replay or mutation. Legacy history and offline fixture/import
-    helpers keep the original records, IDs and documents readable.
-    """
-    if action == 'test.create':
-        raise Problem('Тестовые задания архивированы.', 410)
-    stage_id = 'test:' + text(body.get('testId'), 160) if action == 'test.update' else (
-        text(body.get('stageId'), 220) if action == 'stage.update' else None)
-    if isinstance(stage_id, str) and stage_id.startswith('test:'):
-        # A foreign or invented ID stays 404; it must not reveal archive membership.
-        _stage(db, application_id, stage_id)
-        raise Problem('Тестовые задания архивированы.', 410)
-
-
 def _documents(value):
     require(isinstance(value, list) and len(value) <= 20, 'Добавьте не больше 20 ссылок.', 400)
     documents, ids = [], set()
@@ -565,7 +424,6 @@ def load(db, application_id, *, actor='manager', candidate_id=None, vacancy_id=N
     state['offer'] = _current_offer(db, application_id)
     if actor == 'manager':
         state['screeningComments'] = screening_comments(db, application_id)
-        state['meetingComments'] = meeting_comments(db, application_id)
         state['reviewRejection'] = review_rejection(db, application_id)
         state['stages'] = stage_history(db, application_id, vacancy_id=info['vacancyId'])
         state['meetings'] = [stage['meeting'] for stage in state['stages'] if stage['kind'] == 'meeting']
@@ -599,11 +457,6 @@ def check_revision(db, application_id, expected_revision):
 def meeting_changed(db, application_id):
     """The authenticated meeting adapter appends history in its own transaction."""
     register_stages(db, application_id)
-    _touch(db, application_id)
-
-
-def review_changed(db, application_id):
-    """Advance the existing revision after an atomic, private review answer."""
     _touch(db, application_id)
 
 
@@ -664,7 +517,7 @@ def prepare_questions(db, application_id, meeting_id, turns, *, vacancy_id=None)
 
 
 MANAGER_ACTIONS = {'feedback.questions', 'feedback.draft', 'feedback', 'decision', 'reject', 'offer.save', 'offer.send',
-                   'chat', 'test.create', 'test.update', 'stage.update', 'screening.comment.add', 'meeting.comment.add'}
+                   'chat', 'test.create', 'test.update', 'stage.update', 'screening.comment.add'}
 CANDIDATE_ACTIONS = {'after', 'offer.reply', 'chat'}
 ALIASES = {'feedback.submit': 'feedback', 'offer.draft': 'offer.save', 'after.interest': 'after'}
 
@@ -707,7 +560,7 @@ def _action(db, app_id, action, body, *, actor, actor_id, vacancy_id=None):
     rid = body.get('requestId')
     if rid is not None:
         rid = text(rid, 120)
-    if action in ('screening.comment.add', 'meeting.comment.add') or (action == 'reject' and 'rejectionAnswers' in body):
+    if action == 'screening.comment.add' or (action == 'reject' and 'rejectionAnswers' in body):
         require(rid is not None, 'Укажите идентификатор запроса.', 400)
     fingerprint = hashlib.sha256(_json({'action': action, 'body': {
         k: v for k, v in body.items() if k != 'requestId'}}).encode()).hexdigest()
@@ -725,7 +578,7 @@ def _action(db, app_id, action, body, *, actor, actor_id, vacancy_id=None):
                         'events': [], 'replayed': True}
         state = _workflow(db, app_id)
         hidden = _review_rejected(db, app_id)
-        if action in ('test.create', 'test.update', 'stage.update', 'screening.comment.add', 'meeting.comment.add') or (
+        if action in ('test.create', 'test.update', 'stage.update', 'screening.comment.add') or (
                 action == 'reject' and 'rejectionAnswers' in body):
             require('expectedRevision' in body, 'Обновите карточку перед сохранением.', 409)
         if 'expectedRevision' in body:
@@ -760,15 +613,6 @@ def _apply(db, info, state, action, body, actor, actor_id, events):
           (id,application_id,interview_id,recording_id,seconds,chapter_title,text,created_by,created_at)
           VALUES (?,?,?,?,?,?,?,?,?)''',
           (_id('screening_comment'), app_id, interview_id, recording_id, seconds, chapter, words, actor_id, iso(now())))
-    elif action == 'meeting.comment.add':
-        _open(db, info)
-        meeting_id, recording_id, seconds = _meeting_comment_source(db, info, body)
-        words = text(body.get('text'), 4000)
-        chapter = text(body.get('chapterTitle', ''), 240, required=False)
-        db.execute('''INSERT INTO cp_meeting_comments
-          (id,application_id,meeting_id,recording_id,seconds,chapter_title,text,created_by,created_at)
-          VALUES (?,?,?,?,?,?,?,?,?)''',
-          (_id('meeting_comment'), app_id, meeting_id, recording_id, seconds, chapter, words, actor_id, iso(now())))
     elif action == 'test.create':
         _open(db, info)
         tid, stamp = _id('test'), iso(now())
@@ -884,7 +728,7 @@ def _apply(db, info, state, action, body, actor, actor_id, events):
                            'Компания решила не продолжать подбор с вами по этой вакансии.', system=True)
             events.append(_event(info, 'employer.declined', mid))
     elif action == 'reject':
-        answers = rejection_answers(body['rejectionAnswers']) if 'rejectionAnswers' in body else None
+        answers = _rejection_answers(body['rejectionAnswers']) if 'rejectionAnswers' in body else None
         if state['decision'] == 'declined':
             if answers is not None:
                 saved = review_rejection(db, app_id)

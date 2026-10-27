@@ -66,16 +66,3 @@
   .ew-root .ew-shell .ew-sidebar nav button.active { outline:2px solid Highlight; outline-offset:-2px; }
   .ew-vacancy-menu .ew-vacancy-option[data-state=checked] { outline:1px solid Highlight; outline-offset:-1px; }
 }
-
-/* Telegram supplies safe insets; the normal browser layout is untouched. */
-html[data-employer-miniapp="true"] .cj-app,
-html[data-employer-miniapp="true"] .ew-auth {
-  min-height: var(--employer-viewport, 100dvh);
-  padding-top: var(--employer-safe-top, 0px);
-  padding-right: var(--employer-safe-right, 0px);
-  padding-bottom: var(--employer-safe-bottom, 0px);
-  padding-left: var(--employer-safe-left, 0px);
-}
-html[data-employer-miniapp="true"] .ew-root .ew-shell {
-  min-height: calc(var(--employer-viewport, 100dvh) - var(--employer-safe-top, 0px) - var(--employer-safe-bottom, 0px));
-}

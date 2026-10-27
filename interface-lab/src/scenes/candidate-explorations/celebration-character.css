@@ -1,0 +1,135 @@
+.cex-celebration-character {
+  --cex-char-ink: #243045;
+  --cex-char-muted: #728096;
+  --cex-char-blue: #3265a7;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 610px;
+  padding: 26px 28px 48px;
+  box-sizing: border-box;
+  background: #fff;
+  color: var(--cex-char-ink);
+  text-align: center;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.cex-celebration-character *,
+.cex-celebration-character *::before,
+.cex-celebration-character *::after { box-sizing: border-box; }
+.cex-celebration-character .cex-character-stage {
+  display: block;
+  flex: 0 0 auto;
+  width: min(100%, 350px);
+  padding: 0;
+  margin: 0 0 10px;
+  border: 0;
+  border-radius: 40px;
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.cex-celebration-character .cex-character-stage svg { display: block; width: 100%; height: auto; overflow: visible; }
+.cex-celebration-character .cex-character-stage g,
+.cex-celebration-character .cex-char-shadow { transform-box: view-box; }
+.cex-celebration-character .cex-char-shadow { transform-origin: 181px 236px; }
+.cex-celebration-character .cex-char-five-halo { opacity: 0; }
+.cex-celebration-character .cex-character-copy { max-width: 570px; }
+.cex-celebration-character .cex-character-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 15px;
+  color: #6c7b75;
+  font-size: 12px;
+  line-height: 1.5;
+  font-weight: 500;
+  letter-spacing: .035em;
+}
+.cex-celebration-character .cex-character-eyebrow span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #8eaf9f;
+}
+.cex-celebration-character h2 {
+  margin: 0;
+  font-size: clamp(25px, 3vw, 34px);
+  font-weight: 600;
+  line-height: 1.17;
+  letter-spacing: -.035em;
+  text-wrap: balance;
+}
+.cex-celebration-character .cex-character-description {
+  margin: 17px 0 0;
+  color: var(--cex-char-muted);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.65;
+  letter-spacing: -.006em;
+}
+.cex-celebration-character .cex-character-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-top: 30px;
+  width: min(100%, 292px);
+}
+.cex-celebration-character .cex-character-actions button {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 550;
+  min-height: 46px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.cex-celebration-character .cex-character-resume {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 13px;
+  width: 100%;
+  padding: 12px 22px;
+  border: 1px solid #dce6f4;
+  border-radius: 15px;
+  color: var(--cex-char-blue);
+  background: #edf3fc;
+  transition: background 120ms ease-out, border-color 120ms ease-out;
+}
+.cex-celebration-character .cex-character-resume svg { width: 18px; height: 18px; flex: 0 0 auto; }
+.cex-celebration-character .cex-character-resume:hover { background: #e5eefb; border-color: #bed0ec; }
+.cex-celebration-character .cex-character-processes {
+  color: #738198;
+  padding: 10px 18px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  transition: background 120ms ease-out, color 120ms ease-out;
+}
+.cex-celebration-character .cex-character-processes:hover { color: #3d5676; background: #f5f7fa; }
+.cex-celebration-character button:focus-visible { outline: 3px solid #7ca8e1; outline-offset: 4px; }
+.cex-celebration-character-pair .cex-character-stage { width: min(100%, 380px); margin-bottom: 5px; }
+@media (max-width: 540px) {
+  .cex-celebration-character { min-height: 590px; padding: 23px 22px 32px; }
+  .cex-celebration-character .cex-character-stage { width: min(100%, 305px); margin-bottom: 16px; }
+  .cex-celebration-character-pair .cex-character-stage { width: min(100%, 320px); }
+  .cex-celebration-character h2 { font-size: 27px; line-height: 1.18; }
+  .cex-celebration-character .cex-character-desktop-break { display: none; }
+  .cex-celebration-character .cex-character-description { font-size: 13px; margin-top: 15px; }
+  .cex-celebration-character .cex-character-actions { margin-top: 27px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cex-celebration-character .cex-character-stage g,
+  .cex-celebration-character .cex-char-shadow { transform: none !important; }
+  .cex-celebration-character .cex-character-actions button { transition: none; }
+}
+@media (prefers-contrast: more) {
+  .cex-celebration-character { --cex-char-muted: #425268; }
+  .cex-celebration-character .cex-character-processes { color: #425268; }
+  .cex-celebration-character .cex-character-resume { border-color: #3265a7; }
+}

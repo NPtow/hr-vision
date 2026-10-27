@@ -12,7 +12,7 @@ import urllib.parse
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from domain import Problem, require, timestamp
+from domain import Problem, require
 import employer_workflow
 
 
@@ -187,18 +187,13 @@ class CandidateBot:
             self._send(db, chat, cid, key + ':next', {'text': f'Показано {offset + len(rows)} из {total}.', 'reply_markup': {'inline_keyboard': [[button]]}}, config, tick)
 
     def _meetings(self, db, cid, chat, config, tick, key):
-        interview = self.portal.interview(db, cid)
-        has_interview = interview and interview['status'] in ('booked', 'live') and timestamp(interview['end']).timestamp() > tick
-        if has_interview:
-            self._send(db, chat, cid, key + ':interview', {'text': 'Первичное интервью: ' + _time(interview['start']),
-                'reply_markup': {'inline_keyboard': [[{'text': 'Открыть встречу', 'url': self._url(config)}]]}}, config, tick)
         if not self._searching(db, cid):
             self._send(db, chat, cid, key + ':paused', self._paused_content(config), config, tick)
             return
         rows = db.execute('''SELECT DISTINCT a.id FROM cp_applications a JOIN cp_meetings m
             ON m.application_id=a.id WHERE a.candidate_id=? AND a.archived_at IS NULL AND m.status IN ('pending','confirmed','live')
             ORDER BY m.start LIMIT 20''', (cid,)).fetchall()
-        if not rows and not has_interview:
+        if not rows:
             self._send(db, chat, cid, key + ':empty', {'text': 'Предстоящих встреч пока нет. Согласие на вакансию не подтверждает время встречи.', 'reply_markup': self._menu(config)}, config, tick)
         for index, row in enumerate(rows):
             app = self.portal.application(db, row[0], cid)
@@ -316,10 +311,6 @@ class CandidateBot:
         text = message.get('text', '')
         parts = text.split() if isinstance(text, str) else []
         command = parts[0].split('@')[0] if parts else ''
-        if not cid and command == '/meetings':
-            import meeting_reminders
-            if meeting_reminders.booking_navigation(db, chat, config, timestamp, key + ':booking'):
-                return {'status': 'replied'}
         if not cid or (command == '/start' and not binding_result):
             self._send(db, chat, cid, key + ':roles', self._role_content(config), config, timestamp)
             return {'status': 'replied'}

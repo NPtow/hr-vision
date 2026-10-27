@@ -1,9 +1,0 @@
-[Unit]
-Description=MashaDasha local API, website and service state probes
-After=docker.service
-[Service]
-Type=oneshot
-ExecStart=/usr/bin/python3 /opt/mashadasha-observability/health-probe.py
-MemoryMax=64M
-TimeoutStartSec=60
-Nice=10

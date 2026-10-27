@@ -1,0 +1,41 @@
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { CandidateExplorations } from './scenes/candidate-explorations/CandidateExplorations';
+const meta = {
+  title: 'HR Vision/Кандидат · один поиск', id: 'hr-vision-candidate-explorations', component: CandidateExplorations,
+  parameters: { layout: 'fullscreen', controls: { disable: true } },
+} satisfies Meta<typeof CandidateExplorations>;
+export default meta;
+type Story = StoryObj<typeof meta>;
+export const Gallery: Story = { name: '00 Все варианты · интерактивная лаборатория' };
+export const Board: Story = { name: '00 Сравнение по столбцам', args: { initialMode: 'board' } };
+export const Celebrations: Story = { name: '00 Поиск на паузе · 10 анимаций', args: { initialMode: 'celebrations' } };
+export const Search01: Story = { name: '01 Спокойный фокус · Поиск', args: { initialVariant: 0, initialScreen: 'search' } };
+export const Calendar01: Story = { name: '01 Спокойный фокус · Календарь', args: { initialVariant: 0, initialScreen: 'calendar' } };
+export const Profile01: Story = { name: '01 Спокойный фокус · Профиль', args: { initialVariant: 0, initialScreen: 'profile' } };
+export const Search02: Story = { name: '02 Список и детали · Поиск', args: { initialVariant: 1, initialScreen: 'search' } };
+export const Calendar02: Story = { name: '02 Список и детали · Календарь', args: { initialVariant: 1, initialScreen: 'calendar' } };
+export const Profile02: Story = { name: '02 Список и детали · Профиль', args: { initialVariant: 1, initialScreen: 'profile' } };
+export const Search03: Story = { name: '03 Карточки · Поиск', args: { initialVariant: 2, initialScreen: 'search' } };
+export const Calendar03: Story = { name: '03 Карточки · Календарь', args: { initialVariant: 2, initialScreen: 'calendar' } };
+export const Profile03: Story = { name: '03 Карточки · Профиль', args: { initialVariant: 2, initialScreen: 'profile' } };
+export const Search04: Story = { name: '04 Лёгкая лента · Поиск', args: { initialVariant: 3, initialScreen: 'search' } };
+export const Calendar04: Story = { name: '04 Лёгкая лента · Календарь', args: { initialVariant: 3, initialScreen: 'calendar' } };
+export const Profile04: Story = { name: '04 Лёгкая лента · Профиль', args: { initialVariant: 3, initialScreen: 'profile' } };
+export const Search05: Story = { name: '05 Личный маршрут · Поиск', args: { initialVariant: 4, initialScreen: 'search' } };
+export const Calendar05: Story = { name: '05 Личный маршрут · Календарь', args: { initialVariant: 4, initialScreen: 'calendar' } };
+export const Profile05: Story = { name: '05 Личный маршрут · Профиль', args: { initialVariant: 4, initialScreen: 'profile' } };
+export const Search06: Story = { name: '06 Всё по местам · Поиск', args: { initialVariant: 5, initialScreen: 'search' } };
+export const Calendar06: Story = { name: '06 Всё по местам · Календарь', args: { initialVariant: 5, initialScreen: 'calendar' } };
+export const Profile06: Story = { name: '06 Всё по местам · Профиль', args: { initialVariant: 5, initialScreen: 'profile' } };
+export const Search07: Story = { name: '07 Раскрытие · Поиск', args: { initialVariant: 6, initialScreen: 'search' } };
+export const Calendar07: Story = { name: '07 Раскрытие · Календарь', args: { initialVariant: 6, initialScreen: 'calendar' } };
+export const Profile07: Story = { name: '07 Раскрытие · Профиль', args: { initialVariant: 6, initialScreen: 'profile' } };
+export const Search08: Story = { name: '08 Пространство · Поиск', args: { initialVariant: 7, initialScreen: 'search' } };
+export const Calendar08: Story = { name: '08 Пространство · Календарь', args: { initialVariant: 7, initialScreen: 'calendar' } };
+export const Profile08: Story = { name: '08 Пространство · Профиль', args: { initialVariant: 7, initialScreen: 'profile' } };
+export const Search09: Story = { name: '09 Рядом · Поиск', args: { initialVariant: 8, initialScreen: 'search' } };
+export const Calendar09: Story = { name: '09 Рядом · Календарь', args: { initialVariant: 8, initialScreen: 'calendar' } };
+export const Profile09: Story = { name: '09 Рядом · Профиль', args: { initialVariant: 8, initialScreen: 'profile' } };
+export const Search10: Story = { name: '10 Следующий шаг · Поиск', args: { initialVariant: 9, initialScreen: 'search' } };
+export const Calendar10: Story = { name: '10 Следующий шаг · Календарь', args: { initialVariant: 9, initialScreen: 'calendar' } };
+export const Profile10: Story = { name: '10 Следующий шаг · Профиль', args: { initialVariant: 9, initialScreen: 'profile' } };

@@ -9,10 +9,8 @@ import { candidates } from '../agency-product/model';
 import { InterviewReview } from '../interview-review/InterviewReview';
 import { InterviewMediaProvider, LabMediaControl } from '../interview-review/InterviewMediaContext';
 import { EmployerShell, type Scope, type EmployerPage } from '../employer-workspace/EmployerShell';
-import { EmployerTelegramAction } from '../employer-workspace/EmployerTelegramAction';
 import { EmployerAuth } from '../employer-workspace/EmployerAuth';
 import { VacancyCreate } from '../employer-workspace/VacancyCreate';
-import { isEmployerMiniApp } from '../../lib/telegram-employer';
 import { captureEmployerEntry, clearEmployerEntry } from '../../lib/employer-entry';
 import { Avatar, PeoplePanel } from '../employer-workspace/PeoplePanel';
 import { CandidateIntake, IntakeDetail } from '../employer-workspace/CandidateIntake';
@@ -20,17 +18,13 @@ import { useIntake } from '../employer-workspace/intake';
 import { MeetingScheduler } from '../employer-workspace/MeetingScheduler';
 import { EmployerAgenda } from '../employer-workspace/EmployerAgenda';
 import { CandidateStageWorkspace } from '../employer-workspace/CandidateStageWorkspace';
-import { EmployerCandidateWorkspace, sourceFor } from '../employer-workspace/EmployerCandidateWorkspace';
-import { CandidateReviewQueue } from '../employer-workspace/CandidateReviewQueue';
-import type { ReviewCandidateIdentity } from '../employer-workspace/candidate-review-queue';
-import { EmployerCandidateProfile } from '../employer-workspace/EmployerCandidateProfile';
-import { candidateDecision } from '../employer-workspace/candidate-response';
+import { EmployerCandidateWorkspace } from '../employer-workspace/EmployerCandidateWorkspace';
 import { DsaCandidates } from './DsaCandidates';
 import { MeetingPanel } from './MeetingPanel';
 import { Materials } from './MeetingMaterials';
 import { EmployerScreening } from './EmployerScreening';
 import { FeedbackGate, answerLabels } from './FeedbackGate';
-import { actorName, initials, candidateStatus as status, meetingLabels, offerLabels, dateTime, request, useEntryAccess, useJourney, type AccountList, type Actor, type CandidateId, type Journey, type Offer, type Person, type Vacancy } from './api';
+import { actorName, initials, candidateStatus as status, meetingLabels, offerLabels, dateTime, request, useEntryAccess, useJourney, type AccountList, type Actor, type CandidateId, type Journey, type Offer, type Person, type SourceProfile, type Vacancy } from './api';
 import '../agency-product/theme.css';
 import '../agency-product/product.css';
 import './connected.css';
@@ -54,7 +48,7 @@ export function ConnectedJourney({ initialRole = 'start' }: { initialRole?: 'sta
     const url = new URL(location.href);
     const entry = captureEmployerEntry(url, sessionStorage);
     if (url.href !== location.href) history.replaceState(history.state, '', url);
-    return isEmployerMiniApp() ? { mode: 'login' as const, createVacancy: false, description: '' } : entry;
+    return entry;
   });
   const [scope, setScope] = useState<Scope>(!realEmployer && new URLSearchParams(location.search).get('task') === 'dsa' ? 'dsa' : 'sfera');
   const journey = useJourney(scope, { employer: realEmployer });
@@ -87,7 +81,7 @@ export function ConnectedJourney({ initialRole = 'start' }: { initialRole?: 'sta
     const url = new URL(location.href);
     url.searchParams.set('screen', 'create-vacancy');
     url.searchParams.delete('applicationId'); url.searchParams.delete('intakeId'); url.searchParams.delete('pool');
-    url.searchParams.delete('stageId'); url.searchParams.delete('meetingId'); url.searchParams.delete('view');
+    url.searchParams.delete('stageId'); url.searchParams.delete('meetingId');
     history.replaceState(history.state, '', url);
   }
   useEffect(() => {
@@ -137,8 +131,7 @@ export function ConnectedJourney({ initialRole = 'start' }: { initialRole?: 'sta
   }
   const manager = state?.actor === 'manager';
   const people = state ? personList(journey) : [];
-  const panelPeople = realEmployer ? people.filter(p => p.reviewState === panelMode ||
-    (panelMode === 'proposed' && p.reviewState === 'selected' && p.reviewResponse?.decision === 'invite')) : people;
+  const panelPeople = realEmployer ? people.filter(p => p.reviewState === panelMode) : people;
   const shownPeople = realEmployer && page === 'shortlist' ? panelPeople : people;
   const person = realEmployer && manager && intakeSelected && page === 'shortlist' && panelMode === 'proposed' ? undefined : state ? (realEmployer && manager && selected ? shownPeople.find(p => p.id === selected)
     : shownPeople.find(p => p.id === (manager ? selected : state.actor as CandidateId)) || shownPeople[0]) : undefined;
@@ -152,7 +145,7 @@ export function ConnectedJourney({ initialRole = 'start' }: { initialRole?: 'sta
       if (vacancyId) url.searchParams.set('vacancyId', vacancyId);
       if (id) url.searchParams.set('applicationId', id); else url.searchParams.delete('applicationId');
       url.searchParams.delete('intakeId');
-      url.searchParams.set('screen', next); url.searchParams.delete('stageId'); url.searchParams.delete('meetingId'); url.searchParams.delete('view');
+      url.searchParams.set('screen', next); url.searchParams.delete('stageId'); url.searchParams.delete('meetingId');
       if (leavingIntake && id && next === 'shortlist') history.pushState(history.state, '', url);
       else history.replaceState(history.state, '', url);
     }
@@ -167,24 +160,10 @@ export function ConnectedJourney({ initialRole = 'start' }: { initialRole?: 'sta
     if (state?.vacancy.id) url.searchParams.set('vacancyId', state.vacancy.id);
     url.searchParams.set('intakeId', id);
     url.searchParams.set('screen', 'shortlist'); url.searchParams.set('pool', 'proposed');
-    url.searchParams.delete('applicationId'); url.searchParams.delete('stageId'); url.searchParams.delete('meetingId'); url.searchParams.delete('view');
+    url.searchParams.delete('applicationId'); url.searchParams.delete('stageId'); url.searchParams.delete('meetingId');
     if (changed) history.pushState(history.state, '', url);
     else history.replaceState(history.state, '', url);
   };
-  function currentQueueCandidate(candidate: ReviewCandidateIdentity | null) {
-    if (!realEmployer || historyTarget.current || vacancySwitch.current) return;
-    setSelected(candidate?.source === 'application' ? candidate.id : '');
-    setIntakeSelected(candidate?.source === 'intake' ? candidate.id : '');
-    const url = new URL(location.href);
-    const unchanged = candidate?.source === 'application' ? url.searchParams.get('applicationId') === candidate.id && !url.searchParams.has('intakeId')
-      : candidate?.source === 'intake' ? url.searchParams.get('intakeId') === candidate.id && !url.searchParams.has('applicationId') : false;
-    url.searchParams.delete('applicationId'); url.searchParams.delete('intakeId');
-    if (candidate) url.searchParams.set(candidate.source === 'application' ? 'applicationId' : 'intakeId', candidate.id);
-    if (state?.vacancy.id) url.searchParams.set('vacancyId', state.vacancy.id);
-    url.searchParams.set('screen', 'shortlist'); url.searchParams.set('pool', 'proposed');
-    if (!unchanged) for (const key of ['interview', 't', 'stageId', 'meetingId', 'view']) url.searchParams.delete(key);
-    history.replaceState(history.state, '', url);
-  }
   const meetings = realEmployer ? state?.meetings || [] : people.filter(p => p.meeting && p.meeting.status !== 'cancelled').sort((a,b) => a.meeting!.start.localeCompare(b.meeting!.start));
   const pool = realEmployer ? state?.offerCandidates || [] : people.filter(p => p.decision === 'pool');
   const pendingFeedback = manager && !realEmployer ? people.filter(p => p.meeting?.status === 'completed' && !p.feedback).sort((a, b) => (a.meeting!.endedAt || a.meeting!.start).localeCompare(b.meeting!.endedAt || b.meeting!.start)) : [];
@@ -202,7 +181,7 @@ export function ConnectedJourney({ initialRole = 'start' }: { initialRole?: 'sta
       setPanelMode('proposed'); setPage('shortlist');
       const url = new URL(location.href);
       url.searchParams.set('screen', 'shortlist'); url.searchParams.set('pool', 'proposed');
-      url.searchParams.delete('applicationId'); url.searchParams.delete('intakeId'); url.searchParams.delete('stageId'); url.searchParams.delete('meetingId'); url.searchParams.delete('view');
+      url.searchParams.delete('applicationId'); url.searchParams.delete('intakeId'); url.searchParams.delete('stageId'); url.searchParams.delete('meetingId');
       history.replaceState(history.state, '', url);
     } finally { vacancySwitch.current = false; setVacancyLoading(false); }
   }
@@ -286,9 +265,8 @@ export function ConnectedJourney({ initialRole = 'start' }: { initialRole?: 'sta
     if (page === 'create-vacancy' || siteEntry?.createVacancy) openVacancyEditor(); else setPage('tasks');
     return true;
   }}/>;
-  return <InterviewMediaProvider><div className={`agency-product agency-product-theme cj-app ${inEmployer ? 'ew-root' : ''}`}><EmployerShell enabled={inEmployer} page={page} scope={scope} vacancy={state?.vacancy.role || (realEmployer ? 'Кандидаты' : 'Менеджер по работе с клиентами')} vacancyId={state?.vacancy.id} vacancies={vacancyOptions} onVacancyChange={realEmployer ? id => { void switchVacancy(id); } : undefined} navigationBusy={busy || vacancyLoading || callActive} name={state?.actorName || ''} hasOffers={pool.length > 0} candidateContext={realEmployer ? stageWorkspace ? 'vacancy' : 'queue' : undefined} candidateNavigation={stageWorkspace && people.filter(p => p.reviewState === 'selected').length > 0 ? <nav className="esc-candidate-nav" aria-label="Кандидаты в работе">{people.filter(p => p.reviewState === 'selected').map(p => <button type="button" className="esc-candidate-switch" key={p.id} aria-label={p.name} title={p.name} aria-pressed={person?.id === p.id} disabled={busy || callActive} onClick={() => { setPanelMode('selected'); select(p.id, 'shortlist'); }}><Avatar name={p.name} photo={p.photo}/></button>)}</nav> : undefined} onNavigate={navigate} onAccount={() => setPicker(true)} accountBusy={busy || callActive} accountActions={realEmployer && journey.token ? <EmployerTelegramAction token={journey.token} disabled={busy || callActive} onError={setError}/> : undefined} onLogout={realEmployer ? async () => { if (await journey.logout()) { finishSiteEntry(); setSiteEntry({ mode: 'login', createVacancy: false, description: '' }); setPage('tasks'); setSelected(''); setIntakeSelected(''); setToast(''); } } : undefined}>
+  return <InterviewMediaProvider><div className={`agency-product agency-product-theme cj-app ${inEmployer ? 'ew-root' : ''}`}><EmployerShell enabled={inEmployer} page={page} scope={scope} vacancy={state?.vacancy.role || (realEmployer ? 'Кандидаты' : 'Менеджер по работе с клиентами')} vacancyId={state?.vacancy.id} vacancies={vacancyOptions} onVacancyChange={realEmployer ? id => { void switchVacancy(id); } : undefined} navigationBusy={busy || vacancyLoading || callActive} name={state?.actorName || ''} hasOffers={pool.length > 0} candidateContext={realEmployer ? stageWorkspace ? 'vacancy' : 'queue' : undefined} candidateNavigation={stageWorkspace && people.filter(p => p.reviewState === 'selected').length > 0 ? <nav className="esc-candidate-nav" aria-label="Кандидаты в работе">{people.filter(p => p.reviewState === 'selected').map(p => <button type="button" className="esc-candidate-switch" key={p.id} aria-label={p.name} title={p.name} aria-pressed={person?.id === p.id} disabled={busy || callActive} onClick={() => { setPanelMode('selected'); select(p.id, 'shortlist'); }}><Avatar name={p.name} photo={p.photo}/></button>)}</nav> : undefined} onNavigate={navigate} onAccount={() => setPicker(true)} accountBusy={busy || callActive} onLogout={realEmployer ? async () => { if (await journey.logout()) { finishSiteEntry(); setSiteEntry({ mode: 'login', createVacancy: false, description: '' }); setPage('tasks'); setSelected(''); setIntakeSelected(''); setToast(''); } } : undefined}>
     <header className="cj-header"><button className="cj-brand" onClick={() => setPicker(true)}>HR Vision<span>.</span></button>{state && !picker && <button className="cj-account" onClick={() => setPicker(true)}><span className="cj-avatar">{initials(state.actorName)}</span>{state.actorName}<ChevronRight size={14}/></button>}</header>
-    {journey.entryWarning && <div className="cj-error" role="alert"><span>{journey.entryWarning}</span><Button variant="secondary" onClick={() => { journey.clearEntryWarning(); navigate('tasks'); }}>К моим вакансиям</Button></div>}
     {error && page !== 'create-vacancy' && !stageWorkspace && <div className="cj-error" role="alert"><span>{error}</span><Button variant="ghost" size="icon-sm" aria-label="Закрыть ошибку" onClick={() => setError('')}><X size={16}/></Button></div>}
     {(picker || !state) ? <main className="cj-start">
       <h1>Выберите аккаунт</h1>
@@ -310,7 +288,7 @@ export function ConnectedJourney({ initialRole = 'start' }: { initialRole?: 'sta
         <div className="cj-section-heading ew-tasks-heading"><h1>Задачи найма</h1>{realEmployer && <Button disabled={busy} onClick={openVacancyEditor}><Plus size={16}/>Создать вакансию</Button>}</div>
         {realEmployer ? (state.vacancies?.length ? state.vacancies.map(vacancy => <article className="cj-task" key={vacancy.id}><div><small>{vacancy.company}</small><h2>{vacancy.problem || vacancy.role}</h2>{vacancy.problem && <p>{vacancy.role}</p>}</div><Button disabled={busy} onClick={() => { void openTask(vacancy); }}>{vacancy.selectedCount ? 'Посмотреть выбранных кандидатов' : 'Посмотреть кандидатов'}<ArrowRight size={16}/></Button></article>) : <section className="cj-empty"><h2>Пока нет вакансий</h2><p>Создайте первую вакансию, чтобы начать подбор.</p></section>) : <><article className="cj-task"><div><small>ДСА Инжиниринг</small><h2>Менеджер по работе с клиентами</h2></div><Button disabled={busy} onClick={() => navigate('dsa')}>Открыть кандидатов ДСА<ArrowRight size={16}/></Button></article><article className="cj-task"><div><small>Сфера</small><h2>Вернуть клиентов к повторным покупкам</h2><p>Менеджер по работе с клиентами</p></div><Button disabled={busy} onClick={() => navigate('shortlist')}>Открыть подборку<ArrowRight size={16}/></Button></article></>}
       </main>}
-      {manager && page === 'shortlist' && !stageWorkspace && (realEmployer && !state.vacancy.id ? <main className="cj-main"><section className="cj-empty"><h2>Пока нет вакансий</h2><p>Создайте вакансию, чтобы посмотреть кандидатов.</p><Button onClick={openVacancyEditor}>Создать вакансию</Button></section></main> : vacancyLoading || (intake.loading && !intake.initialized) ? <main className="cj-main ew-vacancy-loading" role="status" aria-live="polite">Загружаем кандидатов…</main> : <>{realEmployer ? <CandidateReviewQueue key={`${journey.token}:${state.generation}:${state.vacancy.id}`} journey={journey} intake={intake} requested={intakeSelected ? { source: 'intake', id: intakeSelected } : selected ? { source: 'application', id: selected } : null} onCurrentChange={currentQueueCandidate}/> : <Shortlist key={state.vacancy.id || scope} journey={journey} person={person} people={panelPeople} selectedId={selected} select={(id, next) => select(id, next, state.vacancy.id)} go={setPage} intake={intake} intakeSelected={intakeSelected} onIntakeSelect={selectIntake}/>}</>)}
+      {manager && page === 'shortlist' && !stageWorkspace && (realEmployer && !state.vacancy.id ? <main className="cj-main"><section className="cj-empty"><h2>Пока нет вакансий</h2><p>Создайте вакансию, чтобы посмотреть кандидатов.</p><Button onClick={openVacancyEditor}>Создать вакансию</Button></section></main> : vacancyLoading || (intake.loading && !intake.people.length) ? <main className="cj-main ew-vacancy-loading" role="status" aria-live="polite">Загружаем кандидатов…</main> : <Shortlist key={state.vacancy.id || scope} journey={journey} person={person} people={panelPeople} selectedId={selected} select={(id, next) => select(id, next, state.vacancy.id)} go={setPage} intake={intake} intakeSelected={intakeSelected} onIntakeSelect={selectIntake}/>)}
       {stageWorkspace && (vacancyLoading ? <main className="cj-main" role="status">Загружаем кандидата…</main> : person ? <CandidateStageWorkspace key={`${state.generation}:${person.id}`} journey={journey} person={person} source={sourceFor(person)} entry={page === 'meeting' || page === 'review' || page === 'offer' ? page : undefined} callActive={callActive} onCallChange={setCallActive} onChat={() => select(person.id, 'chat')}/> : <main className="cj-main"><section className="esc-card esc-unavailable"><h2>{selected ? 'Кандидат недоступен' : 'Выбранных кандидатов пока нет'}</h2><p>{selected ? error || 'Этого кандидата нет в выбранной вакансии.' : 'После приглашения на встречу кандидат появится здесь со своей историей этапов.'}</p><Button onClick={() => { void navigate('shortlist'); }}>К подборке кандидатов</Button></section></main>)}
       {manager && page === 'intake' && <CandidateIntake token={journey.token} scope={scope} vacancy={state.vacancy.role} onBack={() => setPage(scope === 'dsa' ? 'dsa' : 'shortlist')} onSaved={id => { selectIntake(id); if (realEmployer) { setPanelMode('proposed'); void journey.refresh(); } void intake.refresh(); setPage(scope === 'dsa' ? 'dsa' : 'shortlist'); setToast('Кандидаты добавлены'); }}/>}
       {manager && page === 'book' && <MeetingScheduler journey={journey} person={person} onSelect={setSelected} onBack={() => setPage(panel)} onBooked={() => { if (realEmployer) { setPanelMode('selected'); select(person?.id || '', 'shortlist'); const url = new URL(location.href); url.searchParams.set('pool', 'selected'); history.replaceState(history.state, '', url); } else setPage('meeting'); }}/>}
@@ -333,24 +311,20 @@ export function ConnectedJourney({ initialRole = 'start' }: { initialRole?: 'sta
   </EmployerShell></div></InterviewMediaProvider>;
 }
 
+function sourceFor(person: Person): SourceProfile {
+  return person.sourceProfile || { id: person.candidateId || person.id, name: person.name, initials: initials(person.name), role: person.summary || '', interviewRole: person.role || '', interviewDate: '', score: null, duration: null, photo: person.photo || null, video: null, shortChapters: [], fullChapters: [], shortSummary: '', profile: [], cv: '', conclusion: [], questions: [] };
+}
+
 function Shortlist({ journey, person, people, selectedId, select, go, intake, intakeSelected, onIntakeSelect }: { journey: Journey; person?: Person; people: Person[]; selectedId: string; select: (id: CandidateId, page: Page) => void; go: (page: Page) => void; intake: ReturnType<typeof useIntake>; intakeSelected: string; onIntakeSelect: (id: string) => void }) {
   const profile = journey.employer ? undefined : candidates.find(c => c.id === person?.id);
   const source = journey.employer && person ? sourceFor(person) : undefined;
   const pendingIntake = intake.people.filter(p => !journey.employer || !personList(journey).some(candidate => candidate.id === p.id || candidate.candidateId === p.id));
-  const added = pendingIntake.find(p => p.id === intakeSelected && (!p.archived || p.reviewResponse)) || (!person && !selectedId && !intakeSelected ? pendingIntake.find(p => !p.archived || p.reviewResponse) : undefined);
-  // Receipts preserve the employer's own decision without reopening a withdrawn profile.
-  const receipts = journey.employer ? Object.values(journey.state!.reviewResponses || {})
-    .filter(receipt => receipt.vacancyId === journey.state!.vacancy.id && !journey.state!.candidates[receipt.id]) : [];
-  const receipt = !person && !added ? receipts.find(item => item.id === selectedId) : undefined;
+  const added = pendingIntake.find(p => p.id === intakeSelected && !p.archived) || (!person && !selectedId && !intakeSelected ? pendingIntake.find(p => !p.archived) : undefined);
   const meetingActive = person?.meeting && ['pending','confirmed','live'].includes(person.meeting.status);
-  const rows = [...people.map(p => ({ id: p.id, name: p.name, meta: journey.employer ? p.summary || p.role || '' : candidates.find(c => c.id === p.id)?.experience || '', status: status(p) })),
-    ...receipts.map(item => ({ id: item.id, name: item.name, meta: '', status: item.decision === 'invite' ? 'Выбран для встречи' : 'Отказ', reviewed: true })),
-    ...pendingIntake.map(p => ({ id: p.id, name: p.name, meta: p.preparedProfile?.summary || p.role || 'Новый кандидат', status: p.reviewResponse ? p.reviewResponse.decision === 'invite' ? 'Выбран для встречи' : 'Отказ' : p.archived ? 'В архиве' : p.preparedProfile?.source?.example ? 'Пример' : p.preparedProfile ? 'Из вашей подборки' : 'Добавлен вручную', added: true, archived: p.archived, reviewed: !!p.reviewResponse, example: p.preparedProfile?.source?.example }))];
-  return <PeoplePanel title={journey.state!.vacancy.role} rows={rows} selected={added?.id || person?.id || receipt?.id || ''} onAdd={() => go('intake')} onSelect={id => { if (pendingIntake.some(p => p.id === id)) onIntakeSelect(id); else { onIntakeSelect(''); select(id, 'shortlist'); } }}>
-    {added ? <IntakeDetail key={`${journey.token}:${journey.state!.vacancy.id}:${added.id}`} person={added} token={journey.token} vacancyId={journey.employer ? journey.state!.vacancy.id : undefined} onArchived={() => { void intake.refresh(); }}/>
-      : person && source ? <EmployerCandidateWorkspace key={`${journey.token}:${person.vacancyId}:${person.id}:${journey.state!.generation}`} journey={journey} person={person} source={source}/>
-      : receipt ? <EmployerCandidateProfile key={`${journey.token}:${receipt.vacancyId}:${receipt.id}`} person={receipt} source={{}} interview={null}
-        workflowRevision={0} decision={candidateDecision(receipt, receipt.reviewRejection)}/>
+  const rows = [...people.map(p => ({ id: p.id, name: p.name, meta: journey.employer ? p.summary || p.role || '' : candidates.find(c => c.id === p.id)?.experience || '', status: status(p) })), ...pendingIntake.map(p => ({ id: p.id, name: p.name, meta: p.preparedProfile?.summary || p.role || 'Новый кандидат', status: p.archived ? 'В архиве' : p.preparedProfile?.source?.example ? 'Пример' : p.preparedProfile ? 'Из вашей подборки' : 'Добавлен вручную', added: true, archived: p.archived, example: p.preparedProfile?.source?.example }))];
+  return <PeoplePanel title={journey.state!.vacancy.role} rows={rows} selected={added?.id || person?.id || ''} onAdd={() => go('intake')} onSelect={id => { if (pendingIntake.some(p => p.id === id)) onIntakeSelect(id); else { onIntakeSelect(''); select(id, 'shortlist'); } }}>
+    {added ? <IntakeDetail key={added.id} person={added} token={journey.token} vacancyId={journey.employer ? journey.state!.vacancy.id : undefined} onArchived={() => { void intake.refresh(); }}/>
+      : person && source ? <EmployerCandidateWorkspace key={`${person.vacancyId}:${person.id}`} journey={journey} person={person} source={source}/>
       : person && profile ? <>
       <header className="ew-person-heading"><Avatar name={person.name} photo={person.photo}/><div className="ew-person-name"><h2>{person.name}</h2><p>{source ? source.interviewRole || person.role : profile!.role}</p><small>{source ? source.role : `${profile!.city} · ${profile!.experience} · ${profile!.salary}`}</small></div><span className="ew-status">{status(person)}</span><Button variant="ghost" size="icon" onClick={() => go('chat')} aria-label={`Написать ${person.name}`}><MessageCircle size={18}/></Button></header>
       <Tabs defaultValue="interview" key={person.id} className="ew-profile-tabs">
