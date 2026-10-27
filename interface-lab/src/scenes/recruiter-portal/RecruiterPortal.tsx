@@ -4,15 +4,13 @@ import { Button } from '../../components/ui/button';
 import logo from '../employer-workspace/assets/hr-vision-logo.svg';
 import '../employer-workspace/employer.css';
 import './recruiter.css';
-import { recruiterRequest, RecruiterRequestError, type RecruiterCandidate, type RecruiterState } from './api';
+import { formatDate, recruiterRequest, RecruiterRequestError, type RecruiterCandidate, type RecruiterState } from './api';
 import { RecruiterCall, type ActiveCall } from './RecruiterCall';
 import { RecruiterAuth } from './RecruiterAuth';
 import { RecruiterProfile } from './RecruiterProfile';
 import { InterviewList } from './InterviewList';
 import { useRecruiterSession } from './session';
 import { RecruiterCandidateDetails } from './RecruiterCandidateDetails';
-import { RecruiterInterviewWorkspace } from './RecruiterInterviewWorkspace';
-import { startZoomSessionReconcile } from '../../components/call/zoom-session-reconcile';
 
 type SessionIdentity = { token: string; generation: number };
 
@@ -34,6 +32,7 @@ function RecruiterWorkspace() {
   // for the render before the token-change effect clears local controls.
   const state = stateResult?.identity === identity ? stateResult.value : null;
   const [page, setPage] = useState<'interviews' | 'profile'>('interviews');
+  const [selectedId, setSelectedId] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
@@ -42,7 +41,6 @@ function RecruiterWorkspace() {
   const [completedOpen, setCompletedOpen] = useState(false);
   const [completedFocusId, setCompletedFocusId] = useState('');
   const completedSection = useRef<HTMLElement>(null);
-  const cancelZoomReconcile = useRef<(() => void) | null>(null);
   const sequence = useRef(0);
   const mutation = useRef(false);
   const verifyingEmail = useRef(false);
@@ -51,7 +49,7 @@ function RecruiterWorkspace() {
 
   useEffect(() => {
     mounted.current = true;
-    return () => { mounted.current = false; sequence.current++; cancelZoomReconcile.current?.(); };
+    return () => { mounted.current = false; sequence.current++; };
   }, []);
 
   const refresh = useCallback(async () => {
@@ -68,9 +66,8 @@ function RecruiterWorkspace() {
     }
   }, [token]);
   useEffect(() => {
-    cancelZoomReconcile.current?.();
     sequence.current++; mutation.current = false; verifyingEmail.current = false;
-    setStateResult(null); setCallResult(null); setBusy(false); setPage('interviews'); setError(''); setNotice('');
+    setStateResult(null); setCallResult(null); setBusy(false); setSelectedId(''); setPage('interviews'); setError(''); setNotice('');
     setCompletedOpen(false); setCompletedFocusId('');
     void refresh();
     const timer = setInterval(() => { if (document.visibilityState === 'visible') void refresh(); }, 8000);
@@ -123,32 +120,7 @@ function RecruiterWorkspace() {
   const navigate = (next: 'interviews' | 'profile') => { setPage(next); setNotice(''); };
   const completed = (state?.candidates || []).filter(candidate => candidate.interview?.status === 'completed')
     .sort((a, b) => Date.parse(b.interview!.start) - Date.parse(a.interview!.start));
-  function openCandidate(candidate: RecruiterCandidate, materials = false) {
-    cancelZoomReconcile.current?.();
-    setActiveCall({ kind: 'interview', callProvider: candidate.interview!.callProvider === undefined ? 'daily' : candidate.interview!.callProvider,
-      candidateId: candidate.id, interviewId: candidate.interview!.id, title: candidate.name,
-      candidate, recording: candidate.interview!.recording,
-      preview: materials || candidate.interview!.callProvider !== 'zoom' || candidate.interview!.status === 'completed' });
-  }
-  function markCompleted(candidateId: string) {
-    if (!isCurrent(identity)) return;
-    setActiveCall(null); setPage('interviews'); setCompletedOpen(true); setCompletedFocusId(candidateId);
-    setNotice('Интервью завершено.'); void refresh();
-  }
-  function reconcileZoom() {
-    if (!activeCall) return;
-    const captured = identity, call = activeCall;
-    const body = call.kind === 'interview' ? { candidateId: call.candidateId, interviewId: call.interviewId }
-      : { candidateId: call.candidateId, applicationId: call.applicationId, meetingId: call.meetingId };
-    cancelZoomReconcile.current?.();
-    cancelZoomReconcile.current = startZoomSessionReconcile({
-      request: signal => recruiterRequest(`${call.kind}/reconcile`, token, body, signal),
-      onCompleted: () => { if (isCurrent(captured)) markCompleted(call.candidateId); },
-    });
-  }
-  const renderCandidateDetails = (candidate: RecruiterCandidate) => <RecruiterCandidateDetails key={`${identity.generation}-${candidate.id}`} candidate={candidate} token={token}
-    onOpen={() => openCandidate(candidate)} onMaterials={() => openCandidate(candidate, true)}
-    onProvider={provider => run('interview/provider', { candidateId: candidate.id, provider })}/>;
+  const renderCandidateDetails = (candidate: RecruiterCandidate) => <RecruiterCandidateDetails key={`${identity.generation}-${candidate.id}`} candidate={candidate} busy={busy} run={run} onNotice={message => { if (isCurrent(identity)) setNotice(message); }} token={token} onUpdated={refresh}/>;
   return <div className="ew-root rp-root">
     <div className="rp-shell" inert={activeCall ? true : undefined} aria-hidden={activeCall ? true : undefined}>
       <header className="ew-topbar rp-topbar">
@@ -160,20 +132,31 @@ function RecruiterWorkspace() {
         {(error || auth.error) && <div className="rp-error" role="alert">{error || auth.error}</div>}
         {notice && <p className="rp-notice" role="status"><Check size={16}/>{notice}</p>}
         {!state ? <div className="rp-empty"><p>{error ? 'Данные не загрузились.' : 'Загружаем…'}</p>{error && <Button variant="secondary" onClick={() => void refresh()}>Повторить</Button>}</div> : <>
-          {page === 'interviews' && <><InterviewList candidates={state.candidates} renderDetails={renderCandidateDetails}/>
+          {page === 'interviews' && <><InterviewList candidates={state.candidates} busy={busy} videoConfigured={state.videoConfigured}
+            selectedId={selectedId} onDetails={id => setSelectedId(current => current === id ? '' : id)} onCall={setActiveCall}
+            renderDetails={renderCandidateDetails}/>
             {!!completed.length && <section className="rp-completed-interviews" ref={completedSection} aria-label="Завершённые интервью">
               <button className="rp-completed-toggle" type="button" aria-expanded={completedOpen} aria-controls="rp-completed-list" onClick={() => setCompletedOpen(open => !open)}><ChevronDown size={16} aria-hidden="true"/>Завершённые интервью <span>{completed.length}</span></button>
-              {completedOpen && <ul id="rp-completed-list" className="rp-completed-list">{completed.map(candidate => <li key={candidate.interview!.id}>{renderCandidateDetails(candidate)}</li>)}</ul>}
+              {completedOpen && <ul id="rp-completed-list" className="rp-completed-list">{completed.map(candidate => {
+                const expanded = selectedId === candidate.id;
+                const detailId = `rp-completed-${candidate.interview!.id}`;
+                return <li key={candidate.interview!.id}>
+                  <button type="button" className="rp-completed-row" aria-expanded={expanded} aria-controls={expanded ? detailId : undefined} onClick={() => setSelectedId(current => current === candidate.id ? '' : candidate.id)}>
+                    <span><strong>{candidate.name || candidate.email || candidate.intake?.contactEmail || 'Кандидат'}</strong><span>{formatDate(candidate.interview!.start)}{candidate.source?.label ? ` · ${candidate.source.label}` : ''}</span></span><ChevronDown size={16} aria-hidden="true"/>
+                  </button>
+                  {expanded && <div id={detailId}>{renderCandidateDetails(candidate)}</div>}
+                </li>;
+              })}</ul>}
             </section>}
           </>}
           {page === 'profile' && <RecruiterProfile key={identity.generation} token={token} onError={setError} recruiter={auth.recruiter} blocks={state.availabilityBlocks || []} dates={state.availabilityDates || []} slots={state.slots} busy={busy || auth.busy} run={run} onLogout={() => { void auth.logout(); }}/ >}
         </>}
       </main>
     </div>
-    {activeCall?.preview && activeCall.candidate ? <RecruiterInterviewWorkspace
-      key={`${identity.generation}-${activeCall.interviewId}`} candidate={state?.candidates.find(person => person.id === activeCall.candidateId) || activeCall.candidate}
-      token={token} videoConfigured={state?.videoConfigured || false} materialsOnly={activeCall.callProvider === 'zoom' || activeCall.callProvider === null} onClose={() => setActiveCall(null)} onUpdated={refresh}
-      onJoin={(callProvider, recordingConsent) => setActiveCall({ ...activeCall, callProvider, recordingConsent, preview: false })}/>
-      : activeCall && <RecruiterCall key={`${identity.generation}-${activeCall.kind}-${activeCall.interviewId || activeCall.meetingId || activeCall.applicationId || activeCall.candidateId}`} active={{ ...activeCall, accountActive: state?.candidates.find(person => person.id === activeCall.candidateId)?.accountActive ?? activeCall.accountActive }} token={token} onClose={() => { setActiveCall(null); void refresh(); }} onJoined={() => void refresh()} onZoomHostLeft={reconcileZoom} onCompleted={() => markCompleted(activeCall.candidateId)}/ >}
+    {activeCall && <RecruiterCall key={`${identity.generation}-${activeCall.kind}-${activeCall.applicationId || activeCall.candidateId}`} active={{ ...activeCall, accountActive: state?.candidates.find(person => person.id === activeCall.candidateId)?.accountActive ?? activeCall.accountActive }} token={token} onClose={() => { setActiveCall(null); void refresh(); }} onJoined={() => void refresh()} onCompleted={() => {
+      if (!isCurrent(identity)) return;
+      setActiveCall(null); setPage('interviews'); setSelectedId(activeCall.candidateId); setCompletedOpen(true); setCompletedFocusId(activeCall.candidateId);
+      setNotice('Интервью завершено.'); void refresh();
+    }}/ >}
   </div>;
 }

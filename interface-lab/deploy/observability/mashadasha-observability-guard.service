@@ -1,8 +1,0 @@
-[Unit]
-Description=Keep disk reserve for MashaDasha before accepting more telemetry
-After=docker.service
-[Service]
-Type=oneshot
-ExecStart=/usr/bin/python3 /opt/mashadasha-observability/guard.py
-MemoryMax=64M
-Nice=10

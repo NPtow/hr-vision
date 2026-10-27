@@ -1,0 +1,104 @@
+@import '@fontsource-variable/inter';
+
+.pbp-root {
+  --pbp-ink: #24232b;
+  min-height: 100vh;
+  background: #f5f4f8;
+  color: var(--pbp-ink);
+  font-family: 'Inter Variable', Inter, sans-serif;
+  letter-spacing: -.025em;
+  padding-bottom: 32px;
+}
+.pbp-root button, .pbp-root select { cursor: pointer; }
+.pbp-root button:disabled { cursor: default; }
+.pbp-root button { border: 0; }
+.pbp-root h1, .pbp-root h2, .pbp-root p { margin: 0; }
+.pbp-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px!important; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.pbp-lab { min-height: 36px; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 0 30px; font-size: 11px; letter-spacing: 0; color: #777283; background: #eceaf2; }
+.pbp-lab span { display: flex; gap: 8px; align-items: center; }
+.pbp-lab i { height: 5px; width: 5px; flex-shrink: 0; border-radius: 50%; background: #9c8bc7; }
+.pbp-lab button { font-size: 11px; background: none; color: inherit; padding: 5px; white-space: nowrap; }
+.pbp-header { max-width: 1320px; margin: auto; padding: 30px 42px; }
+.pbp-header img { width: 155px; height: auto; display: block; }
+.pbp-main { max-width: 780px; margin: 48px auto 0; padding: 0 24px; }
+.pbp-surface { background: #fff; border-radius: 28px; box-shadow: 0 3px 8px #352b5208, 0 22px 55px -23px #352b522e; padding: 32px; }
+.pbp-picker { min-width: 0; display: grid; grid-template-columns: minmax(290px,1.4fr) minmax(190px,1fr); gap: 40px; }
+.pbp-calendar { min-width: 0; display: flex; flex-direction: column; justify-content: space-between; }
+.pbp-calendar .rdp-root { --rdp-accent-color: #6958cc; --rdp-accent-background-color: #f1ecff; --rdp-day_button-width: 40px; --rdp-day_button-height: 40px; --rdp-day-width: 44px; --rdp-day-height: 48px; width: 100%; font-size: 13px; }
+.pbp-calendar .rdp-months, .pbp-calendar .rdp-month, .pbp-calendar .rdp-month_grid { width: 100%; max-width: none; }
+.pbp-calendar .rdp-month_caption { font-size: 15px; height: 38px; margin-bottom: 19px; font-weight: 600; text-transform: capitalize; letter-spacing: -.02em; }
+.pbp-calendar .rdp-caption_label { padding-left: 2px; }
+.pbp-calendar .rdp-nav { gap: 9px; height: 34px; }
+.pbp-calendar .rdp-button_next, .pbp-calendar .rdp-button_previous { background: #f7f6fa; width: 29px; height: 29px; border-radius: 50%; }
+.pbp-calendar .rdp-chevron { fill: #8a8298; width: 16px; height: 16px; }
+.pbp-calendar .rdp-weekday { font-size: 10px; font-weight: 500; color: #9b94a4; padding: 0 0 10px; opacity: 1; }
+.pbp-calendar .rdp-day_button { margin: auto; font-weight: 550; font-size: 13px; background: #f1ecfb; border-radius: 50%; color: #6454b8; }
+.pbp-calendar .rdp-disabled .rdp-day_button { background: transparent; color: #aaa4b2; font-weight: 400; }
+.pbp-calendar .rdp-disabled { opacity: .5; }
+.pbp-calendar .rdp-selected .rdp-day_button { background: #6958cc; color: white; box-shadow: 0 5px 13px #6958cc30; border: 0; font-weight: 600; }
+.pbp-calendar .rdp-today:not(.rdp-selected) { color: inherit; }
+.pbp-zone { display: flex; align-items: center; gap: 8px; color: #8a8297; margin-top: 20px; padding: 8px 0; font-size: 12px; }
+.pbp-zone select { background: transparent; border: 0; color: #797083; font-family: inherit; max-width: 100%; font-size: 11px; outline-offset: 4px; }
+.pbp-times { min-width: 0; display: flex; flex-direction: column; gap: 20px; }
+.pbp-time-list { display: grid; grid-template-columns: 1fr; gap: 9px; max-height: 320px; overflow: auto; padding: 3px; scrollbar-width: thin; scrollbar-color: #e0dbe8 transparent; }
+.pbp-time { height: 44px; width: 100%; position: relative; background: #f7f6fa; border-radius: 10px; color: #5e566f; font-size: 13px; font-weight: 530; transition: background .14s, box-shadow .14s; }
+.pbp-time:hover { background: #ede8fa; }
+.pbp-time.selected { background: #eee8ff; color: #6551ba; box-shadow: inset 0 0 0 1.5px #b9a9ec; }
+.pbp-time svg { position: absolute; right: 14px; top: 14px; }
+.pbp-primary { display: flex; gap: 16px; align-items: center; justify-content: center; min-height: 44px; border-radius: 11px; background: #6c5bc5; color: white; font-weight: 550; font-size: 12px; padding: 12px 20px; box-shadow: 0 5px 15px #6c5bc526; transition: background .15s; }
+.pbp-primary:hover:not(:disabled) { background: #5948b0; }
+.pbp-primary:disabled { background: #eeebf4; color: #a6a0b2; box-shadow: none; }
+.pbp-times>.pbp-primary { margin-top: auto; }
+.pbp-root button:focus-visible, .pbp-field input:focus-visible, .pbp-zone select:focus-visible { outline: 2px solid #8977d2; outline-offset: 3px; }
+.pbp-stage-details .pbp-surface { max-width: 480px; margin: auto; }
+.pbp-form { width: 100%; }
+.pbp-back { display: flex; align-items: center; gap: 8px; color: #80748f; background: none; padding: 8px 0; font-size: 12px; }
+.pbp-selection { display: flex; align-items: center; gap: 14px; background: #f7f6fa; padding: 20px; border-radius: 15px; margin: 16px 0 24px; color: #786895; }
+.pbp-selection strong { display: block; color: #42374f; font-size: 17px; font-weight: 600; }
+.pbp-selection span { display: block; font-size: 11px; color: #8a8195; margin-top: 7px; }
+.pbp-field { display: grid; gap: 10px; font-size: 12px; font-weight: 550; }
+.pbp-field input { min-height: 45px; border: 0; border-radius: 11px; background: #f5f3f8; padding: 0 15px; font-size: 13px; color: #342a40; width: 100%; }
+.pbp-field-hint { font-size: 11px; line-height: 1.65; color: #97909f; margin-top: 10px!important; }
+.pbp-consent { display: flex; gap: 11px; align-items: flex-start; font-size: 11px; line-height: 1.65; margin: 22px 0; color: #7e738c; }
+.pbp-consent input { accent-color: #6c5bc5; margin: 3px 0 0; min-width: 16px; min-height: 16px; }
+.pbp-form>.pbp-primary { width: 100%; }
+.pbp-error { font-size: 11px; line-height: 1.5; color: #a84c54; background: #fff0f1; padding: 12px; border-radius: 10px; }
+.pbp-success { display: flex; align-items: center; flex-direction: column; text-align: center; max-width: 510px; margin: auto; padding: 40px; gap: 16px; }
+.pbp-success-icon { display: grid; place-items: center; width: 58px; height: 58px; border-radius: 50%; background: #edf5ef; color: #548366; margin-bottom: 7px; }
+.pbp-success h2 { font-size: 22px; letter-spacing: -.04em; }
+.pbp-success-date { font-weight: 600; font-size: 18px; }
+.pbp-success>p:not(.pbp-success-date) { font-size: 13px; color: #8c8197; }
+.pbp-success-note { background: #f7f6fa; border-radius: 15px; padding: 20px 24px; max-width: 430px; font-size: 12px; line-height: 1.7; color: #8b8096; overflow-wrap: anywhere; }
+.pbp-success-note strong { font-weight: 550; color: #695b79; }
+
+@media (max-width: 700px) {
+  .pbp-header { padding: 26px 24px; }
+  .pbp-header img { width: 132px; }
+  .pbp-main { margin-top: 20px; padding: 0 16px; max-width: 460px; }
+  .pbp-surface { border-radius: 23px; padding: 22px 20px; }
+  .pbp-picker { display: flex; flex-direction: column; gap: 22px; }
+  .pbp-calendar .rdp-root { --rdp-day_button-width: 38px; --rdp-day_button-height: 38px; --rdp-day-height: 44px; --rdp-day-width: 40px; }
+  .pbp-calendar .rdp-month_caption { font-size: 14px; margin-bottom: 12px; }
+  .pbp-zone { margin-top: 12px; }
+  .pbp-times { scroll-margin-top: 20px; gap: 14px; }
+  .pbp-time-list { grid-template-columns: repeat(3,1fr); max-height: none; overflow: visible; padding: 2px; gap: 9px; }
+  .pbp-time { height: 44px; font-size: 12px; }
+  .pbp-time svg { width: 13px; height: 13px; right: 7px; top: 15px; }
+  .pbp-times>.pbp-primary { min-height: 46px; font-size: 13px; }
+  .pbp-success { padding: 27px 18px; }
+  .pbp-success h2 { font-size: 21px; }
+  .pbp-success-note { padding: 20px; font-size: 11px; }
+}
+@media (max-width: 400px) {
+  .pbp-lab { padding: 0 12px; font-size: 9px; min-height: 32px; }
+  .pbp-lab button { font-size: 9px; }
+  .pbp-surface { padding: 20px 14px; }
+  .pbp-calendar .rdp-root { --rdp-day_button-width: 34px; --rdp-day_button-height: 34px; --rdp-day-width: 36px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pbp-root button { transition: none; }
+}
+@media (forced-colors: active) {
+  .pbp-root button, .pbp-root input, .pbp-surface { border: 1px solid ButtonText; }
+  .pbp-time.selected, .pbp-calendar .rdp-selected { outline: 2px solid Highlight; }
+}

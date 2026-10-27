@@ -65,7 +65,6 @@ class EmployerCandidateReviewAcceptanceTest(unittest.TestCase):
     completed_meeting = stages_fixture.EmployerStageAcceptanceTest.completed_meeting
     stage_action = stages_fixture.EmployerStageAcceptanceTest.stage_action
     create_test = stages_fixture.EmployerStageAcceptanceTest.create_test
-    legacy_test_action = stages_fixture.EmployerStageAcceptanceTest.legacy_test_action
 
     @classmethod
     def setUpClass(cls):

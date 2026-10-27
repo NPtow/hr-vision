@@ -16,7 +16,6 @@ import unittest
 from unittest.mock import patch
 
 import employer_projection
-import employer_workflow
 import test_employer_acceptance as fixture
 
 
@@ -55,23 +54,13 @@ class EmployerStageAcceptanceTest(unittest.TestCase):
         return self.person_state(employer, vacancy, aid)['meeting']
 
     def create_test(self, employer, vacancy, aid, title):
-        # Seed pre-retirement records through an internal helper only. The public
-        # employer endpoint no longer creates or edits test assignments.
-        with self.app.connect() as db:
-            before = {s['id'] for s in employer_workflow.stage_history(db, aid)}
-        current = self.legacy_test_action(employer, vacancy, aid, 'test.create',
+        before = {s['id'] for s in self.person_state(employer, vacancy, aid)['stages']}
+        current = self.stage_action(employer, vacancy, aid, 'test.create',
                                    title=title, instructions='Синтетическое задание ' + title)
         added = [s for s in current['stages'] if s['id'] not in before]
         self.assertEqual(len(added), 1)
         self.assertEqual(added[0]['kind'], 'test')
         return added[0]
-
-    def legacy_test_action(self, employer, vacancy, aid, action, **changes):
-        with self.app.connect() as db:
-            current = employer_workflow.load(db, aid, vacancy_id=vacancy['id'])
-            return employer_workflow.manager_action(db, aid, action,
-                {'expectedRevision': current['revision'], **changes},
-                manager_id='workspace:' + employer['workspace']['id'], vacancy_id=vacancy['id'])['state']
 
     @staticmethod
     def stages(person, kind):
@@ -86,15 +75,14 @@ class EmployerStageAcceptanceTest(unittest.TestCase):
         self.stage_action(employer, vacancy, aid, 'stage.update', stageId='meeting:' + first['id'],
                           notes='ONLY_FIRST_MEETING', documents=[{'title': 'Первый документ', 'url': 'https://example.test/first'}])
         first_test = self.create_test(employer, vacancy, aid, 'Первое тестовое')
-        self.legacy_test_action(employer, vacancy, aid, 'test.update', testId=first_test['test']['id'],
-                          status='completed', result='ONLY_FIRST_TEST', note='ARCHIVED_NOTE',
-                          documents=[{'title': 'Старый результат', 'url': 'https://example.test/archived-result'}])
+        self.stage_action(employer, vacancy, aid, 'test.update', testId=first_test['test']['id'],
+                          status='completed', result='ONLY_FIRST_TEST')
         second = self.completed_meeting(employer, vacancy, person, aid, minutes=60, previous=first)
         self.feedback(employer, vacancy, aid, second)
         self.stage_action(employer, vacancy, aid, 'stage.update', stageId='meeting:' + second['id'],
                           notes='ONLY_SECOND_MEETING')
         second_test = self.create_test(employer, vacancy, aid, 'Второе тестовое')
-        self.legacy_test_action(employer, vacancy, aid, 'test.update', testId=second_test['test']['id'],
+        self.stage_action(employer, vacancy, aid, 'test.update', testId=second_test['test']['id'],
                           status='completed', result='ONLY_SECOND_TEST')
         self.act(employer, vacancy, aid, 'decision', value='pool')
         first_offer = self.act(employer, vacancy, aid, 'offer.save', **self.offer_terms())['candidates'][aid]['offer']
@@ -108,12 +96,11 @@ class EmployerStageAcceptanceTest(unittest.TestCase):
         self.assertEqual(current['reviewState'], 'selected')
         self.assertEqual(current['stages'][0]['kind'], 'interview')
         self.assertEqual(len(self.stages(current, 'interview')), 1)
-        self.assertEqual([s['id'] for s in current['stages'][:3]], [
+        self.assertEqual([s['id'] for s in current['stages'][:5]], [
             'interview:' + person['initialId'], 'meeting:' + first['id'],
-            'meeting:' + second['id'],
+            first_test['id'], 'meeting:' + second['id'], second_test['id'],
         ])
-        self.assertEqual([s['kind'] for s in current['stages'][3:]], ['offer', 'offer'])
-        self.assertEqual(current['archivedStageIds'], [first_test['id'], second_test['id']])
+        self.assertEqual([s['kind'] for s in current['stages'][5:]], ['offer', 'offer'])
         meetings = {s['meetingId']: s for s in self.stages(current, 'meeting')}
         self.assertEqual(set(meetings), {first['id'], second['id']})
         for meeting, sentinel in ((first, 'ONLY_FIRST_MEETING'), (second, 'ONLY_SECOND_MEETING')):
@@ -123,29 +110,22 @@ class EmployerStageAcceptanceTest(unittest.TestCase):
             self.assertEqual(stage['meeting']['id'], meeting['id'])
         self.assertEqual(meetings[first['id']]['documents'][0]['url'], 'https://example.test/first')
         self.assertEqual(meetings[second['id']]['documents'], [])
-        self.assertEqual(self.stages(current, 'test'), [])
+        tests = {s['test']['id']: s for s in self.stages(current, 'test')}
+        self.assertEqual(tests[first_test['test']['id']]['test']['result'], 'ONLY_FIRST_TEST')
+        self.assertEqual(tests[second_test['test']['id']]['test']['result'], 'ONLY_SECOND_TEST')
         self.assertEqual(len(current['offers']), 2)
         self.assertEqual([o['version'] for o in sorted(current['offers'], key=lambda o: o['version'])], [1, 2])
         self.assertEqual(next(o for o in current['offers'] if o['version'] == 1)['compensation'], '150 000 ₽')
         self.assertEqual(current['offer']['compensation'], '170 000 ₽')
         # Reopen SQLite independently of the handler's response/React state.
         with self.app.connect() as db:
-            archived = {s['id']: s for s in employer_workflow.stage_history(db, aid) if s['kind'] == 'test'}
-            self.assertEqual(archived[first_test['id']]['test']['result'], 'ONLY_FIRST_TEST')
-            self.assertEqual(archived[first_test['id']]['notes'], 'ARCHIVED_NOTE')
-            self.assertEqual(archived[first_test['id']]['documents'][0]['url'], 'https://example.test/archived-result')
-            self.assertEqual(archived[second_test['id']]['test']['result'], 'ONLY_SECOND_TEST')
-            # Both original table records and their stable ledger IDs survive.
-            self.assertEqual(db.execute('SELECT COUNT(*) FROM cp_test_assignments WHERE application_id=?', (aid,)).fetchone()[0], 2)
-            self.assertEqual(db.execute("SELECT COUNT(*) FROM cp_employer_stages WHERE application_id=? AND kind='test'", (aid,)).fetchone()[0], 2)
             restored = employer_projection.build_state(db,
                 {'workspaceId': employer['workspace']['id'], 'name': 'QA', 'team': False},
                 self.app.CANDIDATE_PORTAL, self.media, vacancy['id'])['candidates'][aid]
         self.assertEqual(restored['stages'], current['stages'])
         self.assertEqual(restored['offers'], current['offers'])
-        self.assertEqual(restored['archivedStageIds'], current['archivedStageIds'])
 
-    def test_archived_tests_cannot_be_changed_by_public_actions_or_foreign_identities(self):
+    def test_lost_response_retry_is_one_stage_and_foreign_identity_cannot_mutate_it(self):
         employer, outsider = self.employer('Owner'), self.employer('Foreign')
         vacancy = self.vacancy(employer)
         other_vacancy = self.vacancy(employer, 'Другая собственная вакансия')
@@ -155,29 +135,16 @@ class EmployerStageAcceptanceTest(unittest.TestCase):
         self.completed_meeting(employer, vacancy, person, aid)
         self.completed_meeting(employer, vacancy, other_person, other_aid, minutes=60)
         self.completed_meeting(employer, other_vacancy, person, same_person_other_application, minutes=120)
-        stage = self.create_test(employer, vacancy, aid, 'Preserved legacy test')
-        before = self.person_state(employer, vacancy, aid)
-        with self.app.connect() as db:
-            stored = employer_workflow.stage_history(db, aid)
-            row_count = db.execute('SELECT COUNT(*) FROM cp_test_assignments').fetchone()[0]
-        command = self.action_body(employer, vacancy, aid, 'test.create', title='No longer available',
-            expectedRevision=before['workflowRevision'])
-        for action, changes in (
-            ('test.create', {}),
-            ('test.update', {'testId': stage['test']['id'], 'result': 'CHANGED'}),
-            ('stage.update', {'stageId': stage['id'], 'notes': 'CHANGED'}),
-        ):
-            body = {**command, 'action': action, 'requestId': 'retired-' + action, **changes}
-            # Repeated stale-client requests must remain harmless and explicit.
-            self.assertEqual(self.request('employer/action', body, token=employer['token'])[0], 410)
-            self.assertEqual(self.request('employer/action', body, token=employer['token'])[0], 410)
-        normalized = {**command, 'action': 'stage.update', 'requestId': 'retired-normalized-id',
-                      'stageId': ' ' + stage['id'] + ' ', 'notes': 'CHANGED'}
-        self.assertEqual(self.request('employer/action', normalized, token=employer['token'])[0], 410)
-        for action, changes in (('test.update', {'testId': 'unknown', 'result': 'CHANGED'}),
-                                ('stage.update', {'stageId': 'test:unknown', 'notes': 'CHANGED'})):
-            unknown = {**command, 'action': action, 'requestId': 'retired-unknown-' + action, **changes}
-            self.assertEqual(self.request('employer/action', unknown, token=employer['token'])[0], 404)
+        command = self.action_body(employer, vacancy, aid, 'test.create', title='Exactly once',
+            expectedRevision=self.person_state(employer, vacancy, aid)['workflowRevision'])
+        first = self.ok('employer/action', command, token=employer['token'])['candidates'][aid]
+        # Treat the first response as lost; send the identical command again.
+        again = self.ok('employer/action', command, token=employer['token'])['candidates'][aid]
+        self.assertEqual(first['stages'], again['stages'])
+        self.assertEqual(len(self.stages(again, 'test')), 1)
+        self.assertEqual(self.request('employer/action', {**command, 'title': 'Changed payload'},
+                                     token=employer['token'])[0], 409)
+        stage = self.stages(again, 'test')[0]
         bad_commands = [
             (employer, vacancy, other_aid, {'testId': stage['test']['id'], 'result': 'FOREIGN'}),
             (employer, other_vacancy, same_person_other_application, {'testId': stage['test']['id'], 'result': 'FOREIGN'}),
@@ -199,19 +166,12 @@ class EmployerStageAcceptanceTest(unittest.TestCase):
             stage_body.pop('testId', None)
             stage_body.pop('result', None)
             self.assertEqual(self.request('employer/action', stage_body, token=actor['token'])[0], 404)
-        after = self.person_state(employer, vacancy, aid)
-        self.assertEqual(after['stages'], before['stages'])
-        self.assertEqual(after['workflowRevision'], before['workflowRevision'])
-        self.assertEqual(after['archivedStageIds'], [stage['id']])
-        with self.app.connect() as db:
-            self.assertEqual(employer_workflow.stage_history(db, aid), stored)
-            self.assertEqual(db.execute('SELECT COUNT(*) FROM cp_test_assignments').fetchone()[0], row_count)
-            self.assertEqual(db.execute("SELECT COUNT(*) FROM em_route_commands WHERE request_id LIKE 'retired-%'").fetchone()[0], 0)
+        self.assertEqual(self.person_state(employer, vacancy, aid)['stages'], again['stages'])
         self.assertEqual(self.request('employer/state?vacancyId=' + vacancy['id'], token=outsider['token'])[0], 404)
-        self.assertNotIn(stage['id'], self.person_state(
-            employer, other_vacancy, same_person_other_application)['archivedStageIds'])
+        self.assertNotIn(stage['id'], [s['id'] for s in self.person_state(
+            employer, other_vacancy, same_person_other_application)['stages']])
         self.assertNotIn(stage['id'], json.dumps(self.state(outsider)))
-        self.assertNotIn(stage['id'], self.person_state(employer, vacancy, other_aid)['archivedStageIds'])
+        self.assertNotIn(stage['id'], [s['id'] for s in self.person_state(employer, vacancy, other_aid)['stages']])
 
     def test_offer_does_not_require_or_fabricate_feedback_and_keeps_version_guard(self):
         employer = self.employer('Optional feedback')
@@ -241,11 +201,11 @@ class EmployerStageAcceptanceTest(unittest.TestCase):
         first = self.completed_meeting(employer, vacancy, person, aid)
         self.stage_action(employer, vacancy, aid, 'stage.update', stageId='meeting:' + first['id'], notes='ONLY_FIRST_MEETING')
         test = self.create_test(employer, vacancy, aid, 'Первое тестовое')
-        self.legacy_test_action(employer, vacancy, aid, 'test.update', testId=test['test']['id'], status='completed', result='ONLY_FIRST_TEST')
+        self.stage_action(employer, vacancy, aid, 'test.update', testId=test['test']['id'], status='completed', result='ONLY_FIRST_TEST')
         second = self.completed_meeting(employer, vacancy, person, aid, minutes=60, previous=first)
         self.stage_action(employer, vacancy, aid, 'stage.update', stageId='meeting:' + second['id'], notes='ONLY_SECOND_MEETING')
         test2 = self.create_test(employer, vacancy, aid, 'Второе тестовое')
-        self.legacy_test_action(employer, vacancy, aid, 'test.update', testId=test2['test']['id'], status='completed', result='ONLY_SECOND_TEST')
+        self.stage_action(employer, vacancy, aid, 'test.update', testId=test2['test']['id'], status='completed', result='ONLY_SECOND_TEST')
         # Distinct applications for the same person make vacancy mix-ups observable.
         _, other_aid = self.accepted(employer, other_vacancy, person)
         other_meeting = self.propose(employer, other_vacancy, other_aid, minutes=180)

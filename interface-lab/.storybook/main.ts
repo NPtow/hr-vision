@@ -12,8 +12,6 @@ const config: StorybookConfig = {
   core: { disableTelemetry: true },
   viteFinal: async (config) => ({
     ...config,
-    // Static assets are selected above; Vite must not also copy private local prototypes.
-    publicDir: false,
     plugins: [...(config.plugins ?? []), tailwindcss()],
     ...(process.env.HR_DEV_API ? { server: { ...config.server, proxy: {
       ...config.server?.proxy, '/api/hr': { target: process.env.HR_DEV_API, changeOrigin: false },

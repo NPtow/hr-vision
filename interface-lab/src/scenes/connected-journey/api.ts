@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { loadEmployerTelegram, prepareEmployerTelegram, restoreEmployerIdentity } from '../../lib/telegram-employer';
 import type { RecordingChapter } from '../interview-review/InterviewReview';
 import type { CandidateStage } from '../employer-workspace/candidate-stage-types';
-import type { CallProvider, CallProviderMeeting } from '../../components/call/call-provider';
 export type Scope = 'sfera' | 'dsa';
 export type CandidateId = string;
 export type Actor = CandidateId | 'manager';
@@ -17,7 +16,6 @@ export type SourceProfile = {
   resume?: { filename: string; mime: string; size: number; uploadedAt: string } | null;
 };
 export type ScreeningComment = { id: string; interviewId: string; recordingId: string | null; seconds: number; chapterTitle?: string; text: string; createdAt: string };
-export type MeetingComment = { id: string; meetingId: string; recordingId: string | null; seconds: number; chapterTitle?: string; text: string; createdAt: string };
 export type RejectionAnswers = { reason: string; missing: string; improve: string };
 export type EmployerReviewResponse = { decision: 'invite' | 'reject'; createdAt: string;
   meetingStart?: string; meetingStatus?: 'draft' | 'pending' | 'confirmed' | 'live' | 'completed' | 'cancelled' | 'declined' };
@@ -29,8 +27,8 @@ export type Offer = { id?: string; createdAt?: string; status: 'draft' | 'sent' 
 export type FeedbackQuestion = { id: string; question: string; seconds: number | null; source: 'live' | 'transcript' | 'manual' };
 export type FeedbackAnswer = { rating: 'clear' | 'unclear' | 'unanswered' | 'not_asked'; comment: string };
 export type Questionnaire = { id: string; meetingId: string; questions: FeedbackQuestion[] };
-export type Meeting = CallProviderMeeting & { id: string; revision?: number; start: string; end?: string; startedAt?: string; endedAt?: string; status: 'pending' | 'confirmed' | 'live' | 'cancelled' | 'completed'; testSkip: boolean; joined: Actor[]; questionnaire?: Questionnaire | null; feedbackDraft?: Record<string, FeedbackAnswer> };
-export type Person = { id: CandidateId; candidateId?: string; applicationId?: string; vacancyId?: string; vacancyRole?: string; reviewState?: string; name: string; role?: string; summary?: string; photo?: string | null; sourceProfile?: SourceProfile; interest: 'pending' | 'accepted' | 'declined'; auto: boolean; slots?: string[]; busy?: string[]; freeSlots: string[]; meeting: Meeting | null; meetings?: Meeting[]; offers?: Offer[]; stages?: CandidateStage[]; archivedStageIds?: string[]; workflowRevision?: number; reviewResponse?: EmployerReviewResponse | null; screeningComments?: ScreeningComment[]; meetingComments?: MeetingComment[]; reviewRejection?: (RejectionAnswers & { createdAt?: string }) | null; feedback?: { example?: string; doubts?: string; check?: string; at: string; questions?: FeedbackQuestion[]; answers?: Record<string, FeedbackAnswer> } | null; afterInterest: 'pending' | 'yes' | 'no'; decision: 'review' | 'pool' | 'declined'; offer: Offer | null; messages: { id: string; actor: string; text: string; at: string; system: boolean }[] };
+export type Meeting = { id: string; revision?: number; start: string; end?: string; startedAt?: string; endedAt?: string; status: 'pending' | 'confirmed' | 'live' | 'cancelled' | 'completed'; testSkip: boolean; joined: Actor[]; questionnaire?: Questionnaire | null; feedbackDraft?: Record<string, FeedbackAnswer> };
+export type Person = { id: CandidateId; candidateId?: string; applicationId?: string; vacancyId?: string; vacancyRole?: string; reviewState?: string; name: string; role?: string; summary?: string; photo?: string | null; sourceProfile?: SourceProfile; interest: 'pending' | 'accepted' | 'declined'; auto: boolean; slots?: string[]; busy?: string[]; freeSlots: string[]; meeting: Meeting | null; meetings?: Meeting[]; offers?: Offer[]; stages?: CandidateStage[]; workflowRevision?: number; reviewResponse?: EmployerReviewResponse | null; screeningComments?: ScreeningComment[]; reviewRejection?: (RejectionAnswers & { createdAt?: string }) | null; feedback?: { example?: string; doubts?: string; check?: string; at: string; questions?: FeedbackQuestion[]; answers?: Record<string, FeedbackAnswer> } | null; afterInterest: 'pending' | 'yes' | 'no'; decision: 'review' | 'pool' | 'declined'; offer: Offer | null; messages: { id: string; actor: string; text: string; at: string; system: boolean }[] };
 export type Vacancy = { id?: string; company: string; role: string; problem: string; salary: string; format: string; expectations: string; proposedCount?: number; selectedCount?: number };
 export type EmployerVacancyDetails = {
   address: string;
@@ -86,19 +84,18 @@ export function journeyRequestTarget(path: string, token?: string, body?: unknow
   };
 }
 
-export class RequestError extends Error {
+class RequestError extends Error {
   constructor(message: string, public status: number) { super(message); }
 }
 
-export async function request<T>(path: string, token?: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+export async function request<T>(path: string, token?: string, body?: unknown): Promise<T> {
   const target = journeyRequestTarget(path, token, body);
   if (target.path === 'employer/action' && target.body && typeof target.body === 'object') {
     target.body = { requestId: crypto.randomUUID(), ...target.body };
   }
-  const timeout = AbortSignal.timeout(target.path === 'employer/vacancies/import' ? 150000 : target.path.endsWith('/materials') || target.path === 'materials' ? 60000 : 30000);
   const response = await fetch('/api/hr/' + target.path, { method: target.body === undefined ? 'GET' : 'POST',
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(target.body === undefined ? {} : { 'Content-Type': 'application/json' }) },
-    body: target.body === undefined ? undefined : JSON.stringify(target.body), cache: 'no-store', signal: signal ? AbortSignal.any([timeout, signal]) : timeout });
+    body: target.body === undefined ? undefined : JSON.stringify(target.body), cache: 'no-store', signal: AbortSignal.timeout(target.path === 'employer/vacancies/import' ? 150000 : target.path.endsWith('/materials') || target.path === 'materials' ? 60000 : 30000) });
   const data = await response.json().catch(() => ({ error: 'Сервис временно недоступен.' }));
   if (!response.ok) throw new RequestError(data.error || 'Не удалось выполнить действие.', response.status);
   return data;
@@ -254,7 +251,7 @@ export function useJourney(scope: Scope = 'sfera', options: { employer?: boolean
   }
   const clearLocation = () => {
     const url = new URL(location.href);
-    for (const key of ['vacancyId', 'applicationId', 'intakeId', 'screen', 'pool', 'task', 'stageId', 'meetingId', 'view']) url.searchParams.delete(key);
+    for (const key of ['vacancyId', 'applicationId', 'intakeId', 'screen', 'pool', 'task', 'stageId', 'meetingId']) url.searchParams.delete(key);
     history.replaceState(history.state, '', url);
   };
   async function authenticate(mode: 'register' | 'login', credentials: EmployerCredentials) {
@@ -337,20 +334,7 @@ export function useJourney(scope: Scope = 'sfera', options: { employer?: boolean
     } catch (e) { if (seq === sequence.current) setError((e as Error).message); return false; }
     finally { operation.current = false; setBusy(false); }
   }
-  async function setCallProvider(person: Person, provider: CallProvider) {
-    if (!employer || !state || !person.meeting || operation.current) return false;
-    operation.current = true;
-    sequence.current++; setBusy(true); setError('');
-    try {
-      const data = await request<SharedState>('employer/call-provider', token, {
-        vacancyId: person.vacancyId || state.vacancy.id, applicationId: person.applicationId,
-        candidate: person.id, meetingId: person.meeting.id, generation: state.generation, provider,
-      });
-      sequence.current++; acceptState(data, token); return true;
-    } catch (error) { setError((error as Error).message); return false; }
-    finally { operation.current = false; setBusy(false); }
-  }
-  return { entryWarning, clearEntryWarning: () => setEntryWarning(''), state: employer || state?.scope === scope ? state : null, token, error, setError, busy, initializing, login, authenticate, logout, createVacancy, act, refresh, openVacancy, setCallProvider, employer };
+  return { entryWarning, clearEntryWarning: () => setEntryWarning(''), state: employer || state?.scope === scope ? state : null, token, error, setError, busy, initializing, login, authenticate, logout, createVacancy, act, refresh, openVacancy, employer };
 }
 export type Journey = ReturnType<typeof useJourney>;
 export const dateTime = (value: string) => new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Moscow' }).format(new Date(value)) + ' МСК';

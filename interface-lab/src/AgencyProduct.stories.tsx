@@ -3,8 +3,6 @@ import { AgencyProduct } from './scenes/agency-product/AgencyProduct';
 import { CandidatePortal } from './scenes/candidate-portal/CandidatePortal';
 import { RecruiterPortal } from './scenes/recruiter-portal/RecruiterPortal';
 import { HHOutreach } from './scenes/hh-outreach/HHOutreach';
-import { MeetingNotesDemoEntry } from './scenes/meeting-notes-demo/MeetingNotesDemoEntry';
-import { SelectionWorkbench } from './scenes/selection-workbench/SelectionWorkbench';
 const meta = {
   title: 'HR Vision/Продукт · агентство', id: 'hr-vision-product', component: AgencyProduct,
   parameters: { layout: 'fullscreen', controls: { disable: true } },
@@ -13,9 +11,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 export const Manager: Story = {
   name: '01 Нанимающий · вакансии', args: { initialRole: 'manager' },
-  render: args => new URLSearchParams(location.search).get('demo') === 'meeting-notes'
-    ? <MeetingNotesDemoEntry/> : new URLSearchParams(location.search).get('workspace') === 'selection'
-    ? <SelectionWorkbench/> : new URLSearchParams(location.search).get('workspace') === 'outreach'
+  render: args => new URLSearchParams(location.search).get('workspace') === 'outreach'
     ? <HHOutreach/> : new URLSearchParams(location.search).get('workspace') === 'recruiter'
     ? <RecruiterPortal/> : <AgencyProduct {...args}/>,
 };

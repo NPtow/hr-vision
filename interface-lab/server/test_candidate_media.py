@@ -5,7 +5,6 @@ These tests prove authorization/state handling, never a real Daily recording.
 import concurrent.futures
 import datetime as dt
 import io
-import json
 import threading
 import unittest
 from unittest.mock import patch
@@ -73,35 +72,6 @@ class CandidateMediaTest(unittest.TestCase):
 
     def fetch(self, person):
         return self.call('recruiter/interview/materials', {'candidateId': person['id']}, manager=True)[0]
-
-    def test_imported_interview_uses_existing_authorization_and_completion_guard(self):
-        from test_dsa_panel import imported_fixture
-        from unittest.mock import Mock
-        person, _ = self.completed_person()
-        iid = self.interview(person)['id']
-        with self.connect() as db:
-            db.execute('INSERT OR REPLACE INTO cp_internal_profiles VALUES (?,?)',
-                       (person['id'], json.dumps({'importedInterview': imported_fixture(person['id'], iid)})))
-        self.portal.materials_catalog = Mock()
-        result = self.fetch(person)
-        self.assertEqual(result['video']['status'], 'ready')
-        self.portal.materials_catalog.register_owner.assert_not_called()
-        with self.assertRaises(Problem):
-            self.portal.materials(person['id'], access_check=lambda db: (_ for _ in ()).throw(Problem('denied', 403)))
-        with self.connect() as db:
-            db.execute("UPDATE cp_interviews SET status='booked' WHERE id=?", (iid,))
-        with self.assertRaises(Problem): self.fetch(person)
-
-    def test_imported_screening_does_not_replace_later_meeting_materials(self):
-        from test_dsa_panel import imported_fixture
-        person, cookie = self.completed_person()
-        iid = self.interview(person)['id']
-        with self.connect() as db:
-            db.execute('INSERT OR REPLACE INTO cp_internal_profiles VALUES (?,?)',
-                       (person['id'], json.dumps({'importedInterview': imported_fixture(person['id'], iid)})))
-        app, meeting = self.completed_meeting(person, cookie)
-        result = self.portal.materials(person['id'], app['id'], meeting['id'])
-        self.assertNotEqual(result.get('source', {}).get('kind'), 'dsa-panel')
 
     def requested(self, person):
         with self.connect() as db:

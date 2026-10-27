@@ -1,19 +1,15 @@
-import { Fragment, useEffect, useId, useMemo, useState } from 'react';
-import { ArrowRight, CalendarDays, Check, Clock3, Globe2, Plus, Video } from 'lucide-react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { ArrowRight, CalendarDays, Check, ChevronLeft, ChevronRight, Clock3, Globe2, Plus, Settings2, Video } from 'lucide-react';
 import { Button } from '../../components/ui/button';
-import { CandidateAvailability } from './CandidateAvailability';
+import { AvailabilityForm } from './AvailabilityForm';
 import { applicationGroup, currentApplicationMeeting } from './workspace-model';
-import type { AvailabilitySchedule, CandidateApplication, CandidateMeetingHistory, CandidateState } from './api';
-import { effectiveTimezone, scheduleDateKey, scheduleLabel, scheduleTime, timezoneOptions } from './schedule-time';
+import { localDate, timeLabel, timeZone, type Availability, type CandidateApplication, type CandidateMeetingHistory, type CandidateState } from './api';
 import './candidate-schedule.css';
 
 export type CandidateScheduleProps = {
   candidate: CandidateState;
-  section: 'meetings' | 'availability';
-  onSectionChange: (section: 'meetings' | 'availability') => void;
   busy: boolean;
-  onAvailability: (schedule: AvailabilitySchedule) => Promise<boolean>;
-  onTimezone: (timezone: string) => Promise<boolean>;
+  onAvailability: (availability: Availability[]) => Promise<boolean>;
   onMeetingReply: (application: CandidateApplication, action: 'confirm' | 'decline') => Promise<boolean>;
   onOpenVacancy: (applicationId: string) => void;
   onJoin: (applicationId: string, meetingId?: string) => void;
@@ -37,6 +33,13 @@ type ScheduleEntry = {
 };
 
 const validDate = (value: string) => Number.isFinite(new Date(value).getTime());
+const dayStart = (value: Date) => new Date(value.getFullYear(), value.getMonth(), value.getDate());
+const addDays = (value: Date, days: number) => new Date(value.getFullYear(), value.getMonth(), value.getDate() + days);
+const weekStart = (value: Date) => addDays(dayStart(value), -((value.getDay() + 6) % 7));
+const dateText = (value: Date) => new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).format(value);
+const monthText = (value: Date) => new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' }).format(value).replace(' г.', '');
+const weekdayText = (value: Date) => new Intl.DateTimeFormat('ru-RU', { weekday: 'short' }).format(value);
+const countText = (count: number) => `${count} ${count % 10 === 1 && count % 100 !== 11 ? 'встреча' : count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 12 || count % 100 > 14) ? 'встречи' : 'встреч'}`;
 const durationText = (entry: ScheduleEntry) => {
   const minutes = Math.round((new Date(entry.end).getTime() - new Date(entry.start).getTime()) / 60000);
   return Number.isFinite(minutes) && minutes > 0 ? `${minutes} мин` : '';
@@ -80,72 +83,80 @@ function statusText(entry: ScheduleEntry) {
   return 'Подтверждено';
 }
 
-function ScheduleCard({ entry, timezone, busy, onMeetingReply, onOpenVacancy, onJoin, onInterview }: Pick<CandidateScheduleProps, 'busy' | 'onMeetingReply' | 'onOpenVacancy' | 'onJoin' | 'onInterview'> & { entry: ScheduleEntry; timezone: string }) {
-  const [expanded, setExpanded] = useState(false);
-  const id = useId();
+function ScheduleCard({ entry, busy, onMeetingReply, onOpenVacancy, onJoin, onInterview }: Pick<CandidateScheduleProps, 'busy' | 'onMeetingReply' | 'onOpenVacancy' | 'onJoin' | 'onInterview'> & { entry: ScheduleEntry }) {
   const application = entry.application;
   const active = entry.current && !entry.history && !entry.archived;
   const future = validDate(entry.start) && new Date(entry.start).getTime() > Date.now();
+  const initials = entry.company.trim().split(/\s+/).slice(0, 2).map(word => word[0]).join('').toUpperCase();
   return <article className="cp-schedule-card">
-    <h3><button type="button" aria-expanded={expanded} aria-controls={id} onClick={() => setExpanded(value => !value)}>{entry.title}</button></h3>
-    <p className="cp-schedule-event-time">{validDate(entry.start) ? scheduleTime(entry.start, timezone) : '—'}–{validDate(entry.end) ? scheduleTime(entry.end, timezone) : '—'} · {entry.company}</p>
-    {!expanded && active && entry.status === 'pending' && <p className="cp-schedule-attention">Подтвердите время</p>}
-    {expanded && <div id={id} className="cp-schedule-details">
-      <p className="cp-schedule-status">{statusText(entry)} · {durationText(entry)}</p>
-      <div className="cp-schedule-card-actions">
-        {application && active && future && entry.status === 'pending' && <><Button disabled={busy} onClick={() => void onMeetingReply(application, 'confirm')}><Check size={16} />Подтвердить время</Button><Button variant="ghost" disabled={busy} onClick={() => void onMeetingReply(application, 'decline')}>Не подходит</Button></>}
-        {active && ['confirmed', 'booked', 'live'].includes(entry.status) && <Button disabled={busy} onClick={() => application ? onJoin(application.id, entry.meetingId) : onInterview()}><Video size={16} />Войти во встречу</Button>}
-        {application && active && future && entry.status === 'confirmed' && <Button variant="ghost" disabled={busy} onClick={() => void onMeetingReply(application, 'decline')}>Не подходит время</Button>}
-        {entry.status === 'completed' && <Button variant="secondary" disabled={busy} onClick={() => application ? onJoin(application.id, entry.meetingId) : onInterview()}><Video size={16} />Материалы встречи</Button>}
-        {application && <button type="button" className="cp-schedule-link" onClick={() => onOpenVacancy(application.id)}>О вакансии<ArrowRight size={15} /></button>}
-      </div>
-    </div>}
+    <div className="cp-schedule-card-top"><span className={`cp-schedule-status${active && entry.status === 'pending' ? ' cp-schedule-status-pending' : ''}${entry.status === 'completed' ? ' cp-schedule-status-completed' : ''}`}><i />{statusText(entry)}</span><span className="cp-schedule-duration"><Clock3 size={13} />{durationText(entry)}</span></div>
+    <div className="cp-schedule-card-identity"><span className={`cp-schedule-company${!application ? ' cp-schedule-company-recruiter' : ''}`}>{application ? initials || <CalendarDays size={19} /> : <Video size={19} />}</span><div><p>{entry.company}</p><h3>{entry.title}</h3></div></div>
+    <div className="cp-schedule-card-actions">
+      {application && active && future && entry.status === 'pending' && <><Button disabled={busy} onClick={() => void onMeetingReply(application, 'confirm')}><Check size={16} />Подтвердить время</Button><Button variant="ghost" disabled={busy} onClick={() => void onMeetingReply(application, 'decline')}>Не подходит</Button></>}
+      {active && ['confirmed', 'booked', 'live'].includes(entry.status) && <Button disabled={busy} onClick={() => application ? onJoin(application.id, entry.meetingId) : onInterview()}><Video size={16} />Подготовиться и войти</Button>}
+      {application && active && future && entry.status === 'confirmed' && <Button variant="ghost" disabled={busy} onClick={() => void onMeetingReply(application, 'decline')}>Не подходит время</Button>}
+      {entry.status === 'completed' && <Button variant="secondary" disabled={busy} onClick={() => application ? onJoin(application.id, entry.meetingId) : onInterview()}><Video size={16} />Материалы встречи</Button>}
+      {application && <button type="button" className="cp-schedule-link" onClick={() => onOpenVacancy(application.id)}>О вакансии<ArrowRight size={15} /></button>}
+    </div>
   </article>;
 }
 
-export function CandidateSchedule({ candidate, section, onSectionChange, busy, onAvailability, onTimezone, onMeetingReply, onOpenVacancy, onJoin, onInterview, onBookInterview }: CandidateScheduleProps) {
+export function CandidateSchedule({ candidate, busy, onAvailability, onMeetingReply, onOpenVacancy, onJoin, onInterview, onBookInterview }: CandidateScheduleProps) {
   const [now, setNow] = useState(Date.now);
-  useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 30000); return () => window.clearInterval(timer); }, []);
+  useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 60000); return () => window.clearInterval(timer); }, []);
+  const [section, setSection] = useState<'meetings' | 'availability'>('meetings');
   const [history, setHistory] = useState(false);
+  const [period, setPeriod] = useState<'week' | 'month'>('week');
+  const [cursor, setCursor] = useState(() => new Date());
   const [editing, setEditing] = useState(false);
-  // Browser back can leave the editor without its Cancel action.
-  useEffect(() => { setEditing(false); }, [section]);
-  const [zoneSaving, setZoneSaving] = useState(false);
-  const [zoneMessage, setZoneMessage] = useState('');
-  const timezone = effectiveTimezone(candidate.timezone);
-  const zones = useMemo(() => timezoneOptions(timezone), [timezone]);
+  const [saved, setSaved] = useState(false);
+  const editButton = useRef<HTMLButtonElement>(null);
+  const editor = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (editing) editor.current?.querySelector<HTMLElement>('input,button')?.focus(); }, [editing]);
+  const id = useId();
   const entries = useMemo(() => entriesFor(candidate, now), [candidate, now]);
-  const ordered = entries.filter(entry => entry.history === history);
-  if (history) ordered.reverse();
+  const selectedEntries = entries.filter(entry => entry.history === history);
+  const rangeStart = period === 'week' ? weekStart(cursor) : new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+  const rangeEnd = period === 'week' ? addDays(rangeStart, 7) : new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+  const visibleEntries = selectedEntries.filter(entry => !validDate(entry.start) || (new Date(entry.start) >= rangeStart && new Date(entry.start) < rangeEnd));
+  const orderedEntries = history ? [...visibleEntries].reverse() : visibleEntries;
   const groups = new Map<string, ScheduleEntry[]>();
-  for (const entry of ordered) {
-    const key = validDate(entry.start) ? scheduleDateKey(entry.start, timezone) : 'unknown';
+  for (const entry of orderedEntries) {
+    const key = validDate(entry.start) ? localDate(new Date(entry.start)) : 'unknown';
     groups.set(key, [...(groups.get(key) ?? []), entry]);
   }
-  const today = scheduleDateKey(now, timezone);
+  const timezone = timeZone();
+  const today = new Date();
+  const periodLabel = period === 'month' ? monthText(cursor) : `${dateText(rangeStart)} — ${dateText(addDays(rangeEnd, -1))}${rangeStart.getFullYear() !== today.getFullYear() ? ` ${rangeStart.getFullYear()}` : ''}`;
+  const available = [...candidate.availability].sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
+  const closeEditor = () => { setEditing(false); requestAnimationFrame(() => editButton.current?.focus()); };
+  const changeHistory = (next: boolean) => {
+    setHistory(next);
+    const target = next ? [...entries].reverse().find(entry => entry.history && validDate(entry.start)) : entries.find(entry => !entry.history && validDate(entry.start));
+    setCursor(target ? new Date(target.start) : new Date());
+  };
+  const move = (direction: number) => setCursor(previous => period === 'week' ? addDays(previous, direction * 7) : new Date(previous.getFullYear(), previous.getMonth() + direction, 1));
+  const jumpEntry = (history ? [...selectedEntries].reverse() : selectedEntries).find(entry => validDate(entry.start));
   const canBook = candidate.searching !== false && (!candidate.interview || candidate.interview.status === 'completed');
-  async function changeZone(value: string) {
-    if (zoneSaving || busy || editing) return;
-    setZoneSaving(true); setZoneMessage('');
-    try { if (await onTimezone(value)) setZoneMessage('Часовой пояс сохранён'); }
-    finally { setZoneSaving(false); }
-  }
-  return <section className="cp-schedule" aria-busy={busy || zoneSaving}>
-    <header className="cp-schedule-heading"><h1>Календарь</h1><label className="cp-schedule-timezone"><Globe2 size={17} aria-hidden="true"/><select aria-label="Часовой пояс" value={timezone} disabled={busy || editing || zoneSaving} onChange={event => void changeZone(event.target.value)}>{zones.map(zone => <option value={zone.value} key={zone.value}>{zone.label}</option>)}</select></label></header>
-    <span className="cp-schedule-sr-only" role="status">{zoneMessage}</span>
-    <div className="cp-schedule-sections" role="group" aria-label="Раздел календаря"><button type="button" disabled={editing} aria-pressed={section === 'meetings'} onClick={() => onSectionChange('meetings')}><CalendarDays size={17} />Встречи</button><button type="button" aria-pressed={section === 'availability'} onClick={() => onSectionChange('availability')}><Clock3 size={17} />Моя доступность</button></div>
+
+  return <section className="cp-schedule" aria-busy={busy}>
+    <header className="cp-schedule-heading"><h1>Календарь</h1><span className="cp-schedule-timezone"><Globe2 size={14} />{timezone}</span></header>
+    <div className="cp-schedule-sections" role="group" aria-label="Раздел календаря"><button type="button" aria-pressed={section === 'meetings'} onClick={() => setSection('meetings')}><CalendarDays size={17} />Встречи</button><button type="button" aria-pressed={section === 'availability'} onClick={() => { setSection('availability'); setSaved(false); }}><Clock3 size={17} />Моя доступность</button></div>
     {section === 'meetings' ? <>
-      <div className="cp-schedule-viewbar"><div className="cp-schedule-segment" role="group" aria-label="Встречи по статусу"><button type="button" aria-pressed={!history} onClick={() => setHistory(false)}>Предстоящие<span>{entries.filter(entry => !entry.history).length}</span></button><button type="button" aria-pressed={history} onClick={() => setHistory(true)}>История<span>{entries.filter(entry => entry.history).length}</span></button></div>{canBook && <button type="button" className="cp-schedule-link" disabled={busy} onClick={onBookInterview}><Plus size={16} />Интервью с рекрутером</button>}</div>
+      <div className="cp-schedule-viewbar"><div className="cp-schedule-segment" role="group" aria-label="Встречи по статусу"><button type="button" aria-pressed={!history} onClick={() => changeHistory(false)}>Предстоящие<span>{entries.filter(entry => !entry.history).length}</span></button><button type="button" aria-pressed={history} onClick={() => changeHistory(true)}>История<span>{entries.filter(entry => entry.history).length}</span></button></div>{canBook && <button type="button" className="cp-schedule-link" disabled={busy} onClick={onBookInterview}><Plus size={15} />Интервью с рекрутером</button>}</div>
+      <div className="cp-schedule-toolbar"><div className="cp-schedule-period"><h2>{periodLabel}</h2><div><button type="button" className="cp-schedule-icon" aria-label={period === 'week' ? 'Предыдущая неделя' : 'Предыдущий месяц'} onClick={() => move(-1)}><ChevronLeft size={18} /></button><button type="button" className="cp-schedule-icon" aria-label={period === 'week' ? 'Следующая неделя' : 'Следующий месяц'} onClick={() => move(1)}><ChevronRight size={18} /></button></div><button type="button" className="cp-schedule-today" onClick={() => setCursor(new Date())}>Сегодня</button></div><div className="cp-schedule-segment cp-schedule-range" role="group" aria-label="Показать период"><button type="button" aria-pressed={period === 'week'} onClick={() => setPeriod('week')}>Неделя</button><button type="button" aria-pressed={period === 'month'} onClick={() => setPeriod('month')}>Месяц</button></div></div>
       <div className="cp-schedule-agenda" aria-label={history ? 'История встреч' : 'Предстоящие встречи'}>
-        {[...groups].map(([key, items], index, days) => <Fragment key={key}>
-          {(index === 0 || key.slice(0, 7) !== days[index - 1][0].slice(0, 7)) && <h2 className="cp-schedule-month">{key === 'unknown' ? 'Без даты' : scheduleLabel(items[0].start, timezone, { month: 'long', year: 'numeric' })}</h2>}
-          <section className="cp-schedule-date-group" aria-label={key === 'unknown' ? 'Дата не указана' : scheduleLabel(items[0].start, timezone, { day: 'numeric', month: 'long', year: 'numeric' })}>
-            <h3 className="cp-schedule-date" data-today={key === today}><time dateTime={key === 'unknown' ? undefined : key}><strong>{key === 'unknown' ? '—' : Number(key.slice(-2))}</strong><span>{key === 'unknown' ? '' : scheduleLabel(items[0].start, timezone, { weekday: 'short' })}</span></time></h3>
-            <div className="cp-schedule-date-entries">{items.map(entry => <ScheduleCard key={entry.id} entry={entry} timezone={timezone} busy={busy} onMeetingReply={onMeetingReply} onOpenVacancy={onOpenVacancy} onJoin={onJoin} onInterview={onInterview}/>)}</div>
-          </section>
-        </Fragment>)}
-        {!ordered.length && <div className="cp-schedule-empty"><CalendarDays size={30} strokeWidth={1.5} aria-hidden="true"/><h2>{history ? 'Прошедших встреч пока нет' : 'Пока нет назначенных встреч'}</h2>{!history && !candidate.interview && canBook && <Button disabled={busy} onClick={onBookInterview}>Выбрать время<ArrowRight size={16}/></Button>}</div>}
+        {[...groups].map(([key, items]) => {
+          const date = key === 'unknown' ? null : new Date(`${key}T12:00:00`);
+          return <section className="cp-schedule-date-group" key={key} aria-label={date ? dateText(date) : 'Дата не указана'}><div className={`cp-schedule-date${date && localDate(date) === localDate(today) ? ' cp-schedule-date-today' : ''}`}><strong>{date?.getDate() ?? '—'}</strong><span>{date ? `${weekdayText(date)} · ${new Intl.DateTimeFormat('ru-RU', { month: 'long' }).format(date)}` : 'Без даты'}</span>{date && localDate(date) === localDate(today) && <small>Сегодня</small>}</div><div className="cp-schedule-date-entries">{items.map(entry => <div className="cp-schedule-entry" key={entry.id}><div className="cp-schedule-entry-time"><strong>{validDate(entry.start) ? timeLabel(entry.start) : '—'}</strong><span>{validDate(entry.end) ? timeLabel(entry.end) : ''}</span></div><ScheduleCard entry={entry} busy={busy} onMeetingReply={onMeetingReply} onOpenVacancy={onOpenVacancy} onJoin={onJoin} onInterview={onInterview} /></div>)}</div></section>;
+        })}
+        {!visibleEntries.length && <div className="cp-schedule-empty"><span><CalendarDays size={26} /></span><h3>{history ? 'Здесь пока нет встреч' : 'На этот период встреч нет'}</h3><p>{selectedEntries.length ? 'Выберите другой период, чтобы увидеть встречи.' : history ? 'Здесь сохранятся прошедшие, отменённые и архивные встречи.' : candidate.searching === false ? 'Поиск работы приостановлен. Прошлые встречи доступны в истории.' : 'Когда работодатель предложит время, встреча появится здесь.'}</p>{jumpEntry && <Button variant="secondary" onClick={() => setCursor(new Date(jumpEntry.start))}>{history ? 'К последней встрече' : 'К ближайшей встрече'}<ArrowRight size={15} /></Button>}{!selectedEntries.length && !history && !candidate.interview && canBook && <Button disabled={busy} onClick={onBookInterview}>Выбрать время с рекрутером<ArrowRight size={15} /></Button>}</div>}
       </div>
-    </> : <CandidateAvailability key={timezone} initial={candidate.availabilityManual ?? candidate.availability} schedule={candidate.availabilitySchedule} timezone={timezone} busy={busy} onSave={onAvailability} onEditing={setEditing}/>}
+      {!!visibleEntries.length && <p className="cp-schedule-total">{countText(visibleEntries.length)}</p>}
+    </> : <section className="cp-schedule-availability" aria-labelledby={`${id}-availability`}><div className="cp-schedule-availability-heading"><div><h2 id={`${id}-availability`}>Когда вам удобно</h2><p>Работодатель предложит время в этих интервалах.</p></div>{!editing && available.length > 0 && <Button ref={editButton} variant="outline" disabled={busy} onClick={() => { setEditing(true); setSaved(false); }}><Settings2 size={16} />Изменить</Button>}</div>
+      {saved && <p className="cp-schedule-saved" role="status"><Check size={16} />Удобное время сохранено</p>}
+      {editing ? <div ref={editor} className="cp-schedule-availability-form" onKeyDown={event => { if (event.key === 'Escape' && !busy) { event.stopPropagation(); closeEditor(); } }}><fieldset disabled={busy}><AvailabilityForm showDescription={false} initial={candidate.availability} busy={busy} onSubmit={async windows => { if (await onAvailability(windows)) { setSaved(true); closeEditor(); } }} /></fieldset><button type="button" className="cp-schedule-link cp-schedule-cancel" disabled={busy} onClick={closeEditor}>Отмена</button></div> : available.length ? <div className="cp-schedule-availability-list">{available.map((window, index) => <div key={`${window.start}:${window.end}:${index}`}><CalendarDays size={17} /><strong>{validDate(window.start) ? dateText(new Date(window.start)) : 'Дата не указана'}</strong><span>{validDate(window.start) ? timeLabel(window.start) : '—'} — {validDate(window.end) ? `${localDate(new Date(window.start)) !== localDate(new Date(window.end)) ? `${dateText(new Date(window.end))}, ` : ''}${timeLabel(window.end)}` : '—'}</span></div>)}</div> : <div className="cp-schedule-availability-empty"><Clock3 size={24} /><Button ref={editButton} disabled={busy} onClick={() => { setEditing(true); setSaved(false); }}><Plus size={16} />Добавить время</Button></div>}
+      <p className="cp-schedule-availability-foot">Время встречи подтверждаете отдельно. Назначенные встречи не переносятся.</p>
+    </section>}
   </section>;
 }
