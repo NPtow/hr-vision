@@ -195,7 +195,9 @@ class ReceiverTest(unittest.TestCase):
         self.assertEqual(r.PRE_MATERIALS_LIFECYCLE_RUNTIME - r.PRE_RECOMMENDATIONS_RUNTIME, r.RECOMMENDATIONS_RUNTIME)
         self.assertEqual(r.PRE_RECOMMENDATION_LIFECYCLE_RUNTIME - r.PRE_MATERIALS_LIFECYCLE_RUNTIME, {'selection_materials_lifecycle.py'})
         self.assertEqual(r.PRE_SELECTION_INTERVIEWS_RUNTIME - r.PRE_RECOMMENDATION_LIFECYCLE_RUNTIME, {'recommendation_lifecycle.py'})
-        self.assertEqual(r.RUNTIME - r.PRE_SELECTION_INTERVIEWS_RUNTIME, {'selection_interviews.py'})
+        self.assertEqual(r.PRE_INTAKE_REVIEW_RUNTIME - r.PRE_SELECTION_INTERVIEWS_RUNTIME, {'selection_interviews.py'})
+        self.assertEqual(r.RUNTIME - r.PRE_INTAKE_REVIEW_RUNTIME, {'employer_intake_review.py'})
+        self.assertIn(frozenset(r.PRE_INTAKE_REVIEW_RUNTIME), r.RUNTIME_LAYOUTS)
         self.assertIn(frozenset(r.PRE_SELECTION_INTERVIEWS_RUNTIME), r.RUNTIME_LAYOUTS)
         self.assertIn(frozenset(r.PRE_RECOMMENDATION_LIFECYCLE_RUNTIME), r.RUNTIME_LAYOUTS)
         self.assertIn(frozenset(r.PRE_MATERIALS_LIFECYCLE_RUNTIME), r.RUNTIME_LAYOUTS)
@@ -211,7 +213,7 @@ class ReceiverTest(unittest.TestCase):
         self.assertIn(frozenset(r.PRE_PUBLIC_PROFILE_RUNTIME), r.RUNTIME_LAYOUTS)
         self.assertEqual(r.ZOOM_RUNTIME, {'call_providers.py', 'zoom_media.py', 'materials_zoom.py', 'zoom_recording_retention.py'})
         self.assertEqual(len(r.MATERIALS_RUNTIME), 9)
-        for runtime in (r.PRE_SELECTION_INTERVIEWS_RUNTIME, r.PRE_RECOMMENDATION_LIFECYCLE_RUNTIME, r.PRE_MATERIALS_LIFECYCLE_RUNTIME, r.LEGACY_RUNTIME, r.BOT_RUNTIME, r.PRE_IMPORT_RUNTIME, r.PRE_OUTREACH_RUNTIME,
+        for runtime in (r.PRE_INTAKE_REVIEW_RUNTIME, r.PRE_SELECTION_INTERVIEWS_RUNTIME, r.PRE_RECOMMENDATION_LIFECYCLE_RUNTIME, r.PRE_MATERIALS_LIFECYCLE_RUNTIME, r.LEGACY_RUNTIME, r.BOT_RUNTIME, r.PRE_IMPORT_RUNTIME, r.PRE_OUTREACH_RUNTIME,
                         r.PRE_ACCESS_RUNTIME, r.PRE_CV_RUNTIME, r.PRE_POOLED_RUNTIME, r.PRE_EMPLOYER_TELEGRAM_RUNTIME, r.PRE_REMINDERS_RUNTIME, r.PRE_MEETING_NOTICES_RUNTIME, r.PRE_MEETING_LAB_RUNTIME, r.PRE_RECRUITER_COACH_RUNTIME, r.PRE_CALL_CLEANUP_RUNTIME, r.PRE_OBSERVABILITY_RUNTIME, r.PRE_CANDIDATE_CALENDAR_RUNTIME, r.PRE_INTERVIEW_ASSISTANT_RUNTIME, r.PRE_MATERIALS_RUNTIME, r.PRE_ZOOM_RUNTIME, r.SERVICES_ONLY_RUNTIME, r.ZOOM_ONLY_RUNTIME, r.ASSESSMENT_ONLY_RUNTIME, r.PRE_ASSESSMENT_RUNTIME, r.PRE_ASR_DISPATCH_RUNTIME, r.RUNTIME):
             with self.subTest(count=len(runtime)):
                 a, s, m = self.bundle('service', runtime=runtime)
@@ -902,6 +904,18 @@ class ReceiverTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'Employer preparations'):
                 r.guard_outbox_runtime(db, prior)
             r.guard_outbox_runtime(db, current)
+
+    def test_intake_core_projection_requires_compatible_runtime_after_first_preparation(self):
+        prior = self.runtime(self.root / 'before-intake-core', r.PRE_INTAKE_REVIEW_RUNTIME)
+        current = self.runtime(self.root / 'with-intake-core', r.RUNTIME)
+        with sqlite3.connect(':memory:') as db:
+            db.execute('CREATE TABLE er_intake_preparations (intake_id TEXT)')
+            r.guard_outbox_runtime(db, prior)
+            db.execute("INSERT INTO er_intake_preparations VALUES ('candidate-preparing')")
+            with self.assertRaisesRegex(ValueError, 'Intake preparations'):
+                r.guard_outbox_runtime(db, prior)
+            r.guard_outbox_runtime(db, current)
+            self.assertEqual(db.execute('SELECT intake_id FROM er_intake_preparations').fetchall(), [('candidate-preparing',)])
 
     def test_jev_queue_requires_runtime_and_cannot_be_hidden_by_view(self):
         prior = self.runtime(self.root / 'before-jev', r.PRE_JEV_RUNTIME)

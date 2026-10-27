@@ -67,7 +67,7 @@ if (target === 'service') for (const name of [
   'assessment_corpus.py', 'assessment_core_bridge.py', 'assessment_core_lifecycle.py',
   'selection_facts.py', 'selection_materials_lifecycle.py', 'vacancy_profile_bridge.py', 'recommendations_bridge.py',
   'recommendation_lifecycle.py', 'selection_interviews.py',
-  'employer_review.py',
+  'employer_review.py', 'employer_intake_review.py',
 ]) add(`server/${name}`, `api/${name}`);
 writeFileSync(`${stage}/release.json`, JSON.stringify(manifest) + '\n');
 execFileSync('tar', ['-czf', 'release.tgz', '-C', stage, 'release.json', 'ui', ...(target === 'service' ? ['api'] : [])], {
