@@ -87,6 +87,13 @@ class Bridge:
                 sources.append({'source_id': 'file:' + fid, 'version': core_bridge.digest(text), 'kind': 'cv',
                                 'units': [{'unit_id': 'stored', 'text': text, 'role': 'candidate'}]})
         for part in bundle['parts']:
+            if not part['segments'] and part['text'].startswith('WEBVTT\n'):
+                # Pass the entire immutable source once. Hundreds of per-cue
+                # JSON envelopes exceed JEV's context despite a short interview.
+                # VTT retains every word, voice and timestamp inside the text.
+                sources.append({'source_id': part['recordingId'], 'version': core_bridge.digest(part),
+                    'kind': 'interview', 'units': [{'unit_id': 'transcript', 'text': part['text'], 'role': 'unknown'}]})
+                continue
             turns = part['segments'] or transcript_turns(part['text'])
             require(bool(turns), 'transcript_format_unsupported', 422)
             units = []

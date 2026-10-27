@@ -114,8 +114,8 @@ class IntakeReviewTest(unittest.TestCase):
         corpus = self.core.calls[0][2]['corpus']
         self.assertEqual(corpus['candidate_id'], 'dsa-panel:123')
         self.assertEqual(corpus['sources'][0]['units'][0]['text'], profile()['cvText'])
-        self.assertEqual([u['text'] for u in corpus['sources'][1]['units']],
-            ['Как действовали?', 'Уточнил задачу и согласовал следующий шаг.'])
+        self.assertEqual(corpus['sources'][1]['units'],
+            [{'unit_id': 'transcript', 'text': profile()['transcriptText'], 'role': 'unknown'}])
         with self.connect() as db:
             view = review.projection(db, 'a', self.va, self.cid)
             self.assertEqual(view['status'], 'pending')
@@ -150,6 +150,18 @@ class IntakeReviewTest(unittest.TestCase):
         self.assertFalse(self.tick()); self.assertEqual(self.core.calls, [])
         with self.connect() as db, self.assertRaises(Problem):
             review.projection(db, 'a', self.va, self.cid)
+
+    def test_import_duration_uses_transcript_clock_precision_without_accepting_long_overshoot(self):
+        self.configure()
+        with self.connect() as db:
+            body = json.loads(db.execute('SELECT body FROM em_intake_candidates WHERE id=?', (self.cid,)).fetchone()[0])
+            body['preparedProfile']['recordings'][0]['duration'] = 7.9997
+            db.execute('UPDATE em_intake_candidates SET body=? WHERE id=?', (json.dumps(body), self.cid))
+        self.assertTrue(self.bridge.snapshot(self.cid)['chunks'])
+        with self.connect() as db:
+            body['preparedProfile']['recordings'][0]['duration'] = 7.9987
+            db.execute('UPDATE em_intake_candidates SET body=? WHERE id=?', (json.dumps(body), self.cid))
+        with self.assertRaises(Problem): self.bridge.snapshot(self.cid)
 
     def test_changed_materials_during_preparation_cannot_publish_stale_result(self):
         self.configure(); self.tick(); self.service.status = 'ready'
