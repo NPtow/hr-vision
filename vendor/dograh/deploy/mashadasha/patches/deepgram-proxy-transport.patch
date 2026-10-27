@@ -1,0 +1,14 @@
+--- a/deepgram/listen/v1/client.py
++++ b/deepgram/listen/v1/client.py
+@@ -49,10 +49,7 @@
+ if typing.TYPE_CHECKING:
+     from .media.client import AsyncMediaClient, MediaClient
+ 
+-try:
+-    from websockets.legacy.client import connect as websockets_client_connect  # type: ignore
+-except ImportError:
+-    from websockets import connect as websockets_client_connect  # type: ignore
++from ._dograh_proxy_transport import connect as websockets_client_connect
+ 
+ 
+ class V1Client:

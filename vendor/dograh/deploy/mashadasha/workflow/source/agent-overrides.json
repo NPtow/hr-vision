@@ -1,0 +1,9 @@
+{
+  "_comment": "Top-level agents.* fields for interview v2, everything except system_prompt (loaded separately from system-prompt.txt, it is too long to keep readable inline here) and interview_guide (its own file, interview-guide.json). publish_v2.py merges all three plus infra fields copied from the currently active remote agent (tts/stt/llm/pipeline_type) into one payload. Values and rationale are documented in system-prompt.md.",
+  "name": "Маша",
+  "language": "ru",
+  "welcome_message": "Привет, {Имя}. Я Маша, слышно меня нормально? Тогда по плану из чата: две минуты ты сам. Ты претендуешь на вакансию в продажах, расскажи, в чём твой ключевой опыт.",
+  "silence_prompt": "Не спеши. Скажи, когда будешь готов продолжить.",
+  "max_duration_seconds": 3600,
+  "interview_mode": "structured"
+}

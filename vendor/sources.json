@@ -1,0 +1,12 @@
+[
+  {
+    "path": "vendor/dograh",
+    "revision": "bafe405ff2a77c51d684935254ba23dc3bf61e80",
+    "upstream": "https://github.com/dograh-hq/dograh.git"
+  },
+  {
+    "path": "vendor/dograh/pipecat",
+    "revision": "8d5fc1eee3e9ba22edde5d7bd928f406a91e8091",
+    "upstream": "https://github.com/dograh-hq/pipecat.git"
+  }
+]

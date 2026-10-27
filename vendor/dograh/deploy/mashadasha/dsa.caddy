@@ -1,0 +1,10 @@
+dograh.158-160-179-53.sslip.io {
+    encode zstd gzip
+    header X-Robots-Tag "noindex, nofollow"
+    reverse_proxy 10.130.0.18:8385
+}
+
+dograh-files.158-160-179-53.sslip.io {
+    header X-Robots-Tag "noindex, nofollow"
+    reverse_proxy 10.130.0.18:8385
+}

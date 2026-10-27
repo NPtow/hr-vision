@@ -1,0 +1,16 @@
+FROM dograhai/dograh-api:1.48.0
+USER root
+COPY patch_deepgram_proxy.py /tmp/patch_deepgram_proxy.py
+COPY patches/deepgram_proxy_transport.py /tmp/deepgram_proxy_transport.py
+RUN python /tmp/patch_deepgram_proxy.py /tmp/deepgram_proxy_transport.py && rm /tmp/patch_deepgram_proxy.py /tmp/deepgram_proxy_transport.py
+COPY patch_duration.py /tmp/patch_duration.py
+RUN python /tmp/patch_duration.py /app && rm /tmp/patch_duration.py
+RUN python -c "import hashlib; from pathlib import Path; assert hashlib.sha256(Path('/app/api/services/workflow/pipecat_engine.py').read_bytes()).hexdigest() == '23d3e3c39da820d67a7fc7ab01b635c3b3f2fc42340b0ac8fe5832a1513c5af7', 'Upstream engine changed; review the release patch'"
+COPY patches/pipecat_engine.py /app/api/services/workflow/pipecat_engine.py
+RUN python -c "import hashlib; from pathlib import Path; assert hashlib.sha256(Path('/app/api/services/workflow/text_chat_runner.py').read_bytes()).hexdigest() == '2ffe63a1a70992224fea17f6665cd607b53d07e3865637c5b771670b2cba70fb', 'Upstream text runner changed; review the release patch'"
+COPY patches/text_chat_runner.py /app/api/services/workflow/text_chat_runner.py
+RUN python -c "import hashlib; from pathlib import Path; assert hashlib.sha256(Path('/app/api/services/configuration/check_validity.py').read_bytes()).hexdigest() == '1af597d2bd0969a024558d4e55425efed5c3749fa11eb4bc417e6425348ae98d', 'Upstream key validator changed; review the release patch'"
+COPY patches/check_validity.py /app/api/services/configuration/check_validity.py
+RUN python -m py_compile /app/api/services/configuration/check_validity.py
+RUN python -m py_compile /app/api/services/workflow/pipecat_engine.py /app/api/services/workflow/text_chat_runner.py
+USER dograh

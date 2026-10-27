@@ -1,0 +1,46 @@
+--- a/api/services/workflow/text_chat_runner.py
++++ b/api/services/workflow/text_chat_runner.py
+@@ -471,6 +471,30 @@
+     )
+ 
+ 
++async def _finish_text_chat_pipeline(*, engine, task, runner_task) -> None:
++    """Keep inference alive until a natural end has finished extracting results."""
++    try:
++        # The final response can be idle while the shielded end-call task is
++        # still extracting variables. Cancelling the per-turn pipeline here
++        # closes its shared LLM and checkpoints an incomplete gathered_context.
++        # _end_call owns its bounded extraction timeout and queues EndFrame; it
++        # does not wait for this runner, so awaiting it does not form a cycle.
++        shutdown_task = engine._shutdown_task
++        if shutdown_task is not None:
++            try:
++                await asyncio.shield(shutdown_task)
++            except asyncio.CancelledError:
++                # Cancellation aborts this turn. Settle the shielded extraction
++                # before its pipeline/LLM is closed, rather than orphaning it.
++                shutdown_task.cancel()
++                await asyncio.gather(shutdown_task, return_exceptions=True)
++                raise
++    finally:
++        if not task.has_finished():
++            await task.cancel(reason=TEXT_CHAT_INTERNAL_CANCEL_REASON)
++        await runner_task
++
++
+ async def execute_text_chat_pending_turn(
+     *,
+     workflow_run_id: int,
+@@ -789,9 +813,9 @@
+             )
+     finally:
+         try:
+-            if not task.has_finished():
+-                await task.cancel(reason=TEXT_CHAT_INTERNAL_CANCEL_REASON)
+-            await runner_task
++            await _finish_text_chat_pipeline(
++                engine=engine, task=task, runner_task=runner_task
++            )
+         finally:
+             await engine.close_mcp_sessions()
+             await engine.cleanup()

@@ -1,0 +1,26 @@
+{
+  "source": "OASIS MashaDasha seller interview v2, live agent verified by read-only audit 2026-10-06",
+  "agent_id": "45e3a962-cefd-474e-bc67-70378b300b51",
+  "files": [
+    {
+      "file": "interview-guide.json",
+      "original_path": "/Users/NIKITA/Desktop/JJFR/oasis-platform/pipelines/v2/interview-guide.json",
+      "sha256": "bcce283d6927a657ac34fd6bec1265e555e3eba8cd7e6f26558f971279bed6e8"
+    },
+    {
+      "file": "system-prompt.txt",
+      "original_path": "/Users/NIKITA/Desktop/JJFR/oasis-platform/pipelines/v2/system-prompt.txt",
+      "sha256": "ecdbc8273ca6450db7d23cfdde40e7550d97c9aca8e77a017d1bfbcd0eef50d7"
+    },
+    {
+      "file": "agent-overrides.json",
+      "original_path": "/Users/NIKITA/Desktop/JJFR/oasis-platform/pipelines/v2/agent-overrides.json",
+      "sha256": "26ea6ad6cde179db69f7422474390c724f44edf48748b2e739939725225555bc"
+    },
+    {
+      "file": "blitz-bank.json",
+      "original_path": "/Users/NIKITA/Desktop/JJFR/oasis-platform/pipelines/v2/blitz-bank.json",
+      "sha256": "5c14bc48a17b3f2684f94fed3357fe89dff58dbb8610be3be924dc9e8bac8b27"
+    }
+  ]
+}

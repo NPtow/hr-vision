@@ -1,0 +1,7 @@
+{
+  "release": "1.48.0",
+  "commit": "5db59b9acb11026146df7c1c8613a1b69299c005",
+  "file": "api/services/workflow/pipecat_engine.py",
+  "patched_sha256": "a085e87eeaa81dc0e5f78825e9e3e509c93aa040c781ca9acf68c0f629055bce",
+  "original_sha256": "23d3e3c39da820d67a7fc7ab01b635c3b3f2fc42340b0ac8fe5832a1513c5af7"
+}

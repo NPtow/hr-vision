@@ -1,0 +1,301 @@
+{
+  "source": {
+    "source": "OASIS MashaDasha seller interview v2, live agent verified by read-only audit 2026-10-06",
+    "agent_id": "45e3a962-cefd-474e-bc67-70378b300b51",
+    "files": [
+      {
+        "file": "interview-guide.json",
+        "original_path": "/Users/NIKITA/Desktop/JJFR/oasis-platform/pipelines/v2/interview-guide.json",
+        "sha256": "bcce283d6927a657ac34fd6bec1265e555e3eba8cd7e6f26558f971279bed6e8"
+      },
+      {
+        "file": "system-prompt.txt",
+        "original_path": "/Users/NIKITA/Desktop/JJFR/oasis-platform/pipelines/v2/system-prompt.txt",
+        "sha256": "ecdbc8273ca6450db7d23cfdde40e7550d97c9aca8e77a017d1bfbcd0eef50d7"
+      },
+      {
+        "file": "agent-overrides.json",
+        "original_path": "/Users/NIKITA/Desktop/JJFR/oasis-platform/pipelines/v2/agent-overrides.json",
+        "sha256": "26ea6ad6cde179db69f7422474390c724f44edf48748b2e739939725225555bc"
+      },
+      {
+        "file": "blitz-bank.json",
+        "original_path": "/Users/NIKITA/Desktop/JJFR/oasis-platform/pipelines/v2/blitz-bank.json",
+        "sha256": "5c14bc48a17b3f2684f94fed3357fe89dff58dbb8610be3be924dc9e8bac8b27"
+      }
+    ]
+  },
+  "source_block_order": [
+    "1",
+    "2",
+    "3",
+    "4a",
+    "4b",
+    "5"
+  ],
+  "source_followup_budgets": {
+    "1": 1,
+    "2": 6,
+    "3": 8,
+    "4a": 9,
+    "4b": 5,
+    "5": 16
+  },
+  "node_mapping": {
+    "global": {
+      "source_block": null,
+      "source_path": "system-prompt.txt / closing_message",
+      "name": "Маша · правила и контекст"
+    },
+    "b1_monologue": {
+      "source_block": "1",
+      "source_path": "questions[block_id=1]",
+      "name": "1 · Самопрезентация"
+    },
+    "b1_continue": {
+      "source_block": "1",
+      "source_path": "questions[block_id=1]",
+      "name": "1 · Одно предложение продолжить"
+    },
+    "b2_case": {
+      "source_block": "2",
+      "source_path": "questions[block_id=2]",
+      "name": "2 · КДП: гипотетический кейс"
+    },
+    "b2_clarify": {
+      "source_block": "2",
+      "source_path": "questions[block_id=2]",
+      "name": "2 · Уточнить механику один раз"
+    },
+    "b2_example": {
+      "source_block": "2",
+      "source_path": "questions[block_id=2]",
+      "name": "2 · КДП: конкретный пример"
+    },
+    "b2_case_fact": {
+      "source_block": "2",
+      "source_path": "questions[block_id=2]",
+      "name": "2 · Нет конкретной сделки"
+    },
+    "b2_personal": {
+      "source_block": "2",
+      "source_path": "questions[block_id=2]",
+      "name": "2 · Не раскрыт личный вклад"
+    },
+    "b2_number": {
+      "source_block": "2",
+      "source_path": "questions[block_id=2]",
+      "name": "2 · Нет цифры или срока"
+    },
+    "b2_return": {
+      "source_block": "2",
+      "source_path": "questions[block_id=2]",
+      "name": "2 · Возврат к первой идее"
+    },
+    "b3_deepen": {
+      "source_block": "3",
+      "source_path": "questions[block_id=3]",
+      "name": "3 · Углубление: ответ или резюме"
+    },
+    "b3_detail": {
+      "source_block": "3",
+      "source_path": "questions[block_id=3]",
+      "name": "3 · Закрыть недостающий элемент"
+    },
+    "b3_cv": {
+      "source_block": "3",
+      "source_path": "questions[block_id=3]",
+      "name": "3 · Следующая деталь резюме"
+    },
+    "b3_summary": {
+      "source_block": "3",
+      "source_path": "questions[block_id=3]",
+      "name": "3 · Подтверждение понимания"
+    },
+    "b4_setup": {
+      "source_block": "4a",
+      "source_path": "questions[block_id=4a]",
+      "name": "4a · Выбор B2B или B2C"
+    },
+    "b4_b2b": {
+      "source_block": "4a",
+      "source_path": "questions[block_id=4a]",
+      "name": "4a · B2B · Клиент компании"
+    },
+    "b4_b2c": {
+      "source_block": "4a",
+      "source_path": "questions[block_id=4a]",
+      "name": "4a · B2C · Частный клиент"
+    },
+    "b4_think": {
+      "source_block": "4a",
+      "source_path": "questions[block_id=4a]",
+      "name": "4a · Надо подумать"
+    },
+    "b4_other": {
+      "source_block": "4a",
+      "source_path": "questions[block_id=4a]",
+      "name": "4a · Решаю не один"
+    },
+    "b4_price": {
+      "source_block": "4a",
+      "source_path": "questions[block_id=4a]",
+      "name": "4a · Сравнить цены"
+    },
+    "b4_refuse": {
+      "source_block": "4a",
+      "source_path": "questions[block_id=4a]",
+      "name": "4a · Финальный отказ"
+    },
+    "b4_next": {
+      "source_block": "4b",
+      "source_path": "questions[block_id=4b]",
+      "name": "4b · Следующий шаг от кандидата"
+    },
+    "b4_date": {
+      "source_block": "4b",
+      "source_path": "questions[block_id=4b]",
+      "name": "4b · Один шанс уточнить дату"
+    },
+    "b4_window": {
+      "source_block": "4b",
+      "source_path": "questions[block_id=4b]",
+      "name": "4b · Одно окно для шага"
+    },
+    "b4_confirm": {
+      "source_block": "4b",
+      "source_path": "questions[block_id=4b]",
+      "name": "4b · Согласие только на звонок"
+    },
+    "b4_exit": {
+      "source_block": "4b",
+      "source_path": "questions[block_id=4b]",
+      "name": "4b · Выход из роли"
+    },
+    "b5_blitz": {
+      "source_block": "5",
+      "source_path": "questions[block_id=5]",
+      "name": "5 · Блиц 01/13",
+      "source_probe_index": 0,
+      "blitz_bank_id": "objection-01"
+    },
+    "b5_blitz_02": {
+      "source_block": "5",
+      "source_path": "questions[block_id=5]",
+      "name": "5 · Блиц 02/13",
+      "source_probe_index": 1,
+      "blitz_bank_id": "arithmetic-06"
+    },
+    "b5_blitz_03": {
+      "source_block": "5",
+      "source_path": "questions[block_id=5]",
+      "name": "5 · Блиц 03/13",
+      "source_probe_index": 2,
+      "blitz_bank_id": "facts-05"
+    },
+    "b5_blitz_04": {
+      "source_block": "5",
+      "source_path": "questions[block_id=5]",
+      "name": "5 · Блиц 04/13",
+      "source_probe_index": 3,
+      "blitz_bank_id": "prioritization-04"
+    },
+    "b5_blitz_05": {
+      "source_block": "5",
+      "source_path": "questions[block_id=5]",
+      "name": "5 · Блиц 05/13",
+      "source_probe_index": 4,
+      "blitz_bank_id": "ethics-06"
+    },
+    "b5_blitz_06": {
+      "source_block": "5",
+      "source_path": "questions[block_id=5]",
+      "name": "5 · Блиц 06/13",
+      "source_probe_index": 5,
+      "blitz_bank_id": "qualification-07"
+    },
+    "b5_blitz_07": {
+      "source_block": "5",
+      "source_path": "questions[block_id=5]",
+      "name": "5 · Блиц 07/13",
+      "source_probe_index": 6,
+      "blitz_bank_id": "prioritization-02"
+    },
+    "b5_blitz_08": {
+      "source_block": "5",
+      "source_path": "questions[block_id=5]",
+      "name": "5 · Блиц 08/13",
+      "source_probe_index": 7,
+      "blitz_bank_id": "qualification-08"
+    },
+    "b5_blitz_09": {
+      "source_block": "5",
+      "source_path": "questions[block_id=5]",
+      "name": "5 · Блиц 09/13",
+      "source_probe_index": 8,
+      "blitz_bank_id": "arithmetic-05"
+    },
+    "b5_blitz_10": {
+      "source_block": "5",
+      "source_path": "questions[block_id=5]",
+      "name": "5 · Блиц 10/13",
+      "source_probe_index": 9,
+      "blitz_bank_id": "qualification-09"
+    },
+    "b5_blitz_11": {
+      "source_block": "5",
+      "source_path": "questions[block_id=5]",
+      "name": "5 · Блиц 11/13",
+      "source_probe_index": 10,
+      "blitz_bank_id": "facts-07"
+    },
+    "b5_blitz_12": {
+      "source_block": "5",
+      "source_path": "questions[block_id=5]",
+      "name": "5 · Блиц 12/13",
+      "source_probe_index": 11,
+      "blitz_bank_id": "ethics-03"
+    },
+    "b5_blitz_13": {
+      "source_block": "5",
+      "source_path": "questions[block_id=5]",
+      "name": "5 · Блиц 13/13",
+      "source_probe_index": 12,
+      "blitz_bank_id": "facts-04"
+    },
+    "end": {
+      "source_block": null,
+      "source_path": "system-prompt.txt / closing_message",
+      "name": "Завершение · профиль в результатах"
+    }
+  },
+  "blitz_run_ids": [
+    "objection-01",
+    "arithmetic-06",
+    "facts-05",
+    "prioritization-04",
+    "ethics-06",
+    "qualification-07",
+    "prioritization-02",
+    "qualification-08",
+    "arithmetic-05",
+    "qualification-09",
+    "facts-07",
+    "ethics-03",
+    "facts-04"
+  ],
+  "case_chosen": "product_b2c",
+  "source_preservation": "Frozen source byte-for-byte; node prompts and edges compile source instructions into native Dograh phases.",
+  "limitations": [
+    "Semantic branches and per-block turn budgets are enforced by LLM instructions, as in the original OASIS runtime, not deterministic conditions/counters.",
+    "2-minute monologue and 7-minute blitz ceiling need runtime timing for hard enforcement; model must not invent elapsed time.",
+    "The13 fixed blitz questions now occupy13 ordered nodes. Fresh-user-turn runtime gate prevents skipping questions; no early end edge is based on model-guessed elapsed time.",
+    "3600s global call limit requires deployment patch of upstream 1200s schema cap AND concurrency stale timeout.",
+    "The live seed0 case and13 blitz questions are reproduced; there is no per-candidate randomization or cross-candidate history here.",
+    "CV/pre-screen/context is accepted through initial_context; this package does not connect the original Telegram onboarding or employer delivery.",
+    "Deployed closing omits the original employer-delivery promise because delivery is not connected. Canonical source retains original wording unchanged.",
+    "Transcript-derived profile fields are extraction outputs, not validated hiring scores or measured blitz speed.",
+    "Structured profile extraction runs at the normal end node. An early hangup may save a transcript without these profile fields."
+  ],
+  "workflow_sha256": "f7e586c140b1558669f0389a3fe53f37d6698a5e7caba73da37b83c45eed10cb"
+}
