@@ -1,0 +1,105 @@
+# Linux host networking intentionally reaches only host-loopback Rabbit/core/ASR.
+# The Python wrapper validates env before every start; do not expose these APIs.
+name: hr-vision-data-services
+x-hardened: &hardened
+  network_mode: host
+  init: true
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  restart: unless-stopped
+  stop_signal: SIGTERM
+  stop_grace_period: 90s
+  pids_limit: 128
+  cpus: 1.0
+  mem_limit: 256m
+  memswap_limit: 256m
+  tmpfs: [/tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777]
+  logging:
+    driver: json-file
+    options: {max-size: 10m, max-file: '3'}
+
+services:
+  core:
+    <<: *hardened
+    image: ${CORE_IMAGE:?independent pinned core image required}
+    pull_policy: never
+    user: ${HR_DB_UID:?existing HR database owner required}:${HR_DB_GID:?existing HR database group required}
+    env_file:
+      - path: ${MATERIALS_CONFIG_DIR:?private config directory required}/core.env
+        format: raw
+    environment:
+      CORE_HOST: 127.0.0.1
+      CORE_PORT: '8401'
+      AWS_EC2_METADATA_DISABLED: 'true'
+    volumes:
+      - type: bind
+        source: /var/lib/hr-vision-api
+        target: /var/lib/hr-vision-api
+        bind: {create_host_path: false}
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8401/health/ready', timeout=5).read()"]
+      interval: 15s
+      timeout: 6s
+      retries: 4
+      start_period: 20s
+
+  source-api:
+    <<: *hardened
+    image: ${SOURCE_IMAGE:?independent pinned source image required}
+    pull_policy: never
+    user: 19402:19402
+    command: [serve, --host, 127.0.0.1, --port, '8402']
+    env_file:
+      - path: ${MATERIALS_CONFIG_DIR:?private config directory required}/source.env
+        format: raw
+    environment: &source-environment
+      SOURCE_DAILY_DB_PATH: /state/jobs.sqlite3
+      SOURCE_DAILY_TEMP_ROOT: /state/tmp
+      SOURCE_DAILY_CORE_URL: http://127.0.0.1:8401
+      SOURCE_DAILY_QUEUE: source-daily
+      SOURCE_DAILY_MAX_VIDEO_BYTES: '2147483648'
+      AWS_EC2_METADATA_DISABLED: 'true'
+    volumes: &source-volumes
+      - type: bind
+        source: /var/lib/md-source-daily
+        target: /state
+        bind: {create_host_path: false}
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8402/health/live', timeout=5).read()"]
+      interval: 15s
+      timeout: 6s
+      retries: 4
+      start_period: 20s
+
+  source-worker:
+    <<: *hardened
+    image: ${SOURCE_IMAGE:?independent pinned source image required}
+    pull_policy: never
+    user: 19402:19402
+    command: [worker, --concurrency, '1']
+    mem_limit: 512m
+    memswap_limit: 512m
+    cpus: 1.0
+    pids_limit: 192
+    stop_grace_period: 300s
+    env_file:
+      - path: ${MATERIALS_CONFIG_DIR:?private config directory required}/source.env
+        format: raw
+    environment: *source-environment
+    volumes: *source-volumes
+
+  source-reconcile:
+    <<: *hardened
+    image: ${SOURCE_IMAGE:?independent pinned source image required}
+    pull_policy: never
+    user: 19402:19402
+    command: [reconcile]
+    mem_limit: 128m
+    memswap_limit: 128m
+    cpus: 0.25
+    env_file:
+      - path: ${MATERIALS_CONFIG_DIR:?private config directory required}/source.env
+        format: raw
+    environment: *source-environment
+    volumes: *source-volumes

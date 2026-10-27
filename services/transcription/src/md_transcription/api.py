@@ -55,8 +55,6 @@ def create_app(settings=None, runtime=None):
         runtime.repository.get('health-check')
         return {'status': 'ready', 'normalization': True,
                 'transcription': settings.asr_configured,
-                'api': True, 'asr_configuration': settings.asr_configured,
-                'worker': runtime.repository.worker_readiness(),
                 'delivery': 'broker' if settings.broker_url else 'manual_worker'}
 
     async def chunks(request, maximum):
@@ -126,7 +124,7 @@ def create_app(settings=None, runtime=None):
                 try:
                     job, created = runtime.repository.submit(client, key, sha, sha, size,
                         'input' + extension, language, settings.backend_identity,
-                        initial_status='uploading', backend_model=settings.effective_model)
+                        initial_status='uploading', backend_model=settings.asr_model)
                 except RepositoryConflict:
                     raise HTTPException(409, 'idempotency_conflict') from None
                 if job['status'] == 'uploading':
@@ -158,23 +156,11 @@ def create_app(settings=None, runtime=None):
         job = owned(job_id, client)
         if job['status'] != 'succeeded':
             raise HTTPException(409, 'result_not_ready')
-        provider_fields = {}
-        if job['provider_raw'] is not None:
-            provider_fields = {'provider':job['provider_raw']['provider'], 'provider_metadata':job['provider_metadata'],
-                'raw_result_url':f"/v1/jobs/{job['id']}/result/raw"}
-        return {**provider_fields, 'job_id': job['id'], 'input_sha256': job['input_sha256'],
+        return {'job_id': job['id'], 'input_sha256': job['input_sha256'],
                 'processing_status': 'completed', 'coverage': 'not_independently_verified',
                 'language': job['language'], 'model': job['backend_model'],
                 'backend_identity': job['backend_identity'],
                 'transcript': job['result']}
-
-    @app.get('/v1/jobs/{job_id}/result/raw')
-    def raw_result(job_id: str, client: str = Depends(caller)):
-        job = owned(job_id, client)
-        if job['provider_raw'] is None:
-            if job['status'] != 'succeeded': raise HTTPException(409, 'result_not_ready')
-            raise HTTPException(404, 'provider_raw_unavailable')
-        return job['provider_raw']
 
     @app.post('/v1/jobs/{job_id}/retry', status_code=202)
     def retry(job_id: str, client: str = Depends(caller)):

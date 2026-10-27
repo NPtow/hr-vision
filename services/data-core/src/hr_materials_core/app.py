@@ -2,7 +2,7 @@
 from contextlib import asynccontextmanager
 import sqlite3
 
-from fastapi import Depends, FastAPI, Request, Query
+from fastapi import Depends, FastAPI, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer
@@ -10,7 +10,7 @@ from materials_repository import RepositoryError
 
 from .auth import Tokens
 from .repository import CoreRepository
-from .schemas import BindingInput, CollectInput, OwnerKind, Receipt, TranscriptSelectionInput
+from .schemas import BindingInput, CollectInput, OwnerKind, Receipt
 from .service import CoreService
 
 
@@ -111,14 +111,6 @@ def create_app(settings=None, *, service=None, tokens=None):
     def receipt(binding_id: str, body: Receipt, caller=Depends(principal)):
         return service.receive(caller, binding_id, body)
 
-    @app.put("/v1/bindings/{binding_id}/recordings/{recording_id}/transcript-selection")
-    def select_transcript(binding_id: str, recording_id: str, body: TranscriptSelectionInput, caller=Depends(principal)):
-        return service.repository.select_transcript(caller, binding_id, recording_id, body)
-
-    @app.get("/v1/owners/{kind}/{identity}/primary-transcripts")
-    def primary_transcripts(kind: OwnerKind, identity: str, caller=Depends(principal)):
-        return service.repository.read_primary_transcripts(caller, kind, identity)
-
     @app.get("/v1/owners/{kind}/{identity}/materials")
     def materials(kind: OwnerKind, identity: str, caller=Depends(principal)):
         return service.repository.read_materials(caller, kind, identity)
@@ -127,14 +119,16 @@ def create_app(settings=None, *, service=None, tokens=None):
     def collect(kind: OwnerKind, identity: str, body: CollectInput | None = None, caller=Depends(principal)):
         return service.collect(caller, kind, identity, body.storage_policy if body else None)
 
+    @app.get("/v1/candidates")
+    def candidates(is_test: bool = False, batch_id: str | None = Query(default=None, max_length=200),
+                   limit: int = Query(default=50, ge=1, le=200),
+                   offset: int = Query(default=0, ge=0), caller=Depends(principal)):
+        return service.repository.candidates(caller, is_test=is_test, batch_id=batch_id,
+                                             limit=limit, offset=offset)
+
     @app.get("/v1/candidates/{candidate_id}/dossier")
     def dossier(candidate_id: str, caller=Depends(principal)):
         return service.repository.dossier(caller, candidate_id)
-
-    @app.get("/v1/assets")
-    def catalogue(created_since: float = Query(ge=0), cursor: str | None = Query(default=None, max_length=2000),
-                  limit: int = Query(default=50, ge=1, le=100), caller=Depends(principal)):
-        return service.repository.catalogue_assets(caller, created_since, cursor, limit)
 
     @app.get("/v1/assets/{asset_id}/access")
     def access(asset_id: str, caller=Depends(principal)):

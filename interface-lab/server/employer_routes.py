@@ -7,7 +7,6 @@ and CV parsing calls never run under the shared state lock or SQLite transaction
 import hashlib
 import json
 import math
-import os
 import urllib.parse
 
 from domain import Problem, iso, now, require, text
@@ -17,8 +16,7 @@ import employer_store as store
 import employer_notifications as notifications
 import employer_workflow as workflow
 import vacancy_import
-from interview_assistant import InterviewAssistant, agent_enabled
-from structured_model import scan
+from interview_assistant import InterviewAssistant
 import interview_assessment
 
 
@@ -56,9 +54,6 @@ class EmployerRoutes:
               request_id TEXT NOT NULL, action TEXT NOT NULL, payload_hash TEXT NOT NULL,
               application_id TEXT NOT NULL REFERENCES cp_applications(id), created_at TEXT NOT NULL,
               PRIMARY KEY(workspace_id,account_id,request_id))''')
-
-        from recording_uploads import RecordingUploads
-        self.recording_uploads = RecordingUploads(self)
 
     @staticmethod
     def handles(path):
@@ -214,20 +209,6 @@ class EmployerRoutes:
             return self._finish(headers, body), {}
         if route == '/intake' and method == 'POST':
             return self._intake(headers, body), {}
-        if route == '/intake/materials' and method == 'POST':
-            require(set(body) == {'id', 'vacancyId'}, 'Проверьте источник записи.', 400)
-            with self.connect() as db:
-                principal = access.authenticate(db, headers)
-                self.intake._review_person(db, principal['workspaceId'], body['vacancyId'], body)
-            import canonical_materials
-            return canonical_materials.read_intake(self.portal, principal['workspaceId'], body['vacancyId'], body['id']), {}
-        if route == '/recordings/uploads' and method == 'POST':
-            return self.recording_uploads.begin(headers, body), {}
-        if route.startswith('/recordings/uploads/') and method == 'POST':
-            import re
-            match = re.fullmatch(r'/recordings/uploads/([a-f0-9]{32})/(status|finalize)', route)
-            require(match is not None, 'Загрузка не найдена.', 404)
-            return self.recording_uploads.command(headers, match[1], match[2], body), {}
         if route == '/intake/recording' and method == 'POST':
             return self._intake_recording(headers, body), {}
         if route == '/vacancies/import' and method == 'POST':
@@ -301,14 +282,6 @@ class EmployerRoutes:
         with self.lock, self.connect() as db:
             if scope['source'] == 'intake':
                 principal = access.authenticate(db, headers)
-                import employer_review, employer_intake_review
-                if employer_review.enabled() or employer_intake_review.exists(db):
-                    require(set(scope) == {'source', 'id', 'index', 'vacancyId'} and
-                            isinstance(scope['id'], str) and type(scope['index']) is int and scope['index'] >= 0,
-                            'Проверьте источник интервью.', 400)
-                    value = employer_intake_review.projection(db, principal['workspaceId'], scope['vacancyId'], scope['id'])
-                    require(not feedback, 'Оценка ядра доступна только для просмотра.', 409)
-                    return value
                 binding, fingerprint, _ = interview_assessment.intake_binding(db, principal['workspaceId'], scope, allow_missing_transcript=True)
                 if fingerprint is None:
                     require(not feedback, 'Материалы интервью изменились. Откройте оценку ещё раз.', 409)
@@ -316,11 +289,7 @@ class EmployerRoutes:
                 if feedback:
                     values = {key: value for key, value in body.items() if key in feedback_keys}
                     return interview_assessment.save_feedback(db, principal, binding, fingerprint, values)
-                import assessment_jobs
-                saved = interview_assessment.read(db, principal, binding, fingerprint)
-                pending = assessment_jobs.read_intake(db, principal['workspaceId'], scope['id'], fingerprint)
-                return assessment_jobs.with_match(db, saved if saved.get('assessment') else pending or saved,
-                                                  'intake:' + scope['id'], scope['vacancyId'])
+                return interview_assessment.read(db, principal, binding, fingerprint)
             allowed = {'source', 'candidate', 'applicationId', 'vacancyId', 'generation', 'recordingId'}
             if scope['source'] == 'meeting':
                 allowed.add('meetingId')
@@ -329,13 +298,8 @@ class EmployerRoutes:
             principal, app, _ = self._identity(db, headers, scope, allow_archived=True)
             meeting = self.portal.interview(db, app['candidateId']) if scope['source'] == 'screening' else self._meeting(db, app, scope)
             require(meeting and meeting['status'] == 'completed', 'Материалы доступны после встречи.', 409)
-            if scope['source'] == 'screening' and not feedback:
-                import employer_review
-                if employer_review.enabled() or employer_review.tracked(db, app['applicationId']):
-                    return employer_review.projection(db, app['applicationId']) or {
-                        'assessment': None, 'status': 'pending', 'refreshAfterMs': 15000}
-                import assessment_jobs
-                return assessment_jobs.read_candidate(db, app['candidateId'], scope['recordingId'], app['vacancyId']) or {'assessment': None}
+            # The read-ready boundary keeps real call/materials handling untouched.
+            # No assessment has been imported for these sources in this release.
             require(not feedback, 'Оценка этого интервью недоступна.', 404)
             return {'assessment': None}
 
@@ -349,41 +313,20 @@ class EmployerRoutes:
             require(bool(scope.get('vacancyId')), 'Выберите вакансию.', 400)
             with self.lock, self.connect() as db:
                 principal = access.authenticate(db, headers)
-                core_mode = os.environ.get('HR_CORE_CATALOG_ENABLED') == '1'
-                if not core_mode:
-                    self.intake.recording_source(db, principal['workspaceId'], scope)
+                self.intake.recording_source(db, principal['workspaceId'], scope)
                 person, _ = self.intake._review_person(db, principal['workspaceId'], scope['vacancyId'], scope)
                 profile = person.get('preparedProfile') or {}
-                if core_mode:
-                    import canonical_materials, transcript_bundle
-                    materials = canonical_materials.read_intake_db(db, principal['workspaceId'], scope['vacancyId'], scope['id'])
-                    bundle = transcript_bundle.bundle(materials)
-                    require(type(scope.get('index')) is int and 0 <= scope['index'] < len(bundle['parts']), 'Выберите запись.', 400)
-                    selected_id = bundle['parts'][scope['index']]['recordingId']
-                    transcript = next(t['text'] for t in materials['transcripts'] if t['recordingId'] == selected_id)
-                    fingerprint = transcript_bundle.fingerprint(bundle)
-                else:
-                    require(len(profile.get('recordings', [])) == 1 and scope['index'] == 0,
-                            'Расшифровка пока не сопоставлена с этой частью записи.', 422)
-                    transcript = profile.get('transcriptText', '')
-                    fingerprint = hashlib.sha256(_dump(profile).encode()).hexdigest()
-                context = self._assistant_context(db, principal, scope, profile) if agent_enabled() else None
-                context_hash = hashlib.sha256(_dump(context).encode()).hexdigest()
+                require(len(profile.get('recordings', [])) == 1 and scope['index'] == 0,
+                        'Расшифровка пока не сопоставлена с этой частью записи.', 422)
+                transcript = profile.get('transcriptText', '')
+                fingerprint = hashlib.sha256(_dump(profile).encode()).hexdigest()
             def authorize(db):
                 latest = access.authenticate(db, headers)
                 require(latest['accountId'] == principal['accountId'] and latest['workspaceId'] == principal['workspaceId'], 'Нет доступа.', 403)
+                self.intake.recording_source(db, latest['workspaceId'], scope)
                 current, _ = self.intake._review_person(db, latest['workspaceId'], scope['vacancyId'], scope)
-                if core_mode:
-                    actual = transcript_bundle.fingerprint(transcript_bundle.bundle(canonical_materials.read_intake_db(
-                        db, latest['workspaceId'], scope['vacancyId'], scope['id'])))
-                else:
-                    self.intake.recording_source(db, latest['workspaceId'], scope)
-                    actual = hashlib.sha256(_dump(current.get('preparedProfile') or {}).encode()).hexdigest()
-                require(actual == fingerprint, 'Материалы интервью изменились. Обновите страницу.', 409)
-                if context is not None:
-                    fresh = self._assistant_context(db, latest, scope, current.get('preparedProfile') or {})
-                    require(hashlib.sha256(_dump(fresh).encode()).hexdigest() == context_hash,
-                            'Вакансия или оценка изменились. Обновите страницу.', 409)
+                require(hashlib.sha256(_dump(current.get('preparedProfile') or {}).encode()).hexdigest() == fingerprint,
+                        'Материалы интервью изменились. Обновите страницу.', 409)
             source_id = _dump(['intake', scope['vacancyId'], scope['id'], scope['index']])
         else:
             scope = {key: body[key] for key in ('candidate', 'applicationId', 'vacancyId', 'generation', 'meetingId') if key in body}
@@ -393,62 +336,21 @@ class EmployerRoutes:
                 meeting = self.portal.interview(db, app['candidateId']) if screening else self._meeting(db, app, scope)
                 require(meeting and meeting['status'] == 'completed', 'Материалы доступны после встречи.', 409)
                 meeting_id, room = meeting['id'], meeting['room']
-                context = self._assistant_context(db, principal, scope, {}) if agent_enabled() else None
-                context_hash = hashlib.sha256(_dump(context).encode()).hexdigest()
             materials = self._materials(headers, scope, screening=screening)
             recordings = materials.get('recordings', [])
-            require(any(r['id'] == body.get('recordingId') for r in recordings), 'Расшифровка этой части недоступна.', 422)
-            chosen = [t for t in materials.get('transcripts', []) if t.get('recordingId') == body.get('recordingId')]
-            if os.environ.get('HR_CORE_CATALOG_ENABLED') != '1' and len(recordings) == 1 and not chosen:
-                chosen = materials.get('transcripts', [])
-            require(len(chosen) == 1, 'Расшифровка этой части ещё не готова.', 422)
-            transcript = chosen[0].get('text', '')
+            require(len(recordings) == 1 and recordings[0]['id'] == body.get('recordingId'),
+                    'Расшифровка пока не сопоставлена с этой частью записи.', 422)
+            transcript = '\n\n'.join(item.get('text', '') for item in materials.get('transcripts', []))
             def authorize(db):
                 latest, current, _ = self._identity(db, headers, scope, allow_archived=True)
                 self._same(latest, current, principal, app)
                 checked = self.portal.interview(db, current['candidateId']) if screening else self._meeting(db, current, scope)
                 require(checked and checked['id'] == meeting_id and checked['status'] == 'completed' and checked['room'] == room,
                         'Встреча изменилась. Обновите страницу.', 409)
-                if context is not None:
-                    require(hashlib.sha256(_dump(self._assistant_context(db, latest, scope, {})).encode()).hexdigest() == context_hash,
-                            'Вакансия изменилась. Обновите страницу.', 409)
             source_id = _dump([body['source'], app['applicationId'], meeting_id, body['recordingId']])
-        return self.assistant.run(principal, source_id, transcript, body, authorize, context)
-
-    def _assistant_context(self, db, principal, scope, profile):
-        """Only authorized job/profile fields enter the agent's immutable read tools."""
-        vacancy = store.vacancy(db, principal['workspaceId'], scope['vacancyId'], include_archived=True)
-        assessment = {}
-        if scope.get('id'):
-            binding, fingerprint, _ = interview_assessment.intake_binding(db, principal['workspaceId'],
-                {'source': 'intake', **scope}, allow_missing_transcript=True)
-            saved = interview_assessment.read(db, principal, binding, fingerprint)['assessment'] if fingerprint else None
-            if saved:
-                assessment = {'revisionId': saved['revisionId'], 'limitation': 'Предварительная оценка модели, не подтверждённый результат работы.',
-                    'criteria': [{k: row[k] for k in ('label', 'state', 'level', 'summary', 'limitation') if k in row}
-                                 for row in saved['criteria']]}
-        def clean(value):
-            if isinstance(value, str):
-                sanitized, removed = scan(value)
-                return '[[REDACTED_INJECTION]]' if removed else sanitized
-            if isinstance(value, list): return [clean(v) for v in value]
-            if isinstance(value, dict): return {k: clean(v) for k, v in value.items()}
-            return value
-        context = clean({'vacancy': {k: vacancy[k] for k in ('title', 'role', 'company', 'description', 'expectations', 'problem', 'city', 'format') if k in vacancy},
-            'profile': {k: profile[k] for k in ('summary', 'cvText', 'profile') if k in profile}, 'assessment': assessment})
-        require(len(_dump(context).encode()) <= 90000, 'Контекст вакансии и резюме слишком большой для помощника.', 413)
-        return context
+        return self.assistant.run(principal, source_id, transcript, body, authorize)
 
     def _intake_recording(self, headers, body):
-        if os.environ.get('HR_CORE_CATALOG_ENABLED') == '1':
-            require(set(body) == {'id', 'vacancyId', 'index'} and type(body['index']) is int, 'Выберите запись.', 400)
-            with self.connect() as db:
-                principal = access.authenticate(db, headers)
-            import canonical_materials
-            materials = canonical_materials.read_intake(self.portal, principal['workspaceId'], body['vacancyId'], body['id'])
-            require(0 <= body['index'] < len(materials['recordings']), 'Запись не найдена.', 404)
-            recording = materials['recordings'][body['index']]
-            return {'url': recording['url'], 'mime': 'audio/wav' if recording.get('kind') == 'audio' else 'video/mp4'}
         with self.lock, self.connect() as db:
             principal = access.authenticate(db, headers)
             source = self.intake.recording_source(db, principal['workspaceId'], body)

@@ -17,13 +17,6 @@
 .ew-root .esc-card .cj-meeting { padding:0; border:0; box-shadow:none; background:transparent; }
 .ew-root .esc-card .cj-meeting>.cj-section-heading { display:none; }
 .ew-root .esc-card .cj-materials { margin-top:24px; padding-top:0; border:0; }
-.ew-root .esc-card .esc-meeting-review .cj-materials { margin:0; }
-.esc-next-step { display:flex; align-items:center; justify-content:center; gap:16px; min-height:180px; flex-wrap:wrap; padding:24px 0; }
-.esc-next-step > button { min-height:48px; height:auto; padding:12px 24px; border-radius:24px; }
-.esc-next-step > button:active { transform:scale(.98); }
-.esc-meeting-notes { display:grid; gap:20px; }
-.esc-meeting-notes > button { justify-self:start; }
-@media(max-width:600px) { .esc-next-step { flex-direction:column; align-items:stretch; gap:12px; } }
 .esc-profile-content { --ecp-muted:var(--esc-muted); --ecp-soft:var(--esc-inset); display:grid; gap:28px; min-width:0; }
 .esc-profile-summary { font-size:16px; line-height:24px; white-space:pre-wrap; overflow-wrap:anywhere; }
 .esc-profile-facts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px 32px; }

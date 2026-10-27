@@ -385,8 +385,6 @@ class CatalogueProjectionTests(unittest.TestCase):
         core, source, outbox = Mock(), Mock(), Mock()
         core.materials.return_value = {'sources': [{'binding_id': 'binding', 'generation': 1}],
             'assets': [{'id': 'video', 'kind': 'video', 'state': 'ready'}],
-            'transcript_selections': [{'recording_id': 'video', 'transcript_id': 'text', 'status': 'ready',
-                'revision': 1, 'generation': 1}],
             'transcripts': [{'id': 'text', 'asset_id': 'transcript', 'version': 1,
                 'segments': [{'text': 'Synthetic transcript'}],
                 'metadata': {'normalized': {'full_text': 'Synthetic transcript'}}}],

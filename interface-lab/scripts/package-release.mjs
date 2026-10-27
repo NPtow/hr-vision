@@ -49,7 +49,7 @@ const deployment = JSON.stringify({ target, branch, sha, run }) + '\n';
 writeFileSync(`${stage}/ui/deployment.json`, deployment);
 files['ui/deployment.json'] = digest(deployment);
 if (target === 'service') for (const name of [
-  'app.py', 'observability.py', 'browser_access.py', 'selection.py', 'selection_status.py', 'candidate_portal.py', 'candidate_resume.py', 'candidate_notifications.py', 'candidate_bot.py',
+  'app.py', 'observability.py', 'browser_access.py', 'candidate_portal.py', 'candidate_resume.py', 'candidate_notifications.py', 'candidate_bot.py',
   'structured_model.py', 'candidate_resume_model.py', 'candidate_resume_prompts.py',
   'candidate_invites.py', 'candidate_availability.py', 'recruiter_availability.py', 'interview_scheduler.py', 'hh_recruiting.py', 'hh_routes.py',
   'candidate_booking.py', 'candidate_access.py', 'hh_outreach.py', 'hh_outreach_routes.py', 'hh_outreach_worker.py',
@@ -62,12 +62,7 @@ if (target === 'service') for (const name of [
   'call_providers.py', 'zoom_media.py', 'materials_zoom.py', 'zoom_recording_retention.py', 'domain.py', 'dsa_panel.py', 'feedback.py', 'meeting_lab.py', 'interview_assistant.py', 'interview_assessment.py',
   'materials_capture.py', 'materials_daily.py', 'materials_repository.py', 'materials_http.py',
   'materials_storage.py', 'materials_transcripts.py', 'materials_worker.py', 'materials_runtime.py', 'materials_service.py',
-  'materials_asr_dispatch.py', 'recording_uploads.py', 'canonical_materials.py', 'transcript_bundle.py',
-  'core_source_client.py', 'core_source_outbox.py', 'zoom_api_client.py', 'public_profiles.py', 'assessment_jobs.py',
-  'assessment_corpus.py', 'assessment_core_bridge.py', 'assessment_core_lifecycle.py',
-  'selection_facts.py', 'selection_materials_lifecycle.py', 'vacancy_profile_bridge.py', 'recommendations_bridge.py',
-  'recommendation_lifecycle.py', 'selection_interviews.py',
-  'employer_review.py', 'employer_intake_review.py',
+  'core_source_client.py', 'core_source_outbox.py', 'zoom_api_client.py',
 ]) add(`server/${name}`, `api/${name}`);
 writeFileSync(`${stage}/release.json`, JSON.stringify(manifest) + '\n');
 execFileSync('tar', ['-czf', 'release.tgz', '-C', stage, 'release.json', 'ui', ...(target === 'service' ? ['api'] : [])], {

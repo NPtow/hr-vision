@@ -189,8 +189,8 @@ class MaterialsRepository:
             if key in result and result[key] is not None:
                 result[key] = json.loads(result[key])
         if 'interview_id' in result:
-            result['owner_kind'] = next((kind for kind in ('interview', 'meeting', 'intake') if result.get(kind + '_id') is not None), None)
-            result['owner_id'] = result.get(str(result['owner_kind']) + '_id')
+            result['owner_kind'] = 'interview' if result['interview_id'] is not None else 'meeting'
+            result['owner_id'] = result['interview_id'] or result['meeting_id']
         return result
 
     @classmethod
@@ -204,7 +204,7 @@ class MaterialsRepository:
             return self._one(db, 'media_sources', source_id, 'source_not_found')
 
     def list_sources(self, owner_kind, owner_id):
-        _require(owner_kind in ('interview', 'meeting', 'intake'), 'invalid_owner', 400)
+        _require(owner_kind in ('interview', 'meeting'), 'invalid_owner', 400)
         with self._db() as db:
             return [self._decode(row) for row in db.execute(
                 f'SELECT * FROM media_sources WHERE {owner_kind}_id=? ORDER BY created_at,id', (owner_id,))]
@@ -323,7 +323,7 @@ class MaterialsRepository:
 
     def invalidate_owner(self, owner_kind, owner_id):
         """Fence root and session children together; never cancel by candidate ID."""
-        _require(owner_kind in ('interview', 'meeting', 'intake'), 'invalid_owner', 400)
+        _require(owner_kind in ('interview', 'meeting'), 'invalid_owner', 400)
         with self._db(write=True) as db:
             identities = [row[0] for row in db.execute(f'SELECT id FROM media_sources WHERE {owner_kind}_id=?', (owner_id,))]
             return [self._invalidate(db, identity) for identity in identities]
@@ -340,14 +340,14 @@ class MaterialsRepository:
             return self._suspend(db, source_id, reason)
 
     def suspend_owner(self, owner_kind, owner_id, reason='revoked'):
-        _require(owner_kind in ('interview', 'meeting', 'intake'), 'invalid_owner', 400)
+        _require(owner_kind in ('interview', 'meeting'), 'invalid_owner', 400)
         _identifier(reason)
         with self._db(write=True) as db:
             identities = [row[0] for row in db.execute(f'SELECT id FROM media_sources WHERE {owner_kind}_id=?', (owner_id,))]
             return [self._suspend(db, identity, reason) for identity in identities]
 
     def update_owner_policy(self, owner_kind, owner_id, storage_policy):
-        _require(owner_kind in ('interview', 'meeting', 'intake'), 'invalid_owner', 400)
+        _require(owner_kind in ('interview', 'meeting'), 'invalid_owner', 400)
         storage_policy = _policy(storage_policy)
         with self._db(write=True) as db:
             identities = [row[0] for row in db.execute(f'SELECT id FROM media_sources WHERE {owner_kind}_id=? AND storage_policy<>?',

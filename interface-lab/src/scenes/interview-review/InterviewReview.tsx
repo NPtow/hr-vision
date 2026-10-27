@@ -52,10 +52,6 @@ export type RecordingReviewProps = {
   transcriptText?: string;
   /** False when transcript timestamps have not been mapped to this recording. */
   transcriptSeekable?: boolean;
-  recordingId?: string;
-  onEvidenceNavigate?: (evidence: import('../interview-assessment/types').AssessmentEvidence, criterionId: string) => boolean;
-  evidenceRequest?: { recordingId: string; seconds: number; requestId: string;
-    evidence?: import('../interview-assessment/types').AssessmentEvidence; criterionId?: string };
   emptyMessage?: string;
   fullChapters?: RecordingChapter[];
   shortPlaylist?: boolean;
@@ -64,12 +60,9 @@ export type RecordingReviewProps = {
   commentTimestamps?: { seconds: number; count: number }[];
   comments?: { id: string; seconds: number; text: string; createdAt: string }[];
   canComment?: boolean;
-  /** Public profiles retain review modes but do not ask for fragment feedback. */
-  hideFeedbackQuestions?: boolean;
   assistant?: InterviewAssistantRequest;
   /** Only an authenticated adapter may supply a ready assessment and persistence. */
   assessment?: AssessmentPresentation;
-  assessmentStatus?: 'loading' | 'unavailable';
 };
 
 /** Parse a source's mm:ss or hh:mm:ss. A missing timestamp is never a seekable chapter. */

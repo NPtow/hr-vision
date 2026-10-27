@@ -1,0 +1,26 @@
+[Unit]
+Description=Independent transcription normalization API (ASR disabled)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/md-materials/deploy
+ExecStartPre=/usr/bin/python3 /opt/md-materials/deploy/ctl.py --stack transcription config
+ExecStart=/usr/bin/python3 /opt/md-materials/deploy/ctl.py --stack transcription up
+ExecStop=/usr/bin/python3 /opt/md-materials/deploy/ctl.py --stack transcription stop
+TimeoutStartSec=180
+TimeoutStopSec=330
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/etc/md-materials
+PrivateTmp=true
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

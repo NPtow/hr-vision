@@ -15,7 +15,7 @@ Ref = Annotated[str, Field(min_length=1, max_length=500), AfterValidator(safe_re
 Digest = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
 ChannelState = Literal["processing", "ready", "error", "not_recorded", "unsupported"]
 TranscriptionState = Literal["not_requested", "awaiting_configuration", "queued", "running", "succeeded", "failed"]
-OwnerKind = Literal["interview", "meeting", "intake"]
+OwnerKind = Literal["interview", "meeting"]
 def version(value):
     if type(value) is not int or value != 1:
         raise ValueError("unsupported_schema_version")
@@ -44,7 +44,6 @@ class CollectInput(Model):
 
 
 class Metadata(Model):
-    part_index: Annotated[int, Field(ge=0, le=999)] | None = None
     duration: Annotated[float, Field(ge=0)] | None = None
     format: Ref | None = None
     session_id: Ref | None = None
@@ -112,14 +111,6 @@ class Provenance(Model):
     language: Ref | None = None
     processing_status: Ref
     coverage: Ref
-    input_asset_id: Ref | None = None
-    input_sha256: Digest | None = None
-
-    @model_validator(mode="after")
-    def input_reference(self):
-        if (self.input_asset_id is None) != (self.input_sha256 is None):
-            raise ValueError("incomplete_input_reference")
-        return self
 
 
 class Transcript(Model):
@@ -163,21 +154,4 @@ class Receipt(Model):
     def unique_assets(self):
         if len({(a.kind, a.external_id) for a in self.assets}) != len(self.assets):
             raise ValueError("duplicate_asset")
-        return self
-
-
-class TranscriptSelectionInput(Model):
-    generation: Annotated[int, Field(gt=0)]
-    request_id: Ref
-    expected_revision: Annotated[int, Field(ge=0)]
-    status: Literal["pending", "ready", "failed", "uncertain"]
-    transcript_id: Ref | None = None
-    error_code: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{0,95}$")] | None = None
-
-    @model_validator(mode="after")
-    def selection_state(self):
-        if (self.status == "ready") != (self.transcript_id is not None):
-            raise ValueError("selection_transcript_required_only_when_ready")
-        if self.status in ("pending", "ready") and self.error_code is not None:
-            raise ValueError("selection_error_not_allowed")
         return self

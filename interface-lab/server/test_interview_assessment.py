@@ -66,26 +66,6 @@ class InterviewAssessmentTest(unittest.TestCase):
         self.assertIsNone(result['assessment']['criteria'][1]['level'])
         self.assertFalse(result['assessment']['provenance']['productionCore'])
 
-    def test_connected_intake_reads_same_projection_without_requiring_video_or_starting_model(self):
-        import employer_intake_review
-        with self.app.connect() as db:
-            employer_intake_review.init(db)
-            db.execute("INSERT INTO er_intake_preparations(intake_id,state,assessment,updated) VALUES (?,'ready',?,1)",
-                       (self.person['id'], json.dumps({**projection('core-current'), 'feedback': []})))
-        try:
-            status, result, _ = self.read()
-            self.assertEqual(status, 200)
-            self.assertTrue(result['readOnly'])
-            people = self.ok('employer/intake?vacancyId=' + self.job['id'], token=self.owner['token'])['candidates']
-            self.assertEqual(people[0]['assessment'], result['assessment'])
-            self.assertEqual(result['assessment']['revisionId'], 'core-current')
-            outsider = self.employer('Other')
-            self.assertEqual(self.request('employer/interview-assessment', self.scope, token=outsider['token'])[0], 404)
-            self.assertEqual(self.feedback()[0], 409)
-        finally:
-            with self.app.connect() as db:
-                db.execute('DROP TABLE er_intake_preparations')
-
     def test_idor_wrong_vacancy_index_and_missing_auth_are_rejected(self):
         other = self.employer('Other')
         other_job = self.vacancy(self.owner)
@@ -146,14 +126,14 @@ class InterviewAssessmentTest(unittest.TestCase):
             person = json.loads(raw)
             person['preparedProfile']['transcriptText'] += '\n[00:07-00:08] К: Новый источник.'
             db.execute('UPDATE em_intake_candidates SET body=? WHERE id=?', (json.dumps(person), self.person['id']))
-        self.assertIsNone(self.read()[1]['assessment'])
+        self.assertEqual(self.read()[1], {'assessment': None})
         self.assertEqual(self.feedback(expectedVersion=1)[0], 409)
         with self.app.connect() as db:
             db.execute('UPDATE em_intake_candidates SET body=? WHERE id=?', (raw, self.person['id']))
             row = db.execute('SELECT body FROM cp_vacancies WHERE id=?', (self.job['id'],)).fetchone()
             job = json.loads(row[0]); job['expectations'] = 'Иные требования вакансии'
             db.execute('UPDATE cp_vacancies SET body=? WHERE id=?', (json.dumps(job), self.job['id']))
-        self.assertIsNone(self.read()[1]['assessment'])
+        self.assertEqual(self.read()[1], {'assessment': None})
         self.assertEqual(self.feedback(expectedVersion=1)[0], 409)
 
     def test_source_url_replacement_cannot_reattach_assessment_or_idempotent_retry(self):
@@ -163,7 +143,7 @@ class InterviewAssessmentTest(unittest.TestCase):
             raw = json.loads(db.execute('SELECT body FROM em_intake_candidates WHERE id=?', (self.person['id'],)).fetchone()[0])
             raw['preparedProfile']['recordings'][0]['publicUrl'] = 'https://disk.yandex.ru/i/other_fixture'
             db.execute('UPDATE em_intake_candidates SET body=? WHERE id=?', (json.dumps(raw), self.person['id']))
-        self.assertIsNone(self.read()[1]['assessment'])
+        self.assertEqual(self.read()[1], {'assessment': None})
         self.assertEqual(self.feedback(requestId=rid)[0], 409)
 
     def test_missing_transcript_is_an_unavailable_assessment_not_a_broken_player(self):
@@ -189,53 +169,6 @@ class InterviewAssessmentTest(unittest.TestCase):
             with self.assertRaises(Problem) as caught:
                 assessment.intake_binding(db, self.owner['workspace']['id'], self.scope)
             self.assertEqual(caught.exception.status, 422)
-
-    def test_core_multipart_uses_one_bundle_binding_without_legacy_text_fallback(self):
-        import sys
-        import types
-        import test_transcript_bundle
-        import transcript_bundle
-        data = test_transcript_bundle.materials()
-        module = types.SimpleNamespace(read_intake_db=lambda *args: data)
-        with patch.dict('os.environ', {'HR_CORE_CATALOG_ENABLED': '1'}), patch.dict(sys.modules, {'canonical_materials': module}):
-            with self.app.connect() as db:
-                bindings = [assessment.intake_binding(db, self.owner['workspace']['id'], {**self.scope, 'index': i})
-                            for i in (0, 1)]
-                self.assertEqual(bindings[0][0:2], bindings[1][0:2])
-                self.assertEqual(bindings[0][1], transcript_bundle.fingerprint(transcript_bundle.bundle(data)))
-                self.assertEqual(bindings[1][2]['id'], 'part-b')
-                data['transcription']['status'] = 'processing'
-                _, fingerprint, _ = assessment.intake_binding(db, self.owner['workspace']['id'], self.scope,
-                                                              allow_missing_transcript=True)
-                self.assertIsNone(fingerprint)
-                with self.assertRaises(Problem): assessment.intake_binding(db, self.owner['workspace']['id'], self.scope)
-
-    def test_core_import_checks_exact_part_quote_and_each_local_duration(self):
-        import sys
-        import types
-        import test_transcript_bundle
-        import transcript_bundle
-        data = test_transcript_bundle.materials()
-        data['recordings'][0]['duration'] = 1
-        data['transcripts'][0]['segments'][0]['end_ms'] = 1000
-        data['recordings'][1]['duration'] = 20
-        data['transcripts'][1]['segments'][0].update(start_ms=10000, end_ms=15000)
-        module = types.SimpleNamespace(read_intake_db=lambda *args: data)
-        with patch.dict('os.environ', {'HR_CORE_CATALOG_ENABLED': '1'}), patch.dict(sys.modules, {'canonical_materials': module}):
-            with self.app.connect() as db:
-                binding, fingerprint, recording = assessment.intake_binding(db, self.owner['workspace']['id'], self.scope)
-                row = transcript_bundle.chunks(recording['_transcriptBundle'])[1]
-                value = projection('core-multipart-revision')
-                evidence = {key: row[key] for key in ('id', 'text', 'speaker', 'recordingId', 'transcriptId')}
-                evidence.update(seconds=10, endSeconds=15, time='00:10')
-                for criterion in value['criteria']:
-                    criterion['evidence'] = [evidence] if criterion['state'] == 'supported' else []
-                self.assertFalse(assessment.import_assessment(db, self.owner['workspace']['id'], binding, fingerprint, value)['replayed'])
-                # Part B's time is allowed even though A lasts one second; wrong
-                # recording identity can never be imported with the same quote.
-                evidence['recordingId'] = 'part-a'
-                with self.assertRaises(Problem):
-                    assessment.import_assessment(db, self.owner['workspace']['id'], binding, fingerprint, value)
 
     def test_simultaneous_first_saves_cannot_overwrite_each_other(self):
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:

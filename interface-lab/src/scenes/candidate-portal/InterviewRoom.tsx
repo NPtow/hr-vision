@@ -13,23 +13,12 @@ import { ZoomMeeting } from '../../components/call/ZoomMeeting';
 import type { CallProvider } from '../../components/call/call-provider';
 
 type InterviewRoomProps = {
-  title: string; start: string; completed: boolean; configured: boolean; callProvider?: CallProvider | null; applicationId?: string; meetingId?: string; guestToken?: string; onRefresh: () => Promise<void>; onBack: () => void; onExit?: () => void;
+  title: string; start: string; completed: boolean; configured: boolean; callProvider?: CallProvider; applicationId?: string; meetingId?: string; guestToken?: string; onRefresh: () => Promise<void>; onBack: () => void; onExit?: () => void;
 };
 
 /** Choose the provider before mounting Daily's device or connection hooks. */
 export function InterviewRoom(props: InterviewRoomProps) {
-  if (props.callProvider === null) return <ImportedInterviewMaterials {...props}/>;
   return props.callProvider === 'zoom' ? <ZoomInterviewRoom key={`${props.guestToken || props.applicationId || "interview"}:${props.meetingId || props.start}`} {...props}/> : <DailyInterviewRoom {...props}/>;
-}
-
-function ImportedInterviewMaterials({ title, start, completed, applicationId, meetingId, guestToken, onBack }: InterviewRoomProps) {
-  return <section className="cp-content-page">
-    <Button className="cp-back" variant="ghost" onClick={onBack}><ArrowLeft size={16}/>В кабинет</Button>
-    <div className="cp-page-heading"><h1>{completed ? 'Встреча завершена' : 'Видеовстреча недоступна'}</h1><p>{title} · {dateTimeLabel(start)}</p></div>
-    {completed && !guestToken && (applicationId && !meetingId
-      ? <p className="cp-error" role="alert">Не удалось определить встречу. Откройте её заново из вакансии.</p>
-      : <MediaPanel identity={applicationId ? `meeting:${applicationId}:${meetingId}` : `interview:${start}`} load={() => candidateRequest<CallMaterials>(applicationId ? 'meeting/materials' : 'interview/materials', applicationId ? { applicationId, meetingId } : {})}/>)}
-  </section>;
 }
 
 function ZoomInterviewRoom({ title, start, completed, configured, applicationId, meetingId, guestToken, onRefresh, onBack, onExit }: InterviewRoomProps) {

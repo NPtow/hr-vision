@@ -10,7 +10,6 @@ import hashlib
 import hmac
 from http.cookies import SimpleCookie
 import json
-import os
 import re
 import secrets
 import sqlite3
@@ -31,7 +30,6 @@ import employer_workflow
 import recruiter_access
 import recruiter_notifications
 import recruiter_coach
-import selection_facts
 from core_source_client import SourceMedia, meeting_token
 from call_providers import CallProviders
 
@@ -40,7 +38,7 @@ SESSION_SECONDS = 30 * 86400
 MEDIA_WAIT_SECONDS = 30 * 60
 PROFILE_FIELDS = {'name', 'city', 'desiredRole', 'about', 'telegram', 'geographies',
                   'availability', 'consentReuse', 'autoApprove', 'desiredSalary', 'workMode',
-                  'salaryMin', 'salaryMax', 'latestStartDate', 'residence', 'employmentType', 'resumeReviewed', 'timezone', 'availabilitySchedule', 'preferredCompanies', 'anyCompany', 'work_locations', 'employment_types', 'industry_months'}
+                  'salaryMin', 'salaryMax', 'latestStartDate', 'residence', 'employmentType', 'resumeReviewed', 'timezone', 'availabilitySchedule'}
 
 
 class ClosingConnection(sqlite3.Connection):
@@ -220,12 +218,6 @@ def profile_value(body, previous=None):
     result['employmentType'] = body.get('employmentType', old.get('employmentType', ''))
     require(result['employmentType'] in ('', 'full-time', 'part-time', 'project', 'internship'),
             'Выберите тип занятости.', 400)
-    companies = body.get('preferredCompanies', old.get('preferredCompanies', []))
-    require(isinstance(companies, list) and len(companies) <= 20, 'Укажите не больше 20 компаний.', 400)
-    result['preferredCompanies'] = list(dict.fromkeys(text(company, 120) for company in companies))
-    result['anyCompany'] = body.get('anyCompany', old.get('anyCompany', False))
-    require(isinstance(result['anyCompany'], bool), 'Выберите предпочтения по компаниям.', 400)
-    require(not result['anyCompany'] or not result['preferredCompanies'], 'Выберите компании или «Не важно».', 400)
     result['resumeReviewed'] = body.get('resumeReviewed', old.get('resumeReviewed', False))
     require(isinstance(result['resumeReviewed'], bool), 'Подтвердите данные резюме.', 400)
     geography = body.get('geographies', old.get('geographies', []))
@@ -255,20 +247,6 @@ def profile_value(body, previous=None):
         result[key] = salary_value(body.get(key, old.get(key)))
     require(result['salaryMin'] is None or result['salaryMax'] is None or result['salaryMin'] <= result['salaryMax'],
             'Верхняя граница зарплаты должна быть не меньше нижней.', 400)
-    for key in selection_facts.CANDIDATE:
-        if key in body:
-            value = body[key]
-            require(selection_facts.valid_field('candidate', key, value), 'Проверьте структурированные условия работы.', 400)
-            result[key] = value
-        elif key in old:
-            result[key] = old[key]
-    # A CV update can replace a raw value, but cannot inherit its confirmation.
-    if selection_facts.PROFILE_SOURCE_KEY in old:
-        sources = dict(old[selection_facts.PROFILE_SOURCE_KEY])
-        for key in selection_facts.PROFILE_INPUTS & set(body):
-            if key in sources and old.get(key) != result.get(key):
-                sources[key] = {**sources[key], 'kind': 'unconfirmed_source_change'}
-        result[selection_facts.PROFILE_SOURCE_KEY] = sources
     result['latestStartDate'] = start_date_value(body.get('latestStartDate', old.get('latestStartDate', '')),
                                                 future='latestStartDate' in body)
     return result
@@ -468,8 +446,6 @@ class CandidatePortal:
             return result, {}
 
     def event(self, db, cid, event_type, entity_id):
-        if event_type == 'interview.completed' and self.candidate_access:
-            self.candidate_access.completed(db, cid, entity_id)
         active = db.execute('SELECT email FROM cp_candidates WHERE id=?', (cid,)).fetchone()
         if self.notifications and active and active[0]:
             self.notifications.enqueue(db, cid, event_type + ':' + entity_id, event_type)
@@ -543,7 +519,7 @@ class CandidatePortal:
         room = json.loads(row[2]) if row[2] else None
         return {'id': row[0], 'status': row[1], 'room': room,
                 'start': row[3], 'end': row[4], 'recruiterName': row[5], 'completedAt': row[6],
-                'recording': invites.recording(db, row[0]), **self.calls.describe(db, row[0], room, completed=row[1] == 'completed')}
+                'recording': invites.recording(db, row[0]), **self.calls.describe(db, row[0], room)}
 
     def meeting(self, db, app_id, meeting_id=None):
         row = db.execute('''SELECT id,start,end,status,room,completed_at,revision,confirmed_at,cancelled_at,cancellation_reason
@@ -553,8 +529,7 @@ class CandidatePortal:
                  'room': json.loads(row[4]) if row[4] else None, 'completedAt': row[5],
                  'revision': row[6], 'confirmedAt': row[7], 'cancelledAt': row[8],
                  'cancellationReason': row[9],
-                 **self.calls.describe(db, row[0], json.loads(row[4]) if row[4] else None,
-                                      completed=row[3] == 'completed')} if row else None)
+                 **self.calls.describe(db, row[0], json.loads(row[4]) if row[4] else None)} if row else None)
 
     def application(self, db, app_id, cid=None):
         from vacancy_import import candidate_vacancy
@@ -658,12 +633,12 @@ class CandidatePortal:
             if candidate.get('interview'):
                 current = self.interview(db, row[0])
                 candidate['interview'].update(self.calls.describe(db, current['id'], current['room'],
-                    principal['id'] if personal else 'recruiter', completed=current['status'] == 'completed'))
+                    principal['id'] if personal else 'recruiter'))
             for application in candidate['applications']:
                 if application.get('meeting'):
                     current = self.meeting(db, application['id'])
                     application['meeting'].update(self.calls.describe(db, current['id'], current['room'],
-                        principal['id'] if personal else 'recruiter', completed=current['status'] == 'completed'))
+                        principal['id'] if personal else 'recruiter'))
             from recruiter_sources import candidate_sources
             candidate.update(candidate_sources(db, row[0]))
             candidates.append(candidate)
@@ -706,7 +681,6 @@ class CandidatePortal:
                 'Не удалось создать аккаунт. Если вы уже регистрировались, войдите.', 409)
         profile = profile_value({key: value for key, value in body.items() if key in PROFILE_FIELDS})
         require(profile['consentReuse'], 'Подтвердите использование интервью для подбора вакансий.', 400)
-        selection_facts.confirm_profile(profile, body)
         cid, created = uid('person'), iso(now())
         db.execute('INSERT INTO cp_candidates(id,email,password_hash,profile,created_at,updated_at) VALUES (?,?,?,?,?,?)',
                    (cid, email, password_hash(body.get('password')), dump(profile), created, created))
@@ -722,16 +696,14 @@ class CandidatePortal:
         profile = profile_value(body, previous)
         if body.get('resumeReviewed'):
             require(self.resume_metadata(db, cid), 'Сначала загрузите резюме.', 409)
-            require(not self.missing_preferences(profile), 'Укажите должность, зарплату, локацию, занятость, формат работы и компании.', 400)
-        selection_facts.confirm_profile(profile, body)
+            require(all(profile.get(key) for key in ('salaryMin', 'salaryMax', 'latestStartDate')),
+                    'Укажите желаемую зарплату и дату выхода на работу.', 400)
         changed = any(profile[key] != previous[key] for key in ('consentReuse', 'autoApprove'))
         db.execute('UPDATE cp_candidates SET profile=?,updated_at=? WHERE id=?', (dump(profile), iso(now()), cid))
         if changed:
             db.execute('INSERT INTO cp_consent_log VALUES (?,?,?,?,?,?)',
                        (uid('consent'), cid, iso(now()), int(profile['consentReuse']),
                         int(profile['autoApprove']), 'candidate-preferences-v1'))
-        import selection
-        selection.reconcile_nominations(db, self, cid)
 
     def resume_metadata(self, db, cid):
         row = db.execute('SELECT filename,mime,length(content),extracted,uploaded_at FROM cp_resumes WHERE candidate_id=?', (cid,)).fetchone()
@@ -739,16 +711,13 @@ class CandidatePortal:
                  'extractedFields': list(json.loads(row[3])), 'uploadedAt': row[4]} if row else None)
 
     @staticmethod
-    def missing_preferences(person):
-        missing = [key for key in ('salaryMin', 'desiredRole', 'city', 'employmentType', 'workMode') if not person.get(key)]
-        if not person.get('anyCompany') and not person.get('preferredCompanies'):
-            missing.append('preferredCompanies')
-        return missing
-
-    @staticmethod
     def onboarding(person):
-        # Previously reviewed accounts stay usable; only new onboarding requires the new fields.
-        missing = [] if person.get('resumeReviewed') else CandidatePortal.missing_preferences(person)
+        missing = [key for key in ('salaryMin', 'salaryMax', 'latestStartDate') if not person.get(key)]
+        if person.get('latestStartDate'):
+            try:
+                start_date_value(person['latestStartDate'], future=True)
+            except Problem:
+                missing.append('latestStartDate')
         # An existing appointment is a commitment. Migration must never hide it.
         step = 'complete' if person.get('interview') else 'resume' if not person.get('resume') else 'preferences' if missing or not person.get('resumeReviewed') else 'complete'
         return {'step': step, 'missingFields': missing}
@@ -864,12 +833,6 @@ class CandidatePortal:
             db.execute('INSERT INTO cp_applications(id,candidate_id,vacancy_id,status,approved_automatically,created_at,decided_at) VALUES (?,?,?,?,?,?,?)',
                        (aid, cid, vacancy['id'], 'accepted' if auto else 'pending', int(auto), iso(now()), iso(now()) if auto else None))
             self.event(db, cid, 'application.proposed', aid)
-            import employer_review
-            if employer_review.enabled():
-                employer_review.enqueue(db, aid)
-            else:
-                import assessment_jobs
-                assessment_jobs.enqueue(db, 'candidate', cid, vacancy['id'])
 
     def decide_application(self, db, cid, body):
         with meeting_transaction(db):
@@ -1020,16 +983,7 @@ class CandidatePortal:
         meeting = self.interview(db, person['id'])
         require(meeting and meeting['id'] == capability['interviewId'], 'Встреча не найдена.', 404)
         meeting.pop('room', None)
-        continuation = None
-        if meeting['status'] == 'completed' and self.candidate_access:
-            try:
-                continuation = self.candidate_access.continuation(db, capability)
-            except Problem as error:
-                if error.status != 409:
-                    raise
-        return {'name': person['name'], 'interview': meeting, 'videoConfigured': self.media.configured,
-                **({'accountActive': person['accountActive'], 'continuation': continuation}
-                   if meeting['status'] == 'completed' else {})}
+        return {'name': person['name'], 'interview': meeting, 'videoConfigured': self.media.configured}
 
     def claim_state(self, db, capability):
         person = self.person(db, capability['candidateId'])
@@ -1058,8 +1012,8 @@ class CandidatePortal:
         require('consentReuse' not in edits, 'Подтвердите согласие отдельно.', 400)
         profile = profile_value({**edits, 'consentReuse': True}, person)
         if profile.get('resumeReviewed'):
-            require(not self.missing_preferences(profile), 'Укажите должность, зарплату, локацию, занятость, формат работы и компании.', 400)
-        selection_facts.confirm_profile(profile, edits)
+            require(all(profile.get(key) for key in ('salaryMin', 'salaryMax', 'latestStartDate')),
+                    'Укажите желаемую зарплату и дату выхода на работу.', 400)
         hashed = password_hash(body.get('password'))
         changed = iso(now())
         db.execute('UPDATE cp_candidates SET email=?,password_hash=?,profile=?,updated_at=? WHERE id=?',
@@ -1070,8 +1024,6 @@ class CandidatePortal:
         if self.notifications:
             self.notifications.set_email(db, cid, email, verified=False)
         self.event(db, cid, 'candidate.registered', cid)
-        import selection
-        selection.reconcile_nominations(db, self, cid)
         return cid
 
     def capability_request(self, path, body, ip):
@@ -1080,17 +1032,11 @@ class CandidatePortal:
         self.rate_limit('invitation-ip:' + ip, 120, 60)
         if path == '/api/hr/candidate/claim':
             self.rate_limit('claim-ip:' + ip, 20, 900)
-        if path == '/api/hr/candidate/guest/continue':
-            require(set(body) <= {'token', 'email'}, 'Проверьте запрос продолжения.', 400)
-            self.rate_limit('postcall-ip:' + ip, 10, 900)
         scope = 'call' if '/guest/' in path else 'claim'
         with self.lock, self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             capability = invites.resolve(db, token, scope, allow_consumed=path.endswith('/claim/state'))
             if scope == 'call':
-                if path.endswith('/continue'):
-                    require(self.candidate_access, 'Доступ временно недоступен. Обратитесь к рекрутеру.', 503)
-                    return self.candidate_access.continuation(db, capability, send=True, email=body.get('email')), {}
                 state = self.guest_state(db, capability)
                 if path.endswith('/state'):
                     return state, {}
@@ -1532,14 +1478,6 @@ class CandidatePortal:
             require(meeting and meeting['status'] == 'completed', 'Материалы доступны после встречи.', 409)
             require(meeting_id is None or meeting['id'] == meeting_id, 'Встреча изменилась. Обновите кабинет.', 409)
             mid = meeting['id']
-            if not application_id:
-                saved = db.execute('SELECT body FROM cp_internal_profiles WHERE candidate_id=?', (cid,)).fetchone()
-                imported = json.loads(saved[0]).get('importedInterview') if saved else None
-                if imported is not None and os.environ.get('HR_CORE_CATALOG_ENABLED') != '1':
-                    require(storage_policy in (None, 'remote'),
-                            'Исходная запись хранится в панели ДСА.', 409)
-                    from dsa_panel import imported_materials
-                    return imported_materials(imported, cid, mid)
             catalogue_meeting = meeting
             if self.materials_catalog and not application_id and (meeting.get('room') or {}).get('provider', 'daily') == 'daily':
                 control = db.execute('SELECT start_requested_at FROM cp_recording_control WHERE interview_id=?',
@@ -1654,34 +1592,7 @@ class CandidatePortal:
                     '/api/hr/recruiter/notifications/telegram/link', '/api/hr/recruiter/notifications/telegram/disconnect',
                     '/api/hr/recruiter/candidate-access/state', '/api/hr/recruiter/candidate-access/send'} | recruiter_coach.PATHS,
                     'Доступно только команде HR Vision.', 403)
-        if path in ('/api/hr/candidate/email-access/request', '/api/hr/candidate/email-access/consume'):
-            require(method == 'POST' and self.candidate_access, 'Вход временно недоступен.', 503)
-            self.rate_limit('email-access-ip:' + ip, 20, 900)
-            if path.endswith('/request'):
-                require(set(body) == {'email'}, 'Укажите почту.', 400)
-                email = email_value(body.get('email'))
-                self.rate_limit('email-access-recipient:' + email, 4, 3600)
-                with self.lock, self.connect() as db:
-                    db.execute('BEGIN IMMEDIATE')
-                    row = db.execute('SELECT id FROM cp_candidates WHERE email=?', (email,)).fetchone()
-                    if not row:
-                        # An expired first-access email must remain recoverable after
-                        # the short-lived call capability has expired. Never pick
-                        # between multiple pending profiles with the same address.
-                        pending = db.execute('''SELECT c.id FROM cp_email_access a
-                          JOIN cp_candidates c ON c.id=a.candidate_id
-                          WHERE a.recipient=? AND c.email IS NULL LIMIT 2''', (email,)).fetchall()
-                        row = pending[0] if len(pending) == 1 else None
-                    require(self.candidate_access.config().email_configured, 'Отправка писем временно недоступна.', 503)
-                    if row:
-                        self.candidate_access.enqueue_link(db, row[0], email)
-                return {'ok': True}, {}
-            require(set(body) == {'token'}, 'Проверьте ссылку.', 400)
-            with self.lock, self.connect() as db:
-                db.execute('BEGIN IMMEDIATE')
-                cid = self.candidate_access.consume_link(db, body.get('token'))
-                return self.candidate_state(db, cid), {'Set-Cookie': self.session_cookie(db, cid)}
-        capability_paths = ('/api/hr/candidate/guest/state', '/api/hr/candidate/guest/join', '/api/hr/candidate/guest/continue',
+        capability_paths = ('/api/hr/candidate/guest/state', '/api/hr/candidate/guest/join',
                             '/api/hr/candidate/claim/state', '/api/hr/candidate/claim/resume', '/api/hr/candidate/claim')
         if path in capability_paths:
             require(method == 'POST', 'Откройте персональную ссылку.', 405)

@@ -1,0 +1,121 @@
+{
+  "files": [
+    {
+      "sha256": "86faf23cb6e5c5e499e212fa4671053a4b1b8399d1f314491df0c6ca4ba10083",
+      "source": "services/deploy/Dockerfile.source",
+      "target": "Dockerfile"
+    },
+    {
+      "sha256": "cee00e9ac3631dc721c781d08a443092ab1a0a6d69a5d6daa4c016ca32e36317",
+      "source": "services/deploy/requirements-runtime.lock",
+      "target": "requirements-runtime.lock"
+    },
+    {
+      "sha256": "3e48dfa40699a85fc07ac89a642431832d4226499a0e88b57f9196f77ac41559",
+      "source": "services/source-daily/pyproject.toml",
+      "target": "pyproject.toml"
+    },
+    {
+      "sha256": "b6b203ccf8718b44aed8f6fe2874803991491921004af834efd68492fd9fe341",
+      "source": "services/source-daily/src/source_daily/__init__.py",
+      "target": "src/source_daily/__init__.py"
+    },
+    {
+      "sha256": "bd28cac081f41affa36b8028dd436527ee6bd22667e56e93823b45784424fe20",
+      "source": "services/source-daily/src/source_daily/__main__.py",
+      "target": "src/source_daily/__main__.py"
+    },
+    {
+      "sha256": "e37094066b2b7caa1f4fb5465702390b8580dafcc68644ebfb066d6ca7166838",
+      "source": "services/source-daily/src/source_daily/_vendor/__init__.py",
+      "target": "src/source_daily/_vendor/__init__.py"
+    },
+    {
+      "sha256": "41cdbdc324fc7c0252b28737b09acbe2050f37351dd5e57384385aa8dcdd8900",
+      "source": "services/source-daily/src/source_daily/_vendor/daily_media.py",
+      "target": "src/source_daily/_vendor/daily_media.py"
+    },
+    {
+      "sha256": "e835e76a3e6bdc8dafb213f256f0830bea932b75ddfefbe80197c40c9353c8e9",
+      "source": "services/source-daily/src/source_daily/_vendor/manifest.json",
+      "target": "src/source_daily/_vendor/manifest.json"
+    },
+    {
+      "sha256": "5d3c403a11bc1e818b13f1f0701a3e756894b3b7759c896f21c2cd950f2a5dfb",
+      "source": "services/source-daily/src/source_daily/_vendor/materials_capture.py",
+      "target": "src/source_daily/_vendor/materials_capture.py"
+    },
+    {
+      "sha256": "df4246f793c9018566941e5ce860b8186a97baa90d1a130316e24100a7f94c8d",
+      "source": "services/source-daily/src/source_daily/_vendor/materials_daily.py",
+      "target": "src/source_daily/_vendor/materials_daily.py"
+    },
+    {
+      "sha256": "1d6d503de34e9576bff102fc24f3eda35a21ee49d704319fddb1c655174782b1",
+      "source": "services/source-daily/src/source_daily/_vendor/materials_http.py",
+      "target": "src/source_daily/_vendor/materials_http.py"
+    },
+    {
+      "sha256": "eb3d17a4d3b8062d22530930b0d581e5a4cbb0871426a3bc5f509042cb65aa93",
+      "source": "services/source-daily/src/source_daily/_vendor/materials_storage.py",
+      "target": "src/source_daily/_vendor/materials_storage.py"
+    },
+    {
+      "sha256": "109414a1938759e4b2ca622b01a846ef27f285855d95cfb088f3b4a76751cf3c",
+      "source": "services/source-daily/src/source_daily/_vendor/media_runtime.py",
+      "target": "src/source_daily/_vendor/media_runtime.py"
+    },
+    {
+      "sha256": "5fe3eae676dc505fe8f63bc7ab452fdf3b36be33895c7b29cc2b8a1d9c183d4e",
+      "source": "services/source-daily/src/source_daily/_vendor/observability.py",
+      "target": "src/source_daily/_vendor/observability.py"
+    },
+    {
+      "sha256": "324ab03c97aa0b1774fc26148be3c4741b95b7f997a195093a406c4ef5a3b3fe",
+      "source": "services/source-daily/src/source_daily/_vendor/support.py",
+      "target": "src/source_daily/_vendor/support.py"
+    },
+    {
+      "sha256": "204901681357e2f93110ece076dfb9ede8984bb2f803da97d12248e7fba87a1b",
+      "source": "services/source-daily/src/source_daily/api.py",
+      "target": "src/source_daily/api.py"
+    },
+    {
+      "sha256": "756b2151e056de2cc8058a9ce315d21a9aff0a04a5d8e69a2d21cdc4d8cb8b4b",
+      "source": "services/source-daily/src/source_daily/clients.py",
+      "target": "src/source_daily/clients.py"
+    },
+    {
+      "sha256": "cc8c5a93fc5a20e1f9725adfddb45c4b074def680cdd02b2843cd7fd40866aed",
+      "source": "services/source-daily/src/source_daily/config.py",
+      "target": "src/source_daily/config.py"
+    },
+    {
+      "sha256": "1bb00260886de165a2b11a2738cf02fe270f8737c3cdff8531a345d7e4e03484",
+      "source": "services/source-daily/src/source_daily/errors.py",
+      "target": "src/source_daily/errors.py"
+    },
+    {
+      "sha256": "5eaec7b5c91ce42c3f85dc6108670b2443948d70a92c66ec31a23c7841d18dd4",
+      "source": "services/source-daily/src/source_daily/pipeline.py",
+      "target": "src/source_daily/pipeline.py"
+    },
+    {
+      "sha256": "8d6e7f330ceb2ba87ddab064f71b780e0ec7e0348f262d137a44345f3a9cc821",
+      "source": "services/source-daily/src/source_daily/runtime.py",
+      "target": "src/source_daily/runtime.py"
+    },
+    {
+      "sha256": "d8e71381d62fc47da4c7468e99568f115d81d1777bf1b61c2994e73d219751cb",
+      "source": "services/source-daily/src/source_daily/store.py",
+      "target": "src/source_daily/store.py"
+    },
+    {
+      "sha256": "ceb729fc6111322611d34593806be6aeb0864934f497516f9779521fc4f8c6ce",
+      "source": "services/source-daily/src/source_daily/worker.py",
+      "target": "src/source_daily/worker.py"
+    }
+  ],
+  "schema_version": 1,
+  "service": "source"
+}

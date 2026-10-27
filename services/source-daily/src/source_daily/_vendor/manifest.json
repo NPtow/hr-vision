@@ -1,0 +1,32 @@
+{
+  "daily_media": {
+    "source": "interface-lab/server/daily_media.py",
+    "sha256": "c4ea6434a1f97e6419a1d9bf178e186a3c4dfeacbe9aa3277cc3ceeb1d74d6cc",
+    "vendored_sha256": "41cdbdc324fc7c0252b28737b09acbe2050f37351dd5e57384385aa8dcdd8900"
+  },
+  "materials_daily": {
+    "source": "interface-lab/server/materials_daily.py",
+    "sha256": "55161c13144bcbf526a3a342a9f6b1bf7ad5ea70b0efa5f5a39094bfd540450a",
+    "vendored_sha256": "df4246f793c9018566941e5ce860b8186a97baa90d1a130316e24100a7f94c8d"
+  },
+  "materials_capture": {
+    "source": "interface-lab/server/materials_capture.py",
+    "sha256": "5d3c403a11bc1e818b13f1f0701a3e756894b3b7759c896f21c2cd950f2a5dfb",
+    "vendored_sha256": "5d3c403a11bc1e818b13f1f0701a3e756894b3b7759c896f21c2cd950f2a5dfb"
+  },
+  "materials_http": {
+    "source": "interface-lab/server/materials_http.py",
+    "sha256": "1d6d503de34e9576bff102fc24f3eda35a21ee49d704319fddb1c655174782b1",
+    "vendored_sha256": "1d6d503de34e9576bff102fc24f3eda35a21ee49d704319fddb1c655174782b1"
+  },
+  "materials_storage": {
+    "source": "interface-lab/server/materials_storage.py",
+    "sha256": "eb3d17a4d3b8062d22530930b0d581e5a4cbb0871426a3bc5f509042cb65aa93",
+    "vendored_sha256": "eb3d17a4d3b8062d22530930b0d581e5a4cbb0871426a3bc5f509042cb65aa93"
+  },
+  "media_runtime": {
+    "source": "interface-lab/server/media_runtime.py",
+    "sha256": "de0d389b7d54f6d6f572da695198b48691da0177ea92c3c243888c6b59ef7df9",
+    "vendored_sha256": "109414a1938759e4b2ca622b01a846ef27f285855d95cfb088f3b4a76751cf3c"
+  }
+}

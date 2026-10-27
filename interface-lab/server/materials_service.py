@@ -127,7 +127,7 @@ class MaterialsService:
     def legacy_materials(self, owner_kind, meeting, *, access_check=None):
         """Keep existing candidate/recruiter/employer players working on rollout."""
         data = self.list_materials(owner_kind, meeting['id'], access_check=access_check)
-        recordings, transcripts, transcript_variants, video_errors = [], [], [], []
+        recordings, transcripts, video_errors = [], [], []
         assets = {asset['id']: asset for asset in data['assets']}
         for asset in data['assets']:
             if asset['kind'] != 'video' or asset['state'] not in ('ready', 'available'):
@@ -152,22 +152,12 @@ class MaterialsService:
                 latest[version['asset_id']] = version
         for version in latest.values():
             normalized = version['metadata'].get('normalized', {})
-            projection = {'id': version['id'], 'assetId': version['asset_id'],
+            transcripts.append({'id': version['id'], 'assetId': version['asset_id'],
                                 'revision': version['version'],
                                 'text': normalized.get('vtt') or normalized.get('full_text', ''),
                                 'fullText': normalized.get('full_text', ''),
                                 'segments': version['segments'], 'warnings': normalized.get('warnings', []),
-                                'storage': 'owned'}
-            asset = assets.get(version['asset_id'], {})
-            external_id = asset.get('external_id') or asset.get('provider_asset_id', '')
-            # ASR alternatives remain visible for comparison without silently
-            # replacing capture text consumed by the assessment application.
-            if external_id.startswith('asr:'):
-                metadata = version.get('metadata', {})
-                transcript_variants.append({**projection, 'origin': metadata.get('origin'),
-                    'model': metadata.get('model_version')})
-            else:
-                transcripts.append(projection)
+                                'storage': 'owned'})
         def channel(kind, values):
             generations = {source['id']: source['generation'] for source in data['sources']}
             relevant = [job for job in data['jobs'] if job['operation'] == 'discover' or
@@ -197,8 +187,7 @@ class MaterialsService:
         states = (video['status'], transcription['status'])
         result = {'status': 'ready' if 'ready' in states else 'processing' if 'processing' in states
                   else 'error' if 'error' in states else 'not_recorded',
-                  'recordings': recordings, 'transcripts': transcripts,
-                  **({'transcriptVariants': transcript_variants} if transcript_variants else {}), 'video': video,
+                  'recordings': recordings, 'transcripts': transcripts, 'video': video,
                   'transcription': transcription, 'checkedAt': dt.datetime.now(dt.timezone.utc).isoformat(),
                   'catalogVersion': 1, 'speechProvider': 'not_selected'}
         self._check(access_check)

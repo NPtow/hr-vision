@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { CalendarDays, CheckCircle2, Download, FileText, RefreshCw, Video } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import logo from '../employer-workspace/assets/hr-vision-logo.svg';
-import { candidateRequest, dateTimeLabel, type CandidateState, type ClaimState, type GuestState, type GuestContinuation } from './api';
+import { candidateRequest, dateTimeLabel, type CandidateState, type ClaimState, type GuestState } from './api';
 import { InterviewRoom } from './InterviewRoom';
 
 const storageKey = (kind: string) => `hr-vision-invitation:${kind}`;
@@ -47,7 +47,6 @@ function GuestInvitation({ token }: { token: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [entering, setEntering] = useState(false);
-  const [left, setLeft] = useState(false);
   const refresh = useCallback(async () => {
     try { setState(await candidateRequest<GuestState>('guest/state', { token })); setError(''); }
     catch (cause) { setError((cause as Error).message); }
@@ -58,11 +57,13 @@ function GuestInvitation({ token }: { token: string }) {
     const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void refresh(); }, 10000);
     return () => clearInterval(timer);
   }, [refresh]);
+  // A meeting invitation grants call access only. The cabinet keeps its normal
+  // session check and asks for sign-in when this browser has no session.
+  useEffect(() => { if (state?.interview.status === 'completed') openCabinet('home'); }, [state?.interview.status]);
   if (loading) return <div className="cp-loading" role="status">Открываем приглашение…</div>;
   if (!state) return <section className="cp-form-page cp-invitation"><h1>Приглашение недоступно</h1><p className="cp-error" role="alert">{error}</p><p className="cp-muted">Попросите рекрутера проверить или обновить ссылку.</p><Button variant="secondary" onClick={() => void refresh()}><RefreshCw size={16}/>Проверить ещё раз</Button></section>;
-  if (state.interview.status === 'completed') return <GuestCompletion state={state} token={token} onRefresh={refresh}/>;
-  if (left) return <section className="cp-form-page cp-invitation"><h1>Вы вышли из встречи</h1><p className="cp-muted">Рекрутер ещё не завершил интервью. Можно вернуться; следующий шаг появится здесь после завершения.</p>{error && <p role="alert" className="cp-error">{error}</p>}<Button onClick={() => { setLeft(false); setEntering(true); }}>Вернуться во встречу</Button><Button variant="ghost" onClick={() => void refresh()}>Проверить завершение</Button></section>;
-  if (entering || state.interview.callProvider === 'zoom') return <><InterviewRoom title={`Интервью · ${state.interview.recruiterName}`} start={state.interview.start} completed={false} configured={state.interview.videoConfigured ?? state.videoConfigured} callProvider={state.interview.callProvider} guestToken={token} onRefresh={refresh} onBack={() => setLeft(true)} onExit={() => setLeft(true)}/>{error && <p className="cp-error cp-invitation-error" role="alert">{error}</p>}</>;
+  if (state.interview.status === 'completed') return <section className="cp-form-page cp-invitation"><CheckCircle2 size={32}/><h1>Спасибо за разговор</h1><Button onClick={() => openCabinet('home')}>В личный кабинет</Button></section>;
+  if (entering || state.interview.callProvider === 'zoom') return <><InterviewRoom title={`Интервью · ${state.interview.recruiterName}`} start={state.interview.start} completed={false} configured={state.interview.videoConfigured ?? state.videoConfigured} callProvider={state.interview.callProvider} guestToken={token} onRefresh={refresh} onBack={() => state.interview.callProvider === 'zoom' ? openCabinet('home') : setEntering(false)} onExit={() => openCabinet('home')}/>{error && <p className="cp-error cp-invitation-error" role="alert">{error}</p>}</>;
   return <section className="cp-form-page cp-invitation">
     <span className="cp-large-icon"><Video size={25}/></span>
     <h1>{state.name ? `${state.name.split(' ')[0]}, до встречи` : 'До встречи на интервью'}</h1>
@@ -71,34 +72,6 @@ function GuestInvitation({ token }: { token: string }) {
     <p className="cp-muted">Начнём без записи. Рекрутер объяснит, как работает сервис, и спросит ваше согласие на запись интервью.</p>
     {error && <p className="cp-error" role="alert">{error}</p>}
     <Button onClick={() => setEntering(true)}><Video size={17}/>Подготовиться к встрече</Button>
-  </section>;
-}
-
-function GuestCompletion({ state, token, onRefresh }: { state: GuestState; token: string; onRefresh: () => Promise<void> }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const [email, setEmail] = useState('');
-  const [requested, setRequested] = useState<GuestContinuation | null>(null);
-  const attempted = useRef(false);
-  const access = requested || state.continuation;
-  async function requestAccess() {
-    if (busy) return;
-    setBusy(true); setError('');
-    try { setRequested(await candidateRequest<GuestContinuation>('guest/continue', { token, ...(access?.needsEmail ? { email: email.trim() } : {}) })); await onRefresh(); }
-    catch (cause) { setError((cause as Error).message); }
-    finally { setBusy(false); }
-  }
-  useEffect(() => {
-    if (!state.accountActive && !attempted.current && access?.status === 'not_requested' && access.canSend && !access.needsEmail) { attempted.current = true; void requestAccess(); }
-  }, [access?.status, access?.canSend, access?.needsEmail, state.accountActive]);
-  const current = state.continuation?.status !== 'not_requested' ? state.continuation : access;
-  const waiting = busy || current?.status === 'queued' || current?.status === 'sending';
-  return <section className="cp-form-page cp-invitation">
-    <CheckCircle2 size={32}/><h1>Встреча завершилась</h1>
-    {state.accountActive ? <Button onClick={() => openCabinet('home')}>В личный кабинет</Button>
-      : access?.needsEmail ? <form className="cp-auth-form" onSubmit={event => { event.preventDefault(); void requestAccess(); }}><label>Почта<Input required type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} disabled={busy}/></label><Button disabled={busy}>{busy ? 'Отправляем…' : 'Получить ссылку в кабинет'}</Button></form>
-      : <><p className="cp-muted" role="status">{waiting ? 'Отправляем письмо' : current?.status === 'sent' ? 'Откройте кабинет по кнопке в письме' : current?.status === 'unknown' ? 'Проверьте почту. Если письма нет, обратитесь к рекрутеру.' : 'Получите ссылку на ваш кабинет'}{access?.emailHint ? ` · ${access.emailHint}` : ''}</p>{!waiting && current?.canSend && <Button variant="ghost" onClick={() => void requestAccess()}>Отправить письмо</Button>}{current?.blockedReason === 'email_not_configured' && <p role="status">Отправка временно недоступна. Обратитесь к рекрутеру.</p>}</>}
-    {error && <p role="alert" className="cp-error">{error}</p>}
   </section>;
 }
 

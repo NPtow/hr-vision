@@ -7,7 +7,7 @@ import { useFragmentFeedback } from './useFragmentFeedback';
 import './interview-assessment.css';
 
 const answers = [
-  { value: 'no', label: 'Скорее нет' }, { value: 'unknown', label: 'Не могу сказать' }, { value: 'yes', label: 'Скорее да' },
+  { value: 'yes', label: 'Скорее да' }, { value: 'no', label: 'Скорее нет' }, { value: 'unknown', label: 'Не могу сказать' },
 ] as const;
 const answerLabel = (answer: FragmentOpinion['answer']) => answers.find(item => item.value === answer)?.label ?? 'Без ответа';
 

@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "md-source-daily"
+version = "0.1.0"
+description = "Independent Daily acquisition service; private jobs and HTTP-only core/ASR integration"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi==0.162.0", "starlette==1.9.0", "pydantic==2.14.1", "uvicorn==0.54.0",
+  "celery==5.6.3", "requests==2.34.2", "boto3==1.43.118",
+]
+
+[project.scripts]
+md-source-daily = "source_daily.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"source_daily._vendor" = ["manifest.json"]

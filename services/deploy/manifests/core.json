@@ -1,0 +1,81 @@
+{
+  "files": [
+    {
+      "sha256": "c134d54d27d83ed8ac61811407b18243fbc88dd5f0a17c0e6f1208e16bff3b65",
+      "source": "interface-lab/server/domain.py",
+      "target": "compat/domain.py"
+    },
+    {
+      "sha256": "1a99483a7a0d26e2c65ef12e3ed60418006076a7ece57df5139a5a4baaaa8895",
+      "source": "interface-lab/server/feedback.py",
+      "target": "compat/feedback.py"
+    },
+    {
+      "sha256": "babef4c8389bb187550ed85534a740798abd30672159df24f8f31ad5c730e06a",
+      "source": "interface-lab/server/materials_repository.py",
+      "target": "compat/materials_repository.py"
+    },
+    {
+      "sha256": "eb3d17a4d3b8062d22530930b0d581e5a4cbb0871426a3bc5f509042cb65aa93",
+      "source": "interface-lab/server/materials_storage.py",
+      "target": "compat/materials_storage.py"
+    },
+    {
+      "sha256": "ab2b9c77833242a41a236322f18d1c46f9bcc18deba8210906887b2c03216e8a",
+      "source": "services/data-core/pyproject.toml",
+      "target": "pyproject.toml"
+    },
+    {
+      "sha256": "a405c9813234455ed44c6f9e67da48f328e41c968022ec64167a4395c910b09b",
+      "source": "services/data-core/src/hr_materials_core/__init__.py",
+      "target": "src/hr_materials_core/__init__.py"
+    },
+    {
+      "sha256": "47afdbdd7c9e3578a93c73d1b2b9b7b3bdd670de5bfeb40678e4616b0afa2571",
+      "source": "services/data-core/src/hr_materials_core/__main__.py",
+      "target": "src/hr_materials_core/__main__.py"
+    },
+    {
+      "sha256": "ce2d6624b6db47232d13debbea82fc72625a6bf369f02c5ffc36f85b05ab956b",
+      "source": "services/data-core/src/hr_materials_core/app.py",
+      "target": "src/hr_materials_core/app.py"
+    },
+    {
+      "sha256": "9564f25926892d8f8b148d48ca14274cd5e47a0ad78d6e2a08913fea6c442165",
+      "source": "services/data-core/src/hr_materials_core/auth.py",
+      "target": "src/hr_materials_core/auth.py"
+    },
+    {
+      "sha256": "1bc17a42f2101e650d747783812b2dad3fdaa647bc05028b389e40b3890163ab",
+      "source": "services/data-core/src/hr_materials_core/repository.py",
+      "target": "src/hr_materials_core/repository.py"
+    },
+    {
+      "sha256": "5b58c42bee98aaa1c7a17febdc77eaca23f83420ee1ababc0427599b842b278e",
+      "source": "services/data-core/src/hr_materials_core/schemas.py",
+      "target": "src/hr_materials_core/schemas.py"
+    },
+    {
+      "sha256": "b1bcacf79e7bb10ed5c181d4d6d974134d38fd0eca9d9373a69802f3727f08c4",
+      "source": "services/data-core/src/hr_materials_core/service.py",
+      "target": "src/hr_materials_core/service.py"
+    },
+    {
+      "sha256": "b36c40dc809ec3392d5dc513779861a80c95b70d5d5ca7763cf21ce43fee55fd",
+      "source": "services/data-core/src/hr_materials_core/settings.py",
+      "target": "src/hr_materials_core/settings.py"
+    },
+    {
+      "sha256": "44b25c81ccff9322fcf965e6cd2b096e04ed899c956f53f615537d5ddea03a62",
+      "source": "services/deploy/Dockerfile.core",
+      "target": "Dockerfile"
+    },
+    {
+      "sha256": "cee00e9ac3631dc721c781d08a443092ab1a0a6d69a5d6daa4c016ca32e36317",
+      "source": "services/deploy/requirements-runtime.lock",
+      "target": "requirements-runtime.lock"
+    }
+  ],
+  "schema_version": 1,
+  "service": "core"
+}
