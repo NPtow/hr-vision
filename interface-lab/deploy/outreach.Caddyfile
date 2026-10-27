@@ -95,6 +95,11 @@ http://:8381 {
 		root * /srv/hr-vision/current
 		encode zstd gzip
 		header Cache-Control "no-cache"
+		@zoomImmutable path /call/zoom/assets/* /call/zoom/vendor/6.10.0/*
+		header @zoomImmutable {
+			Cache-Control "public, max-age=31536000, immutable"
+			match status 2xx
+		}
 		header X-Robots-Tag "noindex, nofollow"
 		@landing expression `{http.request.uri.path} == "/" && {http.request.uri.query} == ""`
 		redir @landing "/iframe.html?id=hr-vision-product--start&viewMode=story" 302
@@ -125,6 +130,11 @@ http://:8381 {
 			root * /srv/hr-vision-mockups/current
 			encode zstd gzip
 			header Cache-Control "no-cache"
+			@zoomImmutable path /call/zoom/assets/* /call/zoom/vendor/6.10.0/*
+			header @zoomImmutable {
+				Cache-Control "public, max-age=31536000, immutable"
+				match status 2xx
+			}
 			header X-Robots-Tag "noindex, nofollow"
 			@landing expression `{http.request.uri.path} == "/" && {http.request.uri.query} == ""`
 			redir @landing "/iframe.html?id=hr-vision-employer-menu--gallery&viewMode=story&menu=sidebar" 302

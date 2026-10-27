@@ -38,7 +38,8 @@ function visit(dir = '') {
     if (info.isDirectory()) { visit(`${rel}/`); continue; }
     if (!( /\.(js|css|svg|woff2?|ttf|png|jpe?g|webp|ico|gif)$/.test(rel)
       || ['index.html', 'iframe.html', 'index.json', 'project.json'].includes(rel)
-      || ['call/zoom/client.html', 'call/zoom/left.html'].includes(rel)
+      || ['call/zoom/client.html', 'call/zoom/left.html', 'call/zoom/helper.html', 'call/zoom/externalLinkPage.html', 'call/zoom/bootstrap.json'].includes(rel)
+      || /^call\/zoom\/vendor\/6\.10\.0\/(lib|ui)\/[\w./-]+\.(wasm|json|mp3|wav|bin)$/.test(rel)
       || /\.LICENSE\.txt$/.test(rel))) throw Error(`Unexpected public file: ${rel}`);
     add(file, `ui/${rel}`);
   }

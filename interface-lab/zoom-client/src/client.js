@@ -1,3 +1,4 @@
+import { prepareSdk } from './sdk-loader.js';
 // This document alone owns one Zoom Client View. Credentials arrive in memory
 // from the authorized parent; device permissions and reconnection belong to Zoom.
 const SDK_VERSION = '6.10.0';
@@ -9,6 +10,9 @@ let active = true;
 let attempted = false;
 let joined = false;
 let sdkTimer;
+let preparation;
+let failed = false;
+const controller = new AbortController();
 
 function post(message) {
   if (window.parent === window) return;
@@ -26,12 +30,15 @@ function showNotice(heading, text) {
 }
 
 function fail(stage, error) {
-  if (!active) return;
+  if (!active || failed) return;
+  failed = true;
+  controller.abort();
   const messages = {
     invalid_credentials: 'Не удалось получить доступ к встрече. Обновите страницу и попробуйте снова.',
     insecure_context: 'Для звонка нужен защищённый адрес HTTPS.',
-    sdk_load: 'Не удалось загрузить Zoom. Проверьте подключение к интернету и обновите страницу.',
-    sdk_load_timeout: 'Zoom загружается слишком долго. Проверьте подключение к интернету и обновите страницу.',
+    sdk_load: 'Не удалось загрузить окно встречи. Повторите загрузку.',
+    sdk_assets: 'Не удалось загрузить файлы встречи. Повторите загрузку.',
+    sdk_load_timeout: 'Подготовка встречи занимает слишком много времени. Повторите загрузку.',
     init: 'Не удалось подготовить Zoom. Обновите страницу и попробуйте снова.',
     join: 'Не удалось подключиться. Проверьте сообщение Zoom или обновите страницу.',
   };
@@ -65,19 +72,30 @@ function readCredentials(value) {
   };
 }
 
-async function loadSdk() {
-  try {
-    return await Promise.race([
-      import('https://source.zoom.us/6.10.0/esm/client-view.es.min.js'),
-      new Promise((_, reject) => {
-        sdkTimer = setTimeout(() => reject(new Error('sdk_load_timeout')), 30000);
-      }),
-    ]);
-  } finally { clearTimeout(sdkTimer); }
+function prepare() {
+  if (preparation) return preparation;
+  report('loading');
+  preparation = Promise.race([
+    prepareSdk(controller.signal),
+    new Promise((_, reject) => {
+      sdkTimer = setTimeout(() => { controller.abort(); reject(new Error('sdk_load_timeout')); }, 90000);
+    }),
+  ]).then(sdk => {
+    if (!active || failed) throw new Error('cancelled');
+    report('prepared');
+    return sdk;
+  }).finally(() => clearTimeout(sdkTimer));
+  return preparation;
+}
+
+function preparationFailed(error) {
+  fail(error?.message === 'sdk_load_timeout' || controller.signal.aborted ? 'sdk_load_timeout'
+    : error?.message === 'sdk_assets' ? 'sdk_assets' : 'sdk_load');
 }
 
 function stop() {
   active = false;
+  controller.abort();
   clearTimeout(sdkTimer);
 }
 
@@ -91,54 +109,42 @@ function localLeave() {
 }
 
 async function start(config) {
-  report('loading');
   let ZoomMtg;
-  try { ({ ZoomMtg } = await loadSdk()); }
-  catch (error) {
-    fail(error?.message === 'sdk_load_timeout' ? 'sdk_load_timeout' : 'sdk_load');
-    return;
-  }
-  if (!active) return;
+  try { ZoomMtg = await prepare(); }
+  catch (error) { config = null; preparationFailed(error); return; }
+  if (!active || failed) return;
   try {
-    let initialized = false;
-    ZoomMtg.preLoadWasm();
-    ZoomMtg.prepareWebSDK();
     ZoomMtg.inMeetingServiceListener('onMeetingStatus', (event = {}) => {
-      if (!active) return;
+      if (!active || failed) return;
       const status = event.meetingStatus ?? event.status;
       if (status === 1 || status === 4) report('joining');
       if (status === 2) { joined = true; report('joined'); }
       if (status === 3) { report('left'); stop(); }
     });
-    ZoomMtg.i18n.load('ru-RU');
-    ZoomMtg.i18n.onLoad(() => {
-      if (!active || initialized) return;
-      initialized = true;
-      try {
-        ZoomMtg.init({
-          leaveUrl: `${location.origin}${LEFT_PATH}`,
-          debug: false,
-          disablePreview: false,
-          enableWaitingRoomPreview: true,
-          disableCORP: !window.crossOriginIsolated,
-          success: () => {
-            if (!active || !config) return;
-            notice.hidden = true;
-            report('joining');
-            const credentials = config;
-            config = null;
-            try {
-              ZoomMtg.join({
-                ...credentials,
-                success: () => { if (active) { joined = true; report('joined'); } },
-                error: (error) => fail('join', error),
-              });
-            } catch (error) { fail('join', error); }
-          },
-          error: (error) => { config = null; fail('init', error); },
-        });
-      } catch (error) { config = null; fail('init', error); }
+    let initialized = false;
+    report('joining');
+    const pending = ZoomMtg.init({
+      leaveUrl: `${location.origin}${LEFT_PATH}`,
+      helper: '/call/zoom/helper.html', externalLinkPage: '/call/zoom/externalLinkPage.html',
+      debug: false, patchJsMedia: false,
+      disablePreview: false, enableWaitingRoomPreview: true,
+      disableCORP: !window.crossOriginIsolated,
+      success: () => {
+        if (!active || failed || initialized || !config) return;
+        initialized = true;
+        notice.hidden = true;
+        const credentials = config; config = null;
+        try {
+          const join = ZoomMtg.join({ ...credentials,
+            success: () => { if (active && !failed) { joined = true; report('joined'); } },
+            error: error => fail('join', error),
+          });
+          join?.catch(error => fail('join', error));
+        } catch (error) { fail('join', error); }
+      },
+      error: error => { config = null; fail('init', error); },
     });
+    pending?.catch(error => { config = null; fail('init', error); });
   } catch (error) { config = null; fail('init', error); }
 }
 
@@ -146,7 +152,12 @@ window.addEventListener('message', (event) => {
   if (!active || window.parent === window || event.source !== window.parent
       || event.origin !== location.origin || event.data?.source !== 'hr-zoom-parent') return;
   if (event.data.type === 'leave') { localLeave(); return; }
-  if (event.data.type !== 'join' || attempted) return;
+  if (event.data.type === 'prepare') {
+    if (!window.isSecureContext) { fail('insecure_context'); return; }
+    if (!failed) void prepare().catch(preparationFailed);
+    return;
+  }
+  if (event.data.type !== 'join' || attempted || failed) return;
   attempted = true;
   if (!window.isSecureContext) { fail('insecure_context'); return; }
   const credentials = readCredentials(event.data.credentials);

@@ -10,9 +10,11 @@ const { chromium } = await import(process.env.PLAYWRIGHT_MODULE
   ? pathToFileURL(process.env.PLAYWRIGHT_MODULE).href : 'playwright');
 let browser, server, origin;
 const sdkDocument = `<!doctype html><button id="leave">Leave fixture</button><script>
+  window.commands = [];
   const send = data => parent.postMessage({ source: 'hr-zoom-client', ...data }, location.origin);
   window.addEventListener('message', event => {
     if (event.source !== parent || event.origin !== location.origin || event.data?.source !== 'hr-zoom-parent') return;
+    window.commands.push(event.data);
     if (event.data.type === 'join') {
       document.body.dataset.joined = 'yes';
       document.body.dataset.joinCount = String(Number(document.body.dataset.joinCount || 0) + 1);
@@ -89,6 +91,11 @@ async function assertNoLegacyMedia(page) {
   assert.deepEqual(await page.evaluate(() => [window.__dailyImports, window.__mediaCalls]), [0, 0]);
   assert.equal(await page.locator('video').count(), 0);
 }
+async function assertPreparedOnly(page) {
+  await page.locator('iframe').waitFor({ state: 'hidden' });
+  await page.waitForFunction(() => document.querySelector('iframe')?.contentWindow.commands?.length === 1);
+  assert.deepEqual(await page.locator('iframe').evaluate(frame => frame.contentWindow.commands), [{ source: 'hr-zoom-parent', type: 'prepare' }]);
+}
 async function waitJoined(page) {
   await page.locator('.md-zoom-call[data-phase="joined"]').waitFor();
   assert.equal(await page.frameLocator('iframe').locator('body').getAttribute('data-joined'), 'yes');
@@ -118,9 +125,11 @@ test('candidate consent gates access; Zoom joins without Daily or outer device c
   await page.goto(origin);
   assert.equal(await page.getByRole('button', { name: 'Присоединиться', exact: true }).isDisabled(), true);
   assert.equal(commands.length, 0);
-  assert.equal(await page.locator('iframe').count(), 0);
+  await assertPreparedOnly(page);
+  const preparedFrame = await page.locator('iframe').elementHandle();
   await assertNoLegacyMedia(page);
   await enterCandidate(page);
+  assert.equal(await preparedFrame.evaluate(node => node === document.querySelector('iframe')), true);
   await assertNativeOnlyOverlay(page);
   assert.deepEqual(commands, [{ path: '/api/hr/candidate/interview/join', body: { consent: true } }]);
   assert.equal(await page.locator('iframe').getAttribute('src'), '/call/zoom/client.html');
@@ -143,8 +152,10 @@ test('guest native leave exits to the cabinet without ending the meeting or rejo
   await enterCandidate(page);
   await assertNativeOnlyOverlay(page);
   const refreshesBeforeLeave = await page.evaluate(() => window.__refreshes);
+  const leavingFrame = await page.locator('iframe').elementHandle();
   await page.frameLocator('iframe').getByRole('button', { name: 'Leave fixture' }).click();
-  await page.locator('iframe').waitFor({ state: 'detached' });
+  await page.waitForFunction(frame => !frame.isConnected, leavingFrame);
+  await page.locator('iframe').waitFor({ state: 'hidden' });
   assert.equal(await page.evaluate(() => window.__refreshes), refreshesBeforeLeave + 1);
   await page.getByText('Cabinet fixture', { exact: true }).waitFor();
   assert.equal(await page.evaluate(() => window.__exits), 1);
@@ -185,22 +196,24 @@ for (const alreadyCompleted of [false, true]) test(`guest invitation ${alreadyCo
   await page.goto(origin + '/?screen=invitation&cp=guest#invite=fixture-secret');
   if (!alreadyCompleted) {
     await enterCandidate(page);
+    const leavingFrame = await page.locator('iframe').elementHandle();
     await page.frameLocator('iframe').getByRole('button', { name: 'Leave fixture' }).click();
+    await page.waitForFunction(frame => !frame.isConnected, leavingFrame);
     await page.getByRole('heading', { name: 'Вы вышли из встречи', exact: true }).waitFor();
     assert.equal(new URL(page.url()).searchParams.get('cp'), 'guest');
     assert.equal(commands.filter(c => c.path.endsWith('/guest/join')).length, 1);
     completed = true;
     await page.getByRole('button', { name: 'Проверить завершение', exact: true }).click();
   }
-  await page.getByRole('heading', { name: 'Спасибо за разговор', exact: true }).waitFor();
-  assert.equal(commands.some(c => c.path.endsWith('/guest/continue')), false, 'Reading completion must not send mail');
-  await page.getByRole('button', { name: 'Завершить регистрацию', exact: true }).click();
-  await page.getByRole('status').getByText('Отправляем доступ на почту, указанную при записи.').waitFor();
+  await page.getByRole('heading', { name: 'Встреча завершилась', exact: true }).waitFor();
+  await page.getByRole('status').getByText('Отправляем письмо', { exact: true }).waitFor();
   assert.deepEqual(commands.filter(c => c.path.endsWith('/guest/continue')),
     [{ path: '/api/hr/candidate/guest/continue', body: { token: 'fixture-secret' } }]);
   assert.equal(await page.getByRole('button', { name: 'Завершить регистрацию', exact: true }).count(), 0);
-  await page.getByRole('button', { name: 'Войти с данными из письма', exact: true }).click();
-  await page.waitForURL(url => url.searchParams.get('cp') === 'login');
+  assert.equal(await page.getByRole('button', { name: 'Войти с данными из письма', exact: true }).count(), 0);
+  assert.equal(new URL(page.url()).searchParams.get('cp'), 'guest');
+  assert.equal(await page.locator('iframe').count(), 0);
+  assert.equal(commands.filter(command => command.path.endsWith('/guest/join')).length, alreadyCompleted ? 0 : 1);
   assert.equal(new URL(page.url()).hash, '');
   await assertNoLegacyMedia(page);
 });
@@ -217,12 +230,13 @@ test('a late join response after local cancellation cannot remount the SDK or ca
   await page.getByRole('checkbox').check();
   await page.getByRole('button', { name: 'Присоединиться', exact: true }).click();
   await captured;
-  assert.equal(await page.getByRole('dialog').locator('iframe').count(), 0);
+  assert.equal(await page.getByRole('dialog').locator('iframe').count(), 1);
+  assert.equal(await page.locator('iframe').evaluate(frame => frame.contentWindow.commands.some(command => command.type === 'join')), false);
   await page.getByRole('dialog').getByRole('status').getByText('Получаем доступ к встрече…', { exact: true }).waitFor();
   const aborted = page.waitForEvent('requestfailed', request => request.url().endsWith('/interview/join'));
   await page.getByRole('button', { name: 'Отменить', exact: true }).click();
   release(); await aborted; await settle(page);
-  assert.equal(await page.locator('iframe').count(), 0);
+  await assertPreparedOnly(page);
   assert.equal(await page.getByRole('button', { name: 'Присоединиться', exact: true }).isEnabled(), true);
   await page.route('**/api/hr/candidate/interview/materials', route => route.fulfill({ json: { recordings: [], transcripts: [] } }));
   await page.evaluate(() => window.completeFixture());
@@ -271,8 +285,10 @@ test('compact employer uses one consent and releases the prejoin dialog before t
   assert.notEqual(await page.locator('body').evaluate(element => getComputedStyle(element).pointerEvents), 'none');
   assert.deepEqual(commands.find(command => command.path.endsWith('/room')).body,
     { vacancyId: 'vacancy-1', candidate: 'candidate-1', meetingId: 'meeting-1', generation: 'fixture-generation', consent: true });
+  const leavingFrame = await page.locator('iframe').elementHandle();
   await page.frameLocator('iframe').getByRole('button', { name: 'Leave fixture' }).click();
-  await page.locator('iframe').waitFor({ state: 'detached' });
+  await page.waitForFunction(frame => !frame.isConnected, leavingFrame);
+  await page.locator('iframe').waitFor({ state: 'hidden' });
   await settle(page);
   assert.equal(await page.locator('.cj-app').evaluate(element => element.inert), false);
   assert.equal(await page.getByRole('button', { name: 'Вернуться во встречу', exact: true }).isEnabled(), true);
@@ -330,9 +346,11 @@ test('employer selector saves exact meeting; bookkeeping errors stay outside the
   await page.waitForFunction(() => document.querySelector('select')?.disabled === true);
   // A native host leave/end report reconciles the exact meeting, never ends it.
   const reconciliation = page.waitForResponse(response => response.url().endsWith('/call-reconcile'));
+  const leavingFrame = await page.locator('iframe').elementHandle();
   await page.frameLocator('iframe').getByRole('button', { name: 'Leave fixture' }).click();
   await reconciliation;
-  await page.locator('iframe').waitFor({ state: 'detached' });
+  await page.waitForFunction(frame => !frame.isConnected, leavingFrame);
+  await page.locator('iframe').waitFor({ state: 'hidden' });
   await settle(page);
   assert.deepEqual(commands.find(command => command.path.endsWith('/call-reconcile')),
     { path: '/api/hr/employer/call-reconcile', body: { vacancyId: 'vacancy-1', applicationId: 'application-1',
@@ -389,8 +407,10 @@ test('an employer joining with guest credentials never pins or completes the hos
   await waitJoined(page);
   await assertNativeOnlyOverlay(page);
   assert.equal(await page.getByRole('button', { name: 'Завершить встречу', exact: true }).count(), 0);
+  const leavingFrame = await page.locator('iframe').elementHandle();
   await page.frameLocator('iframe').getByRole('button', { name: 'Leave fixture' }).click();
-  await page.locator('iframe').waitFor({ state: 'detached' });
+  await page.waitForFunction(frame => !frame.isConnected, leavingFrame);
+  await page.locator('iframe').waitFor({ state: 'hidden' });
   assert.equal(await page.getByRole('button', { name: 'Завершить встречу', exact: true }).count(), 0);
   assert.equal(commands.some(command => command.path.endsWith('/call-connected') || command.path.endsWith('/call-reconcile') || command.body?.action === 'meeting.finish'), false);
   assert.equal(await page.evaluate(() => window.__completions), 0);
@@ -420,9 +440,11 @@ test('native host leave polls the exact meeting and completes only after server 
   await waitJoined(page);
   await assertNativeOnlyOverlay(page);
   const firstReconciliation = page.waitForResponse(response => response.url().endsWith('/call-reconcile'));
+  const leavingFrame = await page.locator('iframe').elementHandle();
   await page.frameLocator('iframe').getByRole('button', { name: 'Leave fixture' }).click();
   await firstReconciliation;
-  await page.locator('iframe').waitFor({ state: 'detached' });
+  await page.waitForFunction(frame => !frame.isConnected, leavingFrame);
+  await page.locator('iframe').waitFor({ state: 'hidden' });
   await settle(page);
   assert.equal(reconciliations, 1);
   assert.equal(await page.evaluate(() => window.__completions), 0);

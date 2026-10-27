@@ -54,6 +54,7 @@ jobs:
         working-directory: interface-lab
         run: |
           npm run typecheck
+          node --experimental-vm-modules --test scripts/zoom-client.test.mjs
           node scripts/transcript-check.mjs
           node --test scripts/recording-transcript.test.ts
           node --test scripts/observability-privacy.test.ts
@@ -123,6 +124,9 @@ jobs:
         working-directory: interface-lab
         run: |
           npm run build
+          node --test scripts/zoom-build.test.mjs
+          npx playwright install --with-deps chromium
+          node --test scripts/zoom-frame.component.test.mjs scripts/zoom-participant.component.test.mjs scripts/zoom-recruiter.component.test.mjs scripts/zoom-portal.component.test.mjs scripts/zoom-sdk.browser.test.mjs
           node scripts/package-release.mjs
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

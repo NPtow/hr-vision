@@ -92,8 +92,8 @@ RUNTIME_LAYOUTS.add(frozenset(PRE_MATERIALS_LIFECYCLE_RUNTIME))
 RUNTIME_LAYOUTS.add(frozenset(PRE_RECOMMENDATION_LIFECYCLE_RUNTIME))
 RUNTIME_LAYOUTS.add(frozenset(PRE_SELECTION_INTERVIEWS_RUNTIME))
 RUNTIME_LAYOUTS.add(frozenset(PRE_INTAKE_REVIEW_RUNTIME))
-MAX_ARCHIVE = 50 * 1024 * 1024
-MAX_CONTENT = 120 * 1024 * 1024
+MAX_ARCHIVE = 96 * 1024 * 1024
+MAX_CONTENT = 256 * 1024 * 1024
 
 
 def require(value, message):
@@ -143,7 +143,8 @@ def unpack(archive, destination, target):
                 require(name.startswith('ui/') and not any(part.startswith('.') for part in PurePosixPath(rel).parts), 'Unexpected public path')
                 require(re.search(r'\.(js|css|svg|woff2?|ttf|png|jpe?g|webp|ico|gif)$', rel)
                         or rel in {'index.html', 'iframe.html', 'index.json', 'project.json', 'deployment.json'}
-                        or rel in {'call/zoom/client.html', 'call/zoom/left.html'}
+                        or rel in {'call/zoom/client.html', 'call/zoom/left.html', 'call/zoom/helper.html', 'call/zoom/externalLinkPage.html', 'call/zoom/bootstrap.json'}
+                        or re.fullmatch(r'call/zoom/vendor/6\.10\.0/(lib|ui)/[\w./-]+\.(wasm|json|mp3|wav|bin)', rel)
                         or (target == 'mockups' and rel == 'presentations/hrds-2026-10-07/index.html')
                         or rel.endswith('.LICENSE.txt'), 'Unexpected public file')
         require({'ui/index.html', 'ui/iframe.html', 'ui/index.json', 'ui/deployment.json'} <= files.keys(), 'Missing UI files')
@@ -454,18 +455,24 @@ def check_origin(target, sha):
 
 
 def retain_replay_assets(previous, destination):
-    """Keep missing public replay assets for 25h without duplicating their bytes."""
+    """Keep replay resources and assets used by open Zoom tabs for 25h."""
     if previous is None or not previous.is_dir():
         return
     now = time.time()
     ledger = previous / '.replay-assets.json'
     expiries = json.loads(ledger.read_text()) if ledger.exists() else {}
     retained = {}
-    for source in (previous / 'assets').rglob('*'):
+    candidates = [*(previous / 'assets').rglob('*'),
+                  *(previous / 'call/zoom/assets').rglob('*'),
+                  *(previous / 'call/zoom/vendor').rglob('*')]
+    for source in candidates:
         name = source.relative_to(previous).as_posix()
-        if source.is_symlink() or not source.is_file() or source.suffix.lower() not in {
+        replay = name.startswith('assets/') and source.suffix.lower() in {
             '.css', '.woff', '.woff2', '.ttf', '.otf', '.svg', '.png', '.webp', '.ico',
-        }:
+        }
+        zoom = re.fullmatch(r'call/zoom/assets/[\w.-]+-[\w-]{8}\.(js|css)', name) or re.fullmatch(
+            r'call/zoom/vendor/\d+\.\d+\.\d+/(lib|ui)/[\w./-]+\.(js|css|json|wasm|woff2?|ttf|svg|png|jpe?g|webp|ico|gif|mp3|wav|bin)', name)
+        if source.is_symlink() or not source.is_file() or not (replay or zoom):
             continue
         output = destination / name
         expires = expiries.get(name, now + 25 * 3600)

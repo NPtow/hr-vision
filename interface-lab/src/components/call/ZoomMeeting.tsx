@@ -30,13 +30,14 @@ export function ZoomMeeting(props: Props) {
   const [consent, setConsent] = useState(false);
   const [opened, setOpened] = useState(false);
   const [credentials, setCredentials] = useState<ZoomCredentials | null>(null);
+  const [frameGeneration, setFrameGeneration] = useState(0);
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
   function close() {
     active.current = false;
     request.current?.abort(); request.current = null;
     receipt.current?.(); receipt.current = null;
-    setCredentials(null); setOpened(false);
+    setCredentials(null); setOpened(false); setFrameGeneration(value => value + 1);
   }
   function back() { close(); callbacks.current.onBack?.(); }
   useEffect(() => {
@@ -81,6 +82,7 @@ export function ZoomMeeting(props: Props) {
     }
   }
   function joined() {
+    setError('');
     const current = request.current;
     // Optional product updates cannot throw into the SDK or replace its iframe.
     void Promise.resolve().then(() => callbacks.current.onJoined?.()).catch(() => {
@@ -113,9 +115,9 @@ export function ZoomMeeting(props: Props) {
       <button disabled={!consent || !!props.unavailable || props.completed || opened} onClick={() => void join()}>Присоединиться</button>
       {props.onBack && <button onClick={back}>Вернуться</button>}
     </div>}
-    {opened && createPortal(<div className="agency-product agency-product-theme md-zoom-overlay" role="dialog" aria-modal="true" aria-label={props.title}>
-      {credentials ? <ZoomCallFrame credentials={credentials} onJoined={joined} onLeft={left} onError={setError}/>
-        : <div className="md-zoom-after-call"><p role="status">Получаем доступ к встрече…</p><button onClick={close}>Отменить</button></div>}
+    {(!props.unavailable || opened) && (!props.completed || opened) && createPortal(<div hidden={!opened} style={!opened ? { display: 'none' } : undefined} className="agency-product agency-product-theme md-zoom-overlay" role="dialog" aria-modal="true" aria-label={props.title}>
+      <ZoomCallFrame key={frameGeneration} credentials={credentials} onJoined={joined} onLeft={left} onError={setError}/>
+      {opened && !credentials && <div className="md-zoom-after-call md-zoom-access-pending"><p role="status">Получаем доступ к встрече…</p><button onClick={close}>Отменить</button></div>}
       {error && credentials && <div className="md-zoom-recovery"><button onClick={close}>Вернуться к подключению</button></div>}
     </div>, document.body)}
   </div>;
