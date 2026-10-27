@@ -114,8 +114,12 @@ class IntakeReviewTest(unittest.TestCase):
         corpus = self.core.calls[0][2]['corpus']
         self.assertEqual(corpus['candidate_id'], 'dsa-panel:123')
         self.assertEqual(corpus['sources'][0]['units'][0]['text'], profile()['cvText'])
-        self.assertEqual(corpus['sources'][1]['units'],
-            [{'unit_id': 'transcript', 'text': profile()['transcriptText'], 'role': 'unknown'}])
+        units = corpus['sources'][1]['units']
+        self.assertEqual(len(units), 1)
+        table = json.loads(units[0]['text'])
+        self.assertEqual(table['columns'], ['start_ms', 'end_ms', 'speaker', 'text'])
+        self.assertEqual(table['rows'], [[0, 2000, 'Рекрутер', 'Как действовали?'],
+            [2000, 8000, 'Кандидат', 'Уточнил задачу и согласовал следующий шаг.']])
         with self.connect() as db:
             view = review.projection(db, 'a', self.va, self.cid)
             self.assertEqual(view['status'], 'pending')
