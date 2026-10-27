@@ -68,8 +68,6 @@ def env(tmp_path):
     connect = lambda: sqlite3.connect(path)
     with connect() as db:
         db.executescript("""
-          CREATE TABLE em_intake_candidates(id TEXT PRIMARY KEY,workspace_id TEXT,vacancy_id TEXT,body TEXT);
-          CREATE TABLE em_vacancies(vacancy_id TEXT,workspace_id TEXT,archived_at TEXT);
           CREATE TABLE cp_candidates(id TEXT PRIMARY KEY,email TEXT,password_hash TEXT,profile TEXT,created_at TEXT,updated_at TEXT);
           CREATE TABLE cp_interviews(id TEXT PRIMARY KEY,candidate_id TEXT,status TEXT,room TEXT,created_at TEXT,completed_at TEXT);
           CREATE TABLE cp_applications(id TEXT PRIMARY KEY,candidate_id TEXT,status TEXT);

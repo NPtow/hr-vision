@@ -14,7 +14,6 @@ const wheelLabels: Record<string, string> = {
   A01: 'Диалог', A03: 'Квалификация', A04: 'Задача', A07: 'Следующий шаг',
   A08: 'CRM', A10: 'Продукт', 'NEW-01': 'Передача',
   'A06.1': 'Возражения', 'A11.1': 'Адаптация',
-  A05: 'Ценность', 'A06.2': 'Условия',
 };
 
 function point(angle: number, radius: number) {
@@ -28,9 +27,9 @@ function nearestAngle(current: number, target: number) {
 
 const scoreRadius = (value: number) => INNER_RADIUS + (value - 1) / 4 * (OUTER_RADIUS - INNER_RADIUS);
 
-/** Rotation chooses a skill; only the radial length encodes its score. */
+/** Rotation chooses an evidenced skill; only the radial length encodes its score. */
 export function OrbitGraph({ criteria, selectedId, onSelect, onEvidence }: AssessmentGraphProps) {
-  const available = criteria.filter(criterion => criterion.state !== 'not_applicable');
+  const available = criteria.filter(criterion => criterion.evidence.length > 0);
   const activeIndex = Math.max(0, available.findIndex(criterion => criterion.id === selectedId));
   const active = available[activeIndex];
   const value = active ? graphValue(active) : null;
@@ -63,9 +62,9 @@ export function OrbitGraph({ criteria, selectedId, onSelect, onEvidence }: Asses
     controls.current[next]?.focus({ preventScroll: true });
   }
 
-  if (!active) return <div className="ia-orbit ia-orbit--empty"><p>Пока нет фрагментов для анализа навыков.</p></div>;
+  if (!active || !source) return <div className="ia-orbit ia-orbit--empty"><p>Пока нет фрагментов для анализа навыков.</p></div>;
 
-  const explanation = source?.explanation?.trim() || active.summary.trim() || source?.text || active.missingReason || 'В интервью недостаточно данных для оценки этого навыка.';
+  const explanation = source.explanation?.trim() || active.summary.trim() || source.text;
   const chooseSource = (index: number) => {
     const next = active.evidence[index];
     if (next) setSourceId(next.id);
@@ -122,7 +121,7 @@ export function OrbitGraph({ criteria, selectedId, onSelect, onEvidence }: Asses
           {available.map(criterion => <option key={criterion.id} value={criterion.id}>{skillName(criterion)}</option>)}
         </select> : <h3>{skillName(active)}</h3>}
         <div className="ia-orbit__explanation" aria-live="polite" aria-atomic="true">
-          <motion.p key={`${active.id}:${source?.id || 'unassessed'}`} initial={reduced ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: reduced ? 0 : 0.14 }}>{explanation}</motion.p>
+          <motion.p key={`${active.id}:${source.id}`} initial={reduced ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: reduced ? 0 : 0.14 }}>{explanation}</motion.p>
         </div>
         <div className="ia-orbit__footer">
           {active.evidence.length > 1 && <nav className="ia-orbit__pages" aria-label="Фрагменты выбранного навыка">
@@ -134,10 +133,10 @@ export function OrbitGraph({ criteria, selectedId, onSelect, onEvidence }: Asses
               <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 4 4 4-4 4"/></svg>
             </button>
           </nav>}
-          {onEvidence && source && source.sourceKind !== 'resume' && source.availability !== 'unavailable' && source.availability !== 'text_only' && source.seconds !== null && Number.isFinite(source.seconds) && source.seconds >= 0 ? <button type="button" className="ia-orbit__source" aria-label={`Открыть фрагмент ${source.time || 'в расшифровке'}`} onClick={() => onEvidence(source, active.id)}>
+          {onEvidence && source.sourceKind !== 'resume' && source.availability !== 'unavailable' && source.availability !== 'text_only' && source.seconds !== null && Number.isFinite(source.seconds) && source.seconds >= 0 ? <button type="button" className="ia-orbit__source" aria-label={`Открыть фрагмент ${source.time || 'в расшифровке'}`} onClick={() => onEvidence(source, active.id)}>
             <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.5 12 8l-7 4.5Z"/></svg>
             <span>{source.time || 'К источнику'}</span>
-          </button> : <span className="ia-orbit__source-time">{source ? source.sourceKind === 'resume' ? 'Резюме' : source.time || 'Без таймкода' : 'Нет подтверждённого фрагмента'}</span>}
+          </button> : <span className="ia-orbit__source-time">{source.sourceKind === 'resume' ? 'Резюме' : source.time || 'Без таймкода'}</span>}
         </div>
       </div>
     </div>

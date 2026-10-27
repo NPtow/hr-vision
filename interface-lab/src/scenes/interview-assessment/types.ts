@@ -6,9 +6,6 @@ export type AssessmentEvidence = {
   seconds: number | null;
   endSeconds?: number;
   sourceId?: string;
-  /** Clock and voice identity are local to this immutable recording/version. */
-  recordingId?: string;
-  transcriptId?: string;
   turnIds?: number[];
   sourceKind?: 'interview' | 'resume';
   availability?: 'ready' | 'text_only' | 'unavailable';
@@ -48,7 +45,6 @@ export type AssessmentPresentation = {
   revisionId: string;
   criteria: AssessmentCriterion[];
   feedback: FragmentFeedback[];
-  vacancyMatch?: { revisionId: string; requiresReview: true; criteria: { id: string; label: string; status: 'evidenced' | 'clarify' | 'not_required' }[] };
   saveFeedback: (target: FeedbackTarget, opinion: FragmentOpinion, expectedVersion: number) => Promise<FragmentFeedback>;
 };
 

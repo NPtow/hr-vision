@@ -1,0 +1,39 @@
+/* Comparison chrome only. Each designer owns a separate scoped stylesheet. */
+.review-design-lab{min-height:100dvh;--review-gutter:28px;--review-columns:minmax(0,1.85fr) minmax(310px,1fr)}
+.review-design-lab .feedback-lab__toolbar{left:215px;right:150px;gap:10px}
+.review-design-lab__choices{display:flex;align-items:center;gap:2px;min-width:0;padding:3px;background:#eae8ef;border-radius:10px}
+.review-design-lab__choices button{min-height:30px;padding:6px 9px;border:0;border-radius:7px;background:transparent;color:#6d6679;font:500 12px/18px 'Inter Variable',Inter,sans-serif;white-space:nowrap;cursor:pointer;transition:background 140ms,color 140ms}
+.review-design-lab__choices button[aria-pressed=true]{background:#fff;color:#292531;box-shadow:0 1px 3px #25203012}
+.review-design-lab__choices button:hover{color:#252127}
+.review-design-lab__info{flex:none;display:grid;place-items:center;width:28px;height:28px;border:0;border-radius:8px;background:transparent;color:#716a7c;cursor:pointer}
+.review-design-lab .feedback-lab__candidate{margin-left:auto}
+.review-design-lab .feedback-lab__candidate select{max-width:180px}
+.review-design-lab .feedback-lab__local{display:none}
+.review-design-lab__select{display:none;align-items:center;gap:8px;font-size:12px;color:#6d6679}
+.review-design-lab__select select{max-width:180px;padding:7px 10px;border:0;border-radius:8px;background:#fff;color:#292531;font:inherit;font-weight:550}
+.review-design-lab__about{position:absolute;top:62px;left:225px;z-index:90;width:350px;padding:24px;background:#fff;color:#2b2730;border-radius:16px;box-shadow:0 12px 45px #28203126;font:14px/1.5 'Inter Variable',Inter,sans-serif}
+.review-design-lab__about>button{position:absolute;right:12px;top:12px;display:grid;place-items:center;width:28px;height:28px;border:0;border-radius:8px;background:#f4f3f7;color:#746b80;cursor:pointer}
+.review-design-lab__about h2{margin:0 24px 12px 0;font-size:20px;line-height:26px;font-weight:600}
+.review-design-lab__about p{margin:0 0 12px}
+.review-design-lab__about div{display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:16px}
+.review-design-lab__about a{color:#6a4c99;text-underline-offset:3px;font-size:12px}
+.review-design-lab :is(.review-design-lab__choices button,.review-design-lab__info,.review-design-lab__select select):focus-visible{outline:2px solid #8061ae;outline-offset:3px}
+
+/* Remove the former detached mark. Designers provide selected states using
+   the real aria-pressed attribute, with no synthetic text or hidden action. */
+.review-design-lab .feedback-lab[data-feedback-variant=tiles] .iv-root .iv-fragment-answers button[aria-pressed=true]::before{content:none}
+.review-design-lab .ecp-invite-primary>svg{display:none}
+
+@media(min-width:861px){
+ .review-design-lab .ecp-review-footer{grid-template-columns:var(--review-columns);column-gap:var(--review-gutter)}
+ .review-design-lab .ecp-decision-actions{grid-column:2;width:100%;min-width:0}
+}
+@media(max-width:1280px){.review-design-lab__choices{display:none}.review-design-lab__select{display:flex}}
+@media(max-width:1100px) and (min-width:861px){.review-design-lab{--review-gutter:22px;--review-columns:minmax(0,1.55fr) minmax(290px,1fr)}}
+@media(max-width:860px){
+ .review-design-lab .feedback-lab__toolbar{left:auto;right:auto;padding-inline:12px}
+ .review-design-lab .feedback-lab__candidate select{max-width:140px}
+ .review-design-lab__select>span{display:none}
+ .review-design-lab__about{left:16px;right:16px;top:60px;width:auto}
+}
+@media(prefers-reduced-motion:reduce){.review-design-lab__choices button{transition:none}}

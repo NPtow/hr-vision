@@ -55,7 +55,7 @@ export function FragmentQuestion({ assessment, block, overlapping, playing, comm
     <div className="iv-fragment-actions">
       <div className="iv-fragment-answers" role="group" aria-label="Ваш ответ на вопрос">
         {answers.map(answer => <button type="button" key={answer.value} data-answer={answer.value} aria-pressed={draft.opinion.answer === answer.value}
-          disabled={busy} onClick={() => { void feedback.save(target, { ...draft.opinion, answer: answer.value }); }}>{answer.label}</button>)}
+          disabled={busy} onClick={() => { void feedback.save(target, { ...draft.opinion, answer: answer.value }); }}><span className="iv-answer-label">{answer.label}</span></button>)}
       </div>
       <button type="button" className="iv-fragment-comment" aria-label="Пояснить" aria-expanded={commentOpen} onClick={commentOpen ? onCommentClose : onCommentOpen}>
         <MessageSquare size={14}/><span>Пояснить</span>

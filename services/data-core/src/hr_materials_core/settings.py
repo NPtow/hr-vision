@@ -34,7 +34,7 @@ class Settings:
         configured = json.loads(env.get("CORE_PRINCIPALS_JSON", "[]"))
         principals = {}
         for value in configured:
-            allowed = {"token", "name", "role", "provider", "connection_id", "candidate_ids", "workspace_ids"}
+            allowed = {"token", "name", "role", "provider", "connection_id", "candidate_ids"}
             if not isinstance(value, dict) or not set(value) <= allowed or not {"token", "name", "role"} <= set(value):
                 raise ValueError("invalid_principal_configuration")
             item = value.copy()
@@ -46,11 +46,6 @@ class Settings:
                 if not isinstance(ids, list) or any(not isinstance(x, str) or not x for x in ids):
                     raise ValueError("invalid_candidate_scope")
                 item["candidate_ids"] = frozenset(ids)
-            if "workspace_ids" in item:
-                ids = item["workspace_ids"]
-                if not isinstance(ids, list) or any(not isinstance(x, str) or not x for x in ids):
-                    raise ValueError("invalid_workspace_scope")
-                item["workspace_ids"] = frozenset(ids)
             principals[token] = Principal(**item)
         return cls(database_path=env.get("CORE_HR_DATABASE", ""), principals=principals,
             default_connections=json.loads(env.get("CORE_DEFAULT_CONNECTIONS_JSON", '{"daily":"daily","zoom":"zoom"}')),

@@ -76,6 +76,7 @@
 .iv-tabs{display:flex;align-items:center;background:#f3f3f3;border-radius:30px;height:40px;padding:3px;flex-shrink:0}
 .iv-tabs>button{height:34px;width:44px;display:grid;place-items:center;border-radius:50px;color:#a0a0a0;position:relative;transition:background .18s,color .18s,box-shadow .18s}
 .iv-tabs svg{width:18px;height:18px;stroke-width:1.7}
+.iv-tab-label{display:none}
 .iv-tabs>button[aria-selected=true]{background:#fff;color:#151515;box-shadow:0 1px 4px #00000016}
 .iv-tabs>button:hover{color:#111}
 .iv-comment-dot{position:absolute;right:10px;top:7px;width:4px;height:4px;border-radius:50%;background:var(--iv-accent)}
@@ -550,8 +551,3 @@ to{opacity:1;margin-bottom:0}
 .iv-chapter-description{margin:0 0 18px;color:#969099;font-size:12px;line-height:1.6}
 @media(prefers-reduced-motion:reduce){.iv-root .iv-chapter-trigger,.iv-root .iv-chapter-outline{scroll-behavior:auto}}
 @media(prefers-contrast:more){.iv-transcript-heading h3,.iv-root .iv-chapter-trigger,.iv-chapter-heading-title{color:#44354f!important}.iv-root .iv-chapter-outline>button{color:#51445c}}
-.iv-vacancy-match { margin: 0 24px 24px; font-size: 14px; line-height: 1.5; }
-.iv-vacancy-match summary { cursor: pointer; font-weight: 600; }
-.iv-vacancy-match ul { padding: 0; list-style: none; }
-.iv-vacancy-match li { display: flex; justify-content: space-between; gap: 24px; margin: 12px 0; }
-.iv-vacancy-match li span:last-child { color: var(--text-secondary, #72717a); text-align: right; }

@@ -1,9 +1,7 @@
 export type CallProvider = 'daily' | 'zoom';
 export type CallProviderOption = { id: CallProvider; available: boolean };
 export type CallProviderMeeting = {
-  // null is an explicit completed materials source without a callable room.
-  // Undefined retains compatibility with historical Daily meeting DTOs.
-  callProvider?: CallProvider | null;
+  callProvider?: CallProvider;
   callProviderLocked?: boolean;
   callProviderOptions?: CallProviderOption[];
   videoConfigured?: boolean;

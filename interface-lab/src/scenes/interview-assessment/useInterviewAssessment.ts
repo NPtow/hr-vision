@@ -2,18 +2,14 @@ import { useEffect, useMemo, useState } from 'react';
 import type { AssessmentEvidence, AssessmentPresentation, FeedbackTarget } from './types';
 import { blocksAtTime, feedbackBlocks, initialFeedbackPlayback, reduceFeedbackPlayback, visibleFeedbackBlock, type FeedbackEvent, type FeedbackPlayback } from './fragment-feedback';
 
-export function useInterviewAssessment(assessment: AssessmentPresentation | undefined, current: number, playing: boolean, recordingId?: string) {
-  const revision = JSON.stringify([assessment?.revisionId ?? '', recordingId ?? '']);
-  const blocks = useMemo(() => feedbackBlocks(assessment?.criteria ?? [], recordingId), [assessment?.criteria, recordingId]);
+export function useInterviewAssessment(assessment: AssessmentPresentation | undefined, current: number, playing: boolean) {
+  const revision = assessment?.revisionId ?? '';
+  const blocks = useMemo(() => feedbackBlocks(assessment?.criteria ?? []), [assessment?.criteria]);
   const [state, setState] = useState<{ revision: string; playback: FeedbackPlayback }>({ revision, playback: initialFeedbackPlayback });
   const [selection, setSelection] = useState({ revision, id: '' });
   const playback = state.revision === revision ? state.playback : initialFeedbackPlayback;
-  const selectable = useMemo(() => {
-    const criteria = assessment?.criteria ?? [];
-    return criteria.filter(criterion => criterion.state !== 'not_applicable');
-  }, [assessment?.criteria]);
-  const selectedId = selection.revision === revision && selectable.some(criterion => criterion.id === selection.id)
-    ? selection.id : selectable[0]?.id ?? '';
+  const selectedId = selection.revision === revision && assessment?.criteria.some(criterion => criterion.id === selection.id && criterion.evidence.length)
+    ? selection.id : assessment?.criteria.find(criterion => criterion.evidence.length)?.id ?? '';
 
   function dispatch(event: FeedbackEvent) {
     setState(previous => ({ revision, playback: reduceFeedbackPlayback(previous.revision === revision ? previous.playback : initialFeedbackPlayback, event, blocks) }));

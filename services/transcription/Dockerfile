@@ -2,8 +2,6 @@ FROM python:3.12.13-slim-bookworm
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTHONPATH=/app/src
 WORKDIR /app
 COPY requirements.lock ./requirements.lock
-RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
-    && rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir --require-hashes -r requirements.lock \
     && groupadd --gid 10001 transcription \
     && useradd --uid 10001 --gid transcription --no-create-home transcription \

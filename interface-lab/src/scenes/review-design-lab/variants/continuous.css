@@ -1,0 +1,511 @@
+/* Continuous: one family of selection surfaces, with the video left intact. */
+.review-design-lab[data-review-design="continuous"] {
+  --continuous-ink: #29252f;
+  --continuous-muted: #716a7a;
+  --continuous-accent: #6b50a0;
+  --continuous-selected: #ece7f5;
+  --continuous-panel: #fff;
+  --continuous-control: #f0eef4;
+  --continuous-radius: 12px;
+  --continuous-gap: 8px;
+  --continuous-inset: 16px;
+}
+
+/* One alignment system contains all three modes; grouping lives in controls. */
+.review-design-lab[data-review-design="continuous"] .iv-root:not(.iv-full) .iv-sidebar {
+  padding: 0 0 62px !important;
+  background: transparent;
+  border-radius: 0;
+  color: var(--continuous-ink);
+  scrollbar-color: #cec8d8 transparent;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .iv-side-heading {
+  height: 56px !important;
+  min-height: 56px;
+  gap: 8px;
+  align-items: flex-start;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .iv-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+  padding: 3px;
+  border-radius: 12px;
+  background: #eae7ef;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .iv-tabs > button {
+  width: auto;
+  height: 34px;
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  padding: 0 5px;
+  border-radius: 9px;
+  color: #716b79;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  white-space: nowrap;
+  transition: color 140ms, background-color 140ms, box-shadow 140ms;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .iv-tabs > button > svg {
+  display: none;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .iv-tabs .iv-tab-label {
+  display: block;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .iv-tabs > button[aria-selected="true"] {
+  background: #fff;
+  color: var(--continuous-ink);
+  box-shadow: 0 2px 4px #31263e0d;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .iv-tabs > button:hover:not([aria-selected="true"]) {
+  color: var(--continuous-accent);
+  background: #f6f4fa;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .iv-panel-hide {
+  margin: 0;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: var(--continuous-radius);
+  background: #eeebf2;
+  color: var(--continuous-muted);
+  box-shadow: none;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .iv-panel-hide:hover {
+  background: var(--continuous-selected);
+  color: var(--continuous-accent);
+}
+
+/* Transcript and assistant inherit the exact same content and input edges. */
+.review-design-lab[data-review-design="continuous"] .iv-root .iv-unified-transcript {
+  padding: 0 0 20px;
+  mask-image: none;
+  scrollbar-width: thin;
+  scrollbar-color: #cec8d8 transparent;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .iv-transcript-heading {
+  margin-bottom: 16px;
+  background: var(--continuous-panel);
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .iv-chapter-trigger,
+.review-design-lab[data-review-design="continuous"] .iv-root .iv-chapter-heading-title {
+  min-height: 36px;
+  padding: 8px 0 !important;
+  color: var(--continuous-ink) !important;
+  font-size: 14px !important;
+  line-height: 20px;
+  font-weight: 560 !important;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .iv-chapter-description {
+  color: var(--continuous-muted);
+  font-size: 13px;
+  line-height: 20px;
+  margin-bottom: 16px;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .iv-line {
+  margin-bottom: 16px;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .iv-line-content {
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 12px;
+  font-size: 14px !important;
+  line-height: 21px;
+  color: #77717d !important;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .iv-line-content time {
+  font-size: 12px;
+  line-height: 21px;
+  letter-spacing: 0;
+  color: #77717d;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .iv-line[data-active="true"] .iv-line-content {
+  color: var(--continuous-ink) !important;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .iv-line[data-active="true"] .iv-line-content time {
+  color: var(--continuous-accent);
+  font-weight: 560;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .iv-chat-scroll {
+  padding: 0 0 12px;
+  scrollbar-width: thin;
+  scrollbar-color: #cec8d8 transparent;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .iv-chat-suggestions {
+  gap: 8px;
+  padding: 0;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .iv-chat-suggestions > button {
+  min-height: 44px;
+  padding: 12px 14px;
+  border-radius: var(--continuous-radius);
+  background: #eeebf2;
+  color: #5c5467;
+  font-size: 14px;
+  line-height: 20px;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .iv-chat-suggestions > button:hover {
+  background: var(--continuous-selected);
+  color: var(--continuous-accent);
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .iv-chat-question {
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  border-radius: var(--continuous-radius);
+  background: #eeebf2;
+  color: #5c5467;
+  font-size: 14px;
+  line-height: 21px;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .iv-chat-answer {
+  font-size: 14px;
+  line-height: 21px;
+  color: var(--continuous-ink);
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .iv-side-input {
+  padding-top: 12px !important;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .iv-assistant-composer {
+  min-height: 44px !important;
+  padding: 6px 6px 6px 12px;
+  gap: 8px;
+  background: #fff;
+  border: 1px solid #e5e0eb;
+  border-radius: var(--continuous-radius);
+  box-shadow: none;
+  color: #756d80;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .iv-assistant-composer input {
+  font-size: 13px;
+  line-height: 20px;
+  padding: 5px 0;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .iv-assistant-composer input::placeholder {
+  color: #7b7385;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .iv-assistant-composer > svg {
+  width: 18px;
+  height: 18px;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .iv-assistant-composer > button {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  color: var(--continuous-accent);
+  background: var(--continuous-selected);
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .iv-assistant-composer > button:disabled {
+  color: #a6a0ae;
+  background: #f3f1f6;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .iv-assistant-composer:focus-within {
+  border-color: var(--continuous-accent);
+  box-shadow: none;
+}
+
+/* Orbit has one compact illustration and one reading block; no empty row. */
+.review-design-lab[data-review-design="continuous"] .iv-root .iv-assessment-panel {
+  padding: 0;
+  scrollbar-width: thin;
+  scrollbar-color: #cec8d8 transparent;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .iv-assessment-panel > .ia-orbit {
+  min-height: 0;
+  height: auto;
+  --orbit-accent: var(--continuous-accent);
+  --orbit-line: #e3dfeb;
+  --orbit-surface: var(--continuous-selected);
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .ia-orbit__body {
+  height: auto;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-content: start;
+  gap: 16px;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .ia-orbit__wheel {
+  width: min(100%, 288px);
+  max-width: 100%;
+  height: auto;
+  aspect-ratio: 400 / 360;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .ia-orbit .ia-orbit__skill {
+  width: auto;
+  min-width: 60px;
+  max-width: 100px;
+  height: 32px;
+  padding: 4px 8px;
+  border-radius: 9px;
+  background: var(--continuous-panel);
+  color: #716a7a;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 450;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .ia-orbit .ia-orbit__skill.is-selected {
+  background: var(--continuous-selected);
+  color: var(--continuous-accent);
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px #d8cde9;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .ia-orbit .ia-orbit__skill:hover {
+  color: var(--continuous-accent);
+  background: #eeebf4;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .ia-orbit__center strong {
+  font-size: 30px;
+  font-weight: 560;
+  line-height: 1.05;
+  color: var(--continuous-ink);
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .ia-orbit__center > span {
+  color: #77707f;
+  font-size: 11px;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .ia-orbit__summary {
+  padding: 0 0 4px;
+  gap: 8px;
+  grid-template-rows: auto auto auto;
+  height: auto;
+  max-height: none;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .ia-orbit .ia-orbit__summary h3 {
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: 600;
+  letter-spacing: -.01em;
+  color: var(--continuous-ink);
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .ia-orbit .ia-orbit__explanation p {
+  font-size: 14px;
+  line-height: 21px;
+  color: #5b5463;
+  letter-spacing: 0;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .ia-orbit__footer {
+  min-height: 36px;
+  margin-top: 4px;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .ia-orbit__pages {
+  margin-right: auto;
+  padding: 3px;
+  gap: 0;
+  border-radius: 10px;
+  background: #eeebf2;
+  color: var(--continuous-muted);
+  font-size: 12px;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .ia-orbit .ia-orbit__pages button {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  color: #5e566b;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .ia-orbit .ia-orbit__pages button:hover:not(:disabled) {
+  background: #fff;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .ia-orbit .ia-orbit__source {
+  min-height: 36px;
+  padding: 8px 12px;
+  gap: 8px;
+  border-radius: 10px;
+  background: var(--continuous-selected);
+  color: var(--continuous-accent);
+  font-size: 13px;
+  line-height: 20px;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .ia-orbit .ia-orbit__source:hover {
+  background: #ded5ee;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .ia-orbit__source svg {
+  width: 12px;
+  height: 12px;
+  transform: translateX(1px);
+}
+
+/* The question keeps the accepted three-row footprint, but has one axis. */
+.review-design-lab[data-review-design="continuous"] .feedback-lab .iv-root .iv-fragment-question {
+  gap: 8px;
+  padding: 0 0 1px;
+  justify-items: center;
+}
+.review-design-lab[data-review-design="continuous"] .feedback-lab .iv-root .iv-fragment-context {
+  min-height: 22px;
+  justify-content: center;
+  gap: 2px;
+  padding: 2px;
+  background: #f0eef4;
+  border-radius: 9px;
+}
+.review-design-lab[data-review-design="continuous"] .feedback-lab .iv-root .iv-fragment-context button {
+  padding: 1px 10px;
+  border: 0;
+  border-radius: 7px;
+  color: #766d82;
+  font-size: 12px;
+  line-height: 18px;
+  transition: background-color 140ms, color 140ms;
+}
+.review-design-lab[data-review-design="continuous"] .feedback-lab .iv-root .iv-fragment-context button[aria-pressed="true"] {
+  color: var(--continuous-accent);
+  background: #fff;
+  box-shadow: 0 1px 3px #31263e0b;
+}
+.review-design-lab[data-review-design="continuous"] .feedback-lab .iv-root .iv-fragment-heading {
+  width: min(100%, 68ch);
+  text-align: center;
+}
+.review-design-lab[data-review-design="continuous"] .feedback-lab .iv-root .iv-fragment-heading p {
+  font-size: 18px;
+  line-height: 24px;
+  font-weight: 450;
+  letter-spacing: -.015em;
+  color: var(--continuous-ink);
+  text-wrap: balance;
+}
+.review-design-lab[data-review-design="continuous"] .feedback-lab .iv-root .iv-fragment-actions {
+  width: min(100%, 544px);
+}
+.review-design-lab[data-review-design="continuous"] .feedback-lab .iv-root .iv-fragment-answers {
+  width: 100%;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 12px;
+  background: #eae7ef;
+  animation: none;
+}
+.review-design-lab[data-review-design="continuous"] .feedback-lab .iv-root .iv-fragment-answers > button {
+  height: 40px;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #6a6176;
+  font-size: 18px;
+  line-height: 22px;
+  font-weight: 450;
+  box-shadow: none;
+  transform: none;
+}
+.review-design-lab[data-review-design="continuous"] .feedback-lab .iv-root .iv-fragment-answers > button:hover:not(:disabled) {
+  background: #f6f4fa;
+  color: var(--continuous-accent);
+}
+.review-design-lab[data-review-design="continuous"] .feedback-lab .iv-root .iv-fragment-answers > button[aria-pressed="true"],
+.review-design-lab[data-review-design="continuous"] .feedback-lab .iv-root .iv-fragment-answers > button[aria-pressed="true"]:hover {
+  color: #5b4188;
+  background: #fff;
+  box-shadow: 0 2px 4px #31263e0d;
+  font-weight: 550;
+}
+.review-design-lab[data-review-design="continuous"] .feedback-lab .iv-root .iv-fragment-answers > button::before,
+.review-design-lab[data-review-design="continuous"] .feedback-lab .iv-root .iv-fragment-answers > button::after {
+  display: none;
+}
+.review-design-lab[data-review-design="continuous"] .feedback-lab .iv-root .iv-fragment-answers > button:active:not(:disabled) {
+  background: #ddd3ed;
+  transform: scale(.985);
+}
+.review-design-lab[data-review-design="continuous"] .feedback-lab .iv-root .iv-fragment-question[data-pulsing="true"] .iv-fragment-context button[aria-pressed="true"] {
+  background: #e9e1f4;
+  box-shadow: none;
+}
+
+/* Decisions share the control geometry and the exact content edges. */
+.review-design-lab[data-review-design="continuous"] .ecp-review-footer {
+  padding: 0 0 1px;
+  background: transparent;
+  border-radius: 0;
+}
+.review-design-lab[data-review-design="continuous"] .ecp-decision-actions {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) minmax(0, 1fr);
+  gap: 8px;
+  justify-content: stretch;
+}
+.review-design-lab[data-review-design="continuous"] .ecp-profile .ecp-decision-actions > [data-slot="button"],
+.review-design-lab[data-review-design="continuous"] .ecp-profile .ecp-decision-actions > [data-slot="button"].ecp-invite-primary {
+  min-width: 0;
+  height: 44px;
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: var(--continuous-radius);
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 500;
+  white-space: nowrap;
+  justify-content: center;
+  box-shadow: none;
+}
+.review-design-lab[data-review-design="continuous"] .ecp-profile .ecp-decision-actions > [data-slot="button"].ecp-invite-primary {
+  background: #29252f;
+  color: #fff;
+}
+.review-design-lab[data-review-design="continuous"] .ecp-profile .ecp-decision-actions > [data-slot="button"]:last-child {
+  background: #ebe7f0;
+  color: #6b6078;
+}
+.review-design-lab[data-review-design="continuous"] .ecp-profile .ecp-decision-actions > [data-slot="button"].ecp-invite-primary:hover {
+  background: #433a4e;
+}
+.review-design-lab[data-review-design="continuous"] .ecp-profile .ecp-decision-actions > [data-slot="button"]:last-child:hover {
+  background: #e1dbe9;
+  color: #493b5c;
+}
+.review-design-lab[data-review-design="continuous"] .ecp-invite-primary > svg {
+  display: none;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .iv-sidebar button:focus-visible,
+.review-design-lab[data-review-design="continuous"] .iv-root .iv-fragment-question button:focus-visible,
+.review-design-lab[data-review-design="continuous"] .ecp-decision-actions > button:focus-visible {
+  outline: 2px solid var(--continuous-accent);
+  outline-offset: 3px;
+}
+.review-design-lab[data-review-design="continuous"] .iv-root .iv-sidebar ::selection {
+  color: #332141;
+  background: #e1d3ef;
+}
+
+@media (max-height: 800px) and (min-width: 861px) {
+  .review-design-lab[data-review-design="continuous"] .iv-root .ia-orbit__wheel {
+    width: min(100%, 248px);
+  }
+  .review-design-lab[data-review-design="continuous"] .iv-root .ia-orbit__body {
+    gap: 12px;
+  }
+}
+@media (max-width: 860px) {
+  .review-design-lab[data-review-design="continuous"] .iv-root:not(.iv-full) .iv-sidebar {
+    padding: 0 !important;
+  }
+  .review-design-lab[data-review-design="continuous"] .ecp-review-footer {
+    padding: 0;
+    border-radius: 0;
+  }
+  .review-design-lab[data-review-design="continuous"] .feedback-lab .iv-root .iv-fragment-heading p {
+    font-size: 16px;
+    line-height: 22px;
+  }
+  .review-design-lab[data-review-design="continuous"] .feedback-lab .iv-root .iv-fragment-answers > button {
+    min-height: 44px;
+    height: auto;
+    padding: 10px 8px;
+    font-size: 15px;
+    line-height: 20px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .review-design-lab[data-review-design="continuous"] .iv-root .iv-fragment-answers > button {
+    transition: none;
+    transform: none;
+  }
+}

@@ -69,7 +69,7 @@ ASR не выбран по умолчанию. Без настроенных end
 
 Canonical transcript: времена — целые миллисекунды, начало не позже конца; неизвестные времена — оба null, неизвестный говорящий — null. Текст не пустой, segments не пустой. Сервис не угадывает роли кандидат/рекрутер. `full_text`/`text` соответствуют segments. Warnings сохраняются при доставке в ядро. Пустая/повреждённая выдача ASR не считается успешной.
 
-`POST /v1/jobs/{id}/retry` — явное решение вызывающего сервиса повторить failed/uncertain; 202 либо 409. Для SpeechKit/Deepgram с сохранённым submit intent без operation ID или сохранённого raw ответа повтор запрещён (409), включая явный API retry. Для известного operation ID retry выполняет только GET. Для uncertain прошлый ASR мог выполнить запрос, поэтому повтор не обещает exactly-once. Изменённая конфигурация движка — 409; использовать новый ключ и новую загрузку.
+`POST /v1/jobs/{id}/retry` — явное решение вызывающего сервиса повторить failed/uncertain; 202 либо 409. Для uncertain прошлый ASR мог выполнить запрос, поэтому повтор не обещает exactly-once. Изменённая конфигурация движка — 409; использовать новый ключ и новую загрузку.
 
 ## Ошибки и повтор
 
@@ -82,53 +82,3 @@ Canonical transcript: времена — целые миллисекунды, н
 Рабочий клиент источника: upload → poll → result → core ingest с собственным idempotency key. Готовый provider transcript: normalize → core ingest. Получение нормализованного результата не означает его доставку в ядро — эту доставку и повтор контролирует сервис источника. Прямых SQL-записей в candidate DB из transcription нет.
 
 В этой ветке есть временный HTTP bridge старого provider collector (`interface-lab/server/materials_transcripts.py`). Для нового независимого source-service использовать этот контракт; импортировать пакет transcription в ядро не требуется.
-
-## SpeechKit result/raw
-
-Существующий `/result` сохраняет `transcript` без новых полей внутри NormalizedTranscript. Для SpeechKit в envelope добавлены:
-
-```json
-{
-  "provider": "yandex_speechkit",
-  "provider_metadata": {
-    "configuration": {"model": "general", "language": "ru-RU", "speaker_labeling": false, "config_revision": "1"},
-    "provenance": {"input_sha256": "sha256", "derived_audio_sha256": "sha256", "duration_ms": 1000, "timing_offset_ms": null, "timing_reference": "decoded_first_audio_stream", "timing_alignment_to_original_media": "not_verified"},
-    "provider_channel_labels": ["0"]
-  },
-  "raw_result_url": "/v1/jobs/uuid/result/raw"
-}
-```
-
-`provider_channel_labels` соответствует порядку нормализованных сегментов, может содержать null; метки не преобразуются в роли или имена. Наличие двух меток не доказывает отсутствие третьего участника. `coverage` всегда `not_independently_verified`.
-
-`GET /v1/jobs/{id}/result/raw` использует тот же Bearer/owner ACL, возвращает 409 до готовности, 404 при чужом job или отсутствии raw у прежнего HTTP backend. JSON envelope:
-
-```json
-{
-  "schema_version": 1,
-  "provider": "yandex_speechkit",
-  "job_id": "uuid",
-  "input_sha256": "original-media-sha256",
-  "operation_id": "provider-operation-id",
-  "model": "general",
-  "language": "ru-RU",
-  "configuration": {},
-  "provenance": {},
-  "warnings": ["speaker_labeling_disabled"],
-  "provider_channel_labels": ["0"],
-  "coverage": "not_independently_verified",
-  "events": [{"result": {"final": {"alternatives": []}}}]
-}
-```
-
-`events` сохраняет исходные JSON-объекты provider NDJSON (включая исходную обёртку `result`), а не только выбранный текст. Source сохраняет этот JSON целиком в свой materials S3. Envelope не содержит staging URI, подписей или ключей. `/result/raw` является чувствительным содержимым интервью, как и `/result`, и не используется в логах. Provider WARNING становится ограниченным `speechkit_provider_warning`; исходное сообщение остаётся только в raw. Ошибка в stream после finals не публикует частичный результат как успех.
-
-Статус `/health/ready` сообщает отдельно `api`, `asr_configuration`, `worker.status`/`last_seen_at`. `worker.status=observed` означает heartbeat процесса за последние 90 секунд, без доказательства успешного распознавания. `run-once` не имитирует постоянно работающий worker.
-
-## Deepgram result/raw
-
-Envelope результата одинаков по базовым полям. `provider=deepgram`, модель `nova-3`, язык исходного запроса `ru`; `provider_metadata.configuration` фиксирует все параметры запроса, revision, модель diarization. `provider_metadata.provider_model_info` и `provider_diarize_info` сохраняют metadata провайдера, при отсутствии — null. Изменение модели, языка, diarization или revision изменяет backend identity.
-
-Raw envelope содержит `provider=deepgram`, `operation_id=null` (синхронный prerecorded API), `provider_request_id` при наличии, `events=[<исходный Deepgram JSON>]`, `configuration`, `provenance`, warnings и `coverage=not_independently_verified`. Исходные channels/words/utterances/model_info/diarize_info не выбрасываются из raw. Raw доступен после durable checkpoint даже если canonical parsing затем завершился ошибкой: этот материал можно исследовать и повторно разобрать без нового POST. При невалидном JSON оригинальные bytes хранятся в `unparsed_response_base64`, `events=[]`; это не успешная расшифровка.
-
-В canonical transcript Deepgram использует слова основной alternative, проверяет, что текст полностью соответствует их проекции, сохраняет `punctuated_word` и миллисекунды, группирует по speaker transitions и ограниченным фрагментам. `speaker_N` — метка модели, не имя/роль. `deepgram_speaker_labels_missing` означает отсутствие части запрошенных speaker labels; `speaker=null` остаётся unknown. Это не подтверждение точности диаризации или полноты распознанной речи.

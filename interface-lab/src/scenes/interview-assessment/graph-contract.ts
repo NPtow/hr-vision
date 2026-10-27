@@ -20,10 +20,5 @@ const aliases: Record<string, string> = {
   A01: 'Диалог и слушание', A03: 'Квалификация', A08: 'CRM и сопровождение',
   'NEW-01': 'Передача лида', A10: 'Продукт и обещания', A07: 'Следующий шаг',
   A04: 'Понимание задачи', 'A06.1': 'Работа с возражениями', 'A11.1': 'Гибкость в разговоре',
-  A02: 'Поиск клиентов', A05: 'Презентация ценности', 'A06.2': 'Переговоры об условиях',
-  A09: 'Планирование', A12: 'Работа с участниками сделки', A13: 'Развитие клиентов',
-  M01: 'Найм и адаптация', M02: 'Контроль команды и CRM', M03: 'Система продаж и аналитика',
-  M04: 'Развитие сотрудников', M05: 'Управление командой',
 };
-export const skillName = (criterion: Pick<AssessmentCriterion, 'id' | 'label'>) => aliases[criterion.id]
-  || (/^(?:[A-Z]+-?)?\d+(?:\.\d+)?$/.test(criterion.label.trim()) ? 'Профессиональный навык' : criterion.label);
+export const skillName = (criterion: Pick<AssessmentCriterion, 'id' | 'label'>) => aliases[criterion.id] || criterion.label;

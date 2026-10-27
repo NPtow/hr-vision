@@ -30,10 +30,8 @@ export const sameTarget = (a: FeedbackTarget | null, b: FeedbackTarget) => !!a &
 const targetOf = (block: FeedbackBlock | undefined): FeedbackTarget | null => block ? { criterionId: block.criterionId, evidenceId: block.evidenceId } : null;
 
 /** Only supplied, valid bounds are used; missing timing never becomes an invented interval. */
-export function feedbackBlocks(criteria: AssessmentCriterion[], recordingId?: string): FeedbackBlock[] {
-  const linked = criteria.some(criterion => criterion.evidence.some(evidence => !!evidence.recordingId));
-  return criteria.flatMap(criterion => criterion.evidence.filter(evidence => evidence.feedbackQuestion?.trim() &&
-    (recordingId === undefined || evidence.recordingId === recordingId || !linked && !evidence.recordingId)).map(evidence => {
+export function feedbackBlocks(criteria: AssessmentCriterion[]): FeedbackBlock[] {
+  return criteria.flatMap(criterion => criterion.evidence.filter(evidence => evidence.feedbackQuestion?.trim()).map(evidence => {
     const start = evidence.sourceKind !== 'resume' && evidence.availability !== 'unavailable' && evidence.availability !== 'text_only'
       && typeof evidence.seconds === 'number' && Number.isFinite(evidence.seconds) && evidence.seconds >= 0 ? evidence.seconds : null;
     const end = start !== null && typeof evidence.endSeconds === 'number' && Number.isFinite(evidence.endSeconds) && evidence.endSeconds > start ? evidence.endSeconds : null;

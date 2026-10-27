@@ -30,7 +30,7 @@ class ServiceHTTP:
                 or not isinstance(key, str) or not key or any(ord(c) < 32 for c in key)):
             raise ValueError('Invalid materials service configuration')
         self.base_url, self.key, self.timeout = base_url.rstrip('/'), key, timeout
-        self.opener = opener or urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())
+        self.opener = opener or urllib.request.build_opener(_NoRedirect())
 
     def call(self, method, path, body=None):
         raw = None if body is None else json.dumps(body, ensure_ascii=False, allow_nan=False).encode()
@@ -138,38 +138,25 @@ class CoreClient:
         return self.http.call('POST', '/v1/bindings', payload)
 
     def materials(self, owner_kind, owner_id):
-        require(owner_kind in ('interview', 'meeting', 'intake'), 'invalid_material_owner', 400)
+        require(owner_kind in ('interview', 'meeting'), 'invalid_material_owner', 400)
         return self.http.call('GET', '/v1/owners/' + owner_kind + '/' + _part(owner_id) + '/materials')
-
-    def primary_transcripts(self, owner_kind, owner_id):
-        require(owner_kind in ('interview', 'meeting', 'intake'), 'invalid_material_owner', 400)
-        return self.http.call('GET', '/v1/owners/' + owner_kind + '/' + _part(owner_id) + '/primary-transcripts')
 
     def access(self, asset_id):
         return self.http.call('GET', '/v1/assets/' + _part(asset_id) + '/access')
 
     def collect(self, owner_kind, owner_id, storage_policy=None):
-        require(owner_kind in ('interview', 'meeting', 'intake'), 'invalid_material_owner', 400)
+        require(owner_kind in ('interview', 'meeting'), 'invalid_material_owner', 400)
         return self.http.call('POST', '/v1/owners/' + owner_kind + '/' + _part(owner_id) + '/collect',
             {} if storage_policy is None else {'storage_policy': storage_policy})
 
 
 class CoreMaterialsCatalog:
-    def __init__(self, core, source=None, outbox=None, *, connect=None, collect=True):
+    def __init__(self, core, source=None, outbox=None, *, connect=None):
         self.core, self.source, self.outbox = core, source, outbox
-        require(type(collect) is bool and (collect or outbox is None), 'invalid_material_catalog_configuration', 503)
-        self.collect_enabled = collect
         self.connect = outbox.connect if outbox else connect
         require(self.connect is not None, 'materials_database_required', 503)
 
     def register_owner(self, owner_kind, meeting, storage_policy=None):
-        if not self.collect_enabled:
-            require(owner_kind in ('interview', 'meeting', 'intake') and isinstance(meeting.get('id'), str)
-                    and meeting['id'], 'invalid_material_owner', 400)
-            require(storage_policy in (None, 'owned'), 'Для загруженной записи доступно сохранение в нашем хранилище.', 400)
-            # The import has already bound and verified its immutable materials.
-            # A viewer does not schedule capture discovery or alter storage policy.
-            return None
         if self.outbox is None:
             return self.core.collect(owner_kind, meeting['id'], storage_policy)
         require((meeting.get('room') or {}).get('provider', 'daily') == 'daily',
@@ -187,6 +174,10 @@ class CoreMaterialsCatalog:
         require(self.outbox is None or (meeting.get('room') or {}).get('provider', 'daily') == 'daily',
                 'materials_source_provider_unavailable', 503)
         self._check(access_check)
+        if (meeting.get('room') or {}).get('captureNeverStarted'):
+            channel = {'status': 'not_recorded', 'ids': []}
+            return {'recordings': [], 'transcripts': [], 'video': dict(channel), 'transcription': dict(channel),
+                'status': 'not_recorded', 'catalogVersion': 1, 'checkedAt': dt.datetime.now(dt.timezone.utc).isoformat()}
         try:
             data = self.core.materials(owner_kind, meeting['id'])
         except ServiceError as error:
@@ -194,18 +185,13 @@ class CoreMaterialsCatalog:
             if error.status != 404 or not self.outbox or not self.outbox.pending(owner_kind, meeting['id']):
                 raise
             data = {'sources': [], 'assets': [], 'transcripts': [], 'channels': []}
-        if not data.get('assets') and (meeting.get('room') or {}).get('captureNeverStarted'):
-            channel = {'status': 'not_recorded', 'ids': []}
-            return {'recordings': [], 'transcripts': [], 'video': dict(channel), 'transcription': dict(channel),
-                'status': 'not_recorded', 'catalogVersion': 1, 'checkedAt': dt.datetime.now(dt.timezone.utc).isoformat()}
         if not data.get('sources') and self.outbox and self.outbox.delivery_failed(owner_kind, meeting['id']) is True:
             raise ServiceError('materials_delivery_retrying', 503)
         active_sources = [s for s in data.get('sources', []) if not s.get('revoked')]
         require(not data.get('sources') or active_sources, 'Материалы недоступны.', 410)
-        recordings, transcripts, transcript_variants, video_errors = [], [], [], []
-        assets = {asset['id']: asset for asset in data.get('assets', [])}
+        recordings, transcripts, video_errors = [], [], []
         for asset in data.get('assets', []):
-            if asset['kind'] not in ('video', 'audio') or asset['state'] not in ('ready', 'available'):
+            if asset['kind'] != 'video' or asset['state'] not in ('ready', 'available'):
                 continue
             self._check(access_check)
             try:
@@ -219,52 +205,21 @@ class CoreMaterialsCatalog:
                         and not url.username and not url.password, 'materials_service_invalid_access', 502)
                 recordings.append({'id': asset['id'], 'url': access['url'], 'expires': access.get('expires'),
                     'storage': access['storage'], 'duration': asset.get('metadata', {}).get('duration'),
-                    'partIndex': asset.get('metadata', {}).get('part_index'), 'kind': asset['kind'],
                     'copyStatus': 'ready' if access['storage'] == 'owned' else 'not_requested'})
             except Problem as error:
                 if error.status < 500:
                     raise
                 video_errors.append('Не удалось получить доступ к записи. Повторите попытку.')
         latest = {}
-        versions = {v['id']: v for v in data.get('transcripts', [])}
-        selections = data.get('transcript_selections', [])
-        required = set(data.get('transcript_selection_required_recording_ids', []))
-        required.update(s['recording_id'] for s in selections)
-        # Every newly registered part must be selected before any assessment or
-        # canonical transcript becomes ready, including before scheduler enrollment.
-        required.update(a['id'] for a in data.get('assets', []) if a['kind'] in ('video', 'audio'))
-        selected = {s['transcript_id']: s for s in selections
-                    if s['status'] == 'ready' and s.get('transcript_id')}
-        # Enrolled recordings use only the exact immutable selected version.
-        # No capture fallback when selection is pending, failed or stale.
-        for version in versions.values():
+        for version in data.get('transcripts', []):
             if version['version'] > latest.get(version['asset_id'], {}).get('version', 0):
                 latest[version['asset_id']] = version
-        projected = {v['id']: v for v in latest.values()}
-        projected.update({tid: versions[tid] for tid in selected if tid in versions})
-        for version in projected.values():
+        for version in latest.values():
             normalized = version.get('metadata', {}).get('normalized', {})
-            projection = {'id': version['id'], 'assetId': version['asset_id'], 'revision': version['version'],
+            transcripts.append({'id': version['id'], 'assetId': version['asset_id'], 'revision': version['version'],
                 'text': normalized.get('vtt') or normalized.get('full_text', ''),
                 'fullText': normalized.get('full_text', ''), 'segments': version['segments'],
-                'warnings': normalized.get('warnings', []), 'storage': 'owned'}
-            asset = assets.get(version['asset_id'], {})
-            external_id = asset.get('external_id') or asset.get('provider_asset_id', '')
-            metadata = version.get('metadata', {})
-            if required:
-                projection.update(origin=metadata.get('origin'), model=metadata.get('model_version'))
-                if version['id'] in selected:
-                    choice = selected[version['id']]
-                    projection.update(recordingId=choice['recording_id'], selectionRevision=choice['revision'],
-                                      generation=choice['generation'], sha256=version.get('content_sha256'))
-                    transcripts.append(projection)
-                else:
-                    transcript_variants.append(projection)
-            elif external_id.startswith('asr:'):
-                transcript_variants.append({**projection, 'origin': metadata.get('origin'),
-                    'model': metadata.get('model_version')})
-            else:
-                transcripts.append(projection)
+                'warnings': normalized.get('warnings', []), 'storage': 'owned'})
         def channel(key, values):
             statuses = [row[key] for row in data.get('channels', []) if key in row]
             state = ('ready' if values else 'processing' if not statuses or 'processing' in statuses else
@@ -272,20 +227,6 @@ class CoreMaterialsCatalog:
                      'not_recorded' if all(s == 'not_recorded' for s in statuses) else 'processing')
             return {'status': state, 'ids': [item['id'] for item in values]}
         video, transcription = channel('video_status', recordings), channel('transcript_status', transcripts)
-        if required:
-            ready_recordings = {s['recording_id'] for s in selections
-                                if s['status'] == 'ready' and s.get('transcript_id') in versions}
-            if any(s['status'] in ('failed', 'uncertain') or
-                   (s['status'] == 'ready' and s.get('transcript_id') not in versions) for s in selections):
-                state = 'error'
-            else:
-                state = 'ready' if required <= ready_recordings else 'processing'
-            transcription.update(status=state)
-            # An incomplete multi-recording interview is not assessment-ready.
-            if state != 'ready':
-                transcript_variants.extend(transcripts)
-                transcripts = []
-                transcription['ids'] = []
         if video_errors:
             video.update(status='ready' if recordings else 'error', error=video_errors[0])
         self._check(access_check)
@@ -294,47 +235,29 @@ class CoreMaterialsCatalog:
             current = self.core.materials(owner_kind, meeting['id'])
             old = {(s.get('binding_id', s.get('id')), s['generation']) for s in active_sources}
             fresh = {(s.get('binding_id', s.get('id')), s['generation']) for s in current.get('sources', []) if not s.get('revoked')}
-            require(old <= fresh and transcript_selection_identity(data) == transcript_selection_identity(current),
-                    'Доступ к материалам изменился.', 409)
+            require(old <= fresh, 'Доступ к материалам изменился.', 409)
         self._check(access_check)
         states = (video['status'], transcription['status'])
-        indexes = [r.get('partIndex') for r in recordings]
-        explicit_order = all(type(i) is int and i >= 0 for i in indexes) and len(set(indexes)) == len(indexes)
-        recordings.sort(key=lambda r: r['partIndex'] if explicit_order else r['id'])
-        return {'recordings': recordings, 'transcripts': transcripts,
-            **({'transcriptVariants': transcript_variants} if transcript_variants else {}),
-            'video': video, 'transcription': transcription,
+        return {'recordings': recordings, 'transcripts': transcripts, 'video': video, 'transcription': transcription,
             'status': 'ready' if 'ready' in states else 'error' if 'error' in states else
                       'processing' if 'processing' in states else 'not_recorded',
-            'catalogVersion': 1, 'sourceCount': len(data.get('sources', [])),
-            'checkedAt': dt.datetime.now(dt.timezone.utc).isoformat()}
-
-
-def transcript_selection_identity(data):
-    """Provider-neutral identity; timestamps do not invalidate assessments."""
-    fields = ('binding_id', 'generation', 'recording_id', 'request_id', 'revision', 'status', 'transcript_id', 'error_code')
-    rows = data.get('transcript_selections', data.get('selections', []))
-    return {'required': sorted(data.get('transcript_selection_required_recording_ids', [])),
-            'selections': sorted([[row.get(key) for key in fields] for row in rows], key=lambda row: str(row[:3])),
-            'status': data.get('status') if 'selections' in data else None,
-            'recordings': sorted([[a['id'], a['state'], a.get('metadata', {})] for a in data.get('assets', [])
-                                  if a['kind'] in ('video', 'audio')], key=lambda a: a[0])}
+            'catalogVersion': 1, 'checkedAt': dt.datetime.now(dt.timezone.utc).isoformat()}
 
 
 class ProviderMaterialsCatalog:
-    """Explicit routes for Daily, Zoom and imported owned recordings.
+    """Explicit transition: Daily source API and existing Zoom collector.
 
     The portal passes a meeting loaded from its authorized owner row. Provider
     identity is never accepted from an HTTP materials request or inferred from
     an adapter error. A missing provider cannot fall through to another source.
     """
-    def __init__(self, daily, zoom=None, upload=None):
-        self.daily, self.zoom, self.upload = daily, zoom, upload
+    def __init__(self, daily, zoom=None):
+        self.daily, self.zoom = daily, zoom
 
     def _catalog(self, meeting):
         provider = (meeting.get('room') or {}).get('provider', 'daily')
-        require(provider in ('daily', 'zoom', 'upload'), 'Неизвестный источник материалов.', 409)
-        catalog = {'daily': self.daily, 'zoom': self.zoom, 'upload': self.upload}[provider]
+        require(provider in ('daily', 'zoom'), 'Неизвестный источник материалов.', 409)
+        catalog = self.daily if provider == 'daily' else self.zoom
         require(catalog is not None, 'Источник материалов ещё не подключён.', 503)
         return catalog
 

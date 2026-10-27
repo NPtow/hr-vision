@@ -1,0 +1,112 @@
+/* Comparison styles stay outside the service build. The canonical player,
+   Orbit, typography, source binding and feedback persistence remain in use. */
+.feedback-lab{--employer-viewport:100dvh;--feedback-control-height:46px;--feedback-control-width:176px;--feedback-control-radius:14px;--feedback-control-font:18px;--feedback-prompt-font:18px;--feedback-gap:8px;--feedback-footer-reserve:62px;min-height:100dvh;background:#f5f4f8;font-family:'Inter Variable',Inter,Arial,sans-serif;color:#252427}
+.feedback-lab>.agency-product{min-height:0}
+.feedback-lab__toolbar{height:48px;display:flex;align-items:center;gap:16px;padding:0;position:absolute;left:225px;right:175px;top:8px;z-index:70;font-size:12px}
+.feedback-lab__title{font-weight:600;white-space:nowrap}
+.feedback-lab__variants{display:flex;gap:2px;padding:3px;background:#e4e2ec;border-radius:12px}
+.feedback-lab__variants button{border:0;padding:7px 14px;background:transparent;border-radius:9px;font:inherit;color:#777181;cursor:pointer}
+.feedback-lab__variants button[aria-pressed=true]{background:#fff;color:#302b3c;box-shadow:0 1px 4px #33234c0a}
+.feedback-lab__candidate{display:flex;align-items:center;gap:6px;margin-left:auto;min-width:0}
+.feedback-lab__candidate select{appearance:none;border:0;background:none;font:inherit;max-width:210px;color:#5f596b;cursor:pointer}
+.feedback-lab__reference-toggle{border:0;background:none;padding:9px 0;color:#746681;font:inherit;cursor:pointer}
+.feedback-lab__local{color:#aaa3b3;white-space:nowrap}
+.feedback-lab__references{position:absolute;right:175px;top:62px;z-index:80;width:330px;padding:22px;border-radius:21px;background:#fff;box-shadow:0 12px 45px #29203f26;font-size:13px;line-height:1.55}
+.feedback-lab__references strong{font-size:18px;font-weight:600}
+.feedback-lab__references p{margin:10px 0;color:#777181}
+.feedback-lab__references a{display:inline-flex;align-items:center;gap:6px;color:#7157a8;text-decoration:none}
+.feedback-lab__loading,.feedback-lab__error{padding:40px;margin:0;font-size:15px;color:#746681}
+.feedback-lab__toolbar button:focus-visible,.feedback-lab__toolbar select:focus-visible{outline:2px solid #7d61ac;outline-offset:3px}
+
+/* Only the panel beneath the video changes. No new counters, comments, rating
+   badges or confirmation rows compete with the question. */
+.feedback-lab .ecp-review-footer>.ecp-meta{visibility:hidden}
+.feedback-lab .iv-root .iv-fragment-comment,
+.feedback-lab .iv-root .iv-fragment-actions>.iv-write,
+.feedback-lab .iv-root .iv-below-player>.iv-reactions,
+.feedback-lab .iv-root .iv-fragment-status,
+.feedback-lab .iv-fragment-context>span{display:none}
+.feedback-lab .iv-root .iv-fragment-question{display:grid;grid-template-areas:'context' 'heading' 'answers';gap:var(--feedback-gap);padding:0 1px 1px;isolation:isolate}
+.feedback-lab .iv-fragment-heading{grid-area:heading}
+.feedback-lab .iv-root .iv-fragment-heading p{font-size:var(--feedback-prompt-font);line-height:24px;letter-spacing:-.015em;font-weight:450;color:#343237;text-wrap:pretty}
+.feedback-lab .iv-root .iv-fragment-context{grid-area:context;display:flex;flex-wrap:wrap;gap:4px 16px;margin:0;min-height:22px;align-items:center}
+.feedback-lab .iv-root .iv-fragment-context button{padding:0 0 3px;border-bottom:1.5px solid transparent;font-size:13px;line-height:18px;letter-spacing:-.01em;color:#8e8797}
+.feedback-lab .iv-root .iv-fragment-context button[aria-pressed=true]{color:#7555a3;border-bottom-color:#aa8dce}
+.feedback-lab .iv-fragment-picker{display:none}
+.feedback-lab .iv-root .iv-fragment-actions{grid-area:answers;display:block;margin:0;min-width:0}
+.feedback-lab .iv-root .iv-fragment-answers{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--feedback-gap);width:min(100%,calc(var(--feedback-control-width)*3 + var(--feedback-gap)*2));align-items:stretch}
+.feedback-lab .iv-root .iv-fragment-answers button{position:relative;isolation:isolate;display:flex;align-items:center;justify-content:center;min-width:0;height:var(--feedback-control-height);min-height:var(--feedback-control-height);padding:0 12px;border:0;border-radius:var(--feedback-control-radius);font-size:var(--feedback-control-font);line-height:22px;font-weight:450;letter-spacing:-.015em;white-space:nowrap;cursor:pointer;animation:none;transition:background-color 160ms,color 160ms,box-shadow 160ms,transform 160ms,opacity 160ms}
+.feedback-lab .iv-root .iv-fragment-answers button[data-answer=yes]{--answer-tint:#276645;--answer-soft:#e8f3ed;--answer-hover:#daebdf;--answer-solid:#337853;background:var(--answer-soft);color:var(--answer-tint)}
+.feedback-lab .iv-root .iv-fragment-answers button[data-answer=no]{--answer-tint:#9b4e50;--answer-soft:#f7ebeb;--answer-hover:#f2dfe0;--answer-solid:#ab5d60;background:var(--answer-soft);color:var(--answer-tint)}
+.feedback-lab .iv-root .iv-fragment-answers button[data-answer=unknown]{--answer-tint:#876923;--answer-soft:#faf2df;--answer-hover:#f4e8ca;--answer-solid:#96752d;background:var(--answer-soft);color:var(--answer-tint)}
+.feedback-lab .iv-root .iv-fragment-answers button:hover:not(:disabled){background:var(--answer-hover)}
+.feedback-lab .iv-root .iv-fragment-answers button:active:not(:disabled){transform:scale(.978);transition-duration:70ms}
+.feedback-lab .iv-root .iv-fragment-answers button:focus-visible{outline:2px solid var(--answer-tint);outline-offset:4px}
+.feedback-lab .iv-root .iv-fragment-answers button[aria-pressed=true]{background:var(--answer-solid);color:#fff;font-weight:550;box-shadow:0 4px 14px #2b263d0c}
+.feedback-lab .iv-root .iv-fragment-answers button[aria-pressed=true]:hover{background:var(--answer-solid)}
+.feedback-lab .iv-root .iv-fragment-answers button:disabled{opacity:.7;cursor:wait}
+.feedback-lab .iv-fragment-question[data-pulsing=true] .iv-fragment-answers{animation:feedback-lab-attention 2.8s ease-in-out infinite;border-radius:var(--feedback-control-radius)}
+@keyframes feedback-lab-attention{0%,100%{box-shadow:0 0 0 0 #a78ac500}50%{box-shadow:0 0 0 5px #a78ac516}}
+
+/* A: response cards, inspired by the direct visual choice in survey tools. */
+.feedback-lab[data-feedback-variant=tiles] .iv-root .iv-fragment-answers button[aria-pressed=true]::before{content:'';position:absolute;left:6px;top:50%;width:4px;height:8px;border:solid currentColor;border-width:0 2px 2px 0;transform:translateY(-65%) rotate(45deg)}
+
+/* B: a single selection surface. The underlay travels; text stays stationary.
+   Apple grouping principles + React Aria's visible pressed/selected states. */
+.feedback-lab[data-feedback-variant=strip] .iv-root .iv-fragment-answers{position:relative;isolation:isolate;background:#f2f1f6;padding:5px;gap:0;border-radius:22px;--selected:0}
+.feedback-lab[data-feedback-variant=strip] .iv-root .iv-fragment-answers::before{content:'';position:absolute;z-index:-1;top:5px;bottom:5px;left:5px;width:calc((100% - 10px)/3);border-radius:17px;background:white;box-shadow:0 2px 7px #392d4c0e;opacity:0;transform:translateX(calc(var(--selected)*100%));transition:transform 270ms cubic-bezier(.2,.8,.2,1),opacity 140ms,background-color 170ms}
+.feedback-lab[data-feedback-variant=strip] .iv-root .iv-fragment-answers:has([aria-pressed=true])::before{opacity:1}
+.feedback-lab[data-feedback-variant=strip] .iv-root .iv-fragment-answers:has([data-answer=unknown][aria-pressed=true]){--selected:1}
+.feedback-lab[data-feedback-variant=strip] .iv-root .iv-fragment-answers:has([data-answer=yes][aria-pressed=true]){--selected:2}
+.feedback-lab[data-feedback-variant=strip] .iv-root .iv-fragment-answers:has([data-answer=yes][aria-pressed=true])::before{background:#e2efe7}
+.feedback-lab[data-feedback-variant=strip] .iv-root .iv-fragment-answers:has([data-answer=no][aria-pressed=true])::before{background:#f2e4e5}
+.feedback-lab[data-feedback-variant=strip] .iv-root .iv-fragment-answers:has([data-answer=unknown][aria-pressed=true])::before{background:#f5ecd6}
+.feedback-lab[data-feedback-variant=strip] .iv-root .iv-fragment-answers button{background:transparent;color:#7b7585;box-shadow:none}
+.feedback-lab[data-feedback-variant=strip] .iv-root .iv-fragment-answers button:hover:not([aria-pressed=true]){background:#ffffff65}
+.feedback-lab[data-feedback-variant=strip] .iv-root .iv-fragment-answers button[aria-pressed=true]{background:transparent;color:var(--answer-tint);box-shadow:none}
+
+/* C: a conversation rather than a row of controls. Long prompts have their own
+   column; a vertical answer list keeps the labels equally prominent. */
+.feedback-lab[data-feedback-variant=dialogue] .iv-root .iv-fragment-question{grid-template-columns:minmax(0,1.12fr) minmax(0,1fr);grid-template-areas:'context context' 'heading answers';gap:12px 24px;align-items:center}
+.feedback-lab[data-feedback-variant=dialogue] .iv-root .iv-fragment-answers{grid-template-columns:minmax(0,1fr);gap:6px}
+.feedback-lab[data-feedback-variant=dialogue] .iv-root .iv-fragment-answers button{padding:0 17px;text-align:left;justify-content:space-between;gap:9px}
+.feedback-lab[data-feedback-variant=dialogue] .iv-root .iv-fragment-answers button::after{content:'';flex:none;width:16px;height:16px;border-radius:50%;box-shadow:inset 0 0 0 1.5px currentColor;opacity:.3}
+.feedback-lab[data-feedback-variant=dialogue] .iv-root .iv-fragment-answers button[aria-pressed=true]::after{box-shadow:none;background:var(--answer-solid);border:5px solid #fff;opacity:1}
+
+@media(min-width:861px){
+ .feedback-lab .ew-root .ew-shell:has(.ew-review-queue .ecp-profile-overlay .iv-root) .iv-root.iv-has-question:not(.iv-full) .iv-below-player{max-height:none;overflow:visible;padding-top:1px}
+ /* Share the existing bottom row: the question uses the vacant left side,
+    hiring actions keep their original bottom-right position. Grid overlap is
+    explicit; only the actual actions receive pointer input above the player. */
+ .feedback-lab .ew-root .ecp-profile-overlay:has(.iv-has-question){display:grid;grid-template-rows:minmax(0,1fr);gap:0}
+ .feedback-lab .ecp-profile-overlay:has(.iv-has-question)>.ecp-interview{grid-area:1/1}
+ .feedback-lab .ecp-profile-overlay:has(.iv-has-question)>.ecp-review-footer{grid-area:1/1;align-self:end;z-index:2;pointer-events:none}
+ .feedback-lab .ecp-profile-overlay:has(.iv-has-question)>.ecp-review-footer>:not(.ecp-meta){pointer-events:auto}
+ .feedback-lab .ecp-profile-overlay:has(.iv-has-question)>.ecp-error{grid-row:2}
+ .feedback-lab .ew-root .ew-shell:has(.ew-review-queue .ecp-profile-overlay .iv-root) .iv-root.iv-has-question:not(.iv-full) .iv-sidebar{box-sizing:border-box;padding-bottom:var(--feedback-footer-reserve)}
+}
+@media(max-width:1100px){
+ .feedback-lab__toolbar{left:200px;right:150px;gap:12px}
+ .feedback-lab__local{display:none}
+ .feedback-lab[data-feedback-variant=tiles] .iv-root .iv-fragment-answers button[aria-pressed=true]::before{display:none}
+}
+@media(max-width:860px){
+ .feedback-lab{--employer-viewport:calc(100dvh - 56px)}
+ .feedback-lab__toolbar{position:relative;left:auto;right:auto;top:auto;height:56px;gap:8px;padding-inline:10px;background:#eeedf3}
+ .feedback-lab__title,.feedback-lab__reference-toggle{display:none}
+ .feedback-lab__variants button{padding:7px 10px}
+ .feedback-lab{--feedback-control-font:16px;--feedback-control-height:44px;--feedback-prompt-font:17px}
+ .feedback-lab__candidate select{max-width:120px}
+ .feedback-lab .iv-root .iv-fragment-heading p{line-height:22px}
+ .feedback-lab .iv-root .iv-fragment-context{gap:3px 12px;min-height:22px}
+ .feedback-lab .iv-root .iv-fragment-context button{font-size:12px;line-height:16px}
+ .feedback-lab .iv-root .iv-fragment-answers button{line-height:20px;padding:0 5px;white-space:normal;text-wrap:balance}
+ .feedback-lab[data-feedback-variant=strip] .iv-root .iv-fragment-answers{border-radius:18px}
+ .feedback-lab[data-feedback-variant=strip] .iv-root .iv-fragment-answers::before{border-radius:14px}
+ .feedback-lab[data-feedback-variant=dialogue] .iv-root .iv-fragment-question{gap:9px 15px;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+ .feedback-lab[data-feedback-variant=dialogue] .iv-root .iv-fragment-answers button{padding-inline:10px}
+}
+@media(prefers-reduced-motion:reduce){
+ .feedback-lab .iv-root .iv-fragment-answers,.feedback-lab .iv-root .iv-fragment-answers button,.feedback-lab .iv-root .iv-fragment-answers::before{animation:none!important;transition:none!important;transform:none}
+ .feedback-lab[data-feedback-variant=strip] .iv-root .iv-fragment-answers::before{transform:translateX(calc(var(--selected)*100%))}
+}
