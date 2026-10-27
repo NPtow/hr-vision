@@ -4,6 +4,7 @@ An existing, pending or revoked catalogue source always owns its material state.
 Only a genuinely empty owner may expose its previously verified DSA import.
 """
 import os
+import math
 
 from core_source_client import CoreClient, CoreMaterialsCatalog, ServiceHTTP
 from domain import require
@@ -31,6 +32,9 @@ def read_intake_db(db, workspace_id, vacancy_id, candidate_id):
         result = imported_materials({'version': 1, 'candidateId': source_id,
             'interviewId': source_id, 'preparedProfile': profile}, source_id, source_id)
         result['transcripts'][0]['recordingId'] = result['recordings'][0]['id']
+        # VTT clocks use whole milliseconds; MP4 duration may use fractions of
+        # one millisecond. Compare both clocks at VTT's declared precision.
+        result['recordings'][0]['duration'] = math.ceil(result['recordings'][0]['duration'] * 1000) / 1000
         result['materialOrigin'] = 'verified-import'
     return result
 

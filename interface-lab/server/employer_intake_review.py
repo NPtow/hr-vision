@@ -87,6 +87,18 @@ class Bridge:
                 sources.append({'source_id': 'file:' + fid, 'version': core_bridge.digest(text), 'kind': 'cv',
                                 'units': [{'unit_id': 'stored', 'text': text, 'role': 'candidate'}]})
         for part in bundle['parts']:
+            if not part['segments'] and part['text'].startswith('WEBVTT\n'):
+                # One complete table instead of repeated JSON keys or verbose
+                # VTT markup. Every parsed word, voice and millisecond survives;
+                # source/version still identifies the original immutable VTT.
+                turns = transcript_turns(part['text'])
+                require(bool(turns), 'transcript_format_unsupported', 422)
+                rows = [[t['startMs'], t['endMs'], t['speakerName'], t['text']] for t in turns]
+                table = json.dumps({'columns': ['start_ms', 'end_ms', 'speaker', 'text'],
+                    'rows': rows}, ensure_ascii=False, separators=(',', ':'))
+                sources.append({'source_id': part['recordingId'], 'version': core_bridge.digest(part),
+                    'kind': 'interview', 'units': [{'unit_id': 'transcript', 'text': table, 'role': 'unknown'}]})
+                continue
             turns = part['segments'] or transcript_turns(part['text'])
             require(bool(turns), 'transcript_format_unsupported', 422)
             units = []
