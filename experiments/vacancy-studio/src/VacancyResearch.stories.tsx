@@ -1,0 +1,12 @@
+import type {Meta,StoryObj} from '@storybook/react-vite';
+import {VacancyResearchLab} from './scenes/vacancy-research/VacancyResearchLab';
+import {ProfileResearchLab} from './scenes/vacancy-research/ProfileResearchLab';
+const meta={title:'HR Vision/Исследование вакансии',id:'hr-vision-vacancy-research',component:VacancyResearchLab,parameters:{layout:'fullscreen',controls:{disable:true}},args:{initialPage:'references'}} satisfies Meta<typeof VacancyResearchLab>;
+export default meta;
+type Story=StoryObj<typeof meta>;
+export const References:Story={name:'01 Референсы · 22 приёма'};
+export const Prototype:Story={name:'02 Портрет сотрудника · три формы',render:()=> <ProfileResearchLab initialView="try"/>};
+export const Profiles:Story={name:'05 Референсы профиля · новый поиск',render:()=> <ProfileResearchLab initialView="references"/>};
+export const EarlyPrototype:Story={name:'Архив · первые варианты',args:{initialPage:'prototype'}};
+export const Motion:Story={name:'03 Движение · шесть этюдов',args:{initialPage:'motion'}};
+export const Route:Story={name:'04 Задача и путь к результату',args:{initialPage:'route'}};

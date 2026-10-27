@@ -1,0 +1,21 @@
+{
+    admin off
+    auto_https off
+}
+:8080 {
+    @files host dograh-files.158-160-179-53.sslip.io
+    handle @files {
+        reverse_proxy minio:9000
+    }
+    @api path /api/v1/*
+    handle @api {
+        reverse_proxy api:8000 {
+            header_up X-Forwarded-Proto https
+        }
+    }
+    handle {
+        reverse_proxy ui:3010 {
+            header_up X-Forwarded-Proto https
+        }
+    }
+}

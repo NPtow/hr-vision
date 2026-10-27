@@ -1,0 +1,154 @@
+--- a/api/services/workflow/pipecat_engine.py
++++ b/api/services/workflow/pipecat_engine.py
+@@ -55,6 +55,7 @@
+     LLMService = Union[OpenAILLMService, AnthropicLLMService, GoogleLLMService]
+ 
+ import asyncio
++import os
+ import time
+ 
+ from loguru import logger
+@@ -115,7 +116,10 @@
+ # answers would otherwise hold the call, its telephony channel and every
+ # service behind it open indefinitely. Measured on the abrupt-hangup path at
+ # p50 1.4s / p90 4.0s / max 21.3s, so this cuts off the tail and nothing else.
+-FINAL_EXTRACTION_TIMEOUT_SECONDS = 10.0
++FINAL_EXTRACTION_TIMEOUT_SECONDS = max(
++    1.0,
++    min(120.0, float(os.getenv("DOGRAH_FINAL_EXTRACTION_TIMEOUT_SECONDS", "10"))),
++)
+ 
+ 
+ @dataclass(frozen=True)
+@@ -198,6 +202,20 @@
+             run_transition_variable_extraction_in_background
+         )
+         self._call_dispositions = tuple(call_dispositions or ())
++        # Opt-in interview contract: every conversational node needs a fresh
++        # caller answer before a transition tool can leave it. Keep this off
++        # for general-purpose graphs that intentionally chain action nodes.
++        self._require_user_response = (
++            os.getenv("DOGRAH_REQUIRE_USER_RESPONSE", "false").lower() == "true"
++        )
++        self._response_passthrough_nodes = {
++            node_id.strip()
++            for node_id in os.getenv("DOGRAH_PASSTHROUGH_NODE_IDS", "").split(",")
++            if node_id.strip()
++        }
++        self._node_entry_user_count = 0
++        self._response_gate_retries = 0
++        self._transition_claim = None
+         self._initialized = False
+         self._call_disposed = False
+         self._shutdown_task: asyncio.Task | None = None
+@@ -416,6 +434,30 @@
+         """Delegate prompt formatting to the shared workflow.utils implementation."""
+ 
+         return render_template(prompt, self._call_context_vars)
++
++    def _caller_message_count(self) -> int:
++        """Count caller answers, excluding the engine's synthetic idle prompts.
++
++        Text chat restores its checkpoint and enters the current node *before*
++        appending the pending user message, so the same watermark works for
++        both a long-lived voice pipeline and per-turn text pipelines.
++        """
++        from api.services.workflow.conversation_history import _get_role_and_content
++
++        synthetic_idle_prompts = {
++            "The user has been quiet. Politely and briefly ask if they're still there in the language that the user has been speaking so far.",
++            "The user has been quiet. We will be disconnecting the call now. Wish them a good day in the language that the user has been speaking so far.",
++        }
++        if self.context is None:
++            return 0
++        return sum(
++            role == "user" and bool(content and content.strip())
++            and content not in synthetic_idle_prompts
++            for role, content in (
++                _get_role_and_content(message)
++                for message in self.context.get_messages()
++            )
++        )
+ 
+     async def _create_transition_func(
+         self,
+@@ -429,8 +471,51 @@
+     ):
+         agent = agent or self.active_agent
+ 
++        source_node_id = agent.current_node.id if agent.current_node else None
++
+         async def transition_func(function_call_params: FunctionCallParams) -> None:
+             """Inner function that handles the node change tool calls"""
++            claim = None
++            if self._require_user_response:
++                node = agent.current_node
++                if (
++                    node is None
++                    or (source_node_id is not None and node.id != source_node_id)
++                    or self._transition_claim is not None
++                ):
++                    # A second call from the same model batch must not use the
++                    # answer twice or race the first transition's extraction.
++                    # Leave inference to Pipecat's group-completion logic: this
++                    # may be the last sibling after a successful transition.
++                    # run_llm=False here would swallow the new node's opening.
++                    await function_call_params.result_callback(
++                        {"status": "skipped", "reason": "stale_node_transition"},
++                        properties=FunctionCallResultProperties(),
++                    )
++                    return
++                if (
++                    node.id not in self._response_passthrough_nodes
++                    and self._caller_message_count() <= self._node_entry_user_count
++                ):
++                    self._response_gate_retries += 1
++                    await function_call_params.result_callback(
++                        {
++                            "status": "blocked",
++                            "error": "No new user answer since entering this node. "
++                            "Ask the current node's question and wait for the user. "
++                            "Do not call another transition tool in this response.",
++                            "node_id": node.id,
++                        },
++                        # Give a tool-only response two chances to ask its
++                        # question, but never spin indefinitely on model retries.
++                        properties=FunctionCallResultProperties(
++                            run_llm=self._response_gate_retries <= 2
++                        ),
++                    )
++                    return
++                # Claim synchronously before extraction yields to another task.
++                claim = object()
++                self._transition_claim = claim
+             logger.info(f"LLM Function Call EXECUTED: {name}")
+             logger.info(
+                 f"Function: {name} -> transitioning to node: {transition_to_node}"
+@@ -500,9 +585,16 @@
+                 )
+ 
+             except Exception as e:
++                if claim is not None and self._transition_claim is claim:
++                    self._transition_claim = None
+                 logger.error(f"Error in transition function {name}: {str(e)}")
+                 error_result = {"status": "error", "error": str(e)}
+                 await function_call_params.result_callback(error_result)
++            finally:
++                # Interruption/timeout raises CancelledError (BaseException),
++                # which must not leave this node permanently claimed.
++                if claim is not None and self._transition_claim is claim:
++                    self._transition_claim = None
+ 
+         return agent.bind_tool(self, transition_func)
+ 
+@@ -898,6 +990,10 @@
+ 
+         # Set current node for all nodes (including static ones) so STT mute filter works
+         self.active_agent.current_node = node
++        if self._require_user_response:
++            self._node_entry_user_count = self._caller_message_count()
++            self._response_gate_retries = 0
++            self._transition_claim = None
+ 
+         # Track visited nodes in gathered context for call tags
+         nodes_visited = self._gathered_context.setdefault("nodes_visited", [])

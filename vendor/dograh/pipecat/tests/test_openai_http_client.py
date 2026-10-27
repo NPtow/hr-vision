@@ -1,0 +1,72 @@
+#
+# Copyright (c) 2024-2026, Daily
+#
+# SPDX-License-Identifier: BSD 2-Clause License
+#
+
+"""Unit tests for custom http_client support in OpenAI TTS and Whisper-based STT services."""
+
+import unittest
+from unittest.mock import AsyncMock, patch
+
+from openai import DefaultAsyncHttpxClient
+
+from pipecat.services.groq.stt import GroqSTTService
+from pipecat.services.openai.stt import OpenAISTTService
+from pipecat.services.openai.tts import OpenAITTSService
+from pipecat.services.tts_service import TTSService
+from tests.openai_http_helpers import ASYNC_CLIENT, http
+
+# The SDK adopts a caller-supplied client as-is and derives its request timeout from it.
+CUSTOM_TIMEOUT = http.Timeout(60.0, connect=10.0)
+
+
+def make_http_client() -> DefaultAsyncHttpxClient:
+    return DefaultAsyncHttpxClient(timeout=CUSTOM_TIMEOUT)
+
+
+class TestOpenAIHttpClient(unittest.IsolatedAsyncioTestCase):
+    async def test_openai_tts_cleanup_closes_owned_http_client(self):
+        service = OpenAITTSService(api_key="test-key")
+        await service.cleanup()
+        self.assertTrue(service._client.is_closed())
+
+    async def test_openai_tts_cleanup_preserves_custom_http_client(self):
+        async with make_http_client() as http_client:
+            service = OpenAITTSService(api_key="test-key", http_client=http_client)
+            await service.cleanup()
+            self.assertFalse(http_client.is_closed)
+
+    async def test_openai_tts_closes_client_when_processor_cleanup_fails(self):
+        service = OpenAITTSService(api_key="test-key")
+        with patch.object(TTSService, "cleanup", AsyncMock(side_effect=RuntimeError("cleanup"))):
+            with self.assertRaises(RuntimeError):
+                await service.cleanup()
+        self.assertTrue(service._client.is_closed())
+
+    async def test_openai_tts_uses_custom_http_client(self):
+        async with make_http_client() as http_client:
+            service = OpenAITTSService(api_key="test-key", http_client=http_client)
+            self.assertIs(service._client._client, http_client)
+            self.assertEqual(service._client.timeout, CUSTOM_TIMEOUT)
+
+    async def test_openai_stt_uses_custom_http_client(self):
+        async with make_http_client() as http_client:
+            service = OpenAISTTService(api_key="test-key", http_client=http_client)
+            self.assertIs(service._client._client, http_client)
+            self.assertEqual(service._client.timeout, CUSTOM_TIMEOUT)
+
+    async def test_groq_stt_uses_custom_http_client(self):
+        async with make_http_client() as http_client:
+            service = GroqSTTService(api_key="test-key", http_client=http_client)
+            self.assertIs(service._client._client, http_client)
+
+    async def test_openai_tts_defaults_to_sdk_client(self):
+        service = OpenAITTSService(api_key="test-key")
+        self.assertIsInstance(service._client._client, ASYNC_CLIENT)
+        self.assertNotEqual(service._client.timeout, CUSTOM_TIMEOUT)
+
+    async def test_openai_stt_defaults_to_sdk_client(self):
+        service = OpenAISTTService(api_key="test-key")
+        self.assertIsInstance(service._client._client, ASYNC_CLIENT)
+        self.assertNotEqual(service._client.timeout, CUSTOM_TIMEOUT)

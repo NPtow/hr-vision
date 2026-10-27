@@ -14,7 +14,7 @@ flowchart LR
 
 ## Что именно подключено
 
-- `CandidateCorpusCollector` в `interface-lab/server/assessment_corpus.py` принимает
+- `CandidateCorpusCollector` в `services/recruiting-api/assessment_corpus.py` принимает
   уже настроенный `CoreClient`, функцию чтения CV и обязательную проверку доступа.
 - Через существующий `GET /v1/candidates/{id}/dossier` получает все связанные
   `interviews[]` и `meetings[]`. Новый поиск интервью или второй реестр не создан.

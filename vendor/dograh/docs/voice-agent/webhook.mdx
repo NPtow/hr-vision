@@ -1,0 +1,40 @@
+---
+title: "Webhook"
+description: "Webhook node allow you to sync the result of Voice Agent runs to your external systems, like CRM or to other workflow orchestrator like Zapier or n8n."
+---
+
+## Video Tutorial
+
+<iframe 
+  width="560" 
+  height="315" 
+  src="https://www.youtube.com/embed/oqUm4lLG4eU?si=kXvOtOzvKlEYE6G0" 
+  title="Webhook Configuration Tutorial" 
+  frameBorder="0" 
+  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+  referrerPolicy="strict-origin-when-cross-origin" 
+  allowFullScreen
+></iframe>
+
+<Note>
+You can have multiple Webhook Nodes for a single Voice Agent, if you want to sync the result of the call at multiple places.
+</Note>
+
+### Creating the Webhook Payload
+The payload can contain a valid JSON, and you can reference context variables while constructing it using double-brace syntax — for example `{{workflow_run_id}}`, [`{{initial_context.*}}`](/core-concepts/context-and-variables#initial_context), and [`{{gathered_context.*}}`](/core-concepts/context-and-variables#gathered_context), including the [final call outcome](../developer/call-dispositions) `{{gathered_context.call_disposition}}`.
+
+For the full list of available variables, authentication options, and receiver examples, see the [Webhook Payloads developer reference](/developer/webhooks).
+
+An example of the payload is given below
+
+```json
+{
+  "call_id": "{{workflow_run_id}}",
+  "first_name": "{{initial_context.first_name}}",
+  "rsvp": "{{gathered_context.rsvp}}",
+  "disposition": "{{gathered_context.call_disposition}}",
+  "duration": "{{cost_info.call_duration_seconds}}",
+  "recording_url": "{{recording_url}}",
+  "transcript_url": "{{transcript_url}}"
+}
+```

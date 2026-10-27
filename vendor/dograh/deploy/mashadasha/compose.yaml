@@ -1,0 +1,290 @@
+name: dograh-mashadasha
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-runtime: &runtime
+  restart: unless-stopped
+  logging: *logging
+  networks: [dograh]
+
+services:
+  egress:
+    restart: unless-stopped
+    logging: *logging
+    image: dograhai/dograh-api:1.48.0
+    pull_policy: never
+    entrypoint: [python, /opt/deepgram-egress/proxy.py]
+    command: []
+    user: "999:999"
+    network_mode: host
+    read_only: true
+    init: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 64m
+    cpus: 0.20
+    pids_limit: 32
+    volumes:
+      - ./egress/proxy.py:/opt/deepgram-egress/proxy.py:ro
+    environment:
+      DEEPGRAM_EGRESS_BIND: "172.18.0.1"
+      DEEPGRAM_EGRESS_PORT: "10818"
+      DEEPGRAM_EGRESS_CLIENT_SUBNET: "172.18.0.0/16"
+      PYTHONDONTWRITEBYTECODE: "1"
+    healthcheck:
+      test: [CMD, python, -c, 'import socket; socket.create_connection(("172.18.0.1",10818),3).close()']
+      interval: 20s
+      timeout: 5s
+      retries: 3
+    depends_on:
+      postgres: {condition: service_healthy}
+
+  tts:
+    <<: *runtime
+    image: dograh-mashadasha-tts:edge7.2.8
+    build: ./tts
+    pull_policy: never
+    mem_limit: 128m
+    cpus: 0.50
+    pids_limit: 50
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      TTS_API_KEY: ${TTS_AUTH_TOKEN:?Set TTS_AUTH_TOKEN}
+      TTS_MAX_CONCURRENCY: "1"
+      TTS_PROXY: http://172.18.0.1:10818
+    healthcheck:
+      test: [CMD-SHELL, 'python -c "import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8000/health\").read()"']
+      interval: 20s
+      timeout: 5s
+      retries: 5
+
+  proxy:
+    <<: *runtime
+    image: caddy:2-alpine
+    pull_policy: never
+    mem_limit: 64m
+    cpus: 0.20
+    pids_limit: 50
+    ports:
+      - "10.130.0.18:8385:8080"
+    volumes:
+      - ./proxy.caddy:/etc/caddy/Caddyfile:ro
+    depends_on:
+      ui: {condition: service_healthy}
+
+  postgres:
+    <<: *runtime
+    image: pgvector/pgvector:pg17
+    mem_limit: 192m
+    cpus: 0.50
+    pids_limit: 100
+    environment:
+      POSTGRES_DB: dograh
+      POSTGRES_USER: dograh
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    command: [postgres, -c, shared_buffers=32MB, -c, max_connections=30, -c, work_mem=2MB, -c, maintenance_work_mem=16MB]
+    volumes:
+      - ${DOGRAH_STATE_DIR:-/var/lib/dograh}/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U dograh -d dograh"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+
+  redis:
+    <<: *runtime
+    image: redis:7.4-alpine
+    mem_limit: 64m
+    cpus: 0.20
+    pids_limit: 50
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD}
+    command:
+      - /bin/sh
+      - -ec
+      - exec redis-server --requirepass "$${REDIS_PASSWORD}" --appendonly yes --maxmemory 32mb --maxmemory-policy noeviction
+    volumes:
+      - ${DOGRAH_STATE_DIR:-/var/lib/dograh}/redis:/data
+    healthcheck:
+      test: [CMD-SHELL, 'REDISCLI_AUTH="$${REDIS_PASSWORD}" redis-cli ping | grep -q PONG']
+      interval: 5s
+      timeout: 3s
+      retries: 15
+
+  minio:
+    <<: *runtime
+    image: dograhai/minio:2026.09.22
+    mem_limit: 192m
+    cpus: 0.30
+    pids_limit: 100
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD}
+      MINIO_API_CORS_ALLOW_ORIGIN: ${PUBLIC_BASE_URL:?Set PUBLIC_BASE_URL}
+      GOMEMLIMIT: 140MiB
+      GOMAXPROCS: "1"
+    command: [server, /data, --console-address, ":9001"]
+    ports:
+      - "127.0.0.1:${DOGRAH_STORAGE_PORT:-19000}:9000"
+    volumes:
+      - ${DOGRAH_STATE_DIR:-/var/lib/dograh}/minio:/data
+    healthcheck:
+      test: [CMD, curl, -f, http://127.0.0.1:9000/minio/health/live]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    <<: *runtime
+    # Official 1.48.0 amd64 image, verified 2026-10-06. Pinned to immutable bytes.
+    image: dograh-mashadasha-api:1.48.0-oasis7
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    pull_policy: never
+    platform: linux/amd64
+    mem_limit: 1536m
+    cpus: 1.25
+    pids_limit: 200
+    init: true
+    stop_grace_period: 60s
+    environment:
+      ENVIRONMENT: production
+      DEPLOYMENT_MODE: oss
+      AUTH_PROVIDER: local
+      ENABLE_SIGNUP: "false"
+      ENABLE_TELEMETRY: "false"
+      ENABLE_ARI_MANAGER: "false"
+      ENABLE_CAMPAIGN_ORCHESTRATOR: "false"
+      FASTAPI_WORKERS: "1"
+      ARQ_WORKERS: "1"
+      DEFAULT_ORG_CONCURRENCY_LIMIT: "1"
+      DOGRAH_REQUIRE_USER_RESPONSE: "true"
+      DOGRAH_PASSTHROUGH_NODE_IDS: b4_exit
+      DOGRAH_FINAL_EXTRACTION_TIMEOUT_SECONDS: "60"
+      HTTPS_PROXY: http://172.18.0.1:10818
+      WSS_PROXY: http://172.18.0.1:10818
+      NO_PROXY: localhost,127.0.0.1,::1,api,ui,postgres,redis,minio,tts,proxy,.sslip.io
+      LOG_LEVEL: INFO
+      LOG_TO_FILE: "false"
+      LANGFUSE_TRACES_PUBLIC: "false"
+      PUBLIC_HOST: ${PUBLIC_HOST:?Set PUBLIC_HOST}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?Set PUBLIC_BASE_URL}
+      BACKEND_API_ENDPOINT: ${PUBLIC_BASE_URL:?Set PUBLIC_BASE_URL}
+      UI_APP_URL: ${PUBLIC_BASE_URL:?Set PUBLIC_BASE_URL}
+      CORS_ALLOWED_ORIGINS: ${PUBLIC_BASE_URL:?Set PUBLIC_BASE_URL}
+      FORWARDED_ALLOW_IPS: "*"
+      DATABASE_URL: postgresql+asyncpg://dograh:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/dograh
+      REDIS_URL: redis://:${REDIS_PASSWORD:?Set REDIS_PASSWORD}@redis:6379/0
+      OSS_JWT_SECRET: ${OSS_JWT_SECRET:?Set OSS_JWT_SECRET}
+      OSS_JWT_EXPIRY_HOURS: "168"
+      # Generic S3 against our MinIO preserves a private bucket and signs URLs.
+      ENABLE_AWS_S3: "true"
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD}
+      S3_BUCKET: voice-audio
+      S3_REGION: us-east-1
+      S3_ENDPOINT_URL: ${STORAGE_PUBLIC_BASE_URL:?Set STORAGE_PUBLIC_BASE_URL}
+      S3_SIGNATURE_VERSION: s3v4
+      S3_ADDRESSING_STYLE: path
+      MINIO_ENDPOINT: minio:9000
+      MINIO_PUBLIC_ENDPOINT: ${PUBLIC_BASE_URL:?Set PUBLIC_BASE_URL}
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET: voice-audio
+      MINIO_SECURE: "false"
+      ENABLE_COTURN: ${ENABLE_COTURN:-false}
+      TURN_HOST: ${TURN_HOST:-158.160.193.212}
+      TURN_PORT: "3478"
+      TURN_TLS_PORT: "0"
+      TURN_SECRET: ${TURN_SECRET:?Set TURN_SECRET}
+      SERVER_IP: ${TURN_PUBLIC_IP:-158.160.193.212}
+      FORCE_TURN_RELAY: ${FORCE_TURN_RELAY:-false}
+      # Prevent accidental use of Dograh's managed billing/SIP endpoints. The
+      # installation is provisioned with BYOK configuration and a local owner.
+      MPS_API_URL: http://127.0.0.1:9
+    ports:
+      - "127.0.0.1:${DOGRAH_API_PORT:-18080}:8000"
+    volumes:
+      - .:/deployment:ro
+      - ${DOGRAH_STATE_DIR:-/var/lib/dograh}/bootstrap.json:/run/dograh-bootstrap.json:ro
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      minio: {condition: service_healthy}
+      egress: {condition: service_healthy}
+    healthcheck:
+      test: [CMD-SHELL, 'python -c "import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8000/api/v1/health\").read()"']
+      interval: 20s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
+  ui:
+    <<: *runtime
+    # Official 1.48.0 amd64 image, matching the API release.
+    image: dograhai/dograh-ui:1.48.0
+    pull_policy: never
+    platform: linux/amd64
+    mem_limit: 192m
+    cpus: 0.40
+    pids_limit: 100
+    environment:
+      HOSTNAME: 0.0.0.0
+      BACKEND_URL: http://api:8000
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=128
+      NEXT_TELEMETRY_DISABLED: "1"
+      ENABLE_TELEMETRY: "false"
+    ports:
+      - "127.0.0.1:${DOGRAH_UI_PORT:-13010}:3010"
+    depends_on:
+      api: {condition: service_healthy}
+    healthcheck:
+      test: [CMD-SHELL, "wget --no-verbose --tries=1 --spider http://127.0.0.1:3010 || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+
+  coturn:
+    <<: *runtime
+    profiles: [voice]
+    image: coturn/coturn:4.8.0
+    mem_limit: 64m
+    cpus: 0.25
+    pids_limit: 100
+    # TURN is UDP/TCP media, not HTTP. Activate only after checking the cloud
+    # firewall. The existing HTTP reverse proxy cannot carry this traffic.
+    ports:
+      - "3478:3478/udp"
+      - "3478:3478/tcp"
+      - "49152-49200:49152-49200/udp"
+    command:
+      - -n
+      - --listening-port=3478
+      - --min-port=49152
+      - --max-port=49200
+      - --external-ip=${TURN_PUBLIC_IP:-158.160.193.212}
+      - --realm=dograh-mashadasha
+      - --use-auth-secret
+      - --static-auth-secret=${TURN_SECRET:?Set TURN_SECRET}
+      - --fingerprint
+      - --no-cli
+      - --no-tls
+      - --no-dtls
+      - --no-multicast-peers
+      - --total-quota=20
+      - --user-quota=4
+      - --log-file=stdout
+
+networks:
+  dograh:
+    driver: bridge

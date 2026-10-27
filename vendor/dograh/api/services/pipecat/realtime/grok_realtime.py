@@ -1,0 +1,330 @@
+"""Dograh subclass of pipecat's Grok Realtime LLM service.
+
+Layers Dograh engine integration quirks onto upstream-pristine
+:class:`GrokRealtimeLLMService`. Grok already supports runtime session updates,
+so this wrapper stays close to the OpenAI realtime shim.
+
+Adds:
+
+- **Silent audio while muted** via ``UserMuteStarted/StoppedFrame``.
+- **TTSSpeakFrame as initial-response trigger** so the engine's greeting
+  flow kicks off the bot's first response.
+- **One-off LLMMessagesAppendFrame handling** for ephemeral realtime prompts
+  like user-idle checks, without mutating Dograh's local ``LLMContext``.
+- **Workflow-control deferral** so node transitions, call termination, and
+  transfers wait for any current bot audio to finish while ordinary tools run
+  immediately.
+- **finalized=True on TranscriptionFrame** for parity with Dograh's other
+  realtime providers.
+"""
+
+import json
+from typing import Any
+
+from loguru import logger
+
+from api.services.pipecat.realtime.conversation import RealtimeConversationMixin
+from api.services.pipecat.realtime.static_greeting import format_static_greeting_prompt
+from pipecat.frames.frames import (
+    Frame,
+    FunctionCallFromLLM,
+    LLMFullResponseStartFrame,
+    LLMMessagesAppendFrame,
+    TranscriptionFrame,
+)
+from pipecat.processors.aggregators.llm_context import LLMContext
+from pipecat.processors.frame_processor import FrameDirection
+from pipecat.services.xai.realtime import events
+from pipecat.services.xai.realtime.llm import GrokRealtimeLLMService
+from pipecat.utils.time import time_now_iso8601
+
+
+class DograhGrokRealtimeLLMService(RealtimeConversationMixin, GrokRealtimeLLMService):
+    """Grok Realtime with Dograh engine integration quirks."""
+
+    _workflow_tools_follow_voice_response = False
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._pending_initial_greeting_text: str | None = None
+        # A recorded greeting can open the conversation before the API session
+        # is ready; its seed then waits for session.updated. Kept separate from
+        # the text-greeting slot because the transcript may be None while the
+        # open itself is still pending.
+        self._pending_prerecorded_greeting: tuple[str | None] | None = None
+
+    async def process_frame(self, frame: Frame, direction: FrameDirection):
+        if isinstance(frame, LLMMessagesAppendFrame):
+            await self._handle_messages_append(frame)
+            return
+        await super().process_frame(frame, direction)
+
+    async def _handle_messages_append(self, frame: LLMMessagesAppendFrame):
+        """Consume a one-off append frame without mutating the local LLMContext."""
+        if self._disconnecting:
+            return
+
+        if not self._api_session_ready:
+            if frame.run_llm:
+                logger.debug(
+                    f"{self}: LLMMessagesAppendFrame received before session ready; "
+                    "deferring response until the session is initialized"
+                )
+                self._run_llm_when_api_session_ready = True
+            return
+
+        appended_any = False
+        for message in frame.messages:
+            item = self._message_to_conversation_item(message)
+            if item is None:
+                continue
+            evt = events.ConversationItemCreateEvent(item=item)
+            self._messages_added_manually[evt.item.id] = True
+            await self.send_client_event(evt)
+            appended_any = True
+
+        if frame.run_llm and appended_any:
+            await self._send_manual_response_create()
+
+    async def _handle_context(self, context: LLMContext | None):
+        if context is None:
+            logger.warning(f"{self}: received context trigger before context was set")
+            return
+        if not self._handled_initial_context:
+            self._handled_initial_context = True
+            self._context = context
+            await self._create_response()
+        else:
+            self._context = context
+            await self._process_completed_function_calls(send_new_results=True)
+
+    async def _handle_initial_greeting(
+        self, context: LLMContext | None, greeting_text: str
+    ):
+        if context is None:
+            logger.warning(
+                f"{self}: received initial greeting trigger before context was set"
+            )
+            return
+
+        self._handled_initial_context = True
+        self._context = context
+        await self._create_initial_greeting_response(greeting_text)
+
+    async def _create_initial_greeting_response(self, greeting_text: str):
+        if self._disconnecting:
+            return
+
+        if not self._api_session_ready:
+            self._pending_initial_greeting_text = greeting_text
+            self._run_llm_when_api_session_ready = True
+            return
+
+        self._pending_initial_greeting_text = None
+        await self._ensure_conversation_setup()
+        item = events.ConversationItem(
+            type="message",
+            role="user",
+            content=[
+                events.ItemContent(
+                    type="input_text",
+                    text=format_static_greeting_prompt(greeting_text),
+                )
+            ],
+        )
+        evt = events.ConversationItemCreateEvent(item=item)
+        self._messages_added_manually[evt.item.id] = True
+        await self.send_client_event(evt)
+        await self._send_manual_response_create()
+
+    async def _open_after_prerecorded_greeting(self, transcript: str | None):
+        """Configure the session and seed the greeting, without a response.
+
+        The greeting is sent as its own assistant item rather than through the
+        context: the realtime adapter only passes a lone *user* message
+        through untouched, and packs anything else into a synthetic "this is a
+        previously saved conversation" user turn that ends by telling the model
+        to say it is ready to continue.
+        """
+        if self._disconnecting:
+            return
+
+        if not self._api_session_ready:
+            self._pending_prerecorded_greeting = (transcript,)
+            return
+
+        self._pending_prerecorded_greeting = None
+        await self._ensure_conversation_setup()
+        if not transcript:
+            return
+
+        evt = events.ConversationItemCreateEvent(
+            item=events.ConversationItem(
+                type="message",
+                role="assistant",
+                content=[events.ItemContent(type="output_text", text=transcript)],
+            )
+        )
+        self._messages_added_manually[evt.item.id] = True
+        await self.send_client_event(evt)
+
+    async def _ensure_conversation_setup(self):
+        if not self._llm_needs_conversation_setup:
+            return
+        if self._context is None:
+            logger.warning(f"{self}: cannot set up conversation without context")
+            return
+
+        adapter = self.get_llm_adapter()
+        llm_invocation_params = adapter.get_llm_invocation_params(self._context)
+        for item in llm_invocation_params["messages"]:
+            evt = events.ConversationItemCreateEvent(item=item)
+            self._messages_added_manually[evt.item.id] = True
+            await self.send_client_event(evt)
+
+        await self._send_session_update()
+        self._llm_needs_conversation_setup = False
+
+    async def _handle_evt_session_updated(self, evt):
+        session_id = getattr(getattr(evt, "session", None), "id", None)
+        if session_id:
+            self._session_id = session_id
+        self._api_session_ready = True
+        if self._pending_initial_greeting_text is not None:
+            greeting_text = self._pending_initial_greeting_text
+            self._run_llm_when_api_session_ready = False
+            await self._create_initial_greeting_response(greeting_text)
+        elif self._run_llm_when_api_session_ready:
+            self._run_llm_when_api_session_ready = False
+            await self._create_response()
+        elif self._pending_prerecorded_greeting is not None:
+            await self._open_after_prerecorded_greeting(
+                *self._pending_prerecorded_greeting
+            )
+
+    def _message_to_conversation_item(
+        self, message: Any
+    ) -> events.ConversationItem | None:
+        if not isinstance(message, dict):
+            logger.warning(
+                f"{self}: skipping unsupported appended message payload {message!r}"
+            )
+            return None
+
+        role = message.get("role")
+        if role not in {"user", "system", "developer"}:
+            logger.warning(
+                f"{self}: skipping unsupported appended message role {role!r}"
+            )
+            return None
+
+        text = self._extract_text_content(message.get("content"))
+        if not text:
+            logger.warning(
+                f"{self}: skipping appended message with unsupported content {message!r}"
+            )
+            return None
+
+        item_role = "system" if role in {"system", "developer"} else "user"
+        return events.ConversationItem(
+            type="message",
+            role=item_role,
+            content=[events.ItemContent(type="input_text", text=text)],
+        )
+
+    @staticmethod
+    def _extract_text_content(content: Any) -> str | None:
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts: list[str] = []
+            for part in content:
+                if not isinstance(part, dict):
+                    return None
+                if part.get("type") != "text":
+                    return None
+                text = part.get("text")
+                if not isinstance(text, str):
+                    return None
+                parts.append(text)
+            return "\n".join(parts) if parts else None
+        return None
+
+    async def _send_manual_response_create(self):
+        """Trigger inference after manually appending conversation items."""
+        await self.push_frame(LLMFullResponseStartFrame())
+        await self.start_processing_metrics()
+        await self.start_ttfb_metrics()
+        await self.send_client_event(
+            events.ResponseCreateEvent(
+                response=events.ResponseProperties(modalities=["text", "audio"])
+            )
+        )
+
+    async def _handle_evt_response_created(self, evt):
+        self._workflow_tool_deferral.begin_response(collecting=True)
+        await super()._handle_evt_response_created(evt)
+
+    async def _handle_evt_response_done(self, evt):
+        await super()._handle_evt_response_done(evt)
+        await self._workflow_tool_deferral.complete_response(
+            evt.response.id,
+            speaking=self._workflow_bot_is_speaking,
+            succeeded=evt.response.status == "completed",
+        )
+
+    async def _handle_evt_function_call_arguments_done(self, evt):
+        """Only a response's sole workflow-control call may wait for playback."""
+        try:
+            args = json.loads(evt.arguments)
+
+            function_call_item = self._pending_function_calls.get(evt.call_id)
+            if function_call_item:
+                del self._pending_function_calls[evt.call_id]
+
+                function_name = getattr(evt, "name", None) or function_call_item.name
+                function_calls = [
+                    FunctionCallFromLLM(
+                        context=self._context,
+                        tool_call_id=evt.call_id,
+                        function_name=function_name,
+                        arguments=args,
+                    )
+                ]
+
+                self._workflow_tool_deferral.select_response(
+                    self._current_response_id, collecting=True
+                )
+                await self._workflow_tool_deferral.submit(
+                    function_calls,
+                    speaking=self._workflow_bot_is_speaking,
+                    dispatch=self.run_function_calls,
+                )
+            else:
+                logger.warning(
+                    f"No tracked function call found for call_id: {evt.call_id}"
+                )
+                logger.warning(
+                    f"Available pending calls: {list(self._pending_function_calls.keys())}"
+                )
+
+        except Exception as e:
+            logger.error(f"Failed to process function call arguments: {e}")
+
+    async def _handle_evt_input_audio_transcription_completed(self, evt):
+        await self._call_event_handler(
+            "on_conversation_item_updated", evt.item_id, None
+        )
+
+        transcript = evt.transcript.strip() if evt.transcript else ""
+        if not transcript:
+            return
+
+        await self.broadcast_frame(
+            TranscriptionFrame,
+            text=transcript,
+            user_id="",
+            timestamp=time_now_iso8601(),
+            result=evt,
+            finalized=True,
+        )

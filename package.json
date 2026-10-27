@@ -1,0 +1,17 @@
+{
+  "name": "hr-vision",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/web",
+    "apps/website",
+    "packages/web-shared"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "check:web": "python3 scripts/check.py web",
+    "check:site": "python3 scripts/check.py site"
+  }
+}

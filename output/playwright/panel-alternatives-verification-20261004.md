@@ -2,8 +2,8 @@
 
 Local Storybook: `http://127.0.0.1:6007/iframe.html?id=hr-vision-panel-alternatives--gallery&viewMode=story&variant=1`.
 
-- `npm --prefix interface-lab run typecheck`: passed.
-- `npm --prefix interface-lab run build`: passed. Existing dependency module-directive warnings remain nonfatal.
+- `npm --prefix apps/web run typecheck`: passed.
+- `npm --prefix apps/web run build`: passed. Existing dependency module-directive warnings remain nonfatal.
 - `scripts/panel-alternatives-check.js` via Playwright CLI: **91 checks passed**, `errors: []`.
 - All ten layouts selected and checked at 1440 and 390 px; no document horizontal overflow.
 - Profile selection, evidence and sheet dialogs, nested Escape/focus restoration (three repetitions), accordion close/reopen, next candidate, dossier selection, task lenses, mobile evidence reading/back, reduced-motion strip navigation, card page/back, task context and invalid URL recovery passed.

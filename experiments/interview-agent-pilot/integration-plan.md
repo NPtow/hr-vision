@@ -17,16 +17,16 @@ Strands выполняет агентный цикл, выбирает инст�
 
 ## Точки подключения в коде
 
-- `interface-lab/src/scenes/interview-review/useInterviewAssistant.ts`:
+- `apps/web/src/scenes/interview-review/useInterviewAssistant.ts`:
   сейчас сообщения находятся только в React state. Добавить загрузку сохранённой
   беседы, поток ответа, восстановление выполняющегося запроса и остановку на сервере.
-- `interface-lab/src/scenes/interview-review/interview-assistant-api.ts`:
+- `apps/web/src/scenes/interview-review/interview-assistant-api.ts`:
   запрос сейчас содержит источник, action, query и requestId. Для chat добавить
   conversationId и работу с runId. Режим search продолжает использовать Jev напрямую.
-- `interface-lab/server/employer_routes.py`:
+- `services/recruiting-api/employer_routes.py`:
   повторно использовать авторизацию и разрешение источника; сервер определяет
   вакансию, кандидата и запись. Идентификатор из браузера сам по себе не даёт доступа.
-- `interface-lab/server/interview_assistant.py`:
+- `services/recruiting-api/interview_assistant.py`:
   заменить исполнителя chat через конфигурацию на клиент отдельного сервиса Strands.
   Существующий `evaluate_jev` сохранить инструментом поиска. Повторный requestId
   возвращает прежний run, а не оплачивает новый запрос к модели.

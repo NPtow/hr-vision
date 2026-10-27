@@ -1,0 +1,68 @@
+[
+  {
+    "image": "dograhai/dograh-api:1.48.0",
+    "registry_digest": "sha256:769d68cf29e6b6271e2f885c49ce55ca997fb3c0c5f77738a42de917ad5fac99",
+    "local_image_id": "sha256:380552220f43e8cf25adb71b1e893ae69e1273f0e5378f80cc33411d844c4f8c",
+    "checks": {
+      "rootfs_diff_ids_match": true,
+      "architecture_match": true,
+      "os_match": true
+    },
+    "verified_at": "2026-10-06T14:22:55.399978+00:00"
+  },
+  {
+    "image": "dograhai/dograh-ui:1.48.0",
+    "registry_digest": "sha256:af7b7f1ab7787ff42b7b99f4dfe232bdc27d22f4f186d86af6171bc3b31f9574",
+    "local_image_id": "sha256:abb01680d75bf71ae2edfc6674e18fb4116275e896529364ec3b2feca6a64b8e",
+    "checks": {
+      "rootfs_diff_ids_match": true,
+      "architecture_match": true,
+      "os_match": true
+    },
+    "verified_at": "2026-10-06T14:23:07.928017+00:00"
+  },
+  {
+    "image": "pgvector/pgvector:pg17",
+    "registry_digest": "sha256:cd4ccfdaf62cbfeb5c6ee19ef0dd663406d4ed740c320b324d016a90e85385b3",
+    "local_image_id": "sha256:d7673d1ce79105dbf739e220cf97295d4779c95f2396486f36852a0bfe072343",
+    "checks": {
+      "rootfs_diff_ids_match": true,
+      "architecture_match": true,
+      "os_match": true
+    },
+    "verified_at": "2026-10-06T14:23:20.162138+00:00"
+  },
+  {
+    "image": "redis:7.4-alpine",
+    "registry_digest": "sha256:ca0acbb137c1dc3339c8b147a58fd6f42775d4599327b50e7b116c23de501af2",
+    "local_image_id": "sha256:e0df28b7b89bee1a9e32778ae7d7acfe2b6881da3b9d21b4f5a52554b27cdae1",
+    "checks": {
+      "rootfs_diff_ids_match": true,
+      "architecture_match": true,
+      "os_match": true
+    },
+    "verified_at": "2026-10-06T14:23:32.372064+00:00"
+  },
+  {
+    "image": "dograhai/minio:2026.09.22",
+    "registry_digest": "sha256:ca6b149d3ae518bba820044d168a144789fa594f183f7fdcb76db7d5a37024a0",
+    "local_image_id": "sha256:68fb84b0e53e8a352091658002b87312e04c2f5f19229f1a4e0ab09341bb224e",
+    "checks": {
+      "rootfs_diff_ids_match": true,
+      "architecture_match": true,
+      "os_match": true
+    },
+    "verified_at": "2026-10-06T14:23:44.672423+00:00"
+  },
+  {
+    "image": "coturn/coturn:4.8.0",
+    "registry_digest": "sha256:913d28d8e24f53108454b4b4a53cde5d4b2a00f4fd26021a52c588cf7f723514",
+    "local_image_id": "sha256:54a7f4665f42915cf4df83783317a9d6b2a39b0e91f11e3aa4e5c2b35da2ed1d",
+    "checks": {
+      "rootfs_diff_ids_match": true,
+      "architecture_match": true,
+      "os_match": true
+    },
+    "verified_at": "2026-10-06T14:29:05.744816+00:00"
+  }
+]

@@ -1,0 +1,170 @@
+# HR Vision на YC
+
+С 06.10.2026 публикация выполняется автоматически из GitHub: `main` обновляет работающий сервис, `codex/mockups` обновляет отдельный сайт макетов. [Актуальные адреса, pipeline и откат](ci/README.md). Скрипты `deploy-yc.sh` и `deploy-api-yc.sh` запускают этот же workflow; прежняя прямая загрузка отключена.
+
+Для загрузки CV API использует `pdftotext` из Ubuntu-пакета `poppler-utils`. До первого выпуска CV нужно установить пакет на outreach без перезапуска соседних служб и добавить `candidate_resume.py` в runtime-список установленного CI receiver. Само приложение публикуется обычным GitHub workflow. CV и извлечённый текст хранятся в закрытой SQLite-базе, а не среди публичных файлов сайта. [Подробности и ограничения](../../../services/recruiting-api/CANDIDATE_PORTAL.md).
+
+Для `/api/hr/candidate/resume` и `/api/hr/recruiter/candidates` в `outreach.Caddyfile` нужен отдельный лимит тела **7 MB**: файл до 5 MiB передаётся в JSON как base64 (до 6 990 508 байт плюс поля JSON). API проверяет сессию владельца или рекрутера до чтения большого тела. Общий `/api/hr/*` сохраняет лимит 32 KB, а `/api/hr/intake` — 12 MB. Изменение Caddy устанавливается отдельно от выпуска приложения: внести только эти маршруты в текущую конфигурацию, сохранить остальные маршруты, проверить `caddy validate` и выполнить graceful reload через admin `127.0.0.1:2139`.
+
+Для подготовленных профилей и общего расписания runtime receiver и пакет релиза включают `candidate_invites.py` и `recruiter_availability.py`. Миграция допускает профиль без аккаунта (`email/password_hash = NULL`), сохраняет прежние связи и проверяет внешние ключи. Перед обновлением API receiver делает SQLite backup и отказывается перезапускать API при живом звонке.
+
+Проверка выпуска CV должна проходить через **публичный HTTPS-адрес**, а не только напрямую через API: загрузить синтетический PDF больше 32 KB и файл на предельные 5 MiB во временный тестовый аккаунт; проверить HTTP 200, извлечённые данные, переход к проверке профиля, сохранность после повторного входа/чтения и совпадение скачанного файла. Затем удалить только созданные этой проверкой аккаунт и файлы. 11.10.2026 проверены PDF 167 936 и 5 242 880 байт, переход `resume → preferences → complete` и повторное чтение профиля; тестовые данные удалены. До исправления прокси обрывал загрузку 164 KB с 502, несмотря на корректный лимит внутри API.
+
+## Исторический журнал до разделения веток
+
+Ниже сохранено устройство прежней общей сборки и история её установки. Команды первой миграции и описание ручного скрипта больше не являются текущей процедурой публикации.
+
+Отдельный статический сайт на **outreach**:  `https://hr-vision.158-160-179-53.sslip.io`. Главная без query string открывает XPM; адрес `/?path=/story/...` оставляет галерею Storybook. Прежние адреса `proteus-lab...` обслуживаются отдельной папкой и этой выкладкой не изменяются.
+
+## Устройство
+
+- Файлы и раздача: `outreach`, `10.130.0.18`. SSH через dsa, пользователь `nikita`, ключ `~/.ssh/yandex_ebitrix`.
+- Изолированный `hr-vision-web.service` запускает уже установленный Caddy, обслуживает `/srv/hr-vision/current` на `127.0.0.1:8381` и внутреннем `10.130.0.18:8381`. MemoryMax=128 MiB. Основной Caddy outreach не меняется и не перезапускается.
+- Origin разрешает только localhost и dsa `10.130.0.28` с Host площадки; остальные запросы получают 403. Админский порт `127.0.0.1:2139`.
+- На dsa прежний домен и TLS. Его HR Vision site block теперь только `reverse_proxy 10.130.0.18:8381`. Сайт всё ещё зависит от dsa как от HTTPS-входа, но выпуски и их раздача находятся на outreach.
+- `/etc/hr-vision/Caddyfile`, `/etc/systemd/system/hr-vision-web.service`, служебное состояние Caddy `/var/lib/hr-vision-web` на outreach. Для раздачи статики Node и база данных не нужны. Связанный процесс обслуживает отдельный `hr-vision-api` с SQLite; `/api/hr/*` проксируется на `127.0.0.1:8391`. [API и его отдельная выкладка](../../../services/recruiting-api/README.md).
+- `/srv/hr-vision/releases/<UTC-время>-<случайный номер>` содержит только результат сборки Storybook.
+- `current` и `previous` являются относительными симлинками. Выпуски сохраняются; скрипт не удаляет старые папки.
+- Документы, исходные звонки, исследовательские заметки, `.env` и Git-репозиторий не копируются на публичный сайт. Явный список разрешённых файлов `public/` включает только 19 обезличенных превью экранов; разрешены стандартные ресурсы сборки. Эта проверка дополняет проверку содержания, но не заменяет её: в интерфейс должны попадать только согласованные обезличенные выводы.
+
+## История первой установки площадки на dsa
+
+Нужна один раз. Файл `deploy/Caddyfile` содержит **только дополнительный site block**, а не замену серверной конфигурации.
+
+1. Прочитать текущий `/etc/caddy/Caddyfile` и сравнить его JSON после `caddy adapt` с активной конфигурацией `http://127.0.0.1:2019/config/`. При расхождении сначала выяснить причину: reload из файла может перезаписать чужие изменения через API.
+2. Убедиться, что `hr-vision.158-160-179-53.sslip.io` ещё отсутствует. Повторно блок не добавлять.
+3. Сохранить SHA-256 исходной конфигурации и резервную копию с датой. Создать временный полный Caddyfile: текущий файл плюс содержимое `deploy/Caddyfile`. Проверить `sudo caddy validate --config <временный-полный-файл> --adapter caddyfile`.
+4. Перед заменой ещё раз сравнить SHA-256 текущего `/etc/caddy/Caddyfile` с сохранённым. Если изменился, пересобрать дельту на новой версии. Установить прошедший проверку полный файл с прежними владельцем и правами.
+5. Выполнить `sudo caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile --force`. Останавливать Caddy или виртуальную машину не нужно. При ошибке восстановить резервную копию и повторить reload. Проверить, что в активных маршрутах появился только новый host и сохранились прежние.
+6. Выполнить обычную выкладку ниже. До первого выпуска файлов по новому адресу ещё нет. HTTPS-сертификат выдаёт Caddy.
+
+Проверено read-only 03.10.2026: Caddy `v2.11.4`, systemd запускает `/usr/bin/caddy run --environ --config /etc/caddy/Caddyfile`, активный JSON совпадает с адаптацией этого файла. В нём 38 HTTP routes, блока HR Vision и папки `/srv/hr-vision` ещё нет. Блок общей лаборатории указывает на `/srv/proteus-storybook/current`. Свободно около 781 MiB; текущая статическая сборка HR Vision занимает около 9.3 MiB. Это снимок до установки, а не постоянная гарантия свободного места.
+
+03.10.2026 в 14:05 МСК установлен только site block HR Vision. Резервная копия: `/etc/caddy/Caddyfile.before-hr-vision-20261003T110550Z`. После validate, сравнения исходного SHA-256 и graceful reload активная конфигурация совпала с файлом: 39 HTTP routes, прежние 38 сохранены. При сравнении нормализованы только номера служебных групп Caddy, автоматический список `skip_hosts` и скрываемый путь временного Caddyfile. Старый адрес экранов вернул HTTP 200, новый домен HTTPS 302 на XPM. Свободно 779 020 KiB (~761 MiB). Статический выпуск на этом шаге ещё не загружался; redirect сам по себе не подтверждает наличие карты.
+
+## Установка origin на outreach
+
+Исходники конфигурации: `outreach.Caddyfile`, `hr-vision-web.service`. Перед установкой проверить свободные порты 8381 и 2139, отсутствие одноимённого юнита и достаточный диск. Выполнить `caddy validate --adapter caddyfile` и `systemd-analyze verify` для подготовленных файлов. Установить Caddyfile в `/etc/hr-vision/Caddyfile` (root:caddy, 640), unit в `/etc/systemd/system/`, создать `/srv/hr-vision/releases`, затем `systemctl daemon-reload` и `systemctl enable --now hr-vision-web.service`.
+
+Для первой миграции выполнить `HR_VISION_ORIGIN_ONLY=1 bash scripts/deploy-yc.sh`: это проверяет origin через SSH и **не объявляет публичный сайт готовым**. Затем проверить origin с dsa, сохранить и сравнить активную конфигурацию dsa с Caddyfile, заменить только HR Vision block на `deploy/Caddyfile`, validate, сравнить исходный SHA-256 перед заменой и выполнить graceful reload. Сохранить прежние HR Vision файлы на dsa для отката. Проверить публичный manifest и браузер до объявления успеха.
+
+## Выкладка
+
+Из `apps/web/`:
+
+```bash
+npm ci
+bash scripts/deploy-yc.sh
+```
+
+Скрипт:
+
+1. Читает `current` и `previous`, затем локально запускает typecheck и build в уникальную временную папку. Параллельные сборки не делят `storybook-static`.
+2. Проверяет наличие галереи десяти вариантов, панели, XPM, экранов и последних CJM в Storybook index; формирует SHA-256 для каждого публичного файла.
+3. Проверяет свободное место до передачи и перед распаковкой: кроме архива и нового выпуска должно оставаться не меньше 512 MiB. Другие сервисы и их файлы не очищаются.
+4. Копирует архив в `/tmp`, сверяет SHA-256, берёт `flock` и повторно сравнивает оба симлинка с исходным состоянием. Если другой deploy уже изменил их, останавливается. При ошибке передачи пытается удалить только архив этой попытки.
+5. Распаковывает в новую папку, проверяет все суммы, затем атомарно переключает `current`, сохраняя предыдущий выпуск.
+6. Всегда проверяет origin через SSH: SHA-256 `index.json`, manifest и iframe XPM, галереи и панели. В обычном режиме затем проверяет те же публичные файлы, номер выпуска и перенаправление главной. При ошибке восстанавливает исходные указатели, только если `current` всё ещё принадлежит этой попытке. Чужой более поздний выпуск не откатывается.
+
+После первого запуска дополнительно открыть XPM в браузере, проверить три стратегии и ссылку на прежние экраны. Успешный HTTP-ответ подтверждает доставку файлов, но не заменяет проверку интерфейса.
+
+## Ручной откат
+
+Сначала записать текущие `readlink /srv/hr-vision/current` и `readlink /srv/hr-vision/previous`, выбрать проверенный выпуск и убедиться, что он существует. Под блокировкой `/srv/hr-vision/.deploy.lock` ещё раз проверить `current`, создать временный симлинк на нужный `releases/<выпуск>` и заменить `current` через `mv -Tf`. Reload Caddy для смены статического выпуска не требуется. Не использовать общий `~/deploy.sh`: он относится к другому приложению.
+
+Новый домен не скрывает данные от посетителей. `X-Robots-Tag: noindex, nofollow` запрещает индексацию добросовестным роботам, но не является авторизацией.
+
+
+## Публикация 04.10.2026
+
+Релиз `20261004T063901Z-32590`, исходный коммит `40e9897`. Предыдущий релиз: `20261003T114512Z-20165`. Добавлены истории `hr-vision-product--manager` и `hr-vision-product--candidate`; публичный индекс содержит 34 истории. Typecheck, build, проверка SHA-256 и 49 проверок взаимодействия на публичном сайте прошли. Подробности: `../../output/playwright/agency-product-verification.md`.
+
+Свободное место для выпуска получено временно: закрытый архив журнала ClickHouse сохранён локально и возвращён на сервер в сжатом виде с проверкой исходного и сжатого SHA-256. Активные журналы, данные БД и сервисы не менялись. После публикации диск снова заполнился, ClickHouse стал unhealthy; статические страницы менеджера и кандидата на последней проверке отвечали HTTP 200. Перед следующей выкладкой снова проверить ёмкость; инцидент роста диска этой публикацией не устранён.
+
+
+## Перенос на outreach 04.10.2026
+
+По указанию пользователя размещение перенесено на outreach. Релиз `20261004T174834Z-17891`, UI-исходники `ef49fd8`, 35 историй. На outreach установлен только отдельный `hr-vision-web.service`; основной Caddy и приложения outreach не перезапускались. Origin проверен с localhost и с dsa до переключения публичного входа.
+
+В 21:04 МСК заменён только HR Vision route в Caddy dsa и выполнен graceful reload. Backup: `/etc/caddy/Caddyfile.before-hr-vision-outreach-20261004T180413Z`. Остальные 39 routes/settings сохранены. Новая активная конфигурация точно совпала с подготовленным JSON; исходные статические релизы dsa не удалены. Публичные index/manifest/iframe и JS/CSS галереи/панели проверены по SHA-256; браузерная проверка: 91+55 проверок, ошибок нет. [Отчёт](../../../output/playwright/outreach-public-20261004/README.md).
+
+Для отката первой миграции недостаточно менять указатель outreach: требуется вернуть сохранённый HR Vision site block dsa после проверки, что другие настройки не изменились. Нельзя слепо восстанавливать полный старый Caddyfile поверх более поздних чужих правок.
+
+Ёмкость dsa остаётся ограничением HTTPS-входа: после очистки в 21:13:30 МСК свободно около 224 MiB. Для остановки потока журналов ClickHouse временно применён уровень fatal без перезапуска; системные диагностические таблицы занимают около 8.16 GB и в этой работе не очищались. На outreach после выпуска около 25 GB свободно. [Действия, границы и восстановление](../../../output/operations/yc-cleanup-20261004.md).
+# Public domain, 14 October 2026
+
+`mashadasha.tech` is the public company site. `/candidate` serves the candidate
+landing, `/account/candidate` opens the existing candidate cabinet and `/employer`
+opens employer sign-in. Both cabinets still use the same service release and API
+database on outreach. `www.mashadasha.tech` redirects to the apex with its URI.
+
+The corporate site has its own release at `/srv/hr-vision-company-demo/current`;
+its built files use `/site-assets/` so they cannot shadow Storybook `/assets/`.
+The logo, play icon and font also have exact public-file routes under `/assets/`;
+the rest of that prefix continues to serve the product release.
+The lab route `/demos/company-v1/` continues to use that release. The main service
+is still published only through GitHub Actions. The CI verification hostname
+remains the explicit legacy service alias.
+
+Recruiters continue to use
+`https://hr-vision.158-160-179-53.sslip.io/iframe.html?id=hr-vision-product--manager&viewMode=story&workspace=recruiter`.
+Links with `workspace=recruiter` on the new domain redirect to that host. Old
+candidate/employer links also remain functional; no database reseeding occurs.
+
+Runtime configuration in the private `/etc/hr-vision/api.env`:
+
+```dotenv
+HR_ORIGIN=https://mashadasha.tech
+HR_ADDITIONAL_ORIGINS=https://hr-vision.158-160-179-53.sslip.io
+HR_RECRUITER_ORIGIN=https://hr-vision.158-160-179-53.sslip.io
+HR_RECRUITER_PUBLIC_URL=https://hr-vision.158-160-179-53.sslip.io/iframe.html?id=hr-vision-product--manager&viewMode=story&workspace=recruiter
+```
+
+The allowlist is exact, without wildcard CORS. Existing sent HH invitations are
+reused from either approved origin. Candidate notification links use the new
+canonical origin; recruiter invitations use the explicit recruiter origin.
+Browser cookies and storage are host-specific, so moving to the new domain
+requires signing in once with the same account. No login token is sent between
+the domains in a query string.
+
+DNS in REG.RU: only apex and `www` A records change to `158.160.179.53`. Existing
+MX, SPF, DKIM, DMARC and name servers are retained. Caddy configuration updates
+must preserve neighbouring sites, validate first, compare the previous hash and
+take a backup before graceful reload. If rollback is needed, restore the saved
+Caddy/env files, then return the two A records to their saved values. Database
+snapshots are recovery material; never restore them merely to revert routing.
+
+## Employer Telegram Mini App
+
+Employer Telegram uses the existing bot, notification worker and delivery configuration.
+`HR_ORIGIN` must be the canonical HTTPS product origin. No employer URL override,
+new service or new credentials are required. Inline `web_app` buttons point to the
+existing manager story with `miniapp=employer`, `screen=shortlist` and optionally
+an opaque `vacancyId`. These are public navigation links, never login capabilities.
+The official SDK is loaded only for that entry. Check bot/domain and inline Mini App
+availability in the native Telegram clients before declaring the feature accepted.
+
+Authenticated personal accounts use `GET /api/hr/employer/telegram`,
+`POST /api/hr/employer/telegram/link {}` and
+`POST /api/hr/employer/telegram/disconnect {}`. Team grants cannot bind.
+One-use `em_` start links expire after ten minutes. The public same-origin
+`POST /api/hr/employer/telegram/session {"initData":"…"}` exchanges only signed,
+fresh Telegram data for the existing employer session/cookie. Raw initData is
+not stored; never include it, binding links or session tokens in logs or reports.
+Rebinding/disconnecting revokes Mini App-issued sessions and invalidates queued
+notices from the previous binding, without revoking independent password sessions.
+
+`employer_notifications.py` observes the canonical proposed shortlist at batch
+publication, later candidate approval and worker cycles. Newly visible applications
+are recorded once and aggregated per vacancy before dispatch. Binding baselines
+already visible profiles; unbound/disabled observations are consumed without replay.
+Dispatch rechecks the active personal account, binding generation, vacancy ownership
+and current candidate visibility. Telegram receives the vacancy title and count,
+never a CV or contact information. The shared outbox keeps its existing bounded
+retry and terminal uncertainty behavior.
+
+The new `en_bindings`, `en_tokens`, `en_seen` and `en_sessions` tables initialize
+transactionally. Install the updated CI receiver before publishing a service
+archive containing `employer_notifications.py` and `telegram_miniapp.py`; the old
+complete runtime remains an accepted rollback layout. This documentation describes
+implementation requirements, not evidence of a production or native-client rollout.

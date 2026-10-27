@@ -1,0 +1,58 @@
+{
+  "greenhouse": {
+    "local": "/media/vacancy-research/greenhouse.png",
+    "source": "https://support.greenhouse.io/hc/en-us/articles/4416516351003-Job-kickoff-form-overview",
+    "asset": "https://support.greenhouse.io/hc/article_attachments/4418329952923",
+    "alt": "Job_kickoff_form_-_overview.png",
+    "bytes": 577964
+  },
+  "scorecard": {
+    "local": "/media/vacancy-research/scorecard.png",
+    "source": "https://support.greenhouse.io/hc/en-us/articles/4414777492891-Scorecard-overview",
+    "asset": "https://support.greenhouse.io/hc/article_attachments/6932168372123",
+    "alt": "Screenshot-of-the-candidate-scorecard-setup.png",
+    "bytes": 238552
+  },
+  "ashby": {
+    "local": "/media/vacancy-research/ashby.webp",
+    "source": "https://docs.ashbyhq.com/ai-assisted-application-review",
+    "asset": "https://cdn.images.archbee.com/0p8tQ--ZZOxRtkVp6Qr-e/RwHVlFi0u_7e0Q95FQq-w_group-product-manager-acent-ashby-2026-04-13-at-21618-pm.jpg?format=webp",
+    "alt": "Document image",
+    "bytes": 38778
+  },
+  "ashby-results": {
+    "local": "/media/vacancy-research/ashby-results.webp",
+    "source": "https://docs.ashbyhq.com/ai-assisted-application-review",
+    "asset": "https://cdn.images.archbee.com/0p8tQ--ZZOxRtkVp6Qr-e/ftZsObxEtrWbRD_Rz1w7W_alex-balistreri-group-product-manager-acent-ashby-2026-04-13-at-30652-pm.jpg?format=webp",
+    "alt": "The Feedback tab on a candidate profile displaying the AI evaluation results summary for various resume criteria.",
+    "bytes": 9604
+  },
+  "linear": {
+    "local": "/media/vacancy-research/linear.avif",
+    "source": "https://linear.app/docs/creating-issues",
+    "asset": "https://webassets.linear.app/images/ornj730p/production/25ae979891503f4780b6e837aaa71b5027c67281-1224x534.png?w=1440&q=95&auto=format&dpr=2",
+    "alt": "issue creation dialogue box",
+    "bytes": 56544
+  },
+  "typebot": {
+    "local": "/media/vacancy-research/typebot.png",
+    "source": "https://typebot.com/",
+    "asset": "https://typebot.com/assets/marketing-builder-CGbtQs5X.png",
+    "alt": "An example of a marketing bot being built in Typebot",
+    "bytes": 693524
+  },
+  "notebook": {
+    "local": "/media/vacancy-research/notebook.png",
+    "source": "https://blog.google/innovation-and-ai/products/notebooklm-beginner-tips/",
+    "asset": "https://storage.googleapis.com/gweb-uniblog-publish-prod/images/NotebookLM-Tips_Hero.width-1300.png",
+    "alt": "",
+    "bytes": 370734
+  },
+  "metaview": {
+    "local": "/media/vacancy-research/metaview.jpg",
+    "source": "https://www.metaview.ai/interview-notes",
+    "asset": "https://www.metaview.ai/_next/static/immutable/media/interview-notes-og.3k31t1g3fdbjq.jpg",
+    "alt": "",
+    "bytes": 90537
+  }
+}

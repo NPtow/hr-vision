@@ -1,0 +1,9 @@
+{
+  "image": "dograhai/dograh-api:1.48.0",
+  "installed_package": "deepgram-sdk==7.11.0",
+  "target": "deepgram/listen/v1/client.py",
+  "source_sha256": "ede27c48b12a1e30191b45d046d4e567f5fa784944f4eb772e372293f99a5b54",
+  "patched_client_sha256": "ee88ea69bde64eeaa552c91b0625bf79973b8580878cda6acf0921531acb7a94",
+  "wrapper_sha256": "70b0a8c2188ec3b47cb69c5d0af6a2d15c2ac37c9774eae2fead019c55dc703d",
+  "reason": "SDK chooses websockets.legacy, which ignores proxy environment. Only async listen.v1 connector is replaced with modern proxy-aware connection. Three transport-only handshake attempts; HTTP error status preserved without request headers; audio is never replayed."
+}

@@ -52,7 +52,7 @@ responses still arrive as completed messages, rather than partially validated te
 
 ```sh
 # Existing API tests, no model calls
-cd interface-lab/server && python3.12 -m unittest test_interview_assistant -q
+cd services/recruiting-api && python3.12 -m unittest test_interview_assistant -q
 # In the worker image, mount this directory read-only as /tests
 python -m unittest discover -s /tests -p test_runtime.py -v
 ```

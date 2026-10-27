@@ -1,0 +1,158 @@
+--- a/api/services/configuration/check_validity.py
++++ b/api/services/configuration/check_validity.py
+@@ -1,9 +1,12 @@
++import json
+ from typing import Optional, TypedDict
++from urllib.parse import urlencode, urlsplit, urlunsplit
+ 
+ import httpx
+ import openai
+-from deepgram import DeepgramClient
+ from groq import Groq
++from websockets.exceptions import ConnectionClosed, InvalidStatus
++from websockets.sync.client import connect as websocket_connect
+ 
+ # try:
+ #     from pyneuphonic import Neuphonic
+@@ -258,6 +261,7 @@
+             ServiceProviders.ATLASCLOUD.value,
+             ServiceProviders.HOPPER.value,
+             ServiceProviders.OPENAI_REALTIME.value,
++            ServiceProviders.DEEPGRAM.value,
+         ):
+             return validator(provider, api_key, service_config)
+         return validator(provider, api_key)
+@@ -321,17 +325,122 @@
+                 f"Failed to validate the {provider_name} API key. Please try again later."
+             )
+ 
+-    def _check_deepgram_api_key(self, model: str, api_key: str) -> bool:
+-        try:
+-            deepgram = DeepgramClient(api_key=api_key)
+-            deepgram.manage.v1.projects.list()
+-            return True
+-        except Exception:
+-            raise ValueError(
+-                "Invalid Deepgram API key. The key was rejected by the Deepgram API. "
+-                "Please check that your API key is correct and active. "
+-                "You can verify your keys at https://console.deepgram.com/."
+-            )
++    def _check_deepgram_api_key(
++        self, model: str, api_key: str, service_config: Optional[ServiceConfig] = None
++    ) -> bool:
++        # Deepgram documents this endpoint as the API-key validity check.
++        # Project-management access is unrelated to the configured voice service.
++        # https://developers.deepgram.com/guides/fundamentals/authenticating
++        base_url = (
++            getattr(service_config, "base_url", None) if service_config else None
++        ) or "https://api.deepgram.com"
++        base_url = base_url.strip().rstrip("/")
++        if "://" not in base_url:
++            base_url = f"https://{base_url}"
++        validate_user_configured_service_url(base_url, field_name="base_url")
++        try:
++            response = httpx.get(
++                f"{base_url}/v1/auth/token",
++                headers={"Authorization": f"Token {api_key}"},
++                timeout=3.0,
++                follow_redirects=False,
++            )
++        except httpx.RequestError:
++            # A failed REST transport says nothing about this key. Verify the
++            # configured speech capability through the actual streaming API.
++            return self._check_deepgram_streaming_key(
++                base_url, api_key, service_config
++            )
++        if response.status_code == 401:
++            raise ValueError(
++                "Invalid Deepgram API key. The API rejected the credential. "
++                "Check that the key is correct and active."
++            )
++        if response.status_code == 403:
++            raise ValueError(
++                "Deepgram authorization failed. Check this key's permissions and project access."
++            )
++        if response.status_code == 429:
++            raise ValueError("Deepgram validation was rate limited. Try again shortly.")
++        if response.status_code != 200:
++            raise ValueError(
++                f"Deepgram returned HTTP {response.status_code} while validating the key. "
++                "Try again after checking service availability."
++            )
++        try:
++            details = response.json()
++        except ValueError:
++            raise ValueError("Deepgram returned an unexpected validation response.") from None
++        if not isinstance(details, dict) or not details or details.get("err_code"):
++            raise ValueError("Deepgram returned an unexpected validation response.")
++        return True
++
++    def _check_deepgram_streaming_key(
++        self, base_url: str, api_key: str,
++        service_config: Optional[ServiceConfig] = None,
++    ) -> bool:
++        # Deepgram documents opening a stream then immediately CloseStream;
++        # the response is Metadata with duration 0.0. No audio is uploaded.
++        # https://developers.deepgram.com/docs/close-stream
++        parts = urlsplit(base_url)
++        model = getattr(service_config, "model", None) or "nova-3-general"
++        language = getattr(service_config, "language", None) or "en"
++        query = urlencode({
++            "model": getattr(model, "value", model),
++            "language": getattr(language, "value", language),
++            "encoding": "linear16", "sample_rate": 16000, "channels": 1,
++        })
++        stream_url = urlunsplit((
++            "wss" if parts.scheme == "https" else "ws", parts.netloc,
++            parts.path.rstrip("/") + "/v1/listen", query, "",
++        ))
++        for attempt in range(3):
++            try:
++                # websockets uses the scoped WSS_PROXY environment setting.
++                # Its normal TLS certificate and hostname verification remain on.
++                with websocket_connect(
++                    stream_url,
++                    additional_headers={"Authorization": f"Token {api_key}"},
++                    open_timeout=3.0, close_timeout=1.0, ping_interval=None,
++                ) as stream:
++                    stream.send('{"type":"CloseStream"}')
++                    payload = json.loads(stream.recv(timeout=2.0))
++                    if (
++                        not isinstance(payload, dict)
++                        or payload.get("type") != "Metadata"
++                        or payload.get("err_code")
++                    ):
++                        raise ValueError("unexpected_metadata")
++                    return True
++            except InvalidStatus as error:
++                status = error.response.status_code
++                if status in (401, 403):
++                    raise ValueError(
++                        "Deepgram streaming authorization failed. Check that the key "
++                        "is active and has transcription permission for this model."
++                    ) from None
++                if status == 429:
++                    raise ValueError(
++                        "Deepgram validation was rate limited. Try again shortly."
++                    ) from None
++                raise ValueError(
++                    f"Deepgram streaming validation returned HTTP {status}. "
++                    "Check service availability and model configuration."
++                ) from None
++            except (TimeoutError, OSError, ConnectionClosed):
++                # Only transport failures are retried; each accepted result
++                # still requires a fresh authenticated Metadata response.
++                if attempt < 2:
++                    continue
++            except Exception:
++                raise ValueError(
++                    "Deepgram returned an unexpected streaming validation response."
++                ) from None
++            break
++        raise ValueError(
++            "Could not reach Deepgram to validate the API key. "
++            "Check connectivity and try again; this does not establish that the key is invalid."
++        ) from None
+ 
+     def _check_groq_api_key(self, model: str, api_key: str) -> bool:
+         client = Groq(api_key=api_key)

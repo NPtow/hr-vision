@@ -93,7 +93,7 @@ POST/GET требуют `Authorization: Bearer <service-token>`. POST прини
 
 ## Существующий сборщик: реализованный серверный адаптер
 
-`interface-lab/server/assessment_corpus.py` и операторская команда `collect_hr.py`
+`services/recruiting-api/assessment_corpus.py` и операторская команда `collect_hr.py`
 переиспользуют эти чтения. Подключение проверено на живых данных YC; модель не
 вызывалась. Полный контракт, ограничения и пример: [COLLECTION.md](COLLECTION.md).
 

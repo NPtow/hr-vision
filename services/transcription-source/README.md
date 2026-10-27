@@ -173,7 +173,7 @@ can only be submitted manually by explicit IDs after authorization.
 From repository root:
 
 ```sh
-PYTHONPATH=services/transcription-source/src:services/data-core/src:interface-lab/server python -m pytest services/transcription-source/tests interface-lab/server/test_materials_asr_dispatch.py -q
+PYTHONPATH=services/transcription-source/src:services/data-core/src:services/recruiting-api python -m pytest services/transcription-source/tests services/recruiting-api/test_materials_asr_dispatch.py -q
 ```
 
 Tests use actual source API/worker, authenticated ASR HTTP fixture, recording

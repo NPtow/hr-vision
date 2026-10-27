@@ -1,0 +1,23 @@
+{
+  "source": "Original five-block OASIS career interview; local agent configuration, not the September live seller guide",
+  "original_path": "/Users/NIKITA/Desktop/JJFR/oasis-platform/pipelines/agent-57f7a18a-ea1e-4b8f-829b-e340e1605d46.json",
+  "original_sha256": "2b01cced099609faf26a353a7eff5388f15900fd976176738d421cb3a619a5a5",
+  "agent_id": "57f7a18a-ea1e-4b8f-829b-e340e1605d46",
+  "created_at": "2026-05-14T21:06:51.911389+00:00",
+  "updated_at": "2026-05-16T18:17:52.802392+00:00",
+  "extraction": "Only interview guide, system prompt and non-secret interview settings. Widget key, study identifiers and provider credentials are not copied. JSON reformatted; string values unchanged.",
+  "files": [
+    {
+      "file": "interview-guide.json",
+      "sha256": "9a301b0b4bebca1c1a1d948395270e05d8d2b005af0af175a00788317ab72b45"
+    },
+    {
+      "file": "system-prompt.txt",
+      "sha256": "288a2a6f24b61c5b47b45bebef75855b9dabc96c6c9a4da4dfe6ee531faa2271"
+    },
+    {
+      "file": "agent-overrides.json",
+      "sha256": "aeaf0a745090be27ab8f9e33015e4e9f1e8920ea6d1fd0ab4e753747fbbddd86"
+    }
+  ]
+}

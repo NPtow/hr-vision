@@ -1,0 +1,7 @@
+{
+  "release": "1.48.0",
+  "commit": "5db59b9acb11026146df7c1c8613a1b69299c005",
+  "file": "api/services/workflow/text_chat_runner.py",
+  "original_sha256": "2ffe63a1a70992224fea17f6665cd607b53d07e3865637c5b771670b2cba70fb",
+  "patched_sha256": "af0d7d8dbde87e667139ad95cd690df6df7256bb29d842c39487398ebd8359f8"
+}

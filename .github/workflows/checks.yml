@@ -1,0 +1,104 @@
+name: Monorepo checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - run: npm ci
+      - run: python3 scripts/check.py web
+  python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [api, services, preview]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Install isolated test dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg poppler-utils tesseract-ocr tesseract-ocr-eng tesseract-ocr-rus antiword
+          python -m pip install --require-hashes --only-binary=:all: -r services/recruiting-api/requirements-materials.lock -r services/recruiting-api/requirements-api-extras.lock -r infra/deployment/services/requirements-tests.lock -r infra/deployment/services/transcription/requirements-tests.lock
+          python -m pip check
+      - if: matrix.group == 'preview'
+        run: npm ci --prefix apps/candidate-preview/web
+      - run: python scripts/check.py ${{ matrix.group }}
+  website:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - run: npm ci
+      - run: python3 scripts/check.py site
+  vacancy-studio:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.12'
+      - run: npm ci --prefix experiments/vacancy-studio
+      - run: |
+          python -m pip install --require-hashes --only-binary=:all: -r experiments/vacancy-studio/server/vacancy-studio/requirements.lock
+      - run: npm run typecheck --prefix experiments/vacancy-studio
+      - run: npm run build --prefix experiments/vacancy-studio
+      - run: python -m unittest discover -s experiments/vacancy-studio/server/vacancy-studio -q
+  interview-agent:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - name: Build and test without provider access
+        run: |
+          docker build -f services/interview-agent/Dockerfile -t hr-interview-agent-test .
+          docker run --rm --network=none --read-only --memory=512m --tmpfs /tmp:rw,nosuid,size=32m \
+            -v "$PWD/services/interview-agent:/tests:ro" --entrypoint python hr-interview-agent-test \
+            -m unittest discover -s /tests -p test_runtime.py -v
+  native:
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - run: npm ci --prefix apps/native-signals/board-web
+      - run: npm ci --prefix apps/native-signals/rpa/telemetr --ignore-scripts
+      - run: python3 scripts/check.py native

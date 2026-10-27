@@ -1,0 +1,141 @@
+{
+  "source": {
+    "source": "Original five-block OASIS career interview; local agent configuration, not the September live seller guide",
+    "original_path": "/Users/NIKITA/Desktop/JJFR/oasis-platform/pipelines/agent-57f7a18a-ea1e-4b8f-829b-e340e1605d46.json",
+    "original_sha256": "2b01cced099609faf26a353a7eff5388f15900fd976176738d421cb3a619a5a5",
+    "agent_id": "57f7a18a-ea1e-4b8f-829b-e340e1605d46",
+    "created_at": "2026-05-14T21:06:51.911389+00:00",
+    "updated_at": "2026-05-16T18:17:52.802392+00:00",
+    "extraction": "Only interview guide, system prompt and non-secret interview settings. Widget key, study identifiers and provider credentials are not copied. JSON reformatted; string values unchanged.",
+    "files": [
+      {
+        "file": "interview-guide.json",
+        "sha256": "9a301b0b4bebca1c1a1d948395270e05d8d2b005af0af175a00788317ab72b45"
+      },
+      {
+        "file": "system-prompt.txt",
+        "sha256": "288a2a6f24b61c5b47b45bebef75855b9dabc96c6c9a4da4dfe6ee531faa2271"
+      },
+      {
+        "file": "agent-overrides.json",
+        "sha256": "aeaf0a745090be27ab8f9e33015e4e9f1e8920ea6d1fd0ab4e753747fbbddd86"
+      }
+    ]
+  },
+  "source_block_order": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5"
+  ],
+  "source_followup_budgets": {
+    "1": 3,
+    "2": 3,
+    "3": 2,
+    "4": 2,
+    "5": 5
+  },
+  "node_mapping": {
+    "career_global": {
+      "source_block": null,
+      "name": "Маша · правила карьерного интервью"
+    },
+    "career_welcome": {
+      "source_block": "1",
+      "name": "1 · Приветствие"
+    },
+    "career_why_now": {
+      "source_block": "1",
+      "name": "1 · Почему сейчас"
+    },
+    "career_why_deepen": {
+      "source_block": "1",
+      "name": "1 · Уточнение по последнему ответу"
+    },
+    "career_direction": {
+      "source_block": "2",
+      "name": "2 · Роли и ежедневные задачи"
+    },
+    "career_tasks": {
+      "source_block": "2",
+      "name": "2 · Желаемые задачи"
+    },
+    "career_avoid_tasks": {
+      "source_block": "2",
+      "name": "2 · Какие задачи исключить"
+    },
+    "career_market": {
+      "source_block": "3",
+      "name": "3 · Уровень на языке вакансий"
+    },
+    "career_level_flex": {
+      "source_block": "3",
+      "name": "3 · Границы гибкости по уровню"
+    },
+    "career_company": {
+      "source_block": "4",
+      "name": "4 · Целевая компания и среда"
+    },
+    "career_company_why": {
+      "source_block": "4",
+      "name": "4 · Назван бренд: что за ним"
+    },
+    "career_company_criterion": {
+      "source_block": "4",
+      "name": "4 · Главный признак среды"
+    },
+    "career_company_avoid": {
+      "source_block": "4",
+      "name": "4 · Какая среда не подойдёт"
+    },
+    "career_experience_select": {
+      "source_block": "5",
+      "name": "5 · Выбор одного или двух фокусов CV"
+    },
+    "career_case1": {
+      "source_block": "5",
+      "name": "5 · Первый кейс: базовый вопрос"
+    },
+    "career_depth1": {
+      "source_block": "5",
+      "name": "5 · Первый кейс: одно углубление"
+    },
+    "career_case2": {
+      "source_block": "5",
+      "name": "5 · Второй выбранный кейс"
+    },
+    "career_depth2": {
+      "source_block": "5",
+      "name": "5 · Второй кейс: одно углубление"
+    },
+    "career_reflection": {
+      "source_block": "5",
+      "name": "5 · Связать опыт с будущим шагом"
+    },
+    "career_end": {
+      "source_block": null,
+      "name": "Завершение карьерного интервью"
+    }
+  },
+  "runtime_requirements": {
+    "DOGRAH_REQUIRE_USER_RESPONSE": "true",
+    "passthrough_node_ids": [],
+    "max_call_duration": 1800
+  },
+  "adaptations": [
+    "Five semantic blocks are preserved; native Dograh nodes expose branches previously contained in OASIS prompts.",
+    "Original source strings are preserved in source/. The long block1 opening promises web job search, email delivery and warm introductions; spoken opening replaces those unconnected promises with an honest career-interview frame.",
+    "Block3 does not repeat the role-direction question from block2; its question follows the original seniority goal and first probe.",
+    "One selected experience focus proceeds to reflection after one base and one deep question; unused followup budget is not filled with an invented second case.",
+    "Source transitions sometimes describe the current block rather than the next one; node prompts handle transitions without reading these stale labels aloud.",
+    "No automatic score, hiring recommendation, employer delivery, mailbox action, per-candidate history or separate fact-extraction schema has been added."
+  ],
+  "limitations": [
+    "Source is an original May local agent dump, not the currently published September sales interview.",
+    "Per-block followup budgets remain semantic prompt limits. Fresh-answer gate enforces a new user answer between nodes, not correctness of LLM routing.",
+    "1800-second source duration requires deployment duration schema/stale-timeout patch beyond upstream 1200-second cap.",
+    "No speech/provider or live conversation test is performed by this generator or its contract tests."
+  ],
+  "workflow_sha256": "ec63b8bdba825443d330210b6437809922bdd47568f8997034d5ad64a09470b6"
+}

@@ -1,0 +1,8 @@
+{
+  "name": "Даша",
+  "language": "ru",
+  "welcome_message": "Привет. Я Маша, AI talent agent из МашаДаша. Я здесь, чтобы помочь тебе найти следующую роль. Как ты сегодня?",
+  "silence_prompt": "Take your time. Let me know when you're ready to continue.",
+  "max_duration_seconds": 1800,
+  "interview_mode": "structured"
+}
