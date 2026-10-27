@@ -22,5 +22,6 @@
 *.sqlite3-*
 **/storage-state*.json
 **/browser-state*.json
+/interface-lab/browser-assets/daily-call/
 /interface-lab/release.tgz
 /interface-lab/release-stage/

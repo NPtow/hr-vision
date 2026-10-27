@@ -1,33 +1,28 @@
 import { useEffect, useRef, useState } from 'react';
-import { RecruiterZoomCall } from './RecruiterZoomCall';
-import type { CallProvider } from '../../components/call/call-provider';
 import type { DailyCall, DailyParticipant } from '@daily-co/daily-js';
-import { Camera, CameraOff, Mic, MicOff, MonitorUp, PhoneOff, X } from 'lucide-react';
+import { Camera, CameraOff, Maximize2, Mic, MicOff, Minimize2, MonitorUp, PanelRightOpen, PhoneOff, X } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { recruiterRequest, RecruiterRequestError, type RecruiterCandidate, type Room } from './api';
-import { CallConnectionError, dailyCallConfig, directCallUrl, releaseCall, waitForCall } from '../candidate-portal/call-connection';
+import { CallConnectionError, dailyCallBundleConfig, directCallUrl, releaseCall, waitForCall } from '../candidate-portal/call-connection';
 import { CallDeviceAccess, useCallDeviceAccess } from '../../components/call-device-access';
 import { callInputTracks, canSendTrack } from '../candidate-portal/call-media';
 import { CallMediaStage } from '../candidate-portal/CallMediaStage';
 import type { InterviewRecording } from '../candidate-portal/api';
 import { useInterviewCoach, type LiveInterviewTurn } from './interview-coach';
+import { InterviewCoachPanel } from './InterviewCoachPanel';
+import { InterviewContacts, ResumeAction } from './InterviewPreparation';
 import { RecruiterInterviewShell } from '../recruiter-coach/RecruiterInterviewShell';
 import type { CoachDraft, CoachPerson, CoachTranscriptTurn } from '../recruiter-coach/coach-types';
 import { RecruiterCoachNotesAdapter, RecruiterOriginalResume } from './RecruiterCoachNotesAdapter';
 import './interview-coach.css';
 import './recruiter-coach-live.css';
 
-export type ActiveCall = { callProvider?: CallProvider | null; kind: 'interview' | 'meeting'; preview?: boolean; recordingConsent?: boolean; candidateId: string; interviewId?: string; candidate?: RecruiterCandidate; applicationId?: string; meetingId?: string; title: string; accountActive?: boolean; recording?: InterviewRecording };
+export type ActiveCall = { kind: 'interview' | 'meeting'; preview?: boolean; candidateId: string; interviewId?: string; candidate?: RecruiterCandidate; applicationId?: string; meetingId?: string; title: string; accountActive?: boolean; recording?: InterviewRecording };
 type CaptureStatus = 'unknown' | 'active' | 'stopped' | 'error';
 
-export type RecruiterCallProps = {
-  active: ActiveCall; token: string; onClose: () => void; onJoined: () => void; onCompleted: () => void; onZoomHostLeft?: () => void;
-};
-export function RecruiterCall(props: RecruiterCallProps) {
-  if (props.active.callProvider === null) return <section className="cp-content-page"><p>Для этой записи видеозвонок недоступен.</p><Button onClick={props.onClose}>Закрыть</Button></section>;
-  return props.active.callProvider === 'zoom' ? <RecruiterZoomCall {...props}/> : <DailyRecruiterCall {...props}/>;
-}
-function DailyRecruiterCall({ active, token, onClose, onJoined, onCompleted }: RecruiterCallProps) {
+export function RecruiterCall({ active, token, onClose, onJoined, onCompleted }: {
+  active: ActiveCall; token: string; onClose: () => void; onJoined: () => void; onCompleted: () => void;
+}) {
   const preview = useRef<HTMLVideoElement>(null);
   const devices = useCallDeviceAccess();
   const prepared = useRef<(ReturnType<typeof callInputTracks> & { camera: boolean; microphone: boolean }) | null>(null);
@@ -50,6 +45,8 @@ function DailyRecruiterCall({ active, token, onClose, onJoined, onCompleted }: R
   const [retryTranscription, setRetryTranscription] = useState(false);
   const [startFailed, setStartFailed] = useState(false);
   const [error, setError] = useState('');
+  const [panel, setPanel] = useState(true);
+  const [fullscreen, setFullscreen] = useState(false);
   const [turns, setTurns] = useState<LiveInterviewTurn[]>([]);
   const [currentId, setCurrentId] = useState('');
   const [connectionPhase, setConnectionPhase] = useState<'loading' | 'ready' | 'joined' | 'failed'>('ready');
@@ -70,6 +67,11 @@ function DailyRecruiterCall({ active, token, onClose, onJoined, onCompleted }: R
   callbacks.current = { onClose, onJoined, onCompleted };
   const identity = active.kind === 'interview' ? { candidateId: active.candidateId } : { candidateId: active.candidateId, applicationId: active.applicationId, meetingId: active.meetingId };
 
+  useEffect(() => {
+    const update = () => setFullscreen(document.fullscreenElement === root.current);
+    document.addEventListener('fullscreenchange', update);
+    return () => document.removeEventListener('fullscreenchange', update);
+  }, []);
   useEffect(() => {
     const element = preview.current;
     if (!element) return;
@@ -126,7 +128,7 @@ function DailyRecruiterCall({ active, token, onClose, onJoined, onCompleted }: R
     } catch { setError('Не удалось включить устройство. Проверьте доступ в браузере.'); }
   }
   async function close() {
-    if (!await coachRef.current.flush()) { return; }
+    if (!await coachRef.current.flush()) { setPanel(true); return; }
     connection.current?.abort(); ending.current = true;
     devices.stop(); releaseInputs();
     if (call.current) await retire(call.current);
@@ -174,7 +176,6 @@ function DailyRecruiterCall({ active, token, onClose, onJoined, onCompleted }: R
         if (cleanup.current) await cleanup.current;
         if (!alive || controller.signal.aborted) return;
         const access = recruiterRequest<Room>(`${active.kind}/join`, token, { ...identity, ...(active.kind === 'meeting' ? { consent: true } : {}) }).then(room => {
-          if (room.provider === 'zoom') throw new CallConnectionError('Видеосервис встречи изменился. Вернитесь к интервью и откройте его заново.');
           if (alive && !controller.signal.aborted) {
             setDirectUrl(directCallUrl(room));
             setConnectionHint('Загружаем видеокомнату…');
@@ -194,7 +195,7 @@ function DailyRecruiterCall({ active, token, onClose, onJoined, onCompleted }: R
           throw new CallConnectionError('Предыдущее подключение не закрылось. Обновите страницу.');
         }
         const frame = DailyIframe.createCallObject({
-          dailyConfig: dailyCallConfig(),
+          ...dailyCallBundleConfig(),
           ...(inputs.audioSource ? { audioSource: inputs.audioSource } : {}),
           ...(inputs.videoSource ? { videoSource: inputs.videoSource } : {}),
           startVideoOff: !inputs.camera, startAudioOff: !inputs.microphone,
@@ -323,7 +324,7 @@ function DailyRecruiterCall({ active, token, onClose, onJoined, onCompleted }: R
     if (finishing || starting) return;
     setFinishing(true); setError(''); ending.current = true;
     try {
-      if (!await coachRef.current.flush()) { ending.current = false; setFinishing(false); return; }
+      if (!await coachRef.current.flush()) { ending.current = false; setFinishing(false); setPanel(true); return; }
       await recruiterRequest(`${active.kind}/complete`, token, identity);
       // Completion is already persisted. A frame that was ejected by the
       // provider must not turn successful completion into a client error.
@@ -420,11 +421,13 @@ function DailyRecruiterCall({ active, token, onClose, onJoined, onCompleted }: R
     />
   </div>;
 
-  return <div ref={root} className="rp-call-layer" role="dialog" aria-modal="true" aria-labelledby="rp-call-title">
+  return <div ref={root} className={`rp-call-layer ${hasCoach ? `ric-call ${panel ? '' : 'ric-call-wide'}` : ''}`} role="dialog" aria-modal="true" aria-labelledby="rp-call-title">
     <div className="ric-call-stage">
     <header className="rp-call-header">
       <div><strong id="rp-call-title">{active.title}</strong><p role="status">{!joined ? 'Подключение…' : present ? 'Собеседник подключён' : 'Ждём собеседника'}{joined && ` · ${recording === 'active' ? 'Запись идёт' : recording === 'stopped' ? 'Запись остановлена' : recording === 'error' ? 'Ошибка записи' : 'Статус записи уточняется'}`}{joined && ` · ${transcribing === 'active' ? 'Расшифровка включена' : transcribing === 'stopped' ? 'Расшифровка остановлена' : transcribing === 'error' ? 'Ошибка расшифровки' : 'Статус расшифровки уточняется'}`}</p></div>
       <div className="rp-actions">
+        {hasCoach && <><ResumeAction coach={coach} name={active.title} container={root.current}/><InterviewContacts candidate={active.candidate || { email: null, telegram: '' }}/>{!panel && <button className="ric-icon" aria-label="Показать помощника" onClick={() => setPanel(true)}><PanelRightOpen size={19}/></button>}
+          <button className="ric-icon" aria-label={fullscreen ? 'Выйти из полноэкранного режима' : 'На весь экран'} onClick={() => { if (fullscreen) void document.exitFullscreen(); else void root.current?.requestFullscreen().catch(() => setError('Полноэкранный режим недоступен в этом браузере.')); }}>{fullscreen ? <Minimize2 size={18}/> : <Maximize2 size={18}/>}</button></>}
         <Button variant="secondary" autoFocus disabled={finishing} onClick={() => void close()}><X size={16}/>Выйти</Button>{joined && <Button disabled={finishing || starting} onClick={finish}><PhoneOff size={16}/>{finishing ? 'Завершаем…' : active.kind === 'interview' ? 'Завершить интервью' : 'Завершить встречу'}</Button>}</div>
     </header>
     {joined && <div className="rp-call-controls">
@@ -442,6 +445,7 @@ function DailyRecruiterCall({ active, token, onClose, onJoined, onCompleted }: R
       {mediaControls.canShare && <button className="rcc-tool" disabled={finishing} aria-label={mediaControls.screenOn ? 'Остановить показ экрана' : 'Показать экран'} onClick={mediaControls.toggleScreen}><MonitorUp/></button>}
     </div>}
     </div>
+    {hasCoach && panel && <InterviewCoachPanel coach={coach} name={active.title} joined={joined} turns={turns} onCollapse={() => setPanel(false)}/>}
 
   </div>;
 }

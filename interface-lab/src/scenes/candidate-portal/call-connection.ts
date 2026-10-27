@@ -1,13 +1,5 @@
 export class CallConnectionError extends Error {}
 
-// Daily's call engine is served by this app (scripts/daily-bundles.mjs, pinned by sha256) instead of Daily's CDN,
-// which some users' networks cannot reach. Keep in step with the installed @daily-co/daily-js version.
-export const DAILY_JS_VERSION = '0.93.0';
-
-export function dailyCallConfig(origin = globalThis.location?.origin ?? '') {
-  return { bundlePathOverride: `${origin}/daily/${DAILY_JS_VERSION}` };
-}
-
 // Stop waiting immediately on cancel; a late provider response cannot resume the UI.
 export function waitForCall<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -28,6 +20,22 @@ export function deviceAccessMessage(cause: unknown): string {
   if (name === 'NotFoundError' || name === 'OverconstrainedError') return 'Камера или микрофон не найдены. Проверьте подключение или войдите без устройств.';
   if (name === 'NotReadableError' || name === 'AbortError') return 'Камера или микрофон заняты. Закройте другой звонок и повторите проверку.';
   return 'Не удалось включить устройства. Проверьте доступ в браузере и системных настройках.';
+}
+
+/** Installed @daily-co/daily-js release. Hosted bundles must match this version. */
+export const DAILY_BUNDLE_VERSION = '0.93.0';
+
+/** Call objects otherwise download their engine from CloudFront (c.daily.co),
+ * then two fallback domains, 20s each. Networks that stall CloudFront never
+ * reach `loaded`, and the 90s deadline shows the "video service failed to load"
+ * screen even though the room token was already issued. */
+export function dailyBundleDirectory(pageUrl: string): string {
+  return new URL(`/daily-call/${DAILY_BUNDLE_VERSION}/`, pageUrl).href;
+}
+
+export function dailyCallBundleConfig(pageUrl?: string): { dailyConfig: { bundlePathOverride: string } } {
+  const href = pageUrl ?? (typeof window === 'undefined' ? 'https://mashadasha.tech/' : window.location.href);
+  return { dailyConfig: { bundlePathOverride: dailyBundleDirectory(href) } };
 }
 
 /** Same private room and scoped participant token, only without our iframe. */

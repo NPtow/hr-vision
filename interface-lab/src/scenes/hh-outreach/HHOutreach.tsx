@@ -22,7 +22,7 @@ const number = (value: number | undefined) => value === undefined ? '—' : valu
 export function HHOutreach() {
   const auth = useOperatorSession();
   return <main className="hho-root">
-    <header className="hho-header"><img src={logo} alt="HR Vision"/><span>Рассылка HH</span><a style={{ marginLeft: 'auto', color: '#81798d', fontSize: 13 }} href="/iframe.html?id=hr-vision-product--manager&viewMode=story&workspace=selection">Подборки ↗</a></header>
+    <header className="hho-header"><img src={logo} alt="HR Vision"/><span>Рассылка HH</span></header>
     {auth.status === 'ready' ? <OperatorWorkspace key={auth.token} token={auth.token} onExpired={auth.expire}/> :
       <section className="hho-surface hho-access" aria-live="polite">
         <h1>{auth.status === 'checking' ? 'Проверяем доступ' : 'Доступ для команды HR Vision'}</h1>

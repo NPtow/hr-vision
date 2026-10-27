@@ -1,8 +1,18 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { CallConnectionError, PreviewTimeoutError, deviceAccessMessage, directCallUrl, releaseCall, waitForCall, waitForPreview } from '../src/scenes/candidate-portal/call-connection.ts';
+import { readFileSync } from 'node:fs';
+import { CallConnectionError, DAILY_BUNDLE_VERSION, PreviewTimeoutError, dailyBundleDirectory, dailyCallBundleConfig, deviceAccessMessage, directCallUrl, releaseCall, waitForCall, waitForPreview } from '../src/scenes/candidate-portal/call-connection.ts';
 import type { DailyParticipant, DailyTrackState } from '@daily-co/daily-js';
 import { callInputTracks, callLayout, canSendTrack, mediaTrack } from '../src/scenes/candidate-portal/call-media.ts';
+
+test('the call engine is loaded from our origin, not Daily CloudFront', () => {
+  const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  assert.equal(DAILY_BUNDLE_VERSION, pkg.dependencies['@daily-co/daily-js']);
+  const directory = dailyBundleDirectory('https://mashadasha.tech/iframe.html?id=hr-vision-product--manager&viewMode=story');
+  assert.equal(directory, `https://mashadasha.tech/daily-call/${DAILY_BUNDLE_VERSION}/`);
+  assert.equal(directory.includes('daily.co'), false);
+  assert.deepEqual(dailyCallBundleConfig('https://mashadasha.tech/iframe.html'), { dailyConfig: { bundlePathOverride: directory } });
+});
 
 test('a call that never resolves can be cancelled without waiting for the provider', async () => {
   const controller = new AbortController();

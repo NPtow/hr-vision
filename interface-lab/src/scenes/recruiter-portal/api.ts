@@ -1,10 +1,9 @@
-import type { CallCredentials, CallProviderMeeting } from '../../components/call/call-provider';
 import type { CandidateResume, InterviewRecording } from '../candidate-portal/api';
 
 export type Availability = { start: string; end: string };
 export type Vacancy = { id: string; title: string; company: string; city: string; remote: boolean; description: string };
-export type Interview = CallProviderMeeting & { id: string; status: 'booked' | 'live' | 'completed'; start: string; end: string; recruiterName: string; recording?: InterviewRecording };
-export type EmployerMeeting = CallProviderMeeting & { id: string; start: string; end: string; status: 'pending' | 'confirmed' | 'live' | 'completed' };
+export type Interview = { id: string; status: 'booked' | 'live' | 'completed'; start: string; end: string; recruiterName: string; recording?: InterviewRecording };
+export type EmployerMeeting = { id: string; start: string; end: string; status: 'pending' | 'confirmed' | 'live' | 'completed' };
 export type Application = { id: string; vacancy: Vacancy; status: 'pending' | 'accepted' | 'declined'; approvedAutomatically: boolean; meeting: EmployerMeeting | null };
 export type InternalProfile = { summary: string; evaluation: string; updatedAt?: string };
 export type RecruiterCandidate = {
@@ -22,19 +21,19 @@ export type AvailabilityDate = { date: string; intervals: DayInterval[] };
 export type Invitation = { url: string; expiresAt: string | number };
 export type RecruiterState = { availabilityBlocks?: AvailabilityBlock[]; availabilityDates?: AvailabilityDate[]; candidates: RecruiterCandidate[]; slots: RecruiterSlot[]; vacancies: Vacancy[]; videoConfigured: boolean };
 export type Materials = { status: 'processing' | 'ready'; recordings: { id: string; url: string; duration?: number }[]; transcripts?: { id: string; text: string }[] };
-export type Room = CallCredentials;
+export type Room = { url: string; token: string };
 export type TranscriptTurn = { id: string; text: string; seconds: number; speaker?: string };
 
 export class RecruiterRequestError extends Error {
   constructor(message: string, public status: number) { super(message); }
 }
 
-export async function recruiterRequest<T>(path: string, token: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+export async function recruiterRequest<T>(path: string, token: string, body?: unknown): Promise<T> {
   const response = await fetch('/api/hr/recruiter/' + path, {
     method: body === undefined ? 'GET' : 'POST',
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
     body: body === undefined ? undefined : JSON.stringify(body),
-    cache: 'no-store', signal: AbortSignal.any([AbortSignal.timeout(path === 'hh/responses/import' || path === 'candidates' && body !== undefined ? 180000 : path === 'interview/start' ? 60000 : 30000), ...(signal ? [signal] : [])]),
+    cache: 'no-store', signal: AbortSignal.timeout(path === 'hh/responses/import' || path === 'candidates' && body !== undefined ? 180000 : path === 'interview/start' ? 60000 : 30000),
   });
   const data = await response.json().catch(() => ({ error: 'Сервис временно недоступен.' }));
   if (!response.ok) throw new RecruiterRequestError(data.error || 'Не удалось выполнить действие.', response.status);

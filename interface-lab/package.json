@@ -4,8 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "prestorybook": "node scripts/fetch-daily-bundles.mjs",
     "storybook": "storybook dev -p 6007 --host 127.0.0.1 --no-open --disable-telemetry",
-    "build": "storybook build --disable-telemetry && vite build --config vite.observability.config.ts && node scripts/daily-bundles.mjs storybook-static",
+    "prebuild": "node scripts/fetch-daily-bundles.mjs",
+    "build": "storybook build --disable-telemetry && vite build --config vite.observability.config.ts",
     "typecheck": "tsc --noEmit",
     "deploy:yc": "bash scripts/deploy-yc.sh"
   },

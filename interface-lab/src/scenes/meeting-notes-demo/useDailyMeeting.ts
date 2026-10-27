@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DailyCall, DailyParticipant } from '@daily-co/daily-js';
+import { dailyCallBundleConfig } from '../candidate-portal/call-connection';
 import { readableError, type LabCapture, type LabSession, type LabTranscriptTurn, type MeetingLabApi } from './meeting-notes-api';
 
 type Phase = 'idle' | 'joining' | 'joined' | 'finishing';
@@ -94,7 +95,7 @@ export function useDailyMeeting(api: MeetingLabApi, onSession: (session: LabSess
       if (!alive.current || generation.current !== run) return;
       callback.current(result.session);
       originRef.current = result.session.startedAt ? Date.parse(result.session.startedAt) : Date.now();
-      const call = Daily.createCallObject({ startVideoOff: false, startAudioOff: false });
+      const call = Daily.createCallObject({ ...dailyCallBundleConfig(), startVideoOff: false, startAudioOff: false });
       callRef.current = call;
       const syncParticipants = () => {
         if (alive.current && generation.current === run && !call.isDestroyed()) setParticipants(Object.values(call.participants()));
