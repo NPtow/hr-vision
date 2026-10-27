@@ -1,6 +1,6 @@
 """Isolated HTTP integration checks; never contact production or a model.
 
-Run: python3 -m unittest discover -s services/candidate-profile-preview/tests -v
+Run: python3 -m unittest discover -s apps/candidate-preview/tests -v
 """
 from __future__ import annotations
 
@@ -104,18 +104,20 @@ class PreviewIntegrationTests(unittest.TestCase):
         FakeUpstream.requests.clear()
 
     def request(self, path=PREFIX + '/candidates/candidate_real_123/readiness',
-                method='GET', token=TOKEN, extra_headers=None):
-        connection = http.client.HTTPConnection('127.0.0.1', self.preview.server_port, timeout=3)
+                method='GET', token=TOKEN, extra_headers=None, timeout=3):
+        connection = http.client.HTTPConnection('127.0.0.1', self.preview.server_port, timeout=timeout)
         headers = {'Host': '127.0.0.1:%s' % self.preview.server_port}
         if token is not None:
             headers['Authorization'] = 'Bearer ' + token
         headers.update(extra_headers or {})
-        connection.request(method, path, headers=headers)
-        response = connection.getresponse()
-        result = response.status, dict(response.getheaders()), response.read()
-        response.close()
-        connection.close()
-        return result
+        try:
+            connection.request(method, path, headers=headers)
+            response = connection.getresponse()
+            result = response.status, dict(response.getheaders()), response.read()
+            response.close()
+            return result
+        finally:
+            connection.close()
 
     def assert_private_headers(self, headers):
         headers = {k.lower(): v for k, v in headers.items()}
@@ -486,7 +488,9 @@ class FilteredDirectoryHTTPTests(unittest.TestCase):
         original = FakeDirectory.rows
         try:
             FakeDirectory.rows = [{'id': 'c%s' % i} for i in range(505)]
-            status, _, body = self.request(PREFIX + '/candidates?offset=500&limit=500')
+            # The catalog permits 25 seconds for its bounded scan. Its 505 real
+            # loopback HTTP calls can exceed the short-route timeout on CI.
+            status, _, body = self.request(PREFIX + '/candidates?offset=500&limit=500', timeout=30)
             self.assertEqual(status, 200, body)
             data = json.loads(body)
             self.assertEqual(data['count'], 501)
