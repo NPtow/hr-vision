@@ -117,8 +117,10 @@ class IntakeReviewTest(unittest.TestCase):
         units = corpus['sources'][1]['units']
         self.assertEqual(len(units), 1)
         table = json.loads(units[0]['text'])
-        self.assertEqual(table['columns'], ['start_ms', 'end_ms', 'speaker', 'text'])
-        self.assertEqual(table['rows'], [[0, 2000, 'Рекрутер', 'Как действовали?'],
+        self.assertEqual(table['columns'], ['start_ms', 'end_ms', 'speaker_index', 'text'])
+        self.assertEqual(table['speakers'], ['Рекрутер', 'Кандидат'])
+        self.assertEqual([[a,b,table['speakers'][s],text] for a,b,s,text in table['rows']],
+            [[0, 2000, 'Рекрутер', 'Как действовали?'],
             [2000, 8000, 'Кандидат', 'Уточнил задачу и согласовал следующий шаг.']])
         with self.connect() as db:
             view = review.projection(db, 'a', self.va, self.cid)
