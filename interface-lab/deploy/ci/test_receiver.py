@@ -222,8 +222,8 @@ class ReceiverTest(unittest.TestCase):
     def test_interview_reader_requires_complete_layout_and_previous_api_stays_recoverable(self):
         module = 'selection_interviews.py'
         previous = self.runtime(self.root / 'before-interview-reader', r.PRE_SELECTION_INTERVIEWS_RUNTIME)
-        current = self.runtime(self.root / 'with-interview-reader', r.RUNTIME)
-        for runtime in (r.PRE_SELECTION_INTERVIEWS_RUNTIME, r.RUNTIME):
+        current = self.runtime(self.root / 'with-interview-reader', r.PRE_INTAKE_REVIEW_RUNTIME)
+        for runtime in (r.PRE_SELECTION_INTERVIEWS_RUNTIME, r.PRE_INTAKE_REVIEW_RUNTIME):
             archive, stage, manifest = self.bundle('service', runtime=runtime)
             self.assertEqual(r.unpack(archive, stage, 'service'), manifest)
         for partial in (r.PRE_RECOMMENDATION_LIFECYCLE_RUNTIME | {module}, r.LEGACY_RUNTIME | {module}):
