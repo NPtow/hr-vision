@@ -74,17 +74,14 @@ def prepare(text):
 
 
 def verify_extraction(result, chunks):
-    # PDF line wrapping may become spaces in model quotes. Words must still
-    # occur contiguously in the same source chunk, with unchanged punctuation.
-    by_id = {item['chunkId']: ' '.join(item['text'].split()) for item in chunks}
+    by_id = {item['chunkId']: item['text'] for item in chunks}
     if not result['isResume']:
         if result['evidence'] or result['experience'] or any(value is not None for value in result['profile'].values()):
             raise ValueError('unsupported_document')
         return
     seen = set()
     for fact in [*result['evidence'], *result['experience']]:
-        quote = ' '.join(fact['quote'].split())
-        if not quote or quote not in by_id.get(fact['chunkId'], '') or '[[REDACTED_INJECTION]]' in fact['quote']:
+        if fact['quote'] not in by_id.get(fact['chunkId'], '') or '[[REDACTED_INJECTION]]' in fact['quote']:
             raise ValueError('unsupported_evidence')
         if 'field' in fact:
             key = fact['field']

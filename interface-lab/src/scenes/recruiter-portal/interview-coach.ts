@@ -112,8 +112,7 @@ export function useInterviewCoach({ candidateId, interviewId, token }: Identity)
     return () => clearTimeout(timer);
   }, [progress, dirty, error]);
   return { data, progress, dirty, busy, error, change, flush, command, refresh,
-    context: () => request<CoachContext>('context'),
-    originalResume: () => request<{ resume: { filename: string; mimeType: string; contentBase64: string } | null }>('resume') };
+    context: () => request<CoachContext>('context') };
 }
 
 export type InterviewCoachController = ReturnType<typeof useInterviewCoach>;

@@ -1,5 +1,4 @@
 """Daily rooms are recoverable across retries and expired invitation links."""
-import observability
 import json
 import http.client
 import logging
@@ -30,7 +29,6 @@ class DailyMedia:
     def configured(self):
         return bool(self.key and self.enabled)
 
-    @observability.operation("daily.request")
     def request(self, path, body=None, method=None):
         started = time.monotonic()
         try:

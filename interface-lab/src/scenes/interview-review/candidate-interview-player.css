@@ -395,11 +395,6 @@ to{opacity:1;margin-bottom:0}
 .iv-root .iv-panel-restore{position:absolute;right:18px;top:18px;z-index:6;background:#ffffffef;color:#222;box-shadow:0 2px 12px #0002}
 
 .iv-video-title{position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,#0002,transparent 28%,#0008);opacity:0;transition:opacity .22s;z-index:1;display:flex;align-items:flex-end;padding:0 5.5% 92px;color:#fff}
-.iv-identity-header{position:absolute;inset:0 0 auto;z-index:3;padding:22px 24px 45px;background:linear-gradient(#0009,#0004 60%,transparent);opacity:0;transition:opacity .2s;pointer-events:none}
-.iv-identity-header>*{pointer-events:auto}
-.iv-controls-visible .iv-identity-header,.iv-player:focus-within .iv-identity-header{opacity:1}
-@media(max-width:700px){.iv-identity-header{padding:12px 14px 30px}}
-@media(prefers-reduced-motion:reduce){.iv-identity-header{transition:none}}
 
 .iv-video-title .iv-video-name{display:block;font-size:clamp(22px,3.3cqw,42px);font-weight:600;line-height:1.15;max-width:80%;text-shadow:0 1px 6px #0005;margin:0;color:#fff}
 
@@ -481,77 +476,3 @@ to{opacity:1;margin-bottom:0}
 .iv-tabs>button[aria-selected=true]{outline:1px solid Highlight}
 }
 
-/* The input belongs to the same bounded column as the video, in every mode. */
-.iv-root .iv-side-input{flex:none;min-width:0;padding-top:12px}
-.iv-root .iv-assistant-composer{display:flex;align-items:center;gap:10px;min-height:52px;padding:8px 9px 8px 14px;margin:0;border:1px solid #e5e5e7;border-radius:18px;background:#fafafa;color:#959599;box-shadow:0 1px 3px #00000005}
-.iv-root .iv-assistant-composer:focus-within{border-color:#aaaab2;box-shadow:0 0 0 1px #aaaab2}
-.iv-root .iv-assistant-composer input{border:0;background:none;min-width:0;flex:1;padding:6px 0;color:#232326;outline:none;font-size:13px;line-height:20px}
-.iv-root .iv-assistant-composer input::placeholder{color:#929298}
-.iv-root .iv-assistant-composer input:focus-visible{outline:0}
-.iv-root .iv-assistant-composer>button{display:grid;place-items:center;flex:none;width:32px;height:32px;border-radius:50%;background:#222;color:#fff;transition:transform .14s}
-.iv-root .iv-assistant-composer>button:disabled{background:#ebebed;color:#aaaab0;opacity:1}
-.iv-root .iv-assistant-composer>button:active:not(:disabled){transform:scale(.93)}
-.iv-root .iv-below-player{justify-content:flex-end}
-.iv-root .iv-chat{display:flex;min-height:0;overflow:hidden}
-.iv-root .iv-chat-scroll{flex:1;min-height:0;overflow:auto;padding:18px 3px 16px 0;scrollbar-width:none;overscroll-behavior:contain}
-.iv-root .iv-chat-suggestions{display:grid;align-content:start;gap:10px;padding-top:14px}
-.iv-root .iv-chat-suggestions button{padding:12px 14px;text-align:left;background:#f6f6f7;border-radius:14px;font-size:13px;line-height:1.5;color:#67676d}
-.iv-root .iv-chat-suggestions button:hover{background:#efeff1;color:#242427}
-.iv-root .iv-chat-turn{margin-bottom:24px;font-size:14px;line-height:1.6;overflow-wrap:anywhere}
-.iv-root .iv-chat-question{margin:0 0 20px;padding:12px 15px;border-radius:15px 15px 5px 15px;background:#f4f4f5;color:#65656c;white-space:pre-wrap}
-.iv-root .iv-chat-answer{margin:0 0 14px;white-space:pre-wrap;color:#242427;font-size:14px;line-height:1.7}
-.iv-root .iv-source-chip{display:inline-flex;align-items:center;justify-content:center;vertical-align:baseline;position:relative;top:-1px;min-width:22px;height:22px;margin:0 3px;padding:0 6px;border-radius:8px;background:#f0f0f3;color:#686873;font-size:11px;line-height:1;font-variant-numeric:tabular-nums;transition:background .15s,color .15s}
-.iv-root .iv-source-chip:hover{background:#e6e3f0;color:#403453}
-.iv-root .iv-source-chip:disabled{opacity:.55}
-.iv-source-tooltip{z-index:12000;display:grid;gap:7px;max-width:min(340px,calc(100vw - 28px));padding:13px 16px;border-radius:14px;background:#343139;color:#fff;box-shadow:0 6px 24px #29233225;font:13px/1.55 'Inter Variable',Inter,-apple-system,sans-serif;overflow-wrap:anywhere}
-.iv-source-tooltip strong{font-size:11px;color:#dedbe5;font-weight:500}
-.iv-source-tooltip span{display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-wrap}
-.iv-root .iv-chat-evidence{display:grid;gap:8px}
-.iv-root .iv-chat-evidence button{display:grid;grid-template-columns:42px minmax(0,1fr);gap:10px;text-align:left;padding:8px 0;color:#76767d;font-size:12px;line-height:1.65}
-.iv-root .iv-chat-evidence time{font-variant-numeric:tabular-nums;align-self:start;border-radius:5px;background:#f3f3f4;text-align:center;font-size:11px;color:#515158}
-.iv-root .iv-chat-evidence button:hover span{color:#252529}
-.iv-root .iv-chat-evidence button:disabled{opacity:1;cursor:default}
-.iv-root .iv-chat-coverage,.iv-root .iv-chat-pending,.iv-root .iv-assistant-unavailable{color:#929298;font-size:11px;line-height:1.5}
-.iv-root .iv-assistant-unavailable{display:block;margin:6px 2px 0}
-.iv-root .iv-assistant-error{font-size:12px;line-height:1.6;color:#806268;margin:0 0 10px;overflow-wrap:anywhere}
-.iv-root .iv-assistant-error p{margin:0 0 8px}
-.iv-root .iv-assistant-error button{color:#555;text-decoration:underline;text-underline-offset:3px}
-.iv-root .iv-search-state{display:flex;align-items:center;gap:7px;font-size:11px;color:#82828a;margin:0 0 9px;min-height:28px}
-.iv-root .iv-search-state>span{margin-right:auto}
-.iv-root .iv-search-state .iv-icon{width:25px;height:25px}
-.iv-root .iv-search-state svg{width:14px;height:14px}
-.iv-root .iv-search-state>button:last-child{margin-left:5px}
-.iv-root .iv-line[data-match=true] .iv-line-content>span{background:#fff2c5;color:#393325;box-shadow:3px 0 #fff2c5,-3px 0 #fff2c5;border-radius:3px;box-decoration-break:clone;-webkit-box-decoration-break:clone}
-.iv-root .iv-line[data-search-current=true] .iv-line-content>span{background:#ffe6a0;box-shadow:3px 0 #ffe6a0,-3px 0 #ffe6a0}
-.iv-tooltip{z-index:10020;border-radius:7px;padding:6px 9px;background:#252527;color:#fff;font-family:'Inter Variable',Inter,-apple-system,sans-serif;font-size:11px;line-height:1.4;box-shadow:0 2px 8px #0002;user-select:none;animation:iv-tooltip-enter .12s ease-out}
-@keyframes iv-tooltip-enter{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:translateY(0)}}
-.iv-root .iv-assistant-spinner{width:15px;height:15px;border:1.5px solid currentColor;border-right-color:transparent;border-radius:50%;animation:iv-spin .8s linear infinite}
-@keyframes iv-spin{to{transform:rotate(360deg)}}
-.iv-root .iv-sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
-.iv-root .iv-follow{bottom:76px}
-.iv-root.iv-full .iv-sidebar{padding-bottom:24px}
-@container(max-width:1100px){.iv-root .iv-workspace{column-gap:24px}.iv-root .iv-assistant-composer input{font-size:12px}}
-@container(max-width:760px){.iv-root .iv-sidebar{padding-bottom:0}.iv-root .iv-tabs>button{width:43px}.iv-root .iv-chat-suggestions{padding-top:0}.iv-root.iv-full .iv-sidebar{padding-bottom:12px}.iv-root .iv-assistant-composer input{font-size:16px}}
-@media(prefers-reduced-motion:reduce){.iv-tooltip{animation:none}.iv-root .iv-assistant-spinner{animation-duration:2s!important}}
-
-
-/* Chapters live in the transcript. Only its current heading is a sticky switcher. */
-.iv-root .iv-unified-transcript{padding:4px 2px 36px 0;mask-image:linear-gradient(#000 calc(100% - 22px),transparent)}
-.iv-transcript-section{position:relative;margin-bottom:18px}
-.iv-transcript-section:last-child:has(.iv-transcript-heading){min-height:var(--iv-transcript-height,100%)}
-.iv-transcript-heading{position:relative;z-index:1;background:var(--iv-panel);margin-bottom:14px}
-.iv-transcript-heading[data-current=true]{position:sticky;top:0;z-index:4}
-.iv-transcript-heading h3{margin:0;font-size:13px;line-height:1.5;font-weight:550;letter-spacing:0;color:#71627e}
-.iv-root .iv-chapter-trigger,.iv-chapter-heading-title{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;padding:13px 0!important;text-align:left;color:#71627e!important;font-size:13px!important;font-weight:550!important;line-height:1.5}
-.iv-root .iv-chapter-trigger:active{color:#35273f!important}
-.iv-chapter-outline{overflow:hidden;max-height:min(45dvh,360px);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
-.iv-root .iv-chapter-outline>button{display:block;width:100%;padding:11px 10px!important;text-align:left;color:#8b8196;font-size:12px;border-radius:9px;line-height:1.6}
-.iv-root .iv-chapter-outline>button:hover{background:#f7f5f9;color:#4d425b}
-.iv-chapter-description{margin:0 0 18px;color:#969099;font-size:12px;line-height:1.6}
-@media(prefers-reduced-motion:reduce){.iv-root .iv-chapter-trigger,.iv-root .iv-chapter-outline{scroll-behavior:auto}}
-@media(prefers-contrast:more){.iv-transcript-heading h3,.iv-root .iv-chapter-trigger,.iv-chapter-heading-title{color:#44354f!important}.iv-root .iv-chapter-outline>button{color:#51445c}}
-.iv-vacancy-match { margin: 0 24px 24px; font-size: 14px; line-height: 1.5; }
-.iv-vacancy-match summary { cursor: pointer; font-weight: 600; }
-.iv-vacancy-match ul { padding: 0; list-style: none; }
-.iv-vacancy-match li { display: flex; justify-content: space-between; gap: 24px; margin: 12px 0; }
-.iv-vacancy-match li span:last-child { color: var(--text-secondary, #72717a); text-align: right; }

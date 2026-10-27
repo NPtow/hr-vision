@@ -45,53 +45,12 @@ PRE_MEETING_NOTICES_RUNTIME = PRE_REMINDERS_RUNTIME | {'meeting_reminders.py'}
 PRE_MEETING_LAB_RUNTIME = PRE_MEETING_NOTICES_RUNTIME | {'meeting_notifications.py'}
 PRE_RECRUITER_COACH_RUNTIME = PRE_MEETING_LAB_RUNTIME | {'meeting_lab.py'}
 PRE_CALL_CLEANUP_RUNTIME = PRE_RECRUITER_COACH_RUNTIME | {'recruiter_coach.py'}
-PRE_OBSERVABILITY_RUNTIME = PRE_CALL_CLEANUP_RUNTIME | {'call_cleanup.py', 'media_runtime.py'}
-PRE_CANDIDATE_CALENDAR_RUNTIME = PRE_OBSERVABILITY_RUNTIME | {'observability.py'}
-PRE_INTERVIEW_ASSISTANT_RUNTIME = PRE_CANDIDATE_CALENDAR_RUNTIME | {'candidate_availability.py'}
-PRE_MATERIALS_RUNTIME = PRE_INTERVIEW_ASSISTANT_RUNTIME | {'interview_assistant.py'}
-MATERIALS_RUNTIME = {
-    'materials_capture.py', 'materials_daily.py', 'materials_repository.py',
-    'materials_http.py', 'materials_storage.py', 'materials_transcripts.py',
-    'materials_worker.py', 'materials_runtime.py', 'materials_service.py',
-}
-PRE_SERVICES_RUNTIME = PRE_MATERIALS_RUNTIME | MATERIALS_RUNTIME
-SERVICES_RUNTIME = {'core_source_client.py', 'core_source_outbox.py', 'zoom_api_client.py'}
-PRE_ZOOM_RUNTIME = PRE_SERVICES_RUNTIME
-ZOOM_RUNTIME = {'call_providers.py', 'zoom_media.py', 'materials_zoom.py', 'zoom_recording_retention.py'}
-SERVICES_ONLY_RUNTIME = PRE_SERVICES_RUNTIME | SERVICES_RUNTIME
-ZOOM_ONLY_RUNTIME = PRE_ZOOM_RUNTIME | ZOOM_RUNTIME
-# Preserve both independently shipped complete histories. New releases include
-# the main core/source service boundary and the approved assessment capability.
-ASSESSMENT_ONLY_RUNTIME = ZOOM_ONLY_RUNTIME | {'interview_assessment.py'}
-PRE_ASSESSMENT_RUNTIME = SERVICES_ONLY_RUNTIME | ZOOM_RUNTIME
-PRE_PUBLIC_PROFILE_RUNTIME = PRE_ASSESSMENT_RUNTIME | {'interview_assessment.py'}
-PRE_SELECTION_RUNTIME = PRE_PUBLIC_PROFILE_RUNTIME | {'public_profiles.py'}
-PRE_JEV_RUNTIME = PRE_SELECTION_RUNTIME | {'selection.py'}
-PRE_ASR_DISPATCH_RUNTIME = PRE_JEV_RUNTIME | {'assessment_jobs.py'}
-PRE_SELECTION_STATUS_RUNTIME = PRE_ASR_DISPATCH_RUNTIME | {'materials_asr_dispatch.py'}
-PRE_FULL_CORPUS_RUNTIME = PRE_SELECTION_STATUS_RUNTIME | {'selection_status.py'}
-PRE_PRODUCT_RECORDINGS_RUNTIME = PRE_FULL_CORPUS_RUNTIME | {'assessment_corpus.py', 'assessment_core_bridge.py'}
-RECOMMENDATIONS_RUNTIME = {'assessment_core_lifecycle.py', 'selection_facts.py',
-                           'vacancy_profile_bridge.py', 'recommendations_bridge.py'}
-PRE_EMPLOYER_REVIEW_RUNTIME = PRE_PRODUCT_RECORDINGS_RUNTIME | {'recording_uploads.py', 'canonical_materials.py', 'transcript_bundle.py'}
-PRE_RECOMMENDATIONS_RUNTIME = PRE_EMPLOYER_REVIEW_RUNTIME | {'employer_review.py'}
-PRE_MATERIALS_LIFECYCLE_RUNTIME = PRE_RECOMMENDATIONS_RUNTIME | RECOMMENDATIONS_RUNTIME
-PRE_RECOMMENDATION_LIFECYCLE_RUNTIME = PRE_MATERIALS_LIFECYCLE_RUNTIME | {'selection_materials_lifecycle.py'}
-PRE_SELECTION_INTERVIEWS_RUNTIME = PRE_RECOMMENDATION_LIFECYCLE_RUNTIME | {'recommendation_lifecycle.py'}
-PRE_INTAKE_REVIEW_RUNTIME = PRE_SELECTION_INTERVIEWS_RUNTIME | {'selection_interviews.py'}
-RUNTIME = PRE_INTAKE_REVIEW_RUNTIME | {'employer_intake_review.py'}
+RUNTIME = PRE_CALL_CLEANUP_RUNTIME | {'call_cleanup.py', 'media_runtime.py'}
 BOT_RUNTIME = PRE_IMPORT_RUNTIME - {'recruiter_access.py', 'recruiter_sources.py', 'recruiter_notifications.py'}
 LEGACY_RUNTIME = BOT_RUNTIME - {'candidate_bot.py'}
-RUNTIME_LAYOUTS = {frozenset(PRE_RECOMMENDATIONS_RUNTIME), frozenset(PRE_PRODUCT_RECORDINGS_RUNTIME), frozenset(PRE_FULL_CORPUS_RUNTIME), frozenset(PRE_SELECTION_STATUS_RUNTIME), frozenset(PRE_JEV_RUNTIME), frozenset(LEGACY_RUNTIME), frozenset(BOT_RUNTIME), frozenset(PRE_IMPORT_RUNTIME),
-                   frozenset(PRE_SERVICES_RUNTIME), frozenset(SERVICES_ONLY_RUNTIME), frozenset(ZOOM_ONLY_RUNTIME),
-                   frozenset(ASSESSMENT_ONLY_RUNTIME), frozenset(PRE_ASSESSMENT_RUNTIME), frozenset(PRE_PUBLIC_PROFILE_RUNTIME), frozenset(PRE_SELECTION_RUNTIME), frozenset(PRE_ASR_DISPATCH_RUNTIME),
+RUNTIME_LAYOUTS = {frozenset(LEGACY_RUNTIME), frozenset(BOT_RUNTIME), frozenset(PRE_IMPORT_RUNTIME),
                    frozenset(PRE_OUTREACH_RUNTIME), frozenset(PRE_ACCESS_RUNTIME), frozenset(PRE_CV_RUNTIME),
-                   frozenset(PRE_POOLED_RUNTIME), frozenset(PRE_EMPLOYER_TELEGRAM_RUNTIME), frozenset(PRE_REMINDERS_RUNTIME), frozenset(PRE_MEETING_NOTICES_RUNTIME), frozenset(PRE_MEETING_LAB_RUNTIME), frozenset(PRE_RECRUITER_COACH_RUNTIME), frozenset(PRE_CALL_CLEANUP_RUNTIME), frozenset(PRE_OBSERVABILITY_RUNTIME), frozenset(PRE_CANDIDATE_CALENDAR_RUNTIME), frozenset(PRE_INTERVIEW_ASSISTANT_RUNTIME), frozenset(PRE_MATERIALS_RUNTIME), frozenset(RUNTIME)}
-RUNTIME_LAYOUTS.add(frozenset(PRE_EMPLOYER_REVIEW_RUNTIME))
-RUNTIME_LAYOUTS.add(frozenset(PRE_MATERIALS_LIFECYCLE_RUNTIME))
-RUNTIME_LAYOUTS.add(frozenset(PRE_RECOMMENDATION_LIFECYCLE_RUNTIME))
-RUNTIME_LAYOUTS.add(frozenset(PRE_SELECTION_INTERVIEWS_RUNTIME))
-RUNTIME_LAYOUTS.add(frozenset(PRE_INTAKE_REVIEW_RUNTIME))
+                   frozenset(PRE_POOLED_RUNTIME), frozenset(PRE_EMPLOYER_TELEGRAM_RUNTIME), frozenset(PRE_REMINDERS_RUNTIME), frozenset(PRE_MEETING_NOTICES_RUNTIME), frozenset(PRE_MEETING_LAB_RUNTIME), frozenset(PRE_RECRUITER_COACH_RUNTIME), frozenset(PRE_CALL_CLEANUP_RUNTIME), frozenset(RUNTIME)}
 MAX_ARCHIVE = 50 * 1024 * 1024
 MAX_CONTENT = 120 * 1024 * 1024
 
@@ -143,7 +102,6 @@ def unpack(archive, destination, target):
                 require(name.startswith('ui/') and not any(part.startswith('.') for part in PurePosixPath(rel).parts), 'Unexpected public path')
                 require(re.search(r'\.(js|css|svg|woff2?|ttf|png|jpe?g|webp|ico|gif)$', rel)
                         or rel in {'index.html', 'iframe.html', 'index.json', 'project.json', 'deployment.json'}
-                        or rel in {'call/zoom/client.html', 'call/zoom/left.html'}
                         or (target == 'mockups' and rel == 'presentations/hrds-2026-10-07/index.html')
                         or rel.endswith('.LICENSE.txt'), 'Unexpected public file')
         require({'ui/index.html', 'ui/iframe.html', 'ui/index.json', 'ui/deployment.json'} <= files.keys(), 'Missing UI files')
@@ -245,137 +203,9 @@ def stop_api():
     subprocess.run(['systemctl', 'stop', 'hr-vision-api'], check=True, timeout=45)
 
 
-MATERIALS_UNITS = ('hr-vision-core-outbox', 'hr-vision-data-services',
-                  'hr-vision-materials-scheduler', 'hr-vision-materials-worker')
-
-
-def pause_materials():
-    """Drain separate SQLite writers before backup and API pointer changes."""
-    active = []
-    try:
-        for unit in MATERIALS_UNITS:
-            state = subprocess.run(['systemctl', 'show', unit, '--property=LoadState', '--value'],
-                                   check=True, capture_output=True, text=True, timeout=10).stdout.strip()
-            if state == 'not-found':
-                continue
-            require(state == 'loaded', 'Cannot verify materials unit: ' + unit)
-            running = subprocess.run(['systemctl', 'is-active', unit], capture_output=True,
-                                     text=True, timeout=10).stdout.strip()
-            require(running in ('active', 'inactive', 'failed'), 'Cannot verify materials state: ' + unit)
-            if running != 'active':
-                continue
-            active.append(unit)
-            subprocess.run(['systemctl', 'stop', unit], check=True, timeout=345)
-            stopped = subprocess.run(['systemctl', 'is-active', unit], capture_output=True,
-                                     text=True, timeout=10).stdout.strip()
-            require(stopped == 'inactive', 'Materials unit did not drain: ' + unit)
-    except Exception:
-        resume_materials(active)
-        raise
-    return active
-
-
-def resume_materials(active):
-    for unit in reversed(active):
-        subprocess.run(['systemctl', 'start', unit], check=True, timeout=45)
-
-
 def guard_outbox_runtime(db, source):
     runtime = frozenset(path.relative_to(source).as_posix() for path in source.rglob('*') if path.is_file())
     require(runtime in RUNTIME_LAYOUTS, 'Incomplete recovery API')
-    # rc_auto_vacancies/rc_auto_cursor are additive HR scheduling metadata.
-    # A prior complete API ignores them and retains existing vp/rc results;
-    # paid profile work remains owned by vp_bindings and its existing guard.
-    # Returning to that API pauses automation rather than deleting its state.
-    if not RECOMMENDATIONS_RUNTIME <= runtime:
-        for table in ('vp_bindings', 'rc_bindings', 'sl_fact_revisions', 'sl_evidence',
-                      'sl_recommendation_nominations', 'sl_recommendation_nomination_history',
-                      'ac_auto_cursor', 'ac_auto_candidates', 'ac_auto_work'):
-            schema = db.execute("SELECT type FROM sqlite_master WHERE name=?", (table,)).fetchall()
-            if schema:
-                require(schema == [('table',)], 'Cannot verify recommendation schema')
-                require(not db.execute('SELECT 1 FROM ' + table + ' LIMIT 1').fetchone(),
-                        'Recommendation state requires compatible service adapters; use a forward recovery')
-    if 'employer_intake_review.py' not in runtime:
-        schema = db.execute("SELECT type FROM sqlite_master WHERE name='er_intake_preparations'").fetchall()
-        if schema:
-            require(schema == [('table',)], 'Cannot verify intake preparation schema')
-            require(not db.execute('SELECT 1 FROM er_intake_preparations LIMIT 1').fetchone(),
-                    'Intake preparations require employer_intake_review.py; use a compatible forward recovery')
-    if 'employer_review.py' not in runtime:
-        schema = db.execute("SELECT type FROM sqlite_master WHERE name='er_preparations'").fetchall()
-        if schema:
-            require(schema == [('table',)], 'Cannot verify employer preparation schema')
-            require(not db.execute('SELECT 1 FROM er_preparations LIMIT 1').fetchone(),
-                    'Employer preparations require employer_review.py; use a compatible forward recovery')
-    if 'assessment_core_bridge.py' not in runtime:
-        schema = db.execute("SELECT type FROM sqlite_master WHERE name='ac_bindings'").fetchall()
-        if schema:
-            require(schema == [('table',)], 'Cannot verify full-corpus assessment schema')
-            require(not db.execute('SELECT 1 FROM ac_bindings LIMIT 1').fetchone(),
-                    'Full-corpus results require assessment_core_bridge.py; use a compatible forward recovery')
-    if 'assessment_jobs.py' not in runtime:
-        for table in ('as_bindings', 'as_matches'):
-            schema = db.execute('SELECT type FROM sqlite_master WHERE name=?', (table,)).fetchall()
-            if schema:
-                require(schema == [('table',)], 'Cannot verify Jev queue schema')
-                require(not db.execute('SELECT 1 FROM ' + table + ' LIMIT 1').fetchone(),
-                        'Jev queue data requires assessment_jobs.py; use a compatible forward recovery')
-    if 'selection.py' not in runtime:
-        for table in ('sl_core_results', 'sl_nominations'):
-            schema = db.execute('SELECT type FROM sqlite_master WHERE name=?', (table,)).fetchall()
-            if schema:
-                require(schema == [('table',)], 'Cannot verify selection schema')
-                require(not db.execute('SELECT 1 FROM ' + table + ' LIMIT 1').fetchone(),
-                        'Selection data requires selection.py; use a compatible forward recovery')
-    if 'interview_assessment.py' not in runtime:
-        for table in ('ia_assessment_revisions', 'ia_assessment_feedback',
-                      'ia_assessment_feedback_events', 'ia_assessment_commands'):
-            schema = db.execute('SELECT type FROM sqlite_master WHERE name=?', (table,)).fetchall()
-            if schema:
-                require(schema == [('table',)], 'Cannot verify interview assessment schema: ' + table)
-                # Keep immutable projections, fragment feedback, audit history
-                # and retry identities readable. Never clear them to permit a
-                # downgrade; an empty historical schema remains reversible.
-                require(not db.execute('SELECT 1 FROM ' + table + ' LIMIT 1').fetchone(),
-                        'Interview assessment data requires interview_assessment.py; use a compatible forward recovery')
-    if not SERVICES_RUNTIME.issubset(runtime):
-        for table in ('portal_materials_outbox', 'core_material_receipts', 'core_material_channels', 'core_material_asset_bindings'):
-            schema = db.execute('SELECT type FROM sqlite_master WHERE name=?', (table,)).fetchall()
-            if schema:
-                require(schema == [('table',)], 'Cannot verify core/source schema: ' + table)
-                # Even completed delivery intents and receipts preserve replay
-                # identities. Old collectors must not resume ownership of them.
-                require(not db.execute('SELECT 1 FROM ' + table + ' LIMIT 1').fetchone(),
-                        'Core/source data requires services runtime; use a compatible forward recovery')
-    if not ZOOM_RUNTIME.issubset(runtime):
-        schema = db.execute("SELECT type FROM sqlite_master WHERE name='cp_call_provider_choices'").fetchall()
-        if schema:
-            require(schema == [('table',)], 'Cannot verify call provider choices schema')
-            columns = {row[1] for row in db.execute('PRAGMA table_info(cp_call_provider_choices)')}
-            require('provider' in columns, 'Cannot verify call provider choices schema')
-            # Even a selected/not-yet-created Zoom meeting must never silently
-            # reopen as Daily under an older runtime. Keep the durable choice.
-            require(not db.execute("SELECT 1 FROM cp_call_provider_choices WHERE provider='zoom' LIMIT 1").fetchone(),
-                    'Zoom meetings require Zoom runtime; use a compatible forward recovery')
-    if not MATERIALS_RUNTIME.issubset(runtime):
-        schema = db.execute("SELECT type FROM sqlite_master WHERE name='media_sources'").fetchall()
-        if schema:
-            require(schema == [('table',)], 'Cannot verify materials catalog schema')
-            # Terminal/disabled sources still reference immutable transcripts and
-            # owned objects. Old code cannot safely interpret or preserve them.
-            require(not db.execute('SELECT 1 FROM media_sources LIMIT 1').fetchone(),
-                    'Materials catalog requires materials runtime; use a compatible forward recovery')
-    if 'candidate_availability.py' not in runtime:
-        schema = db.execute("SELECT type FROM sqlite_master WHERE name='cp_candidates'").fetchall()
-        if schema:
-            require(schema == [('table',)], 'Cannot verify candidate calendar schema')
-            for raw, in db.execute('SELECT profile FROM cp_candidates'):
-                profile = json.loads(raw)
-                require(isinstance(profile, dict), 'Cannot verify candidate calendar profile')
-                schedule = profile.get('availabilitySchedule') or {}
-                require(not schedule.get('weekly') and not schedule.get('dates') and not profile.get('timezone'),
-                        'Candidate calendar preferences require candidate_availability.py; use a compatible forward recovery')
     if 'call_cleanup.py' not in runtime:
         schema = db.execute("SELECT type FROM sqlite_master WHERE name='cp_call_cleanup'").fetchall()
         # Even an empty queue is not enough: the durable cancellation trigger
@@ -416,65 +246,25 @@ def activate_api(value):
 
 def check_origin(target, sha):
     host = 'hr-vision.158-160-179-53.sslip.io' if target == 'service' else 'hr-vision-lab.158-160-179-53.sslip.io'
-    deadline = time.monotonic() + 90
-    first = last = None
-
-    def request_timeout():
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            raise TimeoutError('Origin readiness deadline expired')
-        return min(4, remaining)
-
-    while time.monotonic() < deadline:
+    last = None
+    for _ in range(10):
         try:
             request = urllib.request.Request('http://127.0.0.1:8381/deployment.json', headers={'Host': host})
-            with urllib.request.urlopen(request, timeout=request_timeout()) as response:
+            with urllib.request.urlopen(request, timeout=4) as response:
                 data = json.load(response)
             require(data['sha'] == sha and data['target'] == target, 'Origin revision mismatch')
             story = 'hr-vision-product--start' if target == 'service' else 'hr-vision-employer-menu--gallery'
             entry = 'http://127.0.0.1:8381/iframe.html?id=' + story + '&viewMode=story'
-            with urllib.request.urlopen(urllib.request.Request(entry, headers={'Host': host}), timeout=request_timeout()) as response:
+            with urllib.request.urlopen(urllib.request.Request(entry, headers={'Host': host}), timeout=4) as response:
                 require(response.status == 200 and response.url == entry, 'Entry page was redirected to another site')
             if target == 'service':
-                with urllib.request.urlopen('http://127.0.0.1:8391/api/hr/health', timeout=request_timeout()) as response:
+                with urllib.request.urlopen('http://127.0.0.1:8391/api/hr/health', timeout=4) as response:
                     require(json.load(response).get('ok'), 'API health check failed')
             return
         except Exception as error:
-            if first is None:
-                first = error
             last = error
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                break
-            time.sleep(min(1, remaining))
-    if first is None:
-        first = last = TimeoutError('Origin readiness deadline expired before the first check')
-    raise RuntimeError('Origin verification failed; first error: ' + type(first).__name__ + ': ' + str(first)
-                       + '; last error: ' + type(last).__name__ + ': ' + str(last)) from first
-
-
-def retain_replay_assets(previous, destination):
-    """Keep missing public replay assets for 25h without duplicating their bytes."""
-    if previous is None or not previous.is_dir():
-        return
-    now = time.time()
-    ledger = previous / '.replay-assets.json'
-    expiries = json.loads(ledger.read_text()) if ledger.exists() else {}
-    retained = {}
-    for source in (previous / 'assets').rglob('*'):
-        name = source.relative_to(previous).as_posix()
-        if source.is_symlink() or not source.is_file() or source.suffix.lower() not in {
-            '.css', '.woff', '.woff2', '.ttf', '.otf', '.svg', '.png', '.webp', '.ico',
-        }:
-            continue
-        output = destination / name
-        expires = expiries.get(name, now + 25 * 3600)
-        if output.exists() or expires <= now:
-            continue
-        output.parent.mkdir(parents=True, exist_ok=True)
-        os.link(source, output)
-        retained[name] = expires
-    (destination / '.replay-assets.json').write_text(json.dumps(retained))
+            time.sleep(1)
+    raise RuntimeError('Origin verification failed') from last
 
 
 def activate(stage, manifest):
@@ -487,50 +277,39 @@ def activate(stage, manifest):
     previous_ui = pointer(base)
     previous_api = pointer(API) if target == 'service' else None
     change_api = target == 'service' and api_changed(stage / 'api')
-    paused = pause_materials() if change_api else []
-    safe_to_resume = True
+    if change_api:
+        guard_and_backup(release)
+    ui_release = base / 'releases' / release
+    require(not ui_release.exists(), 'Workflow attempt was already installed; rerun it for a new attempt')
+    ui_release.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(stage / 'ui', ui_release)
+    if change_api:
+        api_release = API / 'releases' / release
+        require(not api_release.exists(), 'API release already exists')
+        shutil.copytree(stage / 'api', api_release)
+    attempted_api = False
     try:
         if change_api:
-            guard_and_backup(release)
-        ui_release = base / 'releases' / release
-        require(not ui_release.exists(), 'Workflow attempt was already installed; rerun it for a new attempt')
-        ui_release.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(stage / 'ui', ui_release)
-        if target == 'service':
-            retain_replay_assets(base / previous_ui if previous_ui else None, ui_release)
-        if change_api:
-            api_release = API / 'releases' / release
-            require(not api_release.exists(), 'API release already exists')
-            shutil.copytree(stage / 'api', api_release)
-        attempted_api = False
-        try:
-            if change_api:
-                attempted_api = True
-                activate_api('releases/' + release)
-            switch(base, 'current', 'releases/' + release)
-            check_origin(target, manifest['sha'])
-        except Exception as failure:
-            if attempted_api:
-                try:
-                    # The new runtime may have committed lifecycle rows during its
-                    # health check. Recheck after stopping it, never reuse preflight.
-                    activate_api(previous_api)
-                except Exception as recovery:
-                    safe_to_resume = False
-                    raise RuntimeError('API rollback refused or failed; receiver will not restart an unsafe runtime. '
-                                       'Verify unit state and deploy a compatible forward recovery. '
-                                       'Original failure: ' + type(failure).__name__ + ': ' + str(failure)
-                                       + '; rollback failure: ' + type(recovery).__name__ + ': ' + str(recovery)) from failure
-            switch(base, 'current', previous_ui)
-            raise
-        if previous_ui:
-            switch(base, 'previous', previous_ui)
-        if attempted_api and previous_api:
-            switch(API, 'previous', previous_api)
-        print(json.dumps({'published': target, 'sha': manifest['sha'], 'release': release, 'apiRestarted': change_api}), flush=True)
-    finally:
-        if safe_to_resume:
-            resume_materials(paused)
+            attempted_api = True
+            activate_api('releases/' + release)
+        switch(base, 'current', 'releases/' + release)
+        check_origin(target, manifest['sha'])
+    except Exception:
+        if attempted_api:
+            try:
+                # The new runtime may have committed lifecycle rows during its
+                # health check. Recheck after stopping it, never reuse preflight.
+                activate_api(previous_api)
+            except Exception as recovery:
+                raise RuntimeError('API rollback refused or failed; receiver will not restart an unsafe runtime. '
+                                   'Verify unit state and deploy a compatible forward recovery. ' + str(recovery)) from recovery
+        switch(base, 'current', previous_ui)
+        raise
+    if previous_ui:
+        switch(base, 'previous', previous_ui)
+    if attempted_api and previous_api:
+        switch(API, 'previous', previous_api)
+    print(json.dumps({'published': target, 'sha': manifest['sha'], 'release': release, 'apiRestarted': change_api}), flush=True)
 
 
 def main():

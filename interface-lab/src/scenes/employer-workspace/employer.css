@@ -27,7 +27,7 @@
 .ew-topbar button { border:0; background:none; padding:0; }
 .ew-logo { display:flex; flex-shrink:0; }
 .ew-logo img { width:150px; height:24px; }
-.ew-account { margin-left:auto; display:flex; align-items:center; justify-content:space-between; gap:24px; min-height:40px; padding:0 12px!important; color:#121212!important; }
+.ew-account { margin-left:auto; }
 .ew-vacancy-header { padding:16px 32px; border-bottom:1px solid #e9e7f0; }
 .ew-vacancy-title { display:flex; justify-content:space-between; align-items:center; gap:24px; min-height:64px; }
 .ew-root .ew-vacancy-title h1 { margin:0; font-size:24px; font-weight:600; line-height:32px; letter-spacing:-.25px; }
@@ -260,7 +260,6 @@
 @media(max-width:700px) {
   .ew-topbar { padding:0 18px; height:64px; gap:16px; }
   .ew-logo img { width:125px; height:20px; }
-  .ew-account { gap:8px; padding:0!important; font-size:12px!important; }
   .ew-vacancy-header { padding:18px; }
   .ew-vacancy-title { gap:12px; align-items:flex-start; }
   .ew-root .ew-vacancy-title h1 { font-size:20px; line-height:26px; }
@@ -324,6 +323,7 @@
 @media(prefers-reduced-motion:reduce) { .ew-root * { transition:none!important; scroll-behavior:auto!important; } }
 
 .ew-account-menu { min-width:190px; padding:6px; border:1px solid #e9e7f0; border-radius:12px; background:#fff; box-shadow:0 8px 28px #12121212; z-index:70; }
+.ew-account-label { max-width:260px; padding:8px 12px; color:#757575; font-size:12px; overflow-wrap:anywhere; }
 .ew-account-menu [role=menuitem] { display:block; padding:10px 12px; border-radius:8px; cursor:pointer; outline:none; color:inherit; text-decoration:none; }
 .ew-account-menu [role=menuitem][data-highlighted] { background:#f6f6f7; }
 .ew-account-menu [role=menuitem][data-disabled] { opacity:.5; pointer-events:none; }

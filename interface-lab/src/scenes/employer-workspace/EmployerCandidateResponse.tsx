@@ -1,6 +1,4 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { ArrowUpRight, ChevronLeft } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { Textarea } from '../../components/ui/textarea';
 import { EmployerMeetingTimePicker } from './EmployerMeetingTimePicker';
@@ -27,9 +25,7 @@ const emptyFeedback = { reason: '', missing: '', improve: '' };
 export function EmployerCandidateResponse({ onRespond, decision, meetingOptions, workflowRevision, busy,
   rejectQuestions = employerRejectionQuestions }: EmployerCandidateResponseProps) {
   const panelId = useId();
-  const reduceMotion = useReducedMotion();
   const trigger = useRef<HTMLButtonElement>(null);
-  const opener = useRef<HTMLButtonElement | null>(null);
   const status = useRef<HTMLSpanElement>(null);
   const invite = useRef<HTMLButtonElement>(null);
   const mounted = useRef(true);
@@ -62,27 +58,18 @@ export function EmployerCandidateResponse({ onRespond, decision, meetingOptions,
 
   function close() {
     if (pending.current) return;
-    setOpen(false); setMode(null); setError('');
-    requestAnimationFrame(() => { if (mounted.current) (opener.current?.isConnected ? opener.current : trigger.current || status.current)?.focus(); });
+    setOpen(false); setMode(null); setMeetingStart(''); setDraft(emptyFeedback); setError('');
+    session.current = null;
+    requestAnimationFrame(() => { if (mounted.current) (trigger.current || status.current)?.focus(); });
   }
 
   function toggle() {
     if (open) { close(); return; }
-    opener.current = trigger.current;
     if (editable && onRespond) session.current = {
       submit: onRespond, revision: workflowRevision, requestId: crypto.randomUUID(), attemptedPayload: null,
     };
     if (canAddTime) setMode('invite');
     setError(''); setOpen(true);
-  }
-
-  function choose(kind: 'invite' | 'reject', button: HTMLButtonElement) {
-    if (!onRespond || pending.current || busy) return;
-    opener.current = button;
-    if (!session.current) session.current = {
-      submit: onRespond, revision: workflowRevision, requestId: crypto.randomUUID(), attemptedPayload: null,
-    };
-    setMode(kind); setError(''); setOpen(true);
   }
 
   async function respond(kind: EmployerCandidateResponseValues['decision']) {
@@ -117,17 +104,14 @@ export function EmployerCandidateResponse({ onRespond, decision, meetingOptions,
 
   if (!onRespond && !saved) return null;
   return <>
-    {!saved && onRespond ? <div className="ecp-decision-actions" aria-label="Решение по кандидату">
-      <Button ref={trigger} className="ecp-invite-primary" type="button" aria-expanded={open && mode === 'invite'} aria-controls={panelId} disabled={busy || saving} onClick={event => choose('invite', event.currentTarget)}>Позвать на встречу<ArrowUpRight size={17}/></Button>
-      <Button type="button" variant="ghost" aria-expanded={open && mode === 'reject'} aria-controls={panelId} disabled={busy || saving} onClick={event => choose('reject', event.currentTarget)}>Отказать</Button>
-    </div> : (saved?.decision === 'invite' && !canAddTime) || (saved?.decision === 'reject' && !hasFeedback)
+    {(saved?.decision === 'invite' && !canAddTime) || (saved?.decision === 'reject' && !hasFeedback)
       ? <span ref={status} className="ecp-response-status" role="status" tabIndex={-1}>{saved.meetingStart ? <>
         <time dateTime={saved.meetingStart}>{new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Moscow' }).format(new Date(saved.meetingStart))} МСК</time>
         {saved.meetingStatus && <small>{meetingLabels[saved.meetingStatus]}</small>}
       </> : saved.decision === 'invite' ? 'Выбран для встречи' : 'Отказ'}</span>
       : <Button ref={trigger} className="ecp-response-trigger" type="button" variant="secondary" aria-expanded={open}
         aria-controls={panelId} disabled={saving || (editable && busy)} onClick={toggle}>{canAddTime ? 'Выбрать время' : saved ? 'Отказ' : 'Ответить'}</Button>}
-    <AnimatePresence initial={false}>{open && <motion.div key="decision-panel" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={reduceMotion ? { duration: 0 } : { type: 'spring', bounce: 0, duration: .3 }} id={panelId} className="ecp-response-panel" aria-busy={saving} onKeyDown={event => {
+    <div id={panelId} className="ecp-response-panel" hidden={!open} aria-busy={saving} onKeyDown={event => {
       if (event.key === 'Escape') { event.preventDefault(); close(); }
     }}>
       {!editable ? <>
@@ -136,7 +120,12 @@ export function EmployerCandidateResponse({ onRespond, decision, meetingOptions,
         </div>)}</dl>}
         <Button type="button" variant="ghost" className="ecp-response-close" onClick={close}>Свернуть</Button>
       </> : <>
-        <button className="ecp-decision-back" type="button" disabled={saving} onClick={close}><ChevronLeft size={15}/>Назад</button>
+        {!saved && <div className="ecp-response-choices" aria-label="Решение по кандидату">
+          <Button ref={invite} type="button" variant="secondary" aria-pressed={mode === 'invite'} disabled={busy || saving}
+            onClick={() => { setMode('invite'); setError(''); }}>Позвать на встречу</Button>
+          <Button type="button" variant="ghost" aria-pressed={mode === 'reject'} disabled={busy || saving} onClick={() => { setMode('reject'); setError(''); }}>Отказать</Button>
+          {!mode && <Button type="button" variant="ghost" disabled={saving} onClick={close}>Отмена</Button>}
+        </div>}
         {mode === 'invite' && <form className="ecp-invitation" aria-label="Время встречи" onSubmit={event => { event.preventDefault(); void respond('invite'); }}>
           {meetingOptions && <EmployerMeetingTimePicker options={meetingOptions} value={meetingStart} onChange={setMeetingStart} disabled={busy || saving}/>}
           <div className="ecp-form-actions"><Button type="submit" disabled={busy || saving || (!!meetingOptions && !meetingStart)}>
@@ -153,6 +142,6 @@ export function EmployerCandidateResponse({ onRespond, decision, meetingOptions,
         </form>}
         {error && <p id={`${panelId}-error`} className="ecp-error" role="alert">{error}</p>}
       </>}
-    </motion.div>}</AnimatePresence>
+    </div>
   </>;
 }
