@@ -9,8 +9,6 @@ import './candidate-schedule.css';
 
 export type CandidateScheduleProps = {
   candidate: CandidateState;
-  section: 'meetings' | 'availability';
-  onSectionChange: (section: 'meetings' | 'availability') => void;
   busy: boolean;
   onAvailability: (schedule: AvailabilitySchedule) => Promise<boolean>;
   onTimezone: (timezone: string) => Promise<boolean>;
@@ -103,13 +101,12 @@ function ScheduleCard({ entry, timezone, busy, onMeetingReply, onOpenVacancy, on
   </article>;
 }
 
-export function CandidateSchedule({ candidate, section, onSectionChange, busy, onAvailability, onTimezone, onMeetingReply, onOpenVacancy, onJoin, onInterview, onBookInterview }: CandidateScheduleProps) {
+export function CandidateSchedule({ candidate, busy, onAvailability, onTimezone, onMeetingReply, onOpenVacancy, onJoin, onInterview, onBookInterview }: CandidateScheduleProps) {
   const [now, setNow] = useState(Date.now);
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 30000); return () => window.clearInterval(timer); }, []);
+  const [section, setSection] = useState<'meetings' | 'availability'>('meetings');
   const [history, setHistory] = useState(false);
   const [editing, setEditing] = useState(false);
-  // Browser back can leave the editor without its Cancel action.
-  useEffect(() => { setEditing(false); }, [section]);
   const [zoneSaving, setZoneSaving] = useState(false);
   const [zoneMessage, setZoneMessage] = useState('');
   const timezone = effectiveTimezone(candidate.timezone);
@@ -133,7 +130,7 @@ export function CandidateSchedule({ candidate, section, onSectionChange, busy, o
   return <section className="cp-schedule" aria-busy={busy || zoneSaving}>
     <header className="cp-schedule-heading"><h1>Календарь</h1><label className="cp-schedule-timezone"><Globe2 size={17} aria-hidden="true"/><select aria-label="Часовой пояс" value={timezone} disabled={busy || editing || zoneSaving} onChange={event => void changeZone(event.target.value)}>{zones.map(zone => <option value={zone.value} key={zone.value}>{zone.label}</option>)}</select></label></header>
     <span className="cp-schedule-sr-only" role="status">{zoneMessage}</span>
-    <div className="cp-schedule-sections" role="group" aria-label="Раздел календаря"><button type="button" disabled={editing} aria-pressed={section === 'meetings'} onClick={() => onSectionChange('meetings')}><CalendarDays size={17} />Встречи</button><button type="button" aria-pressed={section === 'availability'} onClick={() => onSectionChange('availability')}><Clock3 size={17} />Моя доступность</button></div>
+    <div className="cp-schedule-sections" role="group" aria-label="Раздел календаря"><button type="button" disabled={editing} aria-pressed={section === 'meetings'} onClick={() => setSection('meetings')}><CalendarDays size={17} />Встречи</button><button type="button" aria-pressed={section === 'availability'} onClick={() => setSection('availability')}><Clock3 size={17} />Моя доступность</button></div>
     {section === 'meetings' ? <>
       <div className="cp-schedule-viewbar"><div className="cp-schedule-segment" role="group" aria-label="Встречи по статусу"><button type="button" aria-pressed={!history} onClick={() => setHistory(false)}>Предстоящие<span>{entries.filter(entry => !entry.history).length}</span></button><button type="button" aria-pressed={history} onClick={() => setHistory(true)}>История<span>{entries.filter(entry => entry.history).length}</span></button></div>{canBook && <button type="button" className="cp-schedule-link" disabled={busy} onClick={onBookInterview}><Plus size={16} />Интервью с рекрутером</button>}</div>
       <div className="cp-schedule-agenda" aria-label={history ? 'История встреч' : 'Предстоящие встречи'}>

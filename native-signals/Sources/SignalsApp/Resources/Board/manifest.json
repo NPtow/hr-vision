@@ -1,0 +1,14 @@
+{
+  "protocolVersion": 1,
+  "dependencies": {
+    "@xyflow/react": "12.11.1",
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
+  },
+  "sha256": {
+    "index.html": "397be8fb41361fc1c2f4c958a64dea809253b025184fa7ae8687fb065b22aec7",
+    "board.js": "a8b09ed7b1b6bbf9196a1c00bc64da20d9aa7af349301cae0edb16eaf05aaef9",
+    "board.css": "4c60232654f9b9cc8536f1dc86cae28e68a9cb54ce8441cec640f4aec195c378",
+    "THIRD-PARTY-NOTICES.txt": "2e9f6580c31bdcfe312e71e2a3fe4f8c2c7c983132a2256cdbd5f2e4b44537d1"
+  }
+}

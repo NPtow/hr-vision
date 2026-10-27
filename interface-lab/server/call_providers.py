@@ -1,6 +1,5 @@
 """Persist one provider before creating a room; never fall back to a second room."""
 import json
-import os
 import secrets
 
 from domain import Problem, require
@@ -9,9 +8,6 @@ from domain import Problem, require
 class CallProviders:
     def __init__(self, connect, daily, zoom=None):
         self.connect, self._daily, self.zoom = connect, daily, zoom
-        self.default_provider = os.environ.get('HR_CALL_PROVIDER', 'daily')
-        if self.default_provider not in ('daily', 'zoom'):
-            raise ValueError('Invalid default call provider')
 
     @property
     def daily(self):
@@ -30,16 +26,9 @@ class CallProviders:
                          'FROM cp_call_provider_choices WHERE meeting_id=?', (meeting_id,)).fetchone()
         return dict(zip(('provider', 'host_id', 'actor_id', 'state', 'room', 'request_id'), row)) if row else None
 
-    def describe(self, db, meeting_id, room=None, actor_id=None, *, completed=False):
-        if (room or {}).get('provider') == 'upload':
-            require(completed is True, 'Загруженная запись доступна только после завершения встречи.', 409)
-            # An imported recording has no callable provider. Its persisted room
-            # is a materials identity, even if a historical Daily choice remains.
-            # Do not resolve adapters, host mappings, or call capabilities here.
-            return {'callProvider': None, 'callProviderLocked': True,
-                    'videoConfigured': False, 'callProviderOptions': []}
+    def describe(self, db, meeting_id, room=None, actor_id=None):
         choice = self.choice(db, meeting_id)
-        provider = choice['provider'] if choice else room.get('provider', 'daily') if room else self.default_provider
+        provider = choice['provider'] if choice else (room or {}).get('provider', 'daily')
         require(provider in ('daily', 'zoom'), 'Неизвестный видеосервис встречи.', 409)
         zoom_available = bool(self.zoom and self.zoom.selection_enabled and
                               actor_id and self.zoom.host_for(actor_id))
@@ -52,8 +41,6 @@ class CallProviders:
 
     def select(self, db, meeting_id, provider, actor_id, room=None):
         require(provider in ('daily', 'zoom'), 'Выберите Daily или Zoom.', 400)
-        require(not room or room.get('provider', 'daily') in ('daily', 'zoom'),
-                'Неизвестный видеосервис встречи.', 409)
         choice = self.choice(db, meeting_id)
         current = choice['provider'] if choice else (room or {}).get('provider', 'daily')
         locked = bool(room or choice and choice['state'] != 'selected')
@@ -69,29 +56,6 @@ class CallProviders:
           ON CONFLICT(meeting_id) DO UPDATE SET provider=excluded.provider,host_id=excluded.host_id,
           actor_id=excluded.actor_id,state='selected',room=NULL,request_id=excluded.request_id''',
           (meeting_id, provider, host, actor_id, 'selected', secrets.token_urlsafe(24)))
-
-    def prepare_default(self, db, meeting_id, room, actor_id):
-        """Pin the configured choice once; an existing room always keeps its provider."""
-        require(not room or room.get('provider', 'daily') in ('daily', 'zoom'),
-                'Неизвестный видеосервис встречи.', 409)
-        choice = self.choice(db, meeting_id)
-        if choice:
-            require(choice['provider'] in ('daily', 'zoom'), 'Неизвестный видеосервис встречи.', 409)
-            return
-        if room:
-            db.execute('INSERT OR IGNORE INTO cp_call_provider_choices VALUES (?,?,?,?,?,?,?)',
-                (meeting_id, room.get('provider', 'daily'), room.get('zoomHostId'), actor_id,
-                 'ready', json.dumps(room), secrets.token_urlsafe(24)))
-        else:
-            host = None
-            if self.default_provider == 'zoom':
-                require(self.zoom and self.zoom.selection_enabled, 'Zoom пока не включён для новых встреч.', 503)
-                host = self.zoom.host_for(actor_id)
-                require(host, 'Для организатора не подключён аккаунт Zoom.', 409)
-            # Config I/O precedes the first write. A concurrent reservation must
-            # never be reset from creating/ready back to selected.
-            db.execute('INSERT OR IGNORE INTO cp_call_provider_choices VALUES (?,?,?,?,?,NULL,?)',
-                (meeting_id, self.default_provider, host, actor_id, 'selected', secrets.token_urlsafe(24)))
 
     @staticmethod
     def invoke(operation, *args, **kwargs):

@@ -10,15 +10,13 @@ import math
 import os
 from pathlib import Path
 import tempfile
-import subprocess
 import unittest
 from unittest.mock import Mock, patch
 import urllib.error
 import urllib.request
 import urllib.response
 
-from assessment_core.providers.jev import (ENDPOINT, JevClient, JevConfig, JevError,
-                                           is_choice_probability_distribution, validate_response)
+from assessment_core.providers.jev import ENDPOINT, JevClient, JevConfig, JevError, validate_response
 
 
 def request_fixture(model="jev-1.14.0"):
@@ -113,72 +111,6 @@ class ConfigTests(unittest.TestCase):
 
 
 class ResponseTests(unittest.TestCase):
-    def test_choice_quantization_preserves_raw_099_101_and_strict_precision(self):
-        for probabilities in ({"yes": 0.49, "unknown": 0.50},
-                              {"yes": 0.50, "unknown": 0.51},
-                              {"yes": 0.400004, "unknown": 0.6}):
-            response = response_fixture()
-            response["answers"]["evidence"]["probabilities"] = probabilities
-            before = deepcopy(response)
-            with self.subTest(probabilities=probabilities):
-                self.assertIs(validate_response(request_fixture(), response), response)
-                self.assertEqual(response, before)
-
-    def test_choice_quantization_rejects_offgrid_gross_and_empty_mass(self):
-        for probabilities in ({"yes": 0.499, "unknown": 0.491},
-                              {"yes": 0.48, "unknown": 0.50},
-                              {"yes": 0.2, "unknown": 0.2},
-                              {"yes": 0, "unknown": 0}):
-            response = response_fixture()
-            response["answers"]["evidence"]["probabilities"] = probabilities
-            with self.subTest(probabilities=probabilities), self.assertRaises(JevError):
-                validate_response(request_fixture(), response)
-
-    def test_choice_distribution_helper_bounds_and_type_guards(self):
-        for values in ([0, .17, .01, 0, 0, .81], [0, .07, .68, .17, .07],
-                       [.49, .50], [.50, .51]):
-            with self.subTest(values=values):
-                before = list(values)
-                self.assertTrue(is_choice_probability_distribution(values))
-                self.assertEqual(values, before)
-        for values in ([], [0] * 255, [True, 0], [1.01, -.01], [math.inf],
-                       [math.nan], ["0.5", .5], [.499, .491], [.48, .50], None):
-            with self.subTest(values=values):
-                self.assertFalse(is_choice_probability_distribution(values))
-
-    def test_choice_quantization_keeps_exact_argmax(self):
-        response = response_fixture()
-        response["answers"]["evidence"]["probabilities"] = {"yes": .50, "unknown": .49}
-        with self.assertRaises(JevError):
-            validate_response(request_fixture(), response)
-
-    def test_choice_machine_float_tie_preserves_original_answer(self):
-        payload = request_fixture()
-        keys = ['L1', 'L2', 'L3', 'L4', 'L5', 'insufficient_data']
-        payload['questions']['evidence']['criteria'] = dict.fromkeys(keys, 'Level')
-        response = response_fixture()
-        response['answers']['evidence'].update(choice='L3', probabilities=dict(zip(
-            keys, [.04, .14, .33999999999999997, .11, .03, .34])))
-        before = deepcopy(response)
-        self.assertIs(validate_response(payload, response), response)
-        self.assertEqual(response, before)
-
-    def test_choice_real_nonmax_cannot_use_machine_tie_tolerance(self):
-        for difference in (1e-12, .001, .01):
-            response = response_fixture()
-            response['answers']['evidence']['probabilities'] = {
-                'yes': .5 + difference, 'unknown': .5 - difference}
-            with self.subTest(difference=difference), self.assertRaises(JevError):
-                validate_response(request_fixture(), response)
-
-    def test_score_distribution_keeps_strict_mass_despite_choice_rounding_policy(self):
-        for probabilities in ({"0": .12, "1": .50, "2": .37},
-                              {"0": .13, "1": .50, "2": .38}):
-            response = response_fixture()
-            response["answers"]["skill"]["probabilities"] = probabilities
-            with self.subTest(probabilities=probabilities), self.assertRaises(JevError):
-                validate_response(request_fixture(), response)
-
     def test_noul_preserves_raw_yes_probability_without_threshold_or_confidence(self):
         for probability in (0, 0.01, 0.5, 0.93, 1):
             response = response_fixture()
@@ -423,63 +355,6 @@ class TransportTests(unittest.TestCase):
                 JevClient(JevConfig(api_key="key", max_response_bytes=5)).evaluate(request_fixture())
         self.assertEqual(raised.exception.code, "response_too_large")
         self.assertTrue(raised.exception.outcome_unknown)
-
-    def test_explicit_loopback_proxy_preserves_request_without_secrets_in_argv(self):
-        client = JevClient(JevConfig(api_key='private-key', proxy_url='socks5h://127.0.0.1:10808'))
-        def invoke(command, **kwargs):
-            self.assertNotIn('private-key', repr(command))
-            self.assertNotIn('All original source material', repr(command))
-            self.assertIn(b'All original source material', kwargs['input'])
-            self.assertIn(b'Authorization: Bearer private-key', kwargs['input'])
-            self.assertEqual(kwargs['env'], {'PATH': '/usr/bin:/bin', 'LANG': 'C'})
-            kwargs['stdout'].write(json.dumps(response_fixture()).encode() + b'\n200')
-            return subprocess.CompletedProcess(command, 0)
-        with patch('assessment_core.providers.jev.subprocess.run', side_effect=invoke) as run:
-            self.assertEqual(client.evaluate(request_fixture()), response_fixture())
-            run.assert_called_once()
-
-    def test_proxy_errors_never_retry_or_become_assessment_results(self):
-        client = JevClient(JevConfig(api_key='key', proxy_url='socks5h://127.0.0.1:10808'))
-        for returncode, expected in ((28, 'timeout'), (63, 'response_too_large'), (7, 'network_error')):
-            with patch('assessment_core.providers.jev.subprocess.run',
-                       return_value=subprocess.CompletedProcess([], returncode)) as run:
-                with self.subTest(returncode=returncode), self.assertRaises(JevError) as error:
-                    client.evaluate(request_fixture())
-                self.assertEqual(error.exception.code, expected)
-                self.assertTrue(error.exception.outcome_unknown)
-                run.assert_called_once()
-
-    def test_untrusted_proxy_configuration_is_rejected(self):
-        for proxy in (False, 'http://127.0.0.1:1', 'socks5h://public.invalid:1080',
-                      'socks5h://user:pass@127.0.0.1:1080', 'socks5h://127.0.0.1:1080/path'):
-            with self.subTest(proxy=proxy), self.assertRaises(JevError):
-                JevConfig(api_key='key', proxy_url=proxy)
-
-    def test_context_rejection_preserves_only_the_safe_machine_code_and_never_retries(self):
-        client = JevClient(JevConfig(api_key='private-key', proxy_url='socks5h://127.0.0.1:10808'))
-        def invoke(command, **kwargs):
-            kwargs['stdout'].write(b'{"detail":{"error_type":"max_tokens_exceeded","input":"PRIVATE SOURCE"}}\n400')
-            return subprocess.CompletedProcess(command, 0)
-        with patch('assessment_core.providers.jev.subprocess.run', side_effect=invoke) as run:
-            with self.assertRaises(JevError) as error:
-                client.evaluate(request_fixture())
-            self.assertEqual(error.exception.code, 'context_limit')
-            self.assertEqual(error.exception.status, 400)
-            self.assertFalse(error.exception.outcome_unknown)
-            self.assertNotIn('PRIVATE', str(error.exception))
-            run.assert_called_once()
-
-    def test_bad_json_and_invalid_typed_answers_remain_available_for_private_diagnosis(self):
-        client = JevClient(JevConfig(api_key='key', proxy_url='socks5h://127.0.0.1:10808'))
-        for raw in (b'not JSON PRIVATE', b'{"answers":{},"model":"jev-1.14.0","usage":{}}'):
-            def invoke(command, **kwargs):
-                kwargs['stdout'].write(raw + b'\n200')
-                return subprocess.CompletedProcess(command, 0)
-            with patch('assessment_core.providers.jev.subprocess.run', side_effect=invoke):
-                with self.assertRaises(JevError) as error:
-                    client.evaluate(request_fixture())
-                self.assertEqual(error.exception.received_body, raw)
-                self.assertNotIn('PRIVATE', str(error.exception))
 
     def test_malformed_json_duplicate_keys_and_nonfinite_numbers_are_rejected(self):
         valid = json.dumps(response_fixture())

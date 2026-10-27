@@ -1,0 +1,577 @@
+/* Candidate CV-driven flow mockups (Steps 3 & 5) */
+
+.cfm-root {
+  min-height: 100vh;
+  background: #f5f4f8;
+  color: #1e1b24;
+  font-family: InterVariable, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  padding: 32px 20px 80px;
+}
+
+.cfm-container {
+  max-width: 680px;
+  margin: 0 auto;
+  transition: max-width 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.cfm-container[data-viewport="mobile"] {
+  max-width: 390px;
+}
+
+/* Lab Controls Header */
+.cfm-lab-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: #ffffff;
+  padding: 10px 16px;
+  border-radius: 16px;
+  margin-bottom: 24px;
+  box-shadow: 0 2px 8px rgba(35, 25, 60, 0.05);
+}
+
+.cfm-tab-group {
+  display: flex;
+  background: #eeedf3;
+  padding: 3px;
+  border-radius: 12px;
+  gap: 2px;
+}
+
+.cfm-tab-btn {
+  border: 0;
+  background: transparent;
+  padding: 8px 14px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 550;
+  color: #635f71;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.cfm-tab-btn[data-active="true"] {
+  background: #ffffff;
+  color: #1e1b24;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.cfm-viewport-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #7a7687;
+}
+
+.cfm-viewport-btn {
+  border: 0;
+  background: #f0eff5;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  cursor: pointer;
+  font-weight: 500;
+  color: #4a4556;
+}
+
+.cfm-viewport-btn[data-active="true"] {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+/* Card Surface */
+.cfm-card {
+  background: #ffffff;
+  border-radius: 28px;
+  padding: 36px;
+  box-shadow: 0 4px 16px rgba(45, 35, 75, 0.06), 0 20px 48px -16px rgba(45, 35, 75, 0.12);
+  margin-bottom: 24px;
+}
+
+@media (max-width: 600px) {
+  .cfm-card {
+    padding: 24px 20px;
+    border-radius: 22px;
+  }
+}
+
+/* Brand Bar */
+.cfm-brand-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 28px;
+}
+
+.cfm-brand-logo {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: #105aaf;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cfm-brand-badge {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #2563eb;
+}
+
+/* Status Icon & Title */
+.cfm-header {
+  text-align: left;
+  margin-bottom: 28px;
+}
+
+.cfm-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #ecfdf5;
+  color: #059669;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 999px;
+  margin-bottom: 14px;
+}
+
+.cfm-header h1 {
+  margin: 0 0 8px;
+  font-size: clamp(24px, 3.2vw, 32px);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1.2;
+}
+
+.cfm-header p {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.55;
+  color: #635f71;
+}
+
+/* Time & Slot Box */
+.cfm-slot-box {
+  background: #f8f7fb;
+  border-radius: 20px;
+  padding: 22px 24px;
+  margin-bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cfm-slot-datetime {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cfm-slot-date {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1e1b24;
+  text-transform: capitalize;
+}
+
+.cfm-slot-time {
+  font-size: 32px;
+  font-weight: 750;
+  letter-spacing: -0.04em;
+  color: #111827;
+}
+
+.cfm-slot-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.cfm-slot-meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* Calendar Actions */
+.cfm-calendar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.cfm-btn-secondary {
+  border: 0;
+  background: #ffffff;
+  color: #374151;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 550;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  transition: all 0.15s ease;
+}
+
+.cfm-btn-secondary:hover {
+  background: #f9fafb;
+  transform: translateY(-1px);
+}
+
+/* Telegram Hook Card (Primary High-Conversion Banner) */
+.cfm-tg-banner {
+  background: linear-gradient(145deg, #f0f4ff 0%, #e6edfd 100%);
+  border-radius: 22px;
+  padding: 24px;
+  margin-bottom: 28px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.12);
+}
+
+.cfm-tg-banner::after {
+  content: '';
+  position: absolute;
+  top: -24px;
+  right: -24px;
+  width: 96px;
+  height: 96px;
+  background: radial-gradient(circle, rgba(37, 99, 235, 0.12) 0%, transparent 70%);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.cfm-tg-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.cfm-tg-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: #2563eb;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.28);
+}
+
+.cfm-tg-header-text h3 {
+  margin: 0 0 4px;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #1e3a8a;
+}
+
+.cfm-tg-header-text p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: #3b5998;
+}
+
+.cfm-tg-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.cfm-btn-tg {
+  border: 0;
+  background: #2563eb;
+  color: #ffffff;
+  padding: 12px 20px;
+  border-radius: 14px;
+  font-size: 14px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
+  transition: all 0.18s ease;
+}
+
+.cfm-btn-tg:hover {
+  background: #1d4ed8;
+  transform: translateY(-1px);
+}
+
+.cfm-tg-success-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #dcfce7;
+  color: #15803d;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 10px 16px;
+  border-radius: 12px;
+}
+
+/* Call to Meeting Box */
+.cfm-meeting-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 18px;
+  border-top: 1px solid #f1f0f5;
+  flex-wrap: wrap;
+}
+
+.cfm-meeting-info h4 {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.cfm-meeting-info p {
+  margin: 0;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.cfm-btn-primary {
+  border: 0;
+  background: #1e1b24;
+  color: #ffffff;
+  padding: 12px 22px;
+  border-radius: 14px;
+  font-size: 14px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.cfm-btn-primary:hover {
+  background: #322d3b;
+}
+
+/* --- STEP 5: POST-INTERVIEW STYLES --- */
+
+.cfm-profile-review-card {
+  background: #faf9fd;
+  border-radius: 20px;
+  padding: 22px 24px;
+  margin-bottom: 24px;
+}
+
+.cfm-profile-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.cfm-profile-title h3 {
+  margin: 0 0 3px;
+  font-size: 16px;
+  font-weight: 650;
+  color: #1e1b24;
+}
+
+.cfm-profile-title p {
+  margin: 0;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.cfm-resume-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #ffffff;
+  border: 1px solid #e5e3ec;
+  padding: 6px 12px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #374151;
+  cursor: pointer;
+}
+
+.cfm-resume-pill:hover {
+  background: #f3f2f8;
+}
+
+.cfm-profile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 500px) {
+  .cfm-profile-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cfm-profile-item {
+  background: #ffffff;
+  padding: 12px 14px;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+.cfm-profile-item small {
+  display: block;
+  font-size: 11px;
+  color: #837e90;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+.cfm-profile-item strong {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+/* Timeline (Next 24 Hours) */
+.cfm-timeline-box {
+  margin-bottom: 28px;
+}
+
+.cfm-timeline-box h3 {
+  font-size: 15px;
+  font-weight: 650;
+  margin: 0 0 14px;
+  color: #1e1b24;
+}
+
+.cfm-timeline-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cfm-timeline-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  position: relative;
+}
+
+.cfm-step-num {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #eeebfc;
+  color: #6756ce;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.cfm-step-num.cfm-step-done {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.cfm-step-content h5 {
+  margin: 0 0 2px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #1e1b24;
+}
+
+.cfm-step-content p {
+  margin: 0;
+  font-size: 12.5px;
+  color: #6b7280;
+  line-height: 1.45;
+}
+
+/* Telegram Bot Simulator Modal / Popover */
+.cfm-bot-sim {
+  background: #18222d;
+  color: #ffffff;
+  border-radius: 18px;
+  padding: 16px;
+  margin-top: 16px;
+  font-size: 13px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  animation: cfm-fade-in 0.2s ease-out;
+}
+
+@keyframes cfm-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.cfm-bot-sim-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 12px;
+}
+
+.cfm-bot-sim-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #2563eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.cfm-bot-sim-name {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.cfm-bot-sim-bubble {
+  background: #242f3d;
+  padding: 12px 14px;
+  border-radius: 12px 12px 12px 2px;
+  line-height: 1.5;
+  margin-bottom: 10px;
+}
+
+.cfm-bot-sim-bubble small {
+  display: block;
+  color: #728a9c;
+  margin-top: 6px;
+  font-size: 11px;
+}

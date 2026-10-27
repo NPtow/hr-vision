@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { CalendarDays, Check, Send, Video } from 'lucide-react';
+import { Calendar, CalendarDays, Check, Download, ExternalLink, FileText, Mail, Send, Video } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import logo from '../employer-workspace/assets/hr-vision-logo.svg';
 import { bookingAttempt, restoreBookingAttempt, type BookingAttempt } from './booking-attempt';
 import { PooledBookingCalendar } from './PooledBookingCalendar';
+import { googleCalendarUrl, downloadIcsFile } from './calendar-export';
 import type { BookingSlot } from './pooled-booking-model';
 import './booking-portal.css';
 
@@ -92,6 +93,7 @@ function BookingInvitation({ token }: { token: string }) {
   const [uncertain, setUncertain] = useState(false);
   const [editingEmail, setEditingEmail] = useState(false);
   const [connectingTelegram, setConnectingTelegram] = useState(false);
+  const [tgDeclined, setTgDeclined] = useState(false);
   const [timezone, setTimezone] = useState('Europe/Moscow');
   const attempt = useRef<BookingAttempt | null>(previousAttempt(token));
   const controller = useRef(new AbortController());
@@ -197,25 +199,123 @@ function BookingInvitation({ token }: { token: string }) {
     <h1>{loading ? 'Открываем приглашение…' : 'Приглашение недоступно'}</h1>
     {loading ? <p className="bp-muted" role="status">Проверяем свободное время рекрутеров.</p> : <><p className="bp-error" role="alert">{error}</p><Button variant="secondary" onClick={() => void refresh()}>Проверить ещё раз</Button></>}
   </section>;
-  if (booking) return <section className="bp-surface bp-confirmation">
-    <span className="bp-symbol bp-success"><Check size={27}/></span>
-    <h1>{booking.status === 'completed' ? 'Спасибо за разговор' : 'Вы записаны на интервью'}</h1>
-    {booking.status === 'completed' ? <p className="bp-muted">Рекрутер пришлёт ссылку на ваш готовый профиль.</p> : <>
-      <div className="bp-booked-time"><strong>{label(booking.start, timezone, { day: 'numeric', month: 'long', weekday: 'long' })}</strong><span>{time(booking.start, timezone)}–{time(booking.end, timezone)}</span></div>
-      <p className="bp-muted">{timezone === 'Europe/Moscow' ? 'Московское время' : timezone} · 30 минут</p>
-      {state.profileReady && <p className="bp-muted">{state.delivery.email === 'delivered' ? 'Приглашение отправлено на ' : state.delivery.email === 'pending' || state.delivery.email === 'sending' ? 'Отправляем приглашение на ' : 'Почта для приглашения: '}{state.contactEmail}</p>}
-      {booking.canOpenCall && <Button disabled={entering} onClick={() => void openCall()}><Video size={18}/>{entering ? 'Открываем встречу…' : 'Перейти к встрече'}</Button>}
-      {state.profileReady && state.delivery.telegramAvailable && <div className="bp-telegram">
-        {state.delivery.telegramLinked ? <span><Check size={17}/>Telegram подключён</span> : <button type="button" disabled={connectingTelegram} onClick={() => void connectTelegram()}><Send size={17}/>{connectingTelegram ? 'Подключаем…' : 'Подключить Telegram'}</button>}
-      </div>}
-    </>}
-    {!state.profileReady && booking.slotId && <form className="bp-profile-confirmation" onSubmit={event => { event.preventDefault(); void book(); }} aria-busy={busy}>
-      <h2>Подготовим ваш профиль</h2>
-      {contactFields}
-      <div className="bp-actions"><Button type="submit" disabled={!email.trim() || !consent || busy}>{busy ? 'Сохраняем…' : uncertain ? 'Проверить подтверждение' : 'Подтвердить профиль'}</Button></div>
-    </form>}
-    {error && <p className="bp-error" role="alert">{error}</p>}
-  </section>;
+  if (booking) {
+    const eventDetails = {
+      title: 'Интервью-знакомство · МашаДаша',
+      description: `30-минутное видеоинтервью с рекрутером МашаДаша.\nВход: ${location.origin}/interview?booking=${token}\nНапоминание придёт за 1 час.`,
+      location: location.href,
+      start: new Date(booking.start),
+      end: new Date(booking.end),
+    };
+
+    return <section className="bp-surface bp-confirmation">
+      <span className="bp-symbol bp-success"><Check size={26}/></span>
+      {booking.status === 'completed' ? <>
+        <h1>Интервью завершено</h1>
+        <div className="bp-debrief-profile">
+          <div className="bp-debrief-header">
+            <h3>Профиль</h3>
+            <button type="button" className="bp-resume-badge" onClick={() => alert('Резюме кандидата сохранено в профиле.')}>
+              <FileText size={13} color="#6756ce"/>Резюме.pdf
+            </button>
+          </div>
+          <div className="bp-debrief-summary">
+            <div><strong>{state.candidateName ? 'Квалифицированный специалист' : 'Специалист'}</strong> · По договоренности · Удаленно</div>
+            <small>Данные сохранены и подтверждены на интервью</small>
+          </div>
+        </div>
+        <div className="bp-timeline-compact">
+          <span className="bp-timeline-pill bp-done">✓ Интервью</span>
+          <span className="bp-timeline-arrow">→</span>
+          <span className="bp-timeline-pill">Матчинг (до 24ч)</span>
+          <span className="bp-timeline-arrow">→</span>
+          <span className="bp-timeline-pill">Предложения</span>
+        </div>
+        {state.profileReady && state.delivery.telegramAvailable && (
+          <div className="bp-channel-card" data-mode={state.delivery.telegramLinked ? 'linked' : tgDeclined ? 'email' : 'default'}>
+            {state.delivery.telegramLinked ? (
+              <>
+                <h3>✓ Telegram подключён</h3>
+                <p>Вакансии и приглашения поступят в чат с ботом.</p>
+              </>
+            ) : tgDeclined ? (
+              <>
+                <h3>Предложения придут на почту</h3>
+                <p>Подходящие вакансии отправим на <strong>{state.contactEmail}</strong>.</p>
+                <div className="bp-channel-reconnect">
+                  <button type="button" onClick={() => setTgDeclined(false)}>В Telegram</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h3>Предложения о работе</h3>
+                <p>Пришлём вакансии с вилкой и условиями прямо в Telegram.</p>
+                <div className="bp-channel-actions">
+                  <Button variant="default" disabled={connectingTelegram} onClick={() => void connectTelegram()}>
+                    {connectingTelegram ? 'Подключаем…' : 'Получать в Telegram'}
+                  </Button>
+                  <button type="button" className="bp-optout-btn" onClick={() => setTgDeclined(true)}>
+                    На почту
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </> : <>
+        <h1>Вы записаны</h1>
+        <div className="bp-booked-time">
+          <strong>{label(booking.start, timezone, { day: 'numeric', month: 'long', weekday: 'long' })}</strong>
+          <span>{time(booking.start, timezone)}–{time(booking.end, timezone)}</span>
+        </div>
+        {state.profileReady && state.delivery.telegramAvailable && (
+          <div className="bp-channel-card" data-mode={state.delivery.telegramLinked ? 'linked' : tgDeclined ? 'email' : 'default'}>
+            {state.delivery.telegramLinked ? (
+              <>
+                <h3>✓ Telegram подключён</h3>
+                <p>Бот пришлёт ссылку на вход за 1 час до встречи.</p>
+              </>
+            ) : tgDeclined ? (
+              <>
+                <h3>Напоминание придёт на почту</h3>
+                <p>Ссылку отправим на <strong>{state.contactEmail}</strong> за 1 час до встречи.</p>
+                <div className="bp-channel-reconnect">
+                  <button type="button" onClick={() => setTgDeclined(false)}>В Telegram</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h3>Напоминание за 1 час</h3>
+                <p>Пришлём ссылку прямо в Telegram, чтобы не искать в почте.</p>
+                <div className="bp-channel-actions">
+                  <Button variant="default" disabled={connectingTelegram} onClick={() => void connectTelegram()}>
+                    {connectingTelegram ? 'Подключаем…' : 'Подключить Telegram'}
+                  </Button>
+                  <button type="button" className="bp-optout-btn" onClick={() => setTgDeclined(true)}>
+                    На почту
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+        {booking.canOpenCall && (
+          <div className="bp-call-box">
+            <span>Вход в видеокомнату</span>
+            <Button disabled={entering} onClick={() => void openCall()}>
+              <Video size={15}/>{entering ? 'Открываем…' : 'Войти'}
+            </Button>
+          </div>
+        )}
+      </>}
+      {!state.profileReady && booking.slotId && <form className="bp-profile-confirmation" onSubmit={event => { event.preventDefault(); void book(); }} aria-busy={busy}>
+        <h2>Подготовим ваш профиль</h2>
+        {contactFields}
+        <div className="bp-actions"><Button type="submit" disabled={!email.trim() || !consent || busy}>{busy ? 'Сохраняем…' : uncertain ? 'Проверить подтверждение' : 'Подтвердить профиль'}</Button></div>
+      </form>}
+      {error && <p className="bp-error" role="alert">{error}</p>}
+    </section>;
+  }
   return <section className="pbc-surface bp-calendar-surface">
     <div className="bp-greeting"><h1>{state.candidateName.trim() ? `Привет, ${state.candidateName.trim().split(/\s+/)[0]}` : 'Выберите время'}</h1><p>Когда удобно поговорить?</p></div>
     {error && <p className="bp-error" role="alert">{error}</p>}

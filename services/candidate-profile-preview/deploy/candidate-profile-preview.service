@@ -1,0 +1,35 @@
+[Unit]
+Description=HR Vision read-only candidate profile preview
+After=network.target
+
+[Service]
+Type=simple
+User=candidate-preview
+Group=candidate-preview
+WorkingDirectory=/opt/candidate-profile-preview/current
+EnvironmentFile=/etc/candidate-profile-preview/services.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONUNBUFFERED=1
+Environment=CANDIDATE_PREVIEW_HOST=127.0.0.1
+Environment=CANDIDATE_PREVIEW_PORT=8397
+Environment=CANDIDATE_PREVIEW_UPSTREAM=http://127.0.0.1:8391
+ExecStart=/usr/bin/python3 /opt/candidate-profile-preview/current/server/app.py
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=15
+MemoryHigh=192M
+MemoryMax=256M
+TasksMax=64
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

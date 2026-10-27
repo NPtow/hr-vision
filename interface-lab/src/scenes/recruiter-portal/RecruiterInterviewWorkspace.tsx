@@ -8,18 +8,19 @@ import { RecruiterMediaActions } from './RecruiterMediaActions';
 import { RecruiterInterviewShell } from '../recruiter-coach/RecruiterInterviewShell';
 import type { CoachDraft, CoachPerson } from '../recruiter-coach/coach-types';
 import { RecruiterCoachNotesAdapter, RecruiterOriginalResume } from './RecruiterCoachNotesAdapter';
+import { CopyMeetingLinkButton } from './InterviewPreparation';
 import './recruiter-coach-live.css';
 
 /** Opening a scheduled interview never creates a room or enables capture. */
-export function RecruiterInterviewWorkspace({ candidate, token, videoConfigured, onJoin, onClose, onUpdated, materialsOnly = false }: {
-  candidate: RecruiterCandidate; token: string; videoConfigured: boolean; materialsOnly?: boolean;
+export function RecruiterInterviewWorkspace({ candidate, token, videoConfigured, onJoin, onClose, onUpdated }: {
+  candidate: RecruiterCandidate; token: string; videoConfigured: boolean;
   onJoin: (provider: CallProvider, recordingConsent?: boolean) => void; onClose: () => void; onUpdated: () => void | Promise<void>;
 }) {
   const [interview, setInterview] = useState<Interview>(candidate.interview!);
   const [switching, setSwitching] = useState(false);
   const [providerError, setProviderError] = useState('');
   useEffect(() => setInterview(candidate.interview!), [candidate.interview]);
-  const provider = interview.callProvider === undefined ? 'daily' : interview.callProvider;
+  const provider = interview.callProvider || 'daily';
   const configured = interview.videoConfigured ?? videoConfigured;
   const coach = useInterviewCoach({ candidateId: candidate.id, interviewId: interview.id, token });
   const [currentId, setCurrentId] = useState('');
@@ -30,7 +31,7 @@ export function RecruiterInterviewWorkspace({ candidate, token, videoConfigured,
   const selectedId = currentId || coach.progress.currentId;
   const current = Math.max(0, questions.findIndex(q => q.id === selectedId));
   const completed = (coach.data?.interviewStatus || interview.status) === 'completed';
-  const available = provider !== null && !completed && configured && now >= Date.parse(interview.start) - 15 * 60_000 && now <= Date.parse(interview.end) + 90 * 60_000;
+  const available = !completed && configured && now >= Date.parse(interview.start) - 15 * 60_000 && now <= Date.parse(interview.end) + 90 * 60_000;
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -44,7 +45,7 @@ export function RecruiterInterviewWorkspace({ candidate, token, videoConfigured,
   };
   async function close() { if (await coach.flush()) onClose(); }
   async function join() {
-    if (provider === null || !available || joining || switching || (provider === 'zoom' && !recordingConsent)) return;
+    if (!available || joining || switching || (provider === 'zoom' && !recordingConsent)) return;
     setJoining(true);
     if (provider === 'zoom') { void coach.flush().catch(() => false); onJoin(provider, recordingConsent); }
     else if (await coach.flush()) onJoin(provider);
@@ -71,8 +72,8 @@ export function RecruiterInterviewWorkspace({ candidate, token, videoConfigured,
       finishLabel="Вернуться к интервью" finishDisabled={joining} closeDisabled={joining}
       mediaSlot={<div className="ric-approved-prejoin">
         <Video size={30} aria-hidden="true"/>
-        <p>{completed ? 'Интервью завершено' : materialsOnly ? 'Материалы интервью' : formatDate(interview.start)}</p>
-        {!completed && !materialsOnly && provider !== null && <>
+        <p>{completed ? 'Интервью завершено' : formatDate(interview.start)}</p>
+        {!completed && <>
           <CallProviderSelector value={provider} locked={interview.callProviderLocked} options={interview.callProviderOptions}
             disabled={joining || switching} onChange={next => void chooseProvider(next)}/>
           {providerError && <span role="alert">{providerError}</span>}
@@ -81,13 +82,14 @@ export function RecruiterInterviewWorkspace({ candidate, token, videoConfigured,
           </div>}
           <button className="ric-approved-join" disabled={!available || joining || switching || (provider === 'zoom' && !recordingConsent)} onClick={() => void join()}>{joining ? 'Подключаемся…' : 'Подключиться к звонку'}</button>
           {!available && <span>{availabilityMessage}</span>}
+          <CopyMeetingLinkButton candidateId={candidate.id} token={token} variant="prejoin"/>
         </>}
       </div>}
       notice={coach.error ? <span role="alert">{coach.error}<button onClick={() => void (coach.dirty ? coach.flush() : coach.refresh())}>Повторить</button></span> : undefined}
       saveError={coach.error}
       resumeContent={<RecruiterOriginalResume token={token} candidateId={candidate.id} interviewId={interview.id}/>}
       stageToolbar={completed ? <div className="ric-approved-materials"><RecruiterMediaActions kind="interview" candidateId={candidate.id} status="completed" token={token} onUpdated={onUpdated}/></div> : undefined}
-      notesContent={onSelectQuestion => <RecruiterCoachNotesAdapter coach={coach} token={token} candidateId={candidate.id} interviewId={interview.id} questions={questions} writable={completed || interview.status === 'live'} onSelectQuestion={onSelectQuestion}/>}
+      notesContent={onSelectQuestion => <RecruiterCoachNotesAdapter coach={coach} token={token} candidateId={candidate.id} interviewId={interview.id} questions={questions} writable={completed} onSelectQuestion={onSelectQuestion}/>}
     />
   </div>;
 }

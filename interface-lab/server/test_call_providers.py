@@ -82,36 +82,6 @@ class CallProvidersTest(unittest.TestCase):
             self.select()
         self.assertEqual(error.exception.status, 409)
 
-    def test_zoom_default_candidate_first_creates_one_host_bound_room(self):
-        self.portal.calls.default_provider = 'zoom'
-        with patch.object(self.zoom, 'host_for', return_value='host@example.test'):
-            guest, host = self.join(), self.join(True)
-        self.assertEqual((guest['provider'], guest['role'], host['role']), ('zoom', 0, 1))
-        self.assertEqual(len(self.zoom.created), 1)
-        self.assertFalse(self.media.tokens)
-
-    def test_zoom_default_does_not_change_existing_daily_room_without_choice(self):
-        self.join(True)
-        with self.connect() as db:
-            db.execute('DELETE FROM cp_call_provider_choices WHERE meeting_id=?', (self.mid,))
-        self.portal.calls.default_provider = 'zoom'
-        self.assertEqual(self.join()['provider'], 'daily')
-        self.assertFalse(self.zoom.created)
-
-    def test_zoom_default_unconfigured_fails_without_daily_fallback(self):
-        self.portal.calls.default_provider = 'zoom'
-        self.zoom.selection_enabled = False
-        with self.assertRaises(Problem) as caught:
-            self.join()
-        self.assertEqual(caught.exception.status, 503)
-        self.assertFalse(self.media.tokens)
-
-    def test_explicit_daily_reserve_overrides_zoom_default(self):
-        self.portal.calls.default_provider = 'zoom'
-        self.select('daily')
-        self.assertEqual(self.join()['provider'], 'daily')
-        self.assertFalse(self.zoom.created)
-
     def test_switch_saved_for_both_participants_with_host_secret_separation(self):
         state = self.select()
         meeting = next(p for p in state['candidates'] if p['id'] == self.person['id'])['interview']

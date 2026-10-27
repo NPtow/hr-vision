@@ -1,32 +1,6 @@
-import type { CandidateState } from './api';
-
-export type CandidatePage = 'welcome' | 'login' | 'register' | 'resume' | 'preferences' | 'home' | 'calendar' | 'availability' | 'booking' | 'profile' | 'vacancies' | 'interview' | 'meeting';
-const pages: CandidatePage[] = ['welcome', 'login', 'register', 'resume', 'preferences', 'home', 'calendar', 'availability', 'booking', 'profile', 'vacancies', 'interview', 'meeting'];
+export type CandidatePage = 'welcome' | 'login' | 'register' | 'resume' | 'preferences' | 'home' | 'calendar' | 'booking' | 'profile' | 'vacancies' | 'interview' | 'meeting';
+const pages: CandidatePage[] = ['welcome', 'login', 'register', 'resume', 'preferences', 'home', 'calendar', 'booking', 'profile', 'vacancies', 'interview', 'meeting'];
 export const authenticatedCandidatePage = (page: CandidatePage) => !['welcome', 'login', 'register'].includes(page);
-
-export function candidateSetupPage(candidate: CandidateState, newBooking = false): 'resume' | 'preferences' | null {
-  // Never hide an appointment or a time-sensitive employer action behind setup.
-  if (candidate.interview && !newBooking) return null;
-  if (!candidate.resume) return 'resume';
-  if (!candidate.resumeReviewed || candidate.onboarding.missingFields.length) return 'preferences';
-  return null;
-}
-
-export function candidateCompletionStep(candidate: CandidateState): 'resume' | 'preferences' | 'consent' | null {
-  if (candidate.interview?.status !== 'completed' || candidate.searching === false) return null;
-  return candidateSetupPage(candidate, true) || (!candidate.consentReuse ? 'consent' : null);
-}
-
-export function candidateAfterProfile(candidate: CandidateState): CandidatePage {
-  return candidateSetupPage(candidate, true) || (candidate.interview ? 'home' : 'booking');
-}
-
-export function candidateDestination(candidate: CandidateState, wanted: CandidatePage = 'home'): CandidatePage {
-  const pending = candidateSetupPage(candidate, wanted === 'booking' && candidate.interview?.status === 'completed');
-  if (pending) return pending;
-  if (['resume', 'preferences'].includes(wanted) && !candidateSetupPage(candidate, true)) return candidate.interview ? 'home' : 'booking';
-  return ['welcome', 'login', 'register'].includes(wanted) ? 'home' : wanted;
-}
 export function candidatePage(query: URLSearchParams): CandidatePage {
   const value = query.get('cp') as CandidatePage;
   return pages.includes(value) ? value : 'welcome';

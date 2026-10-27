@@ -53,15 +53,6 @@ def _digest(handle):
     return digest.hexdigest(), size
 
 
-def _digest_with_md5(handle):
-    sha256, md5, size = hashlib.sha256(), hashlib.md5(usedforsecurity=False), 0
-    while chunk := handle.read(1024 * 1024):
-        sha256.update(chunk)
-        md5.update(chunk)
-        size += len(chunk)
-    return sha256.hexdigest(), base64.b64encode(md5.digest()).decode('ascii'), size
-
-
 def _key(sha256):
     return f'sha256/{sha256[:2]}/{sha256}'
 
@@ -182,7 +173,7 @@ class FileSystemStorage:
 
 
 class S3Storage:
-    """Single-PUT immutable objects (max 5 GiB), with service MD5 checking.
+    """Single-PUT immutable objects (max 5 GiB), with service SHA-256 checking.
 
     Boto3 obtains credentials from its standard chain; never accepts them from
     material URLs. Bucket privacy/lifecycle/versioning are deployment settings.
@@ -217,11 +208,7 @@ class S3Storage:
         digest = _check_key(key, self.prefix)
         response = self.client.head_object(Bucket=self.bucket, Key=key)
         size = response.get('ContentLength')
-        # S3 metadata header names are case-insensitive; Yandex returns Sha256.
-        metadata = response.get('Metadata') or {}
-        recorded = [value for name, value in metadata.items()
-                    if isinstance(name, str) and name.lower() == 'sha256']
-        if recorded != [digest] or type(size) is not int or size < 0:
+        if response.get('Metadata', {}).get('sha256') != digest or type(size) is not int or size < 0:
             raise StorageError('Stored object verification failed')
         checksum = response.get('ChecksumSHA256')
         if checksum is not None and checksum != base64.b64encode(bytes.fromhex(digest)).decode('ascii'):
@@ -231,7 +218,7 @@ class S3Storage:
     def put_file(self, path, *, expected_sha256=None, expected_size=None, content_type='application/octet-stream'):
         from botocore.exceptions import ClientError
         with open(path, 'rb') as source:
-            digest, content_md5, size = _digest_with_md5(source)
+            digest, size = _digest(source)
             _expected(digest, size, expected_sha256, expected_size)
             if size > 5 * 1024 ** 3:
                 raise StorageError('Material exceeds single-upload limit')
@@ -240,7 +227,6 @@ class S3Storage:
             try:
                 self.client.put_object(Bucket=self.bucket, Key=key, Body=source, ContentLength=size,
                                        ContentType=content_type, Metadata={'sha256': digest}, IfNoneMatch='*',
-                                       ContentMD5=content_md5,
                                        ChecksumSHA256=base64.b64encode(bytes.fromhex(digest)).decode('ascii'))
             except ClientError as error:
                 if error.response.get('Error', {}).get('Code') not in ('PreconditionFailed', '412'):

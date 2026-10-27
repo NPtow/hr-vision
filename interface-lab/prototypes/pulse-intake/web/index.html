@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="theme-color" content="#f5f5f7">
+  <title>Пульс Логистика · Заявка на подбор</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/voice.js" defer></script>
+  <script src="/app.js" defer></script>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Пульс Логистика, заявка на подбор">
+      <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" width="24" height="24"><path d="M3 12h4l3-7 4 14 3-7h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+      <span>Пульс Логистика</span>
+    </a>
+    <button class="export-button" id="review-open" disabled>Скачать <span aria-hidden="true">↓</span></button>
+  </header>
+  <nav class="mobile-tabs" aria-label="Разделы анкеты">
+    <button id="tab-chat" aria-pressed="true">Разговор</button>
+    <button id="tab-brief" aria-pressed="false">Заявка <span id="field-count">0</span></button>
+  </nav>
+  <main class="workspace">
+    <aside class="brief-pane" id="brief-pane" aria-label="Поля заявки">
+      <div class="brief-heading">
+        <h1>Лидогенерация</h1>
+        <div class="progress-caption"><span>Заявка на подбор</span><span id="progress-text">0 / 12</span></div>
+        <progress id="progress" value="0" max="12" aria-label="Заполненные ключевые поля"></progress>
+      </div>
+      <div class="field-groups" id="fields"></div>
+    </aside>
+    <section class="chat-pane mobile-active" id="chat-pane" aria-label="Разговор о вакансии">
+      <div class="messages" id="messages-scroll">
+        <div class="messages-inner">
+          <div id="messages" role="log" aria-label="Разговор"></div>
+          <div class="question-stage" id="question-stage">
+            <h2 id="current-question" tabindex="-1" aria-live="polite" aria-atomic="true">Загружаю анкету…</h2>
+            <div class="current-answer" id="current-answer" hidden>
+              <button id="edit-current">Изменить запись</button>
+            </div>
+          </div>
+          <div class="thinking" id="thinking" role="status" hidden><span></span><span></span><span></span><span class="thinking-text">Разбираю ответ…</span></div>
+          <div class="error" id="error" role="alert" hidden>
+            <span id="error-text"></span>
+            <div class="error-actions"><button id="retry">Повторить</button><button id="edit-answer">Изменить ответ</button><button id="refresh-state" hidden>Обновить заявку</button></div>
+          </div>
+        </div>
+      </div>
+      <footer class="composer-area">
+        <button type="button" class="jump-latest" id="jump-latest" aria-label="К текущему вопросу" title="К текущему вопросу" hidden><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M12 5v14m-6-6 6 6 6-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <form class="composer" id="composer">
+          <label class="sr-only" for="answer">Ваш ответ</label>
+          <textarea id="answer" placeholder="Ваш ответ…" maxlength="6000" rows="2" disabled></textarea>
+          <div class="composer-bottom">
+            <span id="voice-status" role="status" hidden></span>
+            <button type="button" class="voice-cancel" id="voice-cancel" aria-label="Отменить запись" hidden>Отмена</button>
+            <div class="composer-actions">
+              <button type="button" class="voice-button" id="voice" aria-label="Ответить голосом" title="Ответить голосом" disabled><svg class="mic-icon" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M6 11v1a6 6 0 0 0 12 0v-1M12 18v3m-3 0h6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><svg class="stop-icon" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="3" fill="currentColor"/></svg></button>
+              <button type="submit" class="send-button" id="send" aria-label="Отправить ответ" disabled><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+            </div>
+          </div>
+        </form>
+        <div class="save-error" id="save-note" role="alert" hidden></div>
+      </footer>
+    </section>
+  </main>
+</div>
+<dialog id="edit-dialog" aria-labelledby="edit-title">
+  <form id="edit-form">
+    <button type="button" class="close-modal" aria-label="Закрыть редактирование" id="edit-close">×</button>
+    <h2 id="edit-title">Изменить поле</h2>
+    <label class="sr-only" for="edit-value">Значение поля</label>
+    <textarea id="edit-value" rows="6" maxlength="5000"></textarea>
+    <button type="submit" class="download-button">Сохранить правку <span aria-hidden="true">✓</span></button>
+    <button type="button" class="review-back" id="edit-revert">Вернуть ответы из беседы</button>
+  </form>
+</dialog>
+<dialog id="review-dialog" aria-labelledby="review-title">
+  <button class="close-modal" aria-label="Закрыть проверку" id="review-close">×</button>
+  <h2 id="review-title">Проверьте заявку</h2>
+  <div class="review-gaps" id="review-gaps"></div>
+  <button class="download-button" id="download">Скачать черновик <span aria-hidden="true">↓</span></button>
+  <button class="review-back" id="review-back">Вернуться к полям</button>
+</dialog>
+</body>
+</html>

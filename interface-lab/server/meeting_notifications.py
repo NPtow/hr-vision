@@ -85,6 +85,8 @@ def enqueue(db, cid, key, event, channels, config, tick):
     for role, person, snapshot in people:
         for channel in channels:
             state, target, binding = reminders.destination(db, snapshot, role, person, channel, tick, config)
+            if event == 'interview.booked' and channel == 'email' and role == 'candidate' and state == 'unverified' and target:
+                state = 'pending' if config.email_configured else 'disabled'
             if not _eligible(db, snapshot, event, role):
                 state = 'error'
             payload = {'lifecycle': True, 'record': snapshot, 'role': role, 'person': person, 'binding': binding}
@@ -117,6 +119,8 @@ def prepare(db, row, config, tick):
     state, target, binding = reminders.destination(db, saved, role, person, row['channel'], tick, config)
     if target != row['recipient'] or binding != payload['binding']:
         return 'error', 'meeting_notice_recipient_changed'
+    if row['event_type'] == 'interview.booked' and row['channel'] == 'email' and role == 'candidate' and state == 'unverified' and target:
+        state = 'pending' if config.email_configured else 'disabled'
     return state, None
 
 

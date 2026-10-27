@@ -16,14 +16,6 @@ from materials_service import MaterialsService
 from materials_storage import FileSystemStorage, S3Storage
 
 
-# Test-only service parser injection; production uses authenticated HTTP.
-import importlib.util
-_parser_path = Path(__file__).resolve().parents[2] / 'services/transcription/src/md_transcription/normalization.py'
-_parser_spec = importlib.util.spec_from_file_location('transcription_fixture_normalization', _parser_path)
-_parser = importlib.util.module_from_spec(_parser_spec)
-_parser_spec.loader.exec_module(_parser)
-
-
 VTT = 'WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nСобственный проверенный текст\n'.encode()
 VIDEO = b'\x00\x00\x00\x18ftypisom\x00\x00\x00\x00isommp42'  # Synthetic container header, not a real recording.
 
@@ -104,7 +96,7 @@ class MaterialsServiceIntegrationTests(unittest.TestCase):
                                   'text/vtt' if transcript else 'video/mp4')
 
         self.runtime = MaterialsRuntime(self.connect, self.repository,
-            {('daily', 'daily'): self.capture}, self.storage, downloader=downloader, normalizer=_parser.normalize_transcript,
+            {('daily', 'daily'): self.capture}, self.storage, downloader=downloader,
             temp_root=self.fixture.tmp.name, clock=lambda: self.clock[0], settle_seconds=120)
         self.service = MaterialsService(self.runtime)
         self.portal.materials_catalog = self.service

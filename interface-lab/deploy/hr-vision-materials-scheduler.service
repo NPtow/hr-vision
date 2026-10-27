@@ -8,7 +8,6 @@ Type=simple
 User=hr-vision
 Group=hr-vision
 WorkingDirectory=/opt/hr-vision-api/current
-EnvironmentFile=/etc/hr-vision/api.env
 EnvironmentFile=/etc/hr-vision/materials.env
 Environment=PYTHONDONTWRITEBYTECODE=1
 Environment=PYTHONUNBUFFERED=1

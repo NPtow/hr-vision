@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Встреча · Zoom</title>
+  <style>
+    html, body { margin: 0; width: 100%; height: 100%; background: #111214; color: #eee; font: 16px/1.5 -apple-system, BlinkMacSystemFont, sans-serif; }
+    #connection-notice { position: fixed; inset: 0; display: grid; place-content: center; padding: 32px; text-align: center; }
+    #connection-notice[hidden] { display: none; }
+    #connection-title { font-size: 22px; font-weight: 600; margin: 0 0 12px; }
+    #connection-description { max-width: 440px; color: #b8bbc4; margin: 0; }
+  </style>
+</head>
+<body>
+  <main id="connection-notice" role="status" aria-live="polite">
+    <h1 id="connection-title">Подключаем Zoom</h1>
+    <p id="connection-description">Готовим окно встречи.</p>
+  </main>
+  <script type="module" src="./client.js"></script>
+</body>
+</html>

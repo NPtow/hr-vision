@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import type { CallMaterials, MediaChannel } from './api';
-import { orderedRecordings, selectedTranscript } from '../interview-review/recording-transcript';
 
 type Props = { identity: string; load: () => Promise<CallMaterials> };
 
@@ -20,7 +19,6 @@ function MaterialContents({ load }: Pick<Props, 'load'>) {
   const [materials, setMaterials] = useState<CallMaterials | null>(null);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState('');
-  const [recordingId, setRecordingId] = useState('');
 
   async function refresh(channel: 'all' | 'video' | 'transcription' = 'all') {
     if (pending.current) return;
@@ -30,32 +28,18 @@ function MaterialContents({ load }: Pick<Props, 'load'>) {
       const next = await loader.current();
       if (alive.current) setMaterials(previous => ({
         ...next,
-        recordings: next.recordings.map(recording => {
-          const old = previous?.recordings.find(item => item.id === recording.id);
-          return channel === 'transcription' && old && (!old.expires || old.expires > Date.now() / 1000 + 30)
-            ? { ...recording, url: old.url, expires: old.expires } : recording;
-        }),
-        // Every response is authoritative for selected text, including [] on
-        // pending/error. An earlier selected version never fills that gap.
-        transcripts: next.transcription.status === 'ready' ? next.transcripts : [],
+        // A failed retry of one channel must not remove the other channel's
+        // already available material (nor interrupt its current playback).
+        recordings: channel === 'transcription' && previous?.recordings.length && previous.recordings.every(recording => !recording.expires || recording.expires > Date.now() / 1000)
+          ? previous.recordings
+          : next.recordings.length || !['error', 'processing'].includes(next.video.status) ? next.recordings : previous?.recordings || [],
+        transcripts: next.transcripts.length || !['error', 'processing'].includes(next.transcription.status) ? next.transcripts : previous?.transcripts || [],
       }));
-    } catch (cause) { if (alive.current) {
-      setError(cause instanceof Error ? cause.message : 'Не удалось получить материалы. Попробуйте ещё раз.');
-      setMaterials(previous => previous ? { ...previous, transcripts: [], transcription: { status: 'error' } } : null);
-    } }
+    } catch (cause) { if (alive.current) setError(cause instanceof Error ? cause.message : 'Не удалось получить материалы. Попробуйте ещё раз.'); }
     finally { pending.current = false; if (alive.current) setBusy(false); }
   }
 
   useEffect(() => { alive.current = true; void refresh(); return () => { alive.current = false; }; }, []);
-
-  useEffect(() => {
-    if (materials?.transcription.status !== 'processing') return;
-    const timer = setTimeout(() => { void refresh('transcription'); }, 8_000);
-    return () => clearTimeout(timer);
-  }, [materials]);
-  const recordings = orderedRecordings(materials?.recordings || []);
-  const recording = recordings.find(item => item.id === recordingId) || recordings[0];
-  const transcript = selectedTranscript(materials, recording?.id);
 
   return <div style={{ display: 'grid', gap: 28, minWidth: 0 }}>
     {error && <div role="alert"><p className="cp-error rp-error">{error}</p><Button variant="secondary" disabled={busy} onClick={() => refresh()}>Повторить загрузку</Button></div>}
@@ -63,16 +47,13 @@ function MaterialContents({ load }: Pick<Props, 'load'>) {
     {materials && <>
       <section aria-label="Запись встречи" style={{ display: 'grid', gap: 14, minWidth: 0 }}>
         <h2 style={{ margin: 0, fontSize: 20 }}>Запись встречи</h2>
-        {recordings.length > 1 && <label>Часть интервью <select aria-label="Часть интервью" value={recording?.id || ''} onChange={event => setRecordingId(event.target.value)}>
-          {recordings.map((item, index) => <option key={item.id} value={item.id}>Запись {index + 1}</option>)}
-        </select></label>}
-        {recording && <RecordingPlayer key={recording.id} recording={recording} busy={busy} onRefresh={() => refresh('video')}/>}
+        {materials.recordings.map(recording => <RecordingPlayer key={recording.id} recording={recording} busy={busy} onRefresh={() => refresh('video')}/>)}
         <ChannelStatus channel={materials.video} kind="video" hasMaterial={materials.recordings.length > 0} busy={busy} onRefresh={() => refresh('video')}/>
       </section>
       <section aria-label="Расшифровка" style={{ display: 'grid', gap: 14, minWidth: 0 }}>
         <h2 style={{ margin: 0, fontSize: 20 }}>Расшифровка</h2>
-        {transcript && <div key={transcript.id} style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', lineHeight: 1.65, padding: 20, borderRadius: 20, background: '#f7f7f8', maxHeight: 440, overflowY: 'auto' }}>{transcript.text}</div>}
-        <ChannelStatus channel={materials.transcription} kind="transcription" hasMaterial={!!transcript} busy={busy} onRefresh={() => refresh('transcription')}/>
+        {materials.transcripts.map(transcript => <div key={transcript.id} style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', lineHeight: 1.65, padding: 20, borderRadius: 20, background: '#f7f7f8', maxHeight: 440, overflowY: 'auto' }}>{transcript.text}</div>)}
+        <ChannelStatus channel={materials.transcription} kind="transcription" hasMaterial={materials.transcripts.length > 0} busy={busy} onRefresh={() => refresh('transcription')}/>
       </section>
     </>}
   </div>;

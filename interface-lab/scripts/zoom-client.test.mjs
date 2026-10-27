@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import vm from 'node:vm';
 
-const source = await fs.readFile(new URL('../browser-assets/call/zoom/client.js', import.meta.url), 'utf8');
-const leftSource = await fs.readFile(new URL('../browser-assets/call/zoom/left.js', import.meta.url), 'utf8');
+const source = await fs.readFile(new URL('../zoom-client/src/client.js', import.meta.url), 'utf8');
+const leftSource = await fs.readFile(new URL('../zoom-client/src/left.js', import.meta.url), 'utf8');
 const tick = () => new Promise((done) => setImmediate(done));
 const credentials = (extra = {}) => ({
   provider: 'zoom', sdkVersion: '6.10.0', meetingNumber: '12345678901',
@@ -33,7 +33,7 @@ async function harness({ sdkOverrides = {}, importGate, importFailure = false, s
   };
   if (standalone) window.parent = window;
   const context = vm.createContext({
-    window,
+    window, AbortController,
     location: { origin: 'https://mashadasha.tech', replace: (path) => navigations.push(path) },
     document: { getElementById: (id) => elements[id] ??= { hidden: true, textContent: '' } },
     setTimeout: (fn, ms) => { timers.set(++timerId, { fn, ms }); return timerId; },
@@ -43,20 +43,17 @@ async function harness({ sdkOverrides = {}, importGate, importFailure = false, s
     sessionStorage: { setItem: () => { throw new Error('must not persist credentials'); } },
     console: { log: () => { throw new Error('must not log SDK credentials'); }, error: () => { throw new Error('must not log SDK errors'); } },
   });
-  const module = new vm.SourceTextModule(script, {
-    context,
-    importModuleDynamically: async (specifier) => {
+  const module = new vm.SourceTextModule(script, { context });
+  await module.link(async specifier => {
+    assert.equal(specifier, './sdk-loader.js');
+    return new vm.SyntheticModule(['prepareSdk'], function () { this.setExport('prepareSdk', async signal => {
       imports++;
-      assert.equal(specifier, 'https://source.zoom.us/6.10.0/esm/client-view.es.min.js');
       if (importGate) await importGate;
       if (importFailure) throw new Error('SECRET_RAW_SDK_ERROR');
-      const dependency = new vm.SyntheticModule(['ZoomMtg'], function () { this.setExport('ZoomMtg', sdk); }, { context });
-      await dependency.link(() => {});
-      await dependency.evaluate();
-      return dependency;
-    },
+      if (signal.aborted) throw new Error('cancelled');
+      return sdk;
+    }); }, { context });
   });
-  await module.link(() => {});
   await module.evaluate();
   await tick();
   const send = (data, overrides = {}) => events.message({ source: parent, origin: 'https://mashadasha.tech', data, ...overrides });
@@ -85,7 +82,6 @@ test('one iframe initializes and joins only once despite duplicate messages and 
   h.join();
   h.join();
   await tick();
-  h.events.localeReady();
   h.events.init.success();
   h.join();
   assert.equal(h.imports(), 1);
@@ -172,7 +168,7 @@ test('SDK loading has a deadline but user prejoin and reconnect do not', async (
   const h = await harness({ importGate: new Promise((done) => { resolve = done; }) });
   h.join();
   const deadline = [...h.timers.values()][0];
-  assert.equal(deadline.ms, 30000);
+  assert.equal(deadline.ms, 90000);
   deadline.fn();
   await tick();
   assert.equal(h.messages.at(-1).code, 'sdk_load_timeout');
@@ -218,4 +214,27 @@ test('native disconnect is terminal and left destination cannot trigger a rejoin
   const left = await harness({ script: leftSource });
   assert.equal(left.imports(), 0);
   assert.deepEqual(left.messages, [{ source: 'hr-zoom-client', type: 'status', phase: 'left', targetOrigin: 'https://mashadasha.tech' }]);
+});
+
+test('preparation downloads the SDK without credentials or starting a meeting; join reuses it', async () => {
+  const h = await harness();
+  h.send({ source: 'hr-zoom-parent', type: 'prepare' });
+  h.send({ source: 'hr-zoom-parent', type: 'prepare' });
+  await tick();
+  assert.equal(h.imports(), 1);
+  assert.equal(h.calls.length, 0);
+  assert.equal(h.messages.at(-1).phase, 'prepared');
+  h.join();
+  await tick();
+  assert.equal(h.imports(), 1);
+  assert.equal(h.calls.filter(call => call.join).length, 1);
+});
+
+test('an init promise rejection is handled even when the SDK never calls its error callback', async () => {
+  const h = await harness({ sdkOverrides: { init: () => Promise.reject({ errorCode: 500, message: 'private' }) } });
+  h.join();
+  await tick();
+  assert.equal(h.messages.at(-1).phase, 'error');
+  assert.equal(h.calls.filter(call => call.join).length, 0);
+  assert.equal(JSON.stringify(h.messages).includes('private'), false);
 });

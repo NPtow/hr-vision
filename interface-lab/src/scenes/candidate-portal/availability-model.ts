@@ -1,12 +1,5 @@
-import type { Availability, AvailabilitySchedule, CandidateProfile, DayAvailability } from './api';
+import type { Availability, AvailabilitySchedule, DayAvailability } from './api';
 import { scheduleDateKey, scheduleDayStart, scheduleInstant, scheduleTime } from './schedule-time.ts';
-
-/** First-time setup, not a check for free slots today. A saved closed day is also a deliberate choice. */
-export function hasConfiguredAvailability(profile: Pick<CandidateProfile, 'availability' | 'availabilityManual' | 'availabilitySchedule'>): boolean {
-  return (profile.availabilityManual ?? profile.availability).length > 0
-    || (profile.availabilitySchedule?.weekly.length ?? 0) > 0
-    || (profile.availabilitySchedule?.dates.length ?? 0) > 0;
-}
 
 export const shiftScheduleDay = (day: string, offset: number) => new Date(Date.parse(`${day}T12:00:00Z`) + offset * 86400_000).toISOString().slice(0, 10);
 export const scheduleWeekday = (day: string) => (new Date(`${day}T12:00:00Z`).getUTCDay() + 6) % 7;

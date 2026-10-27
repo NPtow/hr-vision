@@ -1,0 +1,44 @@
+name: pulse-intake
+services:
+  app:
+    image: pulse-intake:${PULSE_RELEASE:?release required}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    network_mode: host
+    env_file: /etc/pulse-intake/app.env
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 64
+    volumes:
+      - /var/lib/pulse-intake:/state
+    tmpfs: ["/tmp:size=16m,mode=1777"]
+    logging:
+      driver: json-file
+      options: {max-size: 5m, max-file: '2'}
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; r=urllib.request.Request('http://127.0.0.1:8392/healthz',headers={'Host':'pulse.158-160-179-53.sslip.io'}); assert urllib.request.urlopen(r,timeout=3).status == 200"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+  proxy:
+    image: caddy:2-alpine@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b
+    network_mode: host
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 64m
+    cpus: 0.25
+    pids_limit: 64
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    tmpfs: ["/data:size=4m,mode=1777", "/config:size=4m,mode=1777"]
+    logging:
+      driver: json-file
+      options: {max-size: 5m, max-file: '2'}

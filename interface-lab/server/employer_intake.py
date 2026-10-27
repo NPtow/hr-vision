@@ -172,13 +172,6 @@ def list_candidates(db, workspace_id, vacancy_id):
       WHERE workspace_id=? AND vacancy_id=? ORDER BY rowid''', (workspace_id, vacancy_id)):
         events.setdefault(cid, []).append((kind, json.loads(body)))
     people = [json.loads(row[0]) for row in rows]
-    import employer_intake_review
-    if employer_intake_review.exists(db):
-        for person in people:
-            if not person.get('archived'):
-                value = employer_intake_review.projection(db, workspace_id, vacancy_id, person['id'])
-                if value['assessment']:
-                    person['assessment'] = value['assessment']
     return {'candidates': [_review_projection(person, events.get(person['id'], [])) for person in people]}
 
 
@@ -191,8 +184,6 @@ def _recordings(person):
 def _recording_fingerprint(recording):
     # The identity is derived only from persisted source metadata. A filename or
     # a chapter title can be edited without moving comments to another source.
-    if recording.get('source') == 'core':
-        return recording['id']
     source = {key: recording.get(key) for key in
               ('publicUrl', 'mime', 'size', 'id', 'sha256', 'checksum', 'version')}
     if recording.get('source') == 'dsa-panel':
@@ -206,11 +197,7 @@ def _stored_recording(person, index):
     require(index < len(recordings) and isinstance(recordings[index], dict), 'Запись не найдена.', 404)
     recording = recordings[index]
     url, mime = recording.get('publicUrl', ''), recording.get('mime', '')
-    if recording.get('source') == 'core':
-        require(isinstance(recording.get('id'), str) and re.fullmatch(r'[a-f0-9]{32}', recording['id']) and
-                isinstance(recording.get('sha256'), str) and re.fullmatch(r'[a-f0-9]{64}', recording['sha256']),
-                'Запись ещё не сохранена.', 422)
-    elif recording.get('source') == 'dsa-panel':
+    if recording.get('source') == 'dsa-panel':
         source_id = recording.get('sourceCandidateId')
         source = (person.get('preparedProfile') or {}).get('source') or {}
         require(isinstance(source, dict) and source.get('kind') == 'dsa-panel' and
@@ -451,8 +438,6 @@ def add(db, workspace_id, vacancy_id, body, prepared=None):
                 person['files'].append({'id': secrets.token_hex(12), 'name': file['name'], 'size': len(file['content'])})
             db.execute('INSERT INTO em_intake_candidates VALUES (?,?,?,?,?)',
                        (person['id'], workspace_id, vacancy_id, prepared.batch, _dump(person)))
-            import assessment_jobs
-            assessment_jobs.enqueue(db, 'intake', person['id'], vacancy_id, workspace_id)
             if file:
                 db.execute('INSERT INTO em_intake_files VALUES (?,?,?,?,?,?,?,?)',
                            (person['files'][0]['id'], person['id'], file['name'], file['mime'], file['content'],
