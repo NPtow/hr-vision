@@ -61,6 +61,29 @@ class ReceiverTest(unittest.TestCase):
         stage = self.root / 'stage'; stage.mkdir(exist_ok=True)
         return archive, stage, m
 
+    def test_open_zoom_tabs_keep_hashed_chunks_and_versioned_media_until_fixed_expiry(self):
+        old, new, later = [self.root / name for name in ('zoom-old', 'zoom-new', 'zoom-later')]
+        allowed = ('call/zoom/assets/zoommtgMain-Abc123_X.js',
+                   'call/zoom/vendor/6.9.0/lib/av/audio.simd.wasm',
+                   'call/zoom/vendor/6.9.0/ui/zoom-meetingsdk.css')
+        forbidden = ('call/zoom/assets/unversioned.js', 'call/zoom/client.html',
+                     'call/zoom/bootstrap.json', 'call/zoom/vendor/6.9.0/secret.json')
+        for name in allowed + forbidden:
+            file = old / name
+            file.parent.mkdir(parents=True, exist_ok=True)
+            file.write_text('old')
+        new.mkdir(); later.mkdir()
+        with patch.object(r.time, 'time', return_value=1000):
+            r.retain_replay_assets(old, new)
+        for name in allowed:
+            self.assertEqual((new / name).stat().st_ino, (old / name).stat().st_ino)
+        for name in forbidden:
+            self.assertFalse((new / name).exists())
+        with patch.object(r.time, 'time', return_value=1000 + 26 * 3600):
+            r.retain_replay_assets(new, later)
+        for name in allowed:
+            self.assertFalse((later / name).exists())
+
     def test_valid_mockups_and_service(self):
         for target in r.BRANCHES:
             a, s, m = self.bundle(target)
@@ -90,6 +113,15 @@ class ReceiverTest(unittest.TestCase):
         for target, name, accepted in (
             ('service', 'call/zoom/client.html', True),
             ('service', 'call/zoom/left.html', True),
+            ('service', 'call/zoom/helper.html', True),
+            ('service', 'call/zoom/externalLinkPage.html', True),
+            ('service', 'call/zoom/bootstrap.json', True),
+            ('service', 'call/zoom/vendor/6.10.0/lib/av/audio.simd.wasm', True),
+            ('service', 'call/zoom/vendor/6.10.0/lib/lang/ru-RU.json', True),
+            ('service', 'call/zoom/vendor/6.10.0/ui/audio/incoming.mp3', True),
+            ('service', 'call/zoom/vendor/6.11.0/lib/av/audio.simd.wasm', False),
+            ('service', 'call/zoom/private.json', False),
+            ('service', 'private.wasm', False),
             ('mockups', 'call/zoom/client.html', True),
             ('mockups', 'call/zoom/left.html', True),
             ('service', 'call/zoom/admin.html', False),

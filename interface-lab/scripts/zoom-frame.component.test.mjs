@@ -41,6 +41,7 @@ before(async () => {
       function Fixture() {
         const call = useRef(null);
         const [revision, setRevision] = useState(0);
+        const [authorized, setAuthorized] = useState(!new URLSearchParams(location.search).has('prewarm'));
         const [collapsed, setCollapsed] = useState(false);
         const [broken, setBroken] = useState(false);
         const [joined, setJoined] = useState(0);
@@ -50,14 +51,15 @@ before(async () => {
           signature: 'fixture.signature.' + revision, passWord: 'fixture-passcode', userName: 'Fixture', role: 1,
           zak: 'fixture-host-token' };
         return <>
+          <button onClick={() => setAuthorized(true)}>Authorize</button>
           <button onClick={() => setRevision(value => value + 1)}>Change optional props</button>
           <button onClick={() => setCollapsed(value => !value)}>Toggle notes</button>
           <button onClick={() => setBroken(true)}>Break notes</button>
           <button onClick={() => call.current.leave()}>Leave locally</button>
           <output id="callbacks">{JSON.stringify({ joined, left, errors })}</output>
           <div className="call-shell">
-            <ZoomCallFrame ref={call} credentials={credentials} onJoined={() => setJoined(value => value + 1)}
-              onLeft={() => setLeft(value => value + 1)} onError={() => setErrors(value => value + 1)}/>
+            <ZoomCallFrame ref={call} credentials={authorized ? credentials : null} onJoined={() => setJoined(value => value + 1)}
+              onLeft={() => setLeft(value => value + 1)} onError={message => { if (message) setErrors(value => value + 1); }}/>
             <OptionalCallPanel label="Заметки">
               {!collapsed && <OptionalContent broken={broken} revision={revision}/>}
             </OptionalCallPanel>
@@ -239,4 +241,57 @@ test('local leave before child readiness cannot authorize a delayed join even if
   });
   await page.locator('.md-zoom-call[data-phase="left"]').waitFor();
   assert.deepEqual(await callbacks(page), { joined: 0, left: 1, errors: 0 });
+});
+
+test('preparation has no credentials and explicit entry reuses the prepared iframe once', async t => {
+  const { page, requests } = await pageFor(t);
+  await page.goto(origin + '/?prewarm=1');
+  await page.waitForFunction(() => document.querySelector('iframe')?.contentWindow.commands?.length === 1);
+  const frame = await page.locator('iframe').elementHandle();
+  assert.deepEqual(await commands(page), [{ source: 'hr-zoom-parent', type: 'prepare' }]);
+  assert.deepEqual(await callbacks(page), { joined: 0, left: 0, errors: 0 });
+  await page.getByRole('button', { name: 'Authorize', exact: true }).click();
+  await joined(page);
+  assert.equal(await frame.evaluate(node => node === document.querySelector('iframe')), true);
+  assert.deepEqual((await commands(page)).map(command => command.type), ['prepare', 'join']);
+  assert.equal(requests.filter(url => url.endsWith('/call/zoom/client.html')).length, 1);
+});
+
+test('an asset failure ignores late success; retry creates a new frame and joins only once', async t => {
+  const { page } = await pageFor(t);
+  await page.goto(origin + '/?prewarm=1');
+  await page.waitForFunction(() => document.querySelector('iframe')?.contentWindow.commands?.length === 1);
+  const original = await page.locator('iframe').elementHandle();
+  await original.evaluate(frame => {
+    frame.contentWindow.sendFixture({ type: 'status', phase: 'error', code: 'sdk_assets', message: 'PRIVATE_ERROR' });
+    frame.contentWindow.sendFixture({ type: 'status', phase: 'joined' });
+  });
+  await page.getByRole('button', { name: 'Повторить загрузку', exact: true }).waitFor();
+  assert.deepEqual(await callbacks(page), { joined: 0, left: 0, errors: 1 });
+  assert.equal((await page.locator('body').textContent()).includes('PRIVATE_ERROR'), false);
+  await page.getByRole('button', { name: 'Change optional props', exact: true }).click();
+  await settle(page);
+  assert.equal(await original.evaluate(node => node === document.querySelector('iframe')), true);
+  await page.getByRole('button', { name: 'Повторить загрузку', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('iframe')?.contentWindow.commands?.length === 1);
+  assert.equal(await original.evaluate(node => node.isConnected), false);
+  await page.getByRole('button', { name: 'Authorize', exact: true }).click();
+  await joined(page);
+  assert.deepEqual((await commands(page)).map(command => command.type), ['prepare', 'join']);
+  assert.deepEqual(await callbacks(page), { joined: 1, left: 0, errors: 1 });
+});
+
+test('authorization after failed hidden preparation retries once without an error-render loop', async t => {
+  const { page, requests } = await pageFor(t);
+  await page.goto(origin + '/?prewarm=1');
+  await page.waitForFunction(() => document.querySelector('iframe')?.contentWindow.commands?.length === 1);
+  await page.locator('iframe').evaluate(frame => frame.contentWindow.sendFixture({ type: 'status', phase: 'error', code: 'sdk_load' }));
+  await page.getByRole('button', { name: 'Повторить загрузку', exact: true }).waitFor();
+  await settle(page);
+  assert.equal(requests.filter(url => url.endsWith('/call/zoom/client.html')).length, 1);
+  await page.getByRole('button', { name: 'Authorize', exact: true }).click();
+  await joined(page);
+  assert.equal(requests.filter(url => url.endsWith('/call/zoom/client.html')).length, 2);
+  assert.deepEqual((await commands(page)).map(command => command.type), ['join']);
+  assert.deepEqual(await callbacks(page), { joined: 1, left: 0, errors: 1 });
 });

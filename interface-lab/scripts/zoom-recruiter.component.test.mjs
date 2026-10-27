@@ -39,6 +39,7 @@ async function fixture(t, overrides = {}, query = '') {
     await route.fulfill({ json });
   });
   await page.goto(origin + query);
+  await page.waitForFunction(() => window.receipts.includes('prepare'));
   if (!query.includes('without-consent')) {
     await page.getByRole('checkbox').check();
     await page.getByRole('button', { name: 'Присоединиться', exact: true }).click();
@@ -53,7 +54,7 @@ test('call has no coach, notes or resume dependency even when those APIs fail', 
   assert.equal(await page.getByRole('textbox').count(), 0);
   assert.equal(await page.locator('.rcc-panel, .rcc-call-controls, video').count(), 0);
   assert.equal(await page.evaluate(() => window.counts.capture), 0);
-  assert.deepEqual(await page.evaluate(() => window.receipts), ['join']);
+  assert.deepEqual(await page.evaluate(() => window.receipts), ['prepare', 'join']);
 });
 
 async function nativeLeave(page) {
@@ -64,7 +65,8 @@ test('native host leave returns immediately and delegates status to the cabinet'
   const { page, calls } = await fixture(t);
   await nativeLeave(page);
   await page.waitForFunction(() => window.counts.closed === 1);
-  assert.equal(await page.locator('iframe').count(), 0);
+  await page.locator('iframe').waitFor({ state: 'hidden' });
+  assert.equal(await page.evaluate(() => window.receipts.filter(command => command === 'join').length), 1);
   assert.equal(await page.evaluate(() => window.counts.hostLeft), 1);
   assert.equal(calls.includes('interview/complete'), false);
   assert.equal(calls.includes('interview/reconcile'), false);
@@ -79,7 +81,7 @@ test('transient session receipt failure retries without another join or replacin
   await page.getByText('Обновляем статус встречи. Звонок продолжается.', { exact: true }).waitFor({ state: 'hidden' });
   assert.equal(attempts, 2);
   assert.equal(await page.locator('iframe').evaluate((node, old) => node === old, original), true);
-  assert.deepEqual(await page.evaluate(() => window.receipts), ['join']);
+  assert.deepEqual(await page.evaluate(() => window.receipts), ['prepare', 'join']);
 });
 
 test('server guest role cannot pin or complete the host session', async t => {
@@ -94,10 +96,13 @@ test('server guest role cannot pin or complete the host session', async t => {
 test('one explicit consent is required even if the old entry sent recordingConsent', async t => {
   const { page, calls, commands } = await fixture(t, {}, '?without-consent');
   assert.equal(calls.length, 0);
+  assert.deepEqual(await page.evaluate(() => window.receipts), ['prepare']);
+  const preparedFrame = await page.locator('iframe').elementHandle();
   assert.equal(await page.getByRole('button', { name: 'Присоединиться', exact: true }).isDisabled(), true);
   await page.getByRole('checkbox').check();
   await page.getByRole('button', { name: 'Присоединиться', exact: true }).click();
   await page.waitForFunction(() => window.receipts.includes('join'));
+  assert.equal(await preparedFrame.evaluate(node => node === document.querySelector('iframe')), true);
   assert.deepEqual(commands.find(command => command.path === 'interview/join')?.body,
     { candidateId: active.candidateId, interviewId: active.interviewId, consent: true });
   assert.equal(calls.includes('interview/start'), false);

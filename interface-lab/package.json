@@ -7,7 +7,11 @@
     "storybook": "storybook dev -p 6007 --host 127.0.0.1 --no-open --disable-telemetry",
     "build": "storybook build --disable-telemetry && vite build --config vite.observability.config.ts && node scripts/daily-bundles.mjs storybook-static",
     "typecheck": "tsc --noEmit",
-    "deploy:yc": "bash scripts/deploy-yc.sh"
+    "deploy:yc": "bash scripts/deploy-yc.sh",
+    "zoom:build": "npm --prefix zoom-client run build",
+    "prebuild": "npm run zoom:build",
+    "prestorybook": "npm run zoom:build",
+    "postinstall": "npm ci --prefix zoom-client --ignore-scripts --no-audit --no-fund"
   },
   "dependencies": {
     "@daily-co/daily-js": "0.93.0",
@@ -43,7 +47,8 @@
     "storybook": "10.6.1",
     "tailwindcss": "^4.3.3",
     "typescript": "7.0.2",
-    "vite": "8.3.1"
+    "vite": "8.3.1",
+    "playwright": "1.64.1"
   },
   "description": "HR Vision: 19 agency screen prototypes, five current CJM maps and historical versions.",
   "engines": {

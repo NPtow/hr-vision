@@ -21,6 +21,18 @@
 
 ## Устройство
 
+### Zoom: ресурсы на своём домене
+
+Перед первым выпуском локального Meeting SDK 6.10.0 установите receiver этого
+коммита: он разрешает полный проверенный набор ресурсов Zoom и архив до 96 MiB
+(256 MiB после распаковки). API runtime и три сервисные истории не меняются.
+Обновите правила кеширования Zoom в действующем Caddyfile, сохранив локальные
+imports и маршруты; проверьте конфигурацию установленной версией Caddy.
+HTML и bootstrap остаются revalidated, immutable применяется только к успешным
+ответам для хешированных ресурсов и закреплённой версии SDK. Приёмник сохраняет
+предыдущие ресурсы Zoom на 25 часов для уже открытых вкладок. Подробности сборки,
+подготовки iframe и проверок: [zoom-client/README.md](../../zoom-client/README.md).
+
 Сборка выполняется на GitHub-hosted runner, а не на сервере приложения. Node 24, `npm ci` из lock-файла, типизация, разбор транскрипта, unit/HTTP-тесты на отдельной временной SQLite, проверки приёмника, затем Storybook и ограниченный release-архив.
 
 В отдельной deploy job доступен ключ только для её GitHub Environment: `service` разрешён лишь для `main`, `mockups` лишь для `codex/mockups`. `HR_DEPLOY_KEY` и `HR_DEPLOY_KNOWN_HOSTS` хранятся в environment secrets; `HR_DEPLOY_HOST` в environment variables. PR-код и npm install не получают deploy key. Все Actions закреплены по SHA.
