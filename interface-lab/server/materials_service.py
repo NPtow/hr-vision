@@ -17,41 +17,26 @@ class MaterialsService:
 
     def register_owner(self, owner_kind, meeting, storage_policy=None):
         room = meeting.get('room') or {}
-        provider = room.get('provider', 'daily')
-        allowed = getattr(self.runtime, 'provider_allowlist', None)
-        require(allowed is None or provider in allowed,
-                'Этот источник обрабатывается отдельным сервисом.', 409)
-        if provider == 'zoom' and storage_policy is not None:
-            require(storage_policy == 'owned',
-                    'Для записей Zoom требуется сохранение в нашем хранилище.', 400)
         if room.get('captureNeverStarted'):
             return None
         require(owner_kind in ('interview', 'meeting') and room.get('id') and room.get('name'),
                 'Источник материалов не определён.', 409)
+        provider = room.get('provider', 'daily')
         connection = room.get('connectionId', self.runtime.connection_id)
         ref = owner_source_ref(owner_kind, meeting['id'], room, provider, connection)
         if storage_policy is not None:
             require(storage_policy in ('remote', 'owned'), 'Выберите способ хранения записи.', 400)
             sources = self.repository.list_sources(owner_kind, meeting['id'])
-            if allowed is not None:
-                sources = [source for source in sources if source['provider'] in allowed]
             if any(source['storage_policy'] != storage_policy for source in sources):
-                if allowed is None:
-                    self.repository.update_owner_policy(owner_kind, meeting['id'], storage_policy)
-                    for source in sources:
-                        self.runtime.enqueue_discovery(source['id'])
-                else:
-                    for source in sources:
-                        if source['storage_policy'] != storage_policy:
-                            self.runtime.upgrade_policy(source['id'], storage_policy)
+                self.repository.update_owner_policy(owner_kind, meeting['id'], storage_policy)
+                for source in sources:
+                    self.runtime.enqueue_discovery(source['id'])
         source = self.runtime.register_owner(owner_kind, meeting['id'], provider,
                                               connection, ref, storage_policy)
         # A reader can wake a settled or exhausted capture without doing provider
         # I/O in the request. Minute keys coalesce repeated portal refreshes.
         stamp = self.runtime.clock()
         for current in self.repository.list_sources(owner_kind, meeting['id']):
-            if allowed is not None and current['provider'] not in allowed:
-                continue
             if (not current['metadata'].get('capture_disabled') and current['state'] != 'ready'
                     and stamp - current['updated_at'] >= 60):
                 self.runtime.enqueue_discovery(current['id'], token='manual:' + str(int(stamp // 60)))
@@ -127,7 +112,7 @@ class MaterialsService:
     def legacy_materials(self, owner_kind, meeting, *, access_check=None):
         """Keep existing candidate/recruiter/employer players working on rollout."""
         data = self.list_materials(owner_kind, meeting['id'], access_check=access_check)
-        recordings, transcripts, transcript_variants, video_errors = [], [], [], []
+        recordings, transcripts, video_errors = [], [], []
         assets = {asset['id']: asset for asset in data['assets']}
         for asset in data['assets']:
             if asset['kind'] != 'video' or asset['state'] not in ('ready', 'available'):
@@ -152,22 +137,12 @@ class MaterialsService:
                 latest[version['asset_id']] = version
         for version in latest.values():
             normalized = version['metadata'].get('normalized', {})
-            projection = {'id': version['id'], 'assetId': version['asset_id'],
+            transcripts.append({'id': version['id'], 'assetId': version['asset_id'],
                                 'revision': version['version'],
                                 'text': normalized.get('vtt') or normalized.get('full_text', ''),
                                 'fullText': normalized.get('full_text', ''),
                                 'segments': version['segments'], 'warnings': normalized.get('warnings', []),
-                                'storage': 'owned'}
-            asset = assets.get(version['asset_id'], {})
-            external_id = asset.get('external_id') or asset.get('provider_asset_id', '')
-            # ASR alternatives remain visible for comparison without silently
-            # replacing capture text consumed by the assessment application.
-            if external_id.startswith('asr:'):
-                metadata = version.get('metadata', {})
-                transcript_variants.append({**projection, 'origin': metadata.get('origin'),
-                    'model': metadata.get('model_version')})
-            else:
-                transcripts.append(projection)
+                                'storage': 'owned'})
         def channel(kind, values):
             generations = {source['id']: source['generation'] for source in data['sources']}
             relevant = [job for job in data['jobs'] if job['operation'] == 'discover' or
@@ -197,8 +172,7 @@ class MaterialsService:
         states = (video['status'], transcription['status'])
         result = {'status': 'ready' if 'ready' in states else 'processing' if 'processing' in states
                   else 'error' if 'error' in states else 'not_recorded',
-                  'recordings': recordings, 'transcripts': transcripts,
-                  **({'transcriptVariants': transcript_variants} if transcript_variants else {}), 'video': video,
+                  'recordings': recordings, 'transcripts': transcripts, 'video': video,
                   'transcription': transcription, 'checkedAt': dt.datetime.now(dt.timezone.utc).isoformat(),
                   'catalogVersion': 1, 'speechProvider': 'not_selected'}
         self._check(access_check)

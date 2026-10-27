@@ -16,9 +16,6 @@ from materials_capture import Artifact
 
 
 def _download(*args, **kwargs):
-    from zoom_api_client import ZoomContent
-    if isinstance(args[0], ZoomContent):
-        return args[0].download(*args[1:], **kwargs)
     from materials_http import download
     return download(*args, **kwargs)
 
@@ -41,8 +38,7 @@ def fingerprint(value):
 class MaterialsWorker:
     def __init__(self, repository, captures, storage, *, downloader=None, normalizer=None,
                  publish=None, lease_seconds=60, max_bytes=2 * 1024**3,
-                 transcript_max_bytes=20 * 1024**2, timeout_seconds=300, temp_root=None,
-                 provider_allowlist=None):
+                 transcript_max_bytes=20 * 1024**2, timeout_seconds=300, temp_root=None):
         self.repository, self.captures, self.storage = repository, captures, storage
         self.downloader = downloader or _download
         self.normalizer = normalizer or _normalize
@@ -50,17 +46,8 @@ class MaterialsWorker:
         self.lease_seconds = max(3, int(lease_seconds))
         self.max_bytes, self.transcript_max_bytes = max_bytes, transcript_max_bytes
         self.timeout_seconds, self.temp_root = timeout_seconds, temp_root
-        self.provider_allowlist = None if provider_allowlist is None else frozenset(provider_allowlist)
-
-    def _check_source(self, source):
-        if self.provider_allowlist is not None and source['provider'] not in self.provider_allowlist:
-            raise WorkError('provider_not_allowed')
-
-    def _scope(self):
-        return {} if self.provider_allowlist is None else {'provider_allowlist': self.provider_allowlist}
 
     def adapter(self, source):
-        self._check_source(source)
         adapter = self.captures.get((source['provider'], source['connection_id']))
         adapter = adapter or self.captures.get(source['provider'])
         if adapter is None:
@@ -69,7 +56,6 @@ class MaterialsWorker:
 
     def enqueue(self, source_id, operation, payload=None, *, token=None, parent_job=None):
         source = self.repository.get_source(source_id)
-        self._check_source(source)
         job = self.repository.enqueue_job(source_id, operation,
             input_fingerprint=fingerprint({'generation': source['generation'], 'payload': payload or {},
                                            'nonce': token}), payload=payload or {},
@@ -87,7 +73,6 @@ class MaterialsWorker:
 
     @contextmanager
     def _heartbeat(self, job):
-        self._check_source(self.repository.get_source(job['source_id']))
         stop = threading.Event()
         lost = []
 
@@ -112,7 +97,7 @@ class MaterialsWorker:
         return {'job_id': job['id'], 'lease_token': job['lease_token']}
 
     def run_once(self, job_id=None, worker_id='materials-local'):
-        job = self.repository.claim_job(worker_id, self.lease_seconds, job_id=job_id, **self._scope())
+        job = self.repository.claim_job(worker_id, self.lease_seconds, job_id=job_id)
         if not job:
             return {'claimed': False}
         source = self.repository.get_source(job['source_id'])
@@ -151,7 +136,6 @@ class MaterialsWorker:
             return {'claimed': True, 'job_id': job['id'], 'state': 'error', 'code': code}
 
     def _discover(self, source, job):
-        self._check_source(source)
         ref = {**source['source_ref'], 'provider': source['provider'],
                'connection_id': source['connection_id']}
         discovery = self.adapter(source).discover(ref)
@@ -236,7 +220,6 @@ class MaterialsWorker:
         return {'enqueued': queued, 'complete': discovery.complete, 'sources': sorted(sessions)}
 
     def _import(self, source, job):
-        self._check_source(source)
         asset = self.repository.get_asset(job['payload']['asset_id'])
         if asset['source_id'] != source['id']:
             raise WorkError('asset_source_mismatch')
@@ -324,7 +307,6 @@ class MaterialsWorker:
             raise WorkError('unexpected_video_content')
 
     def _save_transcript(self, source, job, asset, artifact, raw, stored, content_type):
-        self._check_source(source)
         fmt = artifact.metadata.get('format') or self._transcript_format(content_type)
         try:
             normalized = self.normalizer(raw, fmt)
@@ -340,7 +322,6 @@ class MaterialsWorker:
                       'source_provider': source['provider']}, **self.fence(job))
 
     def _mark_imported(self, source, job, asset):
-        self._check_source(source)
         self.repository.upsert_asset(source['id'], asset['kind'], asset['provider_asset_id'],
             state='ready', metadata=asset['metadata'], **self.fence(job))
         assets = self.repository.list_assets(source['id'])
@@ -355,8 +336,8 @@ class MaterialsWorker:
                 'application/json': 'json'}.get((content_type or '').split(';')[0], 'unsupported')
 
     def reconcile(self):
-        result = self.repository.reconcile_jobs(**self._scope())
-        pending = self.repository.list_pending_jobs(limit=100, **self._scope())
+        result = self.repository.reconcile_jobs()
+        pending = self.repository.list_pending_jobs(limit=100)
         published = 0
         if self.publish:
             for job in pending:

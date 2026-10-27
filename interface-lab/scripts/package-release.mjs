@@ -38,7 +38,6 @@ function visit(dir = '') {
     if (info.isDirectory()) { visit(`${rel}/`); continue; }
     if (!( /\.(js|css|svg|woff2?|ttf|png|jpe?g|webp|ico|gif)$/.test(rel)
       || ['index.html', 'iframe.html', 'index.json', 'project.json'].includes(rel)
-      || ['call/zoom/client.html', 'call/zoom/left.html'].includes(rel)
       || /\.LICENSE\.txt$/.test(rel))) throw Error(`Unexpected public file: ${rel}`);
     add(file, `ui/${rel}`);
   }
@@ -49,7 +48,7 @@ const deployment = JSON.stringify({ target, branch, sha, run }) + '\n';
 writeFileSync(`${stage}/ui/deployment.json`, deployment);
 files['ui/deployment.json'] = digest(deployment);
 if (target === 'service') for (const name of [
-  'app.py', 'observability.py', 'browser_access.py', 'selection.py', 'selection_status.py', 'candidate_portal.py', 'candidate_resume.py', 'candidate_notifications.py', 'candidate_bot.py',
+  'app.py', 'observability.py', 'browser_access.py', 'candidate_portal.py', 'candidate_resume.py', 'candidate_notifications.py', 'candidate_bot.py',
   'structured_model.py', 'candidate_resume_model.py', 'candidate_resume_prompts.py',
   'candidate_invites.py', 'candidate_availability.py', 'recruiter_availability.py', 'interview_scheduler.py', 'hh_recruiting.py', 'hh_routes.py',
   'candidate_booking.py', 'candidate_access.py', 'hh_outreach.py', 'hh_outreach_routes.py', 'hh_outreach_worker.py',
@@ -58,16 +57,9 @@ if (target === 'service') for (const name of [
   'employer_notifications.py', 'telegram_miniapp.py', 'meeting_reminders.py', 'meeting_notifications.py',
   'employer_access.py', 'employer_store.py', 'employer_workflow.py', 'employer_routes.py',
   'employer_projection.py', 'employer_intake.py', 'vacancy_import.py', 'vacancy_sources.py',
-  'daily_media.py', 'media_runtime.py', 'call_cleanup.py',
-  'call_providers.py', 'zoom_media.py', 'materials_zoom.py', 'zoom_recording_retention.py', 'domain.py', 'dsa_panel.py', 'feedback.py', 'meeting_lab.py', 'interview_assistant.py', 'interview_assessment.py',
+  'daily_media.py', 'media_runtime.py', 'call_cleanup.py', 'domain.py', 'dsa_panel.py', 'feedback.py', 'meeting_lab.py', 'interview_assistant.py',
   'materials_capture.py', 'materials_daily.py', 'materials_repository.py', 'materials_http.py',
   'materials_storage.py', 'materials_transcripts.py', 'materials_worker.py', 'materials_runtime.py', 'materials_service.py',
-  'materials_asr_dispatch.py', 'recording_uploads.py', 'canonical_materials.py', 'transcript_bundle.py',
-  'core_source_client.py', 'core_source_outbox.py', 'zoom_api_client.py', 'public_profiles.py', 'assessment_jobs.py',
-  'assessment_corpus.py', 'assessment_core_bridge.py', 'assessment_core_lifecycle.py',
-  'selection_facts.py', 'selection_materials_lifecycle.py', 'vacancy_profile_bridge.py', 'recommendations_bridge.py',
-  'recommendation_lifecycle.py', 'selection_interviews.py',
-  'employer_review.py', 'employer_intake_review.py',
 ]) add(`server/${name}`, `api/${name}`);
 writeFileSync(`${stage}/release.json`, JSON.stringify(manifest) + '\n');
 execFileSync('tar', ['-czf', 'release.tgz', '-C', stage, 'release.json', 'ui', ...(target === 'service' ? ['api'] : [])], {

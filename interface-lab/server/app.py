@@ -17,7 +17,7 @@ import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from domain import NAMES, Problem, accounts, actor_name, fresh, public_state, require, transition, text, iso, now, timestamp
-from zoom_api_client import zoom_from_env
+from daily_media import DailyMedia
 from media_runtime import provider_budget, provider_timeout
 from feedback import questionnaire, vtt_turns
 import browser_access
@@ -32,9 +32,7 @@ from hh_outreach import HHOutreach
 from hh_outreach_routes import HHOutreachRoutes
 from hh_outreach_worker import OutreachBrowserService
 from employer_routes import EmployerRoutes
-from selection import SelectionRoutes
 from meeting_lab import MeetingLab
-from public_profiles import PublicProfiles
 import employer_access
 import observability
 
@@ -45,15 +43,10 @@ TEAM = os.environ['HR_TEAM_KEY']
 ORIGIN = os.environ.get('HR_ORIGIN', 'https://hr-vision.158-160-179-53.sslip.io')
 ORIGINS = browser_access.allowed_origins(ORIGIN, [value.strip() for value in
     os.environ.get('HR_ADDITIONAL_ORIGINS', '').split(',') if value.strip()])
-MATERIALS_SERVICES_ENABLED = os.environ.get('HR_MATERIALS_SERVICES_ENABLED') == '1'
+DAILY = os.environ.get('DAILY_API_KEY', '')
 VIDEO_ENABLED = os.environ.get('HR_VIDEO_ENABLED') == '1'
 TRUST_CLIENT_IP = os.environ.get('HR_TRUST_CLIENT_IP') == '1'
-if MATERIALS_SERVICES_ENABLED:
-    from core_source_client import clients_from_env
-    CORE_CLIENT, MEDIA = clients_from_env()
-else:
-    from daily_media import DailyMedia
-    MEDIA = DailyMedia(os.environ.get('DAILY_API_KEY', ''), VIDEO_ENABLED)
+MEDIA = DailyMedia(DAILY, VIDEO_ENABLED)
 DSA_PANEL = DsaPanel()
 LOCK = threading.RLock()
 
@@ -95,10 +88,8 @@ with connect() as db:
     db.execute('CREATE TABLE IF NOT EXISTS intake_batches (id TEXT PRIMARY KEY, digest TEXT NOT NULL)')
 os.chmod(DB, 0o600)
 CANDIDATE_PORTAL = CandidatePortal(connect, LOCK, MEDIA, ORIGIN, candidate_notifications,
-                                  origins=ORIGINS, recruiter_origin=os.environ.get('HR_RECRUITER_ORIGIN', ORIGIN),
-                                  zoom=zoom_from_env())
+                                  origins=ORIGINS, recruiter_origin=os.environ.get('HR_RECRUITER_ORIGIN', ORIGIN))
 CANDIDATE_BOT = CandidateBot(CANDIDATE_PORTAL, candidate_notifications)
-PUBLIC_PROFILES = PublicProfiles(CANDIDATE_PORTAL)
 HH_ROUTES = HHRecruiterRoutes(connect, CANDIDATE_PORTAL)
 CANDIDATE_PORTAL.invitation_lookup = HH_ROUTES.existing_invitation
 BOOKING = CandidateBooking(CANDIDATE_PORTAL)
@@ -111,41 +102,14 @@ BOOKING.event_sink = OUTREACH.event_sink
 OUTREACH_ROUTES = HHOutreachRoutes(OUTREACH, worker_secret=os.environ.get('HR_HH_OUTREACH_WORKER_SECRET', ''))
 OUTREACH_BROWSER = OutreachBrowserService.from_env(OUTREACH, CANDIDATE_PORTAL)
 EMPLOYER_ROUTES = EmployerRoutes(connect, LOCK, CANDIDATE_PORTAL, MEDIA, ORIGIN)
-SELECTION_ROUTES = SelectionRoutes(connect, LOCK, CANDIDATE_PORTAL)
 MEETING_LAB = MeetingLab(connect, LOCK, MEDIA)
 MATERIALS_RUNTIME = None
-if MATERIALS_SERVICES_ENABLED:
-    from core_source_client import CoreMaterialsCatalog, ProviderMaterialsCatalog
-    from core_source_outbox import CompletionOutbox
-    CANDIDATE_PORTAL.materials_outbox = CompletionOutbox(connect, CORE_CLIENT, MEDIA,
-        connection_id=os.environ.get('HR_MATERIALS_CONNECTION_ID', 'daily'))
-    daily_catalog = CoreMaterialsCatalog(CORE_CLIENT, MEDIA, CANDIDATE_PORTAL.materials_outbox)
-    zoom_catalog = None
-    if os.environ.get('HR_MATERIALS_ENABLED') == '1':
-        from materials_runtime import build_runtime
-        from materials_service import MaterialsService
-        # Transitional Zoom collector only. Services mode fences legacy Daily
-        # work in runtime/worker; it never constructs a Daily provider client.
-        # Keep owned Zoom playback available even without provider credentials.
-        MATERIALS_RUNTIME = build_runtime(connect=connect, publish=lambda _job_id: None)
-        zoom_catalog = MaterialsService(MATERIALS_RUNTIME)
-    CANDIDATE_PORTAL.materials_catalog = ProviderMaterialsCatalog(daily_catalog, zoom_catalog)
-elif os.environ.get('HR_MATERIALS_ENABLED') == '1':
+if os.environ.get('HR_MATERIALS_ENABLED') == '1':
     from materials_runtime import build_runtime
     from materials_service import MaterialsService
     # HTTP requests commit intent locally; the separate scheduler dispatches it.
     MATERIALS_RUNTIME = build_runtime(connect=connect, media=MEDIA, publish=lambda _job_id: None)
     CANDIDATE_PORTAL.materials_catalog = MaterialsService(MATERIALS_RUNTIME)
-
-if os.environ.get('HR_CORE_CATALOG_ENABLED') == '1':
-    # Daily remains the explicit existing reserve. Zoom and imported owned files
-    # read Core; opening uploaded materials must never schedule provider capture.
-    from core_source_client import CoreClient, CoreMaterialsCatalog, ProviderMaterialsCatalog, ServiceHTTP
-    CORE_CLIENT = CoreClient(ServiceHTTP(os.environ['HR_MATERIALS_CORE_URL'],
-        os.environ['HR_MATERIALS_CORE_KEY'], timeout=10))
-    CANDIDATE_PORTAL.materials_catalog = ProviderMaterialsCatalog(
-        CANDIDATE_PORTAL.materials_catalog, CoreMaterialsCatalog(CORE_CLIENT, connect=connect),
-        CoreMaterialsCatalog(CORE_CLIENT, connect=connect, collect=False))
 
 
 def read(db, scope='sfera'):
@@ -237,7 +201,6 @@ def intake_add(db, body):
 
 
 def provider(path, body=None, method=None):
-    require(not MATERIALS_SERVICES_ENABLED, 'Raw provider access is unavailable.', 503)
     return MEDIA.request(path, body, method)
 
 
@@ -252,8 +215,6 @@ def get_meeting(state, actor, body):
 
 
 def load_transcripts(room):
-    if MATERIALS_SERVICES_ENABLED:
-        return MEDIA.materials(room).get('transcripts', [])
     result = []
     transcripts = provider('/transcript?' + urllib.parse.urlencode({'roomId': room['id'], 'limit': 100}))
     for transcript in transcripts.get('data', []):
@@ -390,7 +351,7 @@ class Handler(BaseHTTPRequestHandler):
                 state = transition(state, actor, body)
                 write(db, state)
             result = public_state(state, actor)
-            result['videoConfigured'] = MEDIA.configured
+            result['videoConfigured'] = bool(DAILY and VIDEO_ENABLED)
         return self.answer(200, result)
 
     def meeting_room(self, body):
@@ -409,10 +370,9 @@ class Handler(BaseHTTPRequestHandler):
                 require(body.get('consent') is True, 'Подтвердите запись разговора.', 400)
                 name = actor_name(state, actor)
             room = MEDIA.room(mid)
-            from core_source_client import meeting_token
-            token = meeting_token(MEDIA, room, {'room_name': room['name'],
+            token = provider('/meeting-tokens', {'properties': {'room_name': room['name'],
                 'user_name': name, 'user_id': actor, 'is_owner': actor == 'manager',
-                'exp': int(time.time()) + 3600, 'eject_at_token_exp': True})
+                'exp': int(time.time()) + 3600, 'eject_at_token_exp': True}})
             with LOCK, connect() as db:
                 db.execute('BEGIN IMMEDIATE')
                 actor = self.actor(db)
@@ -476,13 +436,6 @@ class Handler(BaseHTTPRequestHandler):
     @observability.http_request
     def do_GET(self):
         try:
-            if PUBLIC_PROFILES.handles(self.path):
-                result, headers = PUBLIC_PROFILES.handle('GET', self.path, self.headers, None,
-                    client_identity(self.client_address[0], self.headers))
-                return self.answer(200, result, headers)
-            if SELECTION_ROUTES.handles(self.path):
-                result, headers = SELECTION_ROUTES.handle('GET', self.path, self.headers, None, self.actor)
-                return self.answer(200, result, headers)
             if MEETING_LAB.handles(self.path):
                 result, headers = MEETING_LAB.handle('GET', self.path, self.headers)
                 return self.answer(200, result, headers)
@@ -508,7 +461,7 @@ class Handler(BaseHTTPRequestHandler):
                     client_identity(self.client_address[0], self.headers), self.actor, team_grant=self.browser_access())
                 return self.answer(200, result, headers)
             if self.path == '/api/hr/health':
-                return self.answer(200, {'ok': True, 'videoConfigured': MEDIA.configured})
+                return self.answer(200, {'ok': True, 'videoConfigured': bool(DAILY and VIDEO_ENABLED)})
             if self.path == '/api/hr/access':
                 return self.answer(200, {'ready': self.browser_access()})
             if self.path.startswith('/api/hr/intake/files/'):
@@ -543,7 +496,7 @@ class Handler(BaseHTTPRequestHandler):
             with LOCK, connect() as db:
                 actor = self.actor(db)
                 result = public_state(read(db, self.scope), actor)
-                result['videoConfigured'] = MEDIA.configured
+                result['videoConfigured'] = bool(DAILY and VIDEO_ENABLED)
             self.answer(200, result)
         except Problem as error:
             if error.status >= 500:
@@ -559,19 +512,9 @@ class Handler(BaseHTTPRequestHandler):
             # Session bearer auth is tab-scoped; explicit JSON + origin blocks browser CSRF.
             require(self.headers.get('Origin') is None or self.headers.get('Origin') in ORIGINS,
                     'Другой источник запроса.', 403)
-            path = urllib.parse.urlsplit(self.path).path
-            upload_part = re.fullmatch(r'/api/hr/employer/recordings/uploads/([a-f0-9]{32})/parts/([0-9]{1,2})', path)
-            if upload_part:
-                require(self.headers.get('Sec-Fetch-Site') not in ('cross-site', 'none'), 'Другой источник запроса.', 403)
-                require(self.headers.get('Content-Type') == 'application/octet-stream' and
-                        not self.headers.get('Transfer-Encoding'), 'Нужен файл с известным размером.', 415)
-                size = int(self.headers.get('Content-Length', '0'))
-                require(0 < size <= 1024**3, 'Файл должен быть не больше 1 ГБ.', 413)
-                self.connection.settimeout(300)
-                result = EMPLOYER_ROUTES.recording_uploads.stream_part(self.headers, upload_part[1], int(upload_part[2]), self.rfile, size)
-                return self.answer(200, result)
             require(self.headers.get('Content-Type', '').startswith('application/json'), 'Нужен JSON.', 415)
-            if EMPLOYER_ROUTES.handles(path) or MEETING_LAB.handles(path) or SELECTION_ROUTES.handles(path):
+            path = urllib.parse.urlsplit(self.path).path
+            if EMPLOYER_ROUTES.handles(path) or MEETING_LAB.handles(path):
                 require(self.headers.get('Sec-Fetch-Site') not in ('cross-site', 'none') or
                         self.headers.get('Sec-Fetch-Site') == 'none' and self.headers.get('Origin') in ORIGINS,
                         'Другой источник запроса.', 403)
@@ -595,16 +538,12 @@ class Handler(BaseHTTPRequestHandler):
                 # Authenticate before reading a potentially large private file.
                 with connect() as db:
                     CANDIDATE_PORTAL.session_candidate(db, self.headers)
-            if SELECTION_ROUTES.handles(path):
-                with connect() as db:
-                    require(self.actor(db) == 'manager', 'Доступ только для команды HR Vision.', 403)
             outreach_discovery = bool(re.fullmatch(r'/api/hr/outreach/campaigns/[A-Za-z0-9_-]+/discover', path))
             if outreach_discovery:
                 OUTREACH_ROUTES.authorize(self.actor)
             limit = (256 * 1024 if path == '/api/hr/materials/webhooks/daily' else
                      12 * 1024 * 1024 if path in ('/api/hr/intake', '/api/hr/employer/intake') else
                      7 * 1024 * 1024 if path in ('/api/hr/candidate/resume', '/api/hr/recruiter/candidates', '/api/hr/employer/vacancies/import') else
-                     3 * 1024 * 1024 if path in ('/api/hr/selection/results', '/api/hr/selection/requirements', '/api/hr/selection/matches') else
                      256 * 1024 if coach_notes else
                      256 * 1024 if outreach_discovery else
                      128 * 1024 if path in ('/api/hr/employer/vacancies', '/api/hr/employer/vacancies/update') or MEETING_LAB.handles(path) else 32768)
@@ -612,21 +551,11 @@ class Handler(BaseHTTPRequestHandler):
             raw_body = self.rfile.read(size)
             require(len(raw_body) == size, 'Неполный запрос.', 400)
             if path == '/api/hr/materials/webhooks/daily':
-                if MATERIALS_SERVICES_ENABLED:
-                    result = MEDIA.forward_webhook(raw_body, self.headers)
-                else:
-                    require(MATERIALS_RUNTIME is not None, 'Каталог материалов ещё не подключён.', 503)
-                    result = MATERIALS_RUNTIME.handle_event('daily', self.headers, raw_body)
+                require(MATERIALS_RUNTIME is not None, 'Каталог материалов ещё не подключён.', 503)
+                result = MATERIALS_RUNTIME.handle_event('daily', self.headers, raw_body)
                 return self.answer(200, result)
             body = json.loads(raw_body)
             require(isinstance(body, dict), 'Некорректный запрос.', 400)
-            if PUBLIC_PROFILES.handles(self.path):
-                result, headers = PUBLIC_PROFILES.handle('POST', self.path, self.headers, body,
-                    client_identity(self.client_address[0], self.headers))
-                return self.answer(200, result, headers)
-            if SELECTION_ROUTES.handles(self.path):
-                result, headers = SELECTION_ROUTES.handle('POST', self.path, self.headers, body, self.actor)
-                return self.answer(200, result, headers)
             if MEETING_LAB.handles(self.path):
                 result, headers = MEETING_LAB.handle('POST', self.path, self.headers, body)
                 return self.answer(200, result, headers)
@@ -715,7 +644,7 @@ class Handler(BaseHTTPRequestHandler):
                         state = transition(state, actor, body)
                         write(db, state)
                         response = public_state(state, actor)
-                        response['videoConfigured'] = MEDIA.configured
+                        response['videoConfigured'] = bool(DAILY and VIDEO_ENABLED)
                     else:
                         raise Problem('Не найдено.', 404)
             self.answer(200, response, response_headers)
@@ -734,46 +663,9 @@ if __name__ == '__main__':
     observability.install_thread_hook()
     import call_cleanup
     call_cleanup.start_worker(CANDIDATE_PORTAL)
-    import assessment_jobs
-    assessment_jobs.start_worker(CANDIDATE_PORTAL)
-    import assessment_core_lifecycle
-    import selection_materials_lifecycle
-
-    def authorize_assessment_candidate(candidate_id):
-        # Background reconciliation has no browser session. Its configured
-        # allowlist/creation cursor scopes work; ownership is the HR backend's
-        # canonical candidate directory, never an arbitrary caller-supplied ID.
-        with connect() as db:
-            require(db.execute('SELECT 1 FROM cp_candidates WHERE id=?',
-                               (candidate_id,)).fetchone(), 'Кандидат не найден.', 404)
-
-    CANDIDATE_PORTAL.selection_materials_lifecycle = selection_materials_lifecycle.configured(
-        connect, LOCK, authorize_assessment_candidate)
-    CANDIDATE_PORTAL.assessment_lifecycle = assessment_core_lifecycle.start_background(
-        connect, LOCK, authorize_assessment_candidate)
-    import recommendations_bridge
-    CANDIDATE_PORTAL.recommendation_lifecycle = recommendations_bridge.start_background(
-        connect, LOCK, CANDIDATE_PORTAL)
-    import recommendation_lifecycle
-    CANDIDATE_PORTAL.recommendation_automation_lifecycle = recommendation_lifecycle.start_background(
-        connect, LOCK, CANDIDATE_PORTAL)
-    import employer_review
-    employer_review.start_worker(CANDIDATE_PORTAL)
     candidate_notifications.start_worker(connect, update_handler=CANDIDATE_BOT.handle_update,
         telegram_renderer=CANDIDATE_BOT.render_notification)
     HH_ROUTES.start_worker()
     OUTREACH_BROWSER.start_worker()
     CANDIDATE_ACCESS.start_worker()
-    server = ThreadingHTTPServer(('127.0.0.1', int(os.environ.get('HR_PORT', '8391'))), Handler)
-    try:
-        server.serve_forever()
-    finally:
-        server.server_close()
-        if CANDIDATE_PORTAL.recommendation_automation_lifecycle is not None:
-            CANDIDATE_PORTAL.recommendation_automation_lifecycle.stop()
-        if CANDIDATE_PORTAL.selection_materials_lifecycle is not None:
-            CANDIDATE_PORTAL.selection_materials_lifecycle.stop()
-        if CANDIDATE_PORTAL.assessment_lifecycle is not None:
-            CANDIDATE_PORTAL.assessment_lifecycle.stop()
-        if CANDIDATE_PORTAL.recommendation_lifecycle is not None:
-            CANDIDATE_PORTAL.recommendation_lifecycle.stop()
+    ThreadingHTTPServer(('127.0.0.1', int(os.environ.get('HR_PORT', '8391'))), Handler).serve_forever()

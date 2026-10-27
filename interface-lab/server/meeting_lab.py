@@ -347,10 +347,9 @@ class MeetingLab:
                 principal, session = self.identity(db, headers, sid)
                 require(session['status'] != 'completed', 'Эта встреча завершена.', 409)
             room = self.media.room(sid, recordable=True, screenshare=True)
-            from core_source_client import meeting_token
-            token = meeting_token(self.media, room, {'room_name': room['name'],
+            token = self.media.request('/meeting-tokens', {'properties': {'room_name': room['name'],
                 'user_name': principal['name'], 'user_id': principal['accountId'], 'is_owner': True,
-                'exp': int(time.time()) + 3600, 'eject_at_token_exp': True})
+                'exp': int(time.time()) + 3600, 'eject_at_token_exp': True}})
             require(isinstance(token, dict) and isinstance(token.get('token'), str) and token['token'],
                     'Не удалось получить доступ к звонку.', 502)
             with self.lock, self.connect() as db:

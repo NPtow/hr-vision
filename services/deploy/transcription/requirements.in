@@ -1,3 +1,0 @@
-# Preserve every reviewed ASR pin; source coordinator adds only its HTTP client.
--r ../../transcription/requirements.lock
-httpx==0.28.1

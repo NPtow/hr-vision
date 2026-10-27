@@ -21,38 +21,6 @@ provider has been selected or enabled.
 This change is prepared locally. It does not provision a broker, bucket, keys,
 webhook subscription, production Python, or enable a production feature.
 
-## Zoom recordings
-
-The parallel Zoom path uses the same catalog, worker and private storage.
-Zoom sources always use `owned` storage, including when the global Daily policy
-is `remote`; an existing Zoom remote source is upgraded with generation fencing.
-Daily's default and existing sources retain their policy. Recording discovery is
-bound to the saved Zoom connection, meeting number and exact pinned session UUID.
-Authenticated download headers are private worker transport data, never playback
-URLs. A ready video requires a verified owned file; transcript readiness is separate.
-
-New Zoom rooms use native automatic cloud recording after each participant's
-explicit consent before credential issuance. The call interface and controls are
-Zoom's; the shared material worker imports provider files independently of call
-transport, notes and coaching. `HR_ZOOM_DEFAULT_HOST_ID` explicitly supplies a licensed
-host for organizers without a more specific actor mapping. Account entitlements
-still govern Zoom capacity. See [ZOOM_PROVIDER.md](ZOOM_PROVIDER.md) for the switch,
-native completion reconciliation, credentials and deployment acceptance.
-
-Optional cleanup requires `HR_ZOOM_RECORDING_RETENTION_ENABLED=1`. It keeps a
-30-day buffer after both recording end and our verified copy, then moves only
-individually verified files to Zoom's trash. Current checksum/size, storage
-namespace, exact session/account, completed owner, source generation and inventory
-must still match. Uncopied or uncertain files remain; no whole-meeting, permanent
-or local-object deletion occurs. The account must allow recovery from trash and
-have provider automatic deletion disabled. Missing permissions/settings block
-cleanup, not meetings or copying; ambiguous mutations are not replayed.
-
-Cleanup needs `account:read:settings:admin` and
-`cloud_recording:delete:recording_file:admin`. Both were absent in the fresh token
-check during 2026-10-25 deployment preparation, when production Zoom credentials
-were still uninstalled. Cleanup is prepared but is not confirmed active.
-
 ## Dependencies and isolated Python
 
 Use the isolated **CPython 3.12** runtime for both the materials worker and the
@@ -91,6 +59,8 @@ uv pip compile --python-version 3.12 --python-platform x86_64-unknown-linux-gnu 
 
 On 2026-10-25 requests 2.34.2, boto3 1.43.118, celery 5.6.3, and pysubs2 1.9.0
 were actually installed and imported in isolated CPython 3.12.13 on macOS ARM64.
+After extraction, `pysubs2` belongs to `services/transcription`; collector tests
+install `requirements-materials-tests.lock`, while its production runtime does not.
 The same lock installed successfully and `uv pip check` passed. OSV's batch API
 returned HTTP 200 with no known advisories for all 27 exact versions. `pip-audit`
 was not available; an advisory scan does not establish absence of vulnerabilities.
@@ -217,9 +187,13 @@ is suspended or a lease is lost, publication remains blocked even if bytes reach
 storage. There is no automatic object erasure or garbage collector: preserve these
 objects and review pending intents/orphans before any separately authorized cleanup.
 
-Transcript import preserves the raw file and a parsed revision. `pysubs2` supports
-SRT and basic WebVTT; styling, speaker identifiers, overlap semantics and exact
-round trips are not guaranteed. Preserve raw VTT when interpreting speaker data.
+Transcript import preserves the raw file and a parsed revision. Normalization
+now calls the standalone transcription API via `HR_TRANSCRIPTION_URL` and
+`HR_TRANSCRIPTION_TOKEN`; launch and verify that service before switching the
+collector. A service outage is retryable and does not discard the owned raw file.
+The `pysubs2` parser lives in that service; styling, speaker identifiers, overlap
+semantics and exact round trips are not guaranteed. Preserve raw VTT when
+interpreting speaker data. See [deployment instructions](../../services/transcription/DEPLOYMENT.md).
 No ASR provider or automatic retranscription is enabled by this implementation;
 missing provider transcription remains an explicit missing/pending/error state.
 Do not send recordings or transcripts to a new external ASR/LLM service to fill it.

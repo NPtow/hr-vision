@@ -1,15 +1,12 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { AlignLeft, ArrowUp, Captions, CaptionsOff, ChartNoAxesCombined, Check, ChevronDown, ChevronLeft, ChevronUp, Link as LinkIcon, Maximize2, MessageSquare, Minimize2, PanelRightClose, PanelRightOpen, Pause, Play, Redo2, Search, SmilePlus, Sparkles, Tv, Undo2, Volume2, VolumeX } from 'lucide-react';
+import { AlignLeft, ArrowUp, Captions, CaptionsOff, Check, ChevronDown, ChevronUp, Link as LinkIcon, Maximize2, MessageSquare, Minimize2, PanelRightClose, PanelRightOpen, Pause, Play, Redo2, Search, SmilePlus, Sparkles, Tv, Undo2, Volume2, VolumeX } from 'lucide-react';
 import { Tooltip } from 'radix-ui';
 import { useInterviewAssistant } from './useInterviewAssistant';
 import { InterviewChatAnswer } from './InterviewChatAnswer';
 import { UnifiedInterviewTranscript } from './UnifiedInterviewTranscript';
 import { parseMeetingTranscript } from '../connected-journey/transcript';
 import type { RecordingReviewProps } from './InterviewReview';
-import { interviewTranscriptSections, interviewTime as time, interviewTimeline, interviewSearchGroups } from './candidate-player-model';
-import { OrbitGraph } from '../interview-assessment/OrbitGraph';
-import { FragmentQuestion } from '../interview-assessment/FragmentQuestion';
-import { useInterviewAssessment } from '../interview-assessment/useInterviewAssessment';
+import { interviewTranscriptSections, interviewTime as time, interviewTimeline } from './candidate-player-model';
 import './candidate-interview-player.css';
 
 type Tab = 'transcript' | 'assistant' | 'comments';
@@ -26,20 +23,10 @@ function IconButton({ label, children, onClick, className = '', pressed, expande
 
 /** Candidate materials are supplied by the authorised caller. No fixtures or local comment store. */
 export function CandidateInterviewPlayer({ sourceId, name, header, media, chapters, fullChapters, transcriptText = '', emptyMessage,
-  initialEvidenceIndex, renderTimeComment, comments = [], canComment = false, transcriptSeekable = true, assistant, assessment, assessmentStatus, hideFeedbackQuestions = false, recordingId, onEvidenceNavigate, evidenceRequest }: RecordingReviewProps) {
+  initialEvidenceIndex, renderTimeComment, comments = [], canComment = false, transcriptSeekable = true, assistant }: RecordingReviewProps) {
   const id = useId();
-  const hasAssessmentTab = !!assessment || !!assessmentStatus;
   const root = useRef<HTMLDivElement>(null);
   const video = useRef<HTMLVideoElement>(null);
-  const currentMedia = useRef(media); currentMedia.current = media;
-  const bindVideo = useCallback((node: HTMLVideoElement | null) => {
-    const previous = video.current;
-    if (previous && previous !== node) { previous.pause(); previous.removeAttribute('src'); previous.load(); }
-    video.current = node;
-    // StrictMode may detach and reattach this same DOM node. Reinstall its source.
-    const src = currentMedia.current?.src;
-    if (node && src && node.getAttribute('src') !== src) node.setAttribute('src', src);
-  }, []);
   const side = useRef<HTMLElement>(null);
   const transcriptList = useRef<HTMLDivElement>(null);
   const lastFocus = useRef<HTMLElement | null>(null);
@@ -50,14 +37,10 @@ export function CandidateInterviewPlayer({ sourceId, name, header, media, chapte
   const nativeFull = useRef(false);
   const [full, setFull] = useState(false);
   const [theatre, setTheatre] = useState(false);
-  const [tab, setTab] = useState<Tab>(hasAssessmentTab ? 'comments' : 'transcript');
-  const explicitTabSelection = useRef(false);
-  const [commentHistory, setCommentHistory] = useState(false);
+  const [tab, setTab] = useState<Tab>('transcript');
   const [playing, setPlaying] = useState(false);
   const [current, setCurrent] = useState(0);
   const [duration, setDuration] = useState(0);
-  const assessmentFlow = useInterviewAssessment(assessment, current, playing, recordingId);
-  useEffect(() => { if (hasAssessmentTab && !explicitTabSelection.current) setTab('comments'); }, [hasAssessmentTab, assessment?.revisionId]);
   const [volume, setVolume] = useState(0.8);
   const [muted, setMuted] = useState(false);
   const [captions, setCaptions] = useState(false);
@@ -86,16 +69,16 @@ export function CandidateInterviewPlayer({ sourceId, name, header, media, chapte
   const activeIndex = paragraphs.reduce((found, row, index) => row.start <= current ? index : found, 0);
   const active = transcriptSeekable ? paragraphs[activeIndex] : undefined;
   const activeChapter = topics.reduce((found, row, index) => row.seconds !== null && row.seconds <= current ? index : found, -1);
-  const searchGroups = useMemo(() => interviewSearchGroups(paragraphs, assist.search?.matches || []), [paragraphs, assist.search]);
-  const matchedRows = useMemo(() => searchGroups.flat(), [searchGroups]);
-  const currentSearchRows = searchGroups[hit] || [];
+  const matchedRows = useMemo(() => paragraphs.flatMap((row, index) => assist.search?.matches.some(match =>
+    (row.end === row.start ? row.start * 1000 >= match.startMs : row.end * 1000 > match.startMs)
+    && (match.endMs === match.startMs ? row.start * 1000 <= match.endMs : row.start * 1000 < match.endMs)) ? [index] : []), [paragraphs, assist.search]);
   useEffect(() => { setHit(0); }, [assist.search]);
   useEffect(() => {
     if (!assist.search || tab !== 'transcript') return;
     const list = transcriptList.current;
-    const row = list?.querySelector<HTMLElement>(`[data-line-index="${searchGroups[hit]?.[0]}"]`);
+    const row = list?.querySelector<HTMLElement>(`[data-line-index="${matchedRows[hit]}"]`);
     if (list && row) list.scrollTo({ top: Math.max(0, row.getBoundingClientRect().top - list.getBoundingClientRect().top + list.scrollTop - list.clientHeight * .32), behavior: 'instant' });
-  }, [assist.search, hit, tab, searchGroups]);
+  }, [assist.search, hit, tab, matchedRows]);
   async function submitSearch() { setFollow(false); await assist.submit('search', query); }
   async function submitChat(value = chatQuery) {
     if (assist.busy || !value.trim()) return;
@@ -134,7 +117,7 @@ export function CandidateInterviewPlayer({ sourceId, name, header, media, chapte
   useEffect(() => {
     const pauseOther = (event: Event) => { if ((event as CustomEvent).detail !== video.current) video.current?.pause(); };
     window.addEventListener('hr-vision-interview-play', pauseOther);
-    return () => window.removeEventListener('hr-vision-interview-play', pauseOther);
+    return () => { video.current?.pause(); window.removeEventListener('hr-vision-interview-play', pauseOther); };
   }, []);
   useEffect(() => () => {
     clearTimeout(hideTimer.current); clearTimeout(toastTimer.current);
@@ -145,19 +128,12 @@ export function CandidateInterviewPlayer({ sourceId, name, header, media, chapte
     hideTimer.current = setTimeout(() => setControls(false), 2200);
   }
   const seek = useCallback((value: number) => {
-    if (!Number.isFinite(value) || value < 0) return false;
+    if (!Number.isFinite(value) || value < 0) return;
     const player = video.current;
-    if (!player || player.readyState < 1) { pendingSeek.current = value; assessmentFlow.seek(value); return true; }
-    if (!Number.isFinite(player.duration) || value >= player.duration) { notify('Таймкод вне этой записи'); return false; }
-    player.currentTime = value; setCurrent(value); setFollow(true); pendingSeek.current = null; assessmentFlow.seek(value);
-    return true;
-  }, [notify, assessmentFlow.seek]);
-  useEffect(() => {
-    if (!evidenceRequest || evidenceRequest.recordingId !== recordingId) return;
-    if (seek(evidenceRequest.seconds) && evidenceRequest.evidence && evidenceRequest.criterionId) {
-      assessmentFlow.source(evidenceRequest.evidence, evidenceRequest.criterionId);
-    }
-  }, [evidenceRequest?.requestId, recordingId]);
+    if (!player || player.readyState < 1) { pendingSeek.current = value; return; }
+    if (!Number.isFinite(player.duration) || value >= player.duration) { notify('Таймкод вне этой записи'); return; }
+    player.currentTime = value; setCurrent(value); setFollow(true); pendingSeek.current = null;
+  }, [notify]);
   const togglePlay = useCallback(() => {
     const player = video.current;
     if (!player) return;
@@ -184,8 +160,7 @@ export function CandidateInterviewPlayer({ sourceId, name, header, media, chapte
     return () => document.removeEventListener('fullscreenchange', changed);
   }, []);
   useEffect(() => {
-    // A containing dialog owns the page scroll lock, including its cleanup.
-    if (!full || root.current?.closest('[role="dialog"]')) return;
+    if (!full) return;
     const old = document.body.style.overflow; document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = old; };
   }, [full]);
@@ -198,7 +173,7 @@ export function CandidateInterviewPlayer({ sourceId, name, header, media, chapte
         if (menu) setMenu(null); else if (full) exitFull();
         return;
       }
-      if (target.closest('input, textarea, select, button, [contenteditable], [role="tab"]') || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (target.closest('input, textarea, button, [contenteditable], [role="tab"]') || event.ctrlKey || event.metaKey || event.altKey) return;
       if (event.code === 'Space') { event.preventDefault(); togglePlay(); }
       if (event.key === 'ArrowRight') { event.preventDefault(); seek(Math.min(duration - .1, current + 5)); }
       if (event.key === 'ArrowLeft') { event.preventDefault(); seek(Math.max(0, current - 5)); }
@@ -214,10 +189,8 @@ export function CandidateInterviewPlayer({ sourceId, name, header, media, chapte
   }, [menu]);
   function openComment(at = current) {
     if (!canComment || !renderTimeComment) return;
-    explicitTabSelection.current = true;
-    video.current?.pause(); setTheatre(false); setTab('comments'); setCommentHistory(true); setCommentTime(at); setCommentRequest(value => value + 1); setMenu(null);
+    video.current?.pause(); setTheatre(false); setTab('comments'); setCommentTime(at); setCommentRequest(value => value + 1); setMenu(null);
   }
-  function openCommentHistory() { explicitTabSelection.current = true; setTheatre(false); setTab('comments'); setCommentHistory(true); setMenu(null); }
   function react(value: string) {
     const item = { id: crypto.randomUUID(), emoji: value };
     setFloating(items => [...items, item]); setMenu(null);
@@ -230,21 +203,20 @@ export function CandidateInterviewPlayer({ sourceId, name, header, media, chapte
     try { await navigator.clipboard.writeText(url.toString()); notify(`Ссылка на ${time(at)} скопирована`); }
     catch { notify('Не удалось скопировать ссылку'); }
   }
-  function chooseTab(next: Tab) { explicitTabSelection.current = true; setTab(next); setCommentHistory(false); setMenu(null); }
+  function chooseTab(next: Tab) { setTab(next); setMenu(null); }
   const reactions = (inPlayer = false) => <div className={`iv-reactions${inPlayer ? ' iv-reactions-inline' : ''}`}>
     {emoji.map((value, i) => <button type="button" className={`iv-emoji iv-emoji-${i}`} key={value} aria-label={`Реакция ${value}`} onClick={() => react(value)}>{value}</button>)}
     <div className="iv-menu-anchor" data-iv-menu><IconButton label="Другие реакции" expanded={menu === 'emoji'} onClick={() => setMenu(menu === 'emoji' ? null : 'emoji')}><SmilePlus/></IconButton>
       {menu === 'emoji' && <div className="iv-popover iv-emoji-menu" role="menu" aria-label="Реакции">{moreEmoji.map(value => <button type="button" role="menuitem" key={value} onClick={() => react(value)}>{value}</button>)}</div>}
     </div>
     {canComment && <><span className="iv-reaction-divider"/><button type="button" className="iv-write" aria-label="Написать комментарий" onClick={() => openComment()}><MessageSquare/>{inPlayer && <span>Написать</span>}</button></>}
-    {!canComment && assessment && comments.length > 0 && <button type="button" className="iv-write" aria-label="Комментарии к видео" onClick={openCommentHistory}><MessageSquare/></button>}
   </div>;
 
-  return <Tooltip.Provider delayDuration={650} skipDelayDuration={250}><div ref={root} className={`iv-root${full ? ' iv-full' : ''}${theatre ? ' iv-theatre' : ''}${assessment ? ' iv-has-assessment' : ''}${!hideFeedbackQuestions && assessmentFlow.visible ? ' iv-has-question' : ''}`} data-source-id={sourceId}>
+  return <Tooltip.Provider delayDuration={650} skipDelayDuration={250}><div ref={root} className={`iv-root${full ? ' iv-full' : ''}${theatre ? ' iv-theatre' : ''}`} data-source-id={sourceId}>
     <div className="iv-workspace">
       <section className={`iv-player${!playing || controls || menu ? ' iv-controls-visible' : ''}`} tabIndex={0} aria-label={`Интервью — ${name}`}
         onPointerMove={revealControls} onPointerLeave={() => { if (playing) setControls(false); }}>
-        {media ? <video ref={bindVideo} src={media.src} preload="metadata" playsInline aria-label={`Видеозапись: ${name}`}
+        {media ? <video ref={video} src={media.src} preload="metadata" playsInline aria-label={`Видеозапись: ${name}`}
           onClick={togglePlay} onDoubleClick={toggleFull} onLoadedMetadata={event => {
             const player = event.currentTarget;
             setDuration(Number.isFinite(player.duration) ? player.duration : 0); setResolution(`${player.videoWidth} × ${player.videoHeight}`);
@@ -255,7 +227,7 @@ export function CandidateInterviewPlayer({ sourceId, name, header, media, chapte
             if (requested !== null && requested >= 0 && requested < player.duration) seek(requested);
           }} onTimeUpdate={event => setCurrent(event.currentTarget.currentTime)}
           onPlay={() => { setPlaying(true); revealControls(); window.dispatchEvent(new CustomEvent('hr-vision-interview-play', { detail: video.current })); }}
-          onPause={() => setPlaying(false)} onEnded={event => { setPlaying(false); assessmentFlow.end(event.currentTarget.currentTime); }} onError={() => setError('Не удалось открыть запись')}/>
+          onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} onError={() => setError('Не удалось открыть запись')}/>
           : <div className="iv-media-empty">{emptyMessage || 'Записи пока нет'}</div>}
         {header ? <div className="iv-identity-header">{header}</div>
           : <div className={`iv-video-title${captions ? ' iv-title-hidden' : ''}`} aria-hidden="true"><span className="iv-video-name">{name}</span></div>}
@@ -293,7 +265,7 @@ export function CandidateInterviewPlayer({ sourceId, name, header, media, chapte
 
       <aside ref={side} className="iv-sidebar" aria-label="Материалы интервью" hidden={theatre}>
         <div className="iv-side-heading"><div role="tablist" aria-label="Материалы интервью" className="iv-tabs">
-          {([{id:'transcript', label:'Расшифровка', icon:AlignLeft}, {id:'assistant', label:'Спросить ИИ', icon:Sparkles}, {id:'comments', label:hasAssessmentTab ? 'Оценка навыков' : 'Комментарии', icon:hasAssessmentTab ? ChartNoAxesCombined : MessageSquare}] as const).map((item, index, items) => <Tooltip.Root key={item.id}>
+          {([{id:'transcript', label:'Расшифровка', icon:AlignLeft}, {id:'assistant', label:'Спросить ИИ', icon:Sparkles}, {id:'comments', label:'Комментарии', icon:MessageSquare}] as const).map((item, index, items) => <Tooltip.Root key={item.id}>
             <Tooltip.Trigger asChild><button type="button" id={`${id}-${item.id}-tab`} role="tab" aria-controls={`${id}-${item.id}`} aria-selected={tab === item.id} tabIndex={tab === item.id ? 0 : -1} aria-label={item.label} onClick={() => chooseTab(item.id)} onKeyDown={event => {
               if (event.key === 'ArrowRight' || event.key === 'ArrowLeft' || event.key === 'Home' || event.key === 'End') {
                 event.preventDefault(); const next = items[event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : items.length - 1)) % items.length];
@@ -306,7 +278,7 @@ export function CandidateInterviewPlayer({ sourceId, name, header, media, chapte
 
         {tab === 'transcript' && <div className="iv-panel iv-transcript-panel" id={`${id}-transcript`} role="tabpanel" aria-labelledby={`${id}-transcript-tab`}>
           <UnifiedInterviewTranscript list={transcriptList} sections={sections} seekable={transcriptSeekable} seek={seek} pauseFollow={() => setFollow(false)}
-            renderRow={(row, index) => <div key={`${row.start}:${index}`} className="iv-line" data-line-index={index} data-match={matchedRows.includes(index)} data-search-current={currentSearchRows.includes(index)} data-active={transcriptSeekable && index === activeIndex}>
+            renderRow={(row, index) => <div key={`${row.start}:${index}`} className="iv-line" data-line-index={index} data-match={matchedRows.includes(index)} data-search-current={matchedRows[hit] === index} data-active={transcriptSeekable && index === activeIndex}>
               <button type="button" className="iv-line-content" disabled={!transcriptSeekable} onClick={() => seek(row.start)} aria-label={`${time(row.start)} ${row.text}`} aria-current={transcriptSeekable && index === activeIndex ? 'true' : undefined}><time>{time(row.start)}</time><span>{row.text}</span></button>
               {transcriptSeekable && <div className="iv-line-tools"><IconButton label={`Ссылка на ${time(row.start)}`} onClick={() => { void copyMoment(row.start); }}><LinkIcon/></IconButton>{canComment && <IconButton label={`Комментарий к ${time(row.start)}`} onClick={() => openComment(row.start)}><MessageSquare/></IconButton>}</div>}
             </div>}
@@ -315,7 +287,6 @@ export function CandidateInterviewPlayer({ sourceId, name, header, media, chapte
         {tab === 'transcript' && !assist.search && !follow && transcriptSeekable && <button type="button" className="iv-follow" onClick={() => { setFollow(true); followMoment(true); }}><AlignLeft size={14}/>К текущему моменту<ChevronDown size={13}/></button>}
         {tab === 'assistant' && <div className="iv-panel iv-chat" id={`${id}-assistant`} role="tabpanel" aria-labelledby={`${id}-assistant-tab`}>
           <div ref={chatList} className="iv-chat-scroll" role="log" aria-label="Диалог об интервью" aria-live="polite">
-            {assist.historyError && <div className="iv-assistant-error" role="alert"><p>{assist.historyError}</p><button type="button" disabled={!!assist.busy} onClick={assist.retryHistory}>Повторить загрузку</button></div>}
             {!assist.messages.length && <div className="iv-chat-suggestions">{['Кратко расскажи об опыте', 'Как работает с возражениями?', 'Что стоит уточнить на встрече?'].map(value => <button type="button" key={value} disabled={!!assist.busy || !assistant} onClick={() => { void submitChat(value); }}>{value}</button>)}</div>}
             {assist.messages.map(message => <div className="iv-chat-turn" key={message.id}>
               <p className="iv-chat-question">{message.query}</p>
@@ -325,24 +296,7 @@ export function CandidateInterviewPlayer({ sourceId, name, header, media, chapte
             </div>)}
           </div>
         </div>}
-        {hasAssessmentTab && <div hidden={tab !== 'comments' || commentHistory} className="iv-panel iv-assessment-panel" id={commentHistory ? undefined : `${id}-comments`} role="tabpanel" aria-labelledby={`${id}-comments-tab`}>
-          {assessment ? <OrbitGraph key={assessment.revisionId} criteria={assessment.criteria} selectedId={assessmentFlow.selectedId} onSelect={assessmentFlow.selectCriterion}
-            onEvidence={(evidence, criterionId) => {
-              if (onEvidenceNavigate) { if (!onEvidenceNavigate(evidence, criterionId)) notify('Источник фрагмента изменился. Обновите материалы.'); return; }
-              if (evidence.recordingId && evidence.recordingId !== recordingId) { notify('Фрагмент относится к другой записи.'); return; }
-              if (evidence.seconds !== null && seek(evidence.seconds)) assessmentFlow.source(evidence, criterionId);
-            }}/>
-            : <div className="ia-orbit ia-orbit--empty"><p role="status">{assessmentStatus === 'loading' ? 'Готовим разбор…' : 'Разбор интервью ещё не подготовлен.'}</p></div>}
-          {assessment?.vacancyMatch && <details className="iv-vacancy-match">
-            <summary>Соответствие вакансии</summary>
-            <ul>{assessment.vacancyMatch.criteria.map(item => <li key={item.id}>
-              <span>{item.label}</span><span>{item.status === 'evidenced' ? 'Есть подтверждение в интервью' : 'Нужно уточнить'}</span>
-            </li>)}</ul>
-            {!assessment.vacancyMatch.criteria.length && <p>В вакансии нет явных требований к оценённым навыкам.</p>}
-          </details>}
-        </div>}
-        {<div hidden={tab !== 'comments' || (hasAssessmentTab && !commentHistory)} className="iv-panel iv-comments" id={hasAssessmentTab && !commentHistory ? undefined : `${id}-comments`} role="tabpanel" aria-labelledby={`${id}-comments-tab`}>
-          {assessment && <button type="button" className="iv-comments-return" onClick={() => setCommentHistory(false)}><ChevronLeft size={14}/>К оценке навыков</button>}
+        {<div hidden={tab !== 'comments'} className="iv-panel iv-comments" id={`${id}-comments`} role="tabpanel" aria-labelledby={`${id}-comments-tab`}>
           <div className="iv-comment-list">
             {!comments.length && commentTime === null && <div className="iv-no-comments"><MessageSquare size={30}/><span>Нет комментариев</span></div>}
             {!comments.length && commentTime !== null && <div className="iv-comment-context"><time>{time(commentTime)}</time>{transcriptSeekable && <blockquote>{paragraphs.filter(row => row.start <= commentTime).at(-1)?.text}</blockquote>}</div>}
@@ -354,8 +308,8 @@ export function CandidateInterviewPlayer({ sourceId, name, header, media, chapte
         {(tab === 'transcript' || tab === 'assistant') && <div className="iv-side-input">
           {tab === 'transcript' && <>
             {assist.searchError && <p className="iv-assistant-error" role="alert">{assist.searchError}</p>}
-            {assist.search && <div className="iv-search-state" role="status"><span>{searchGroups.length ? `${hit + 1} / ${searchGroups.length}` : 'Подходящих фрагментов не найдено'}</span>
-              {!!searchGroups.length && <><IconButton label="Предыдущее совпадение" onClick={() => setHit(value => (value + searchGroups.length - 1) % searchGroups.length)}><ChevronUp/></IconButton><IconButton label="Следующее совпадение" onClick={() => setHit(value => (value + 1) % searchGroups.length)}><ChevronDown/></IconButton></>}
+            {assist.search && <div className="iv-search-state" role="status"><span>{matchedRows.length ? `${hit + 1} / ${matchedRows.length}` : 'Подходящих фрагментов не найдено'}</span>
+              {!!matchedRows.length && <><IconButton label="Предыдущее совпадение" onClick={() => setHit(value => (value + matchedRows.length - 1) % matchedRows.length)}><ChevronUp/></IconButton><IconButton label="Следующее совпадение" onClick={() => setHit(value => (value + 1) % matchedRows.length)}><ChevronDown/></IconButton></>}
               <button type="button" onClick={() => { assist.clearSearch(); setQuery(''); setFollow(true); }}>Сбросить</button>
             </div>}
           </>}
@@ -363,7 +317,7 @@ export function CandidateInterviewPlayer({ sourceId, name, header, media, chapte
             {tab === 'assistant' ? <Sparkles size={19}/> : <Search size={19}/>}
             <input aria-label={tab === 'assistant' ? 'Спросить ИИ об интервью' : 'Поиск по смыслу в расшифровке'} maxLength={tab === 'assistant' ? 2000 : 300}
               placeholder={tab === 'assistant' ? 'Спросите ИИ об интервью…' : 'Найти по смыслу в расшифровке…'}
-              title={tab === 'assistant' ? 'ИИ ответит по записи и покажет цитаты' : 'Найти до пяти подходящих отрезков интервью'}
+              title={tab === 'assistant' ? 'ИИ ответит по записи и покажет цитаты' : 'Jev выделит подходящие фрагменты расшифровки'}
               value={tab === 'assistant' ? chatQuery : query} onChange={event => tab === 'assistant' ? setChatQuery(event.target.value) : setQuery(event.target.value)}/>
             <button type="submit" aria-label={tab === 'assistant' ? 'Отправить вопрос ИИ' : 'Выделить фрагменты'} disabled={!!assist.busy || !assistant || (tab === 'assistant' ? chatQuery : query).trim().length < 2}>
               {(tab === 'assistant' && assist.busy === 'chat') || (tab === 'transcript' && assist.busy === 'search') ? <span className="iv-assistant-spinner"/> : <ArrowUp size={19}/>}
@@ -373,11 +327,7 @@ export function CandidateInterviewPlayer({ sourceId, name, header, media, chapte
           {!assistant && <span className="iv-assistant-unavailable">Помощник появится, когда будет готова расшифровка этой записи.</span>}
         </div>}
       </aside>
-      <div className="iv-below-player">{assessment && !hideFeedbackQuestions ? <FragmentQuestion key={assessment.revisionId} assessment={assessment} block={assessmentFlow.visible}
-        overlapping={assessmentFlow.overlapping} playing={playing} commentOpen={!!assessmentFlow.playback.commentLock}
-        onCommentOpen={assessmentFlow.openComment} onCommentClose={assessmentFlow.closeComment} onChoose={assessmentFlow.selectQuestion} fallback={reactions()}
-        legacyComment={(canComment || comments.length > 0) ? <button type="button" className="iv-write" aria-label="Комментарии к видео" title="Комментарии к видео" onClick={openCommentHistory}><MessageSquare size={16}/></button> : null}/>
-        : reactions()}</div>
+      <div className="iv-below-player">{reactions()}</div>
     </div>
     {toast && <div className="iv-toast" role="status"><Check size={15}/>{toast}</div>}
   </div></Tooltip.Provider>;

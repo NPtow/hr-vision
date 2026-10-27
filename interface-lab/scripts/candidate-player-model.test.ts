@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { interviewParagraphs, interviewTime, interviewTimeline, interviewTranscriptSections, interviewSearchGroups } from '../src/scenes/interview-review/candidate-player-model.ts';
+import { interviewParagraphs, interviewTime, interviewTimeline, interviewTranscriptSections } from '../src/scenes/interview-review/candidate-player-model.ts';
 import { parseMeetingTranscript } from '../src/scenes/connected-journey/transcript.ts';
 
 test('DSA speech keeps every source word and speaker while making readable paragraphs', () => {
@@ -61,13 +61,6 @@ test('source-derived transcript cues never become chapter headings, including vo
   assert.equal(result.sections.length,1);
   assert.equal(result.sections[0].chapters.length,0);
   assert.equal(result.paragraphs.length,2);
-  assert.deepEqual(interviewTimeline(cues, 10), [{ start: 0, end: 10 }]);
-});
-
-test('search navigation counts whole passages instead of each highlighted paragraph', () => {
-  const paragraphs = interviewParagraphs(parseMeetingTranscript('[00:01-00:05] Р: Вопрос.\n[00:05-00:10] К: Ответ.\n[00:10-00:15] Р: Уточнение.\n[02:00-02:04] К: Другой ответ.'));
-  assert.deepEqual(interviewSearchGroups(paragraphs, [{startMs:1000,endMs:15000},{startMs:120000,endMs:124000}]), [[0,1,2],[3]]);
-  assert.deepEqual(interviewSearchGroups(paragraphs, [{startMs:15000,endMs:20000}]), []);
 });
 
 test('unsorted and repeated boundaries share one heading location; untimed descriptions never acquire a video clock', () => {
