@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>МашаДаша · Zoom</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="zoom-poc" id="app">
+    <main class="call-stage" aria-label="Видеовстреча Zoom">
+      <header class="call-header">
+        <div class="meeting-heading"><span class="brand">МашаДаша</span><h1 id="meeting-title">Проверка Zoom</h1></div>
+        <button class="icon-button" id="toggle-panel" aria-label="Скрыть заметки и вопросы" aria-expanded="true" aria-controls="side-panel" title="Скрыть заметки и вопросы"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M15 4v16m-5-11-3 3 3 3"/></svg></button>
+      </header>
+      <section class="call-surface" id="call-surface" aria-label="Комната встречи">
+        <div class="connection-card" id="connection-card">
+          <div class="camera-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="12" height="14" rx="4"/><path d="m15 10 6-4v12l-6-4"/></svg></div>
+          <span class="eyebrow">Zoom Meeting SDK · пробное подключение</span>
+          <h2 id="connection-title">Подключение Zoom</h2>
+          <p id="connection-description" class="connection-description" role="status">Проверяем подключение аккаунта…</p>
+          <form id="join-form" class="join-form" hidden>
+            <label for="display-name">Ваше имя</label>
+            <input id="display-name" name="displayName" autocomplete="name" maxlength="80" placeholder="Имя участника" required>
+            <button id="primary-action" class="primary-button" type="submit">Создать встречу</button>
+          </form>
+          <button id="retry-config" class="quiet-button" hidden>Проверить подключение</button>
+          <details id="setup-details" class="setup-details" hidden><summary>Что нужно для подключения</summary><p>Данные аккаунта добавляются в локальную конфигурацию сервера.</p><ul id="missing-settings"></ul></details>
+          <p id="connection-error" class="error-message" role="alert" hidden></p>
+        </div>
+        <div id="sdk-container" class="sdk-container" hidden></div>
+      </section>
+      <footer class="call-footer">
+        <p id="call-status" role="status">Встреча ещё не создана</p>
+        <div class="meeting-actions"><button id="copy-invite" class="quiet-button" hidden>Скопировать приглашение</button><button id="return-to-join" class="quiet-button" hidden>Вернуться ко входу</button><button id="fullscreen" class="icon-button" aria-label="На весь экран" title="На весь экран"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg></button></div>
+      </footer>
+      <p class="footer-notice" id="action-notice" role="status" hidden></p>
+    </main>
+
+    <aside class="side-panel" id="side-panel" aria-label="Материалы встречи">
+      <header class="panel-header"><div class="panel-tabs" role="tablist" aria-label="Материалы"><button id="notes-tab" role="tab" aria-selected="true" aria-controls="notes-view" tabindex="0">Заметки</button><button id="questions-tab" role="tab" aria-selected="false" aria-controls="questions-view" tabindex="-1">Вопросы</button></div><button id="export-notes" class="text-button">Скачать</button></header>
+      <div class="notes-workspace" id="notes-workspace">
+        <section class="notes-view" id="notes-view" role="tabpanel" aria-labelledby="notes-tab"><h2>По ходу разговора</h2><p class="panel-description">Главное из ответов, детали и следующие шаги.</p><label class="visually-hidden" for="general-notes">Заметки к встрече</label><textarea id="general-notes" placeholder="Начните писать…" spellcheck="true"></textarea></section>
+        <section class="questions-view" id="questions-view" role="tabpanel" aria-labelledby="questions-tab" hidden><h2>План разговора</h2><p class="panel-description">Добавьте вопросы перед встречей или во время разговора.</p><div id="questions-list"></div><button id="add-question" class="add-question">+ Добавить вопрос</button></section>
+      </div>
+      <div class="notes-recovery" id="notes-recovery" hidden role="alert"><span class="recovery-symbol" aria-hidden="true">↻</span><h2>Панель недоступна</h2><p>Окно Zoom остаётся открытым. Ваш черновик остаётся в памяти страницы.</p><button id="restore-notes" class="accent-button">Восстановить панель</button><button id="export-recovery" class="text-button">Скачать черновик</button></div>
+      <footer class="panel-footer"><p id="draft-status" role="status">Заметки сохраняются только в этом браузере</p>
+        <details class="recordings" id="recordings-section" hidden><summary>Запись встречи</summary><p>Запускайте запись в Zoom с согласия участников.</p><button id="refresh-recordings" class="text-button">Проверить запись</button><p id="recordings-status" role="status">Статус записи ещё не проверен</p><ul id="recording-files"></ul></details>
+        <details class="proof-tools"><summary>Проверка независимости панели</summary><p>Тест временно отключает заметки. Комната Zoom остаётся открытой.</p><button id="fail-notes" class="text-button">Проверить сбой заметок</button></details>
+      </footer>
+    </aside>
+  </div>
+</body>
+</html>

@@ -1,0 +1,15 @@
+.git
+**/node_modules
+**/.venv
+**/venv
+**/.build
+**/__pycache__
+**/.pytest_cache
+**/dist
+**/storybook-static
+**/output
+**/.env
+**/.env.*
+**/*.sqlite*
+**/*.db
+**/*.log

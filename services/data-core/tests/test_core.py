@@ -678,7 +678,7 @@ def test_imports_work_with_only_explicit_pure_donors(tmp_path):
     vendor = tmp_path / "selected-pure-modules"
     vendor.mkdir()
     for name in ("materials_repository.py", "materials_storage.py", "domain.py", "feedback.py"):
-        shutil.copyfile(root / "interface-lab" / "server" / name, vendor / name)
+        shutil.copyfile(root / "services" / "recruiting-api" / name, vendor / name)
     code = """
 import sys
 from hr_materials_core.app import create_app

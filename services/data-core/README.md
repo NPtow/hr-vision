@@ -7,7 +7,7 @@ Collection adds no source database, queue, receipt pipeline, or ASR engine. The 
 does not execute media jobs or import the portal application.
 
 The installed artifact must contain the `hr_materials_core` package and pinned
-copies of `interface-lab/server/materials_repository.py`, `materials_storage.py`,
+copies of `services/recruiting-api/materials_repository.py`, `materials_storage.py`,
 `domain.py`, and `feedback.py`. These selected pure modules are dependencies of
 the artifact, not runtime imports from the mutable portal deployment directory.
 The legacy repository supplies schema/transaction primitives; receipt publication

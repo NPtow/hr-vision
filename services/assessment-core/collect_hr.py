@@ -81,7 +81,7 @@ def main(argv=None):
         from core_source_client import CoreClient, ServiceHTTP
         # New portal module is separate from the mutable ASR checkout; this CLI
         # resolves its sibling source in the current artifact/repository.
-        sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "interface-lab" / "server"))
+        sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "services" / "recruiting-api"))
         from assessment_corpus import CandidateCorpusCollector, SQLiteResumeReader
         core = CoreClient(ServiceHTTP(os.environ["HR_MATERIALS_CORE_URL"],
                                       os.environ["HR_MATERIALS_CORE_KEY"]))

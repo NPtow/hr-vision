@@ -22,5 +22,22 @@
 *.sqlite3-*
 **/storage-state*.json
 **/browser-state*.json
-/interface-lab/release.tgz
-/interface-lab/release-stage/
+/apps/web/release.tgz
+/apps/web/release-stage/
+# Local dependencies, generated artifacts and private operational state.
+**/node_modules
+**/.venv/
+**/venv/
+**/.build/
+**/.swiftpm/
+**/.pytest_cache/
+**/.local/
+**/output/
+**/test-results/
+**/playwright-report/
+**/storybook-*-static/
+**/storybook-service/
+*.sqlite3*
+*.db
+*.db-*
+/apps/native-signals/data/

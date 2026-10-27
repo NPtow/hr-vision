@@ -1,0 +1,1 @@
+{"extends":"../../tsconfig.json","include":["../../src/scenes/vacancy-studio","../../src/VacancyStudio.stories.tsx","../../src/vite-env.d.ts","./storybook"]}

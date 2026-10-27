@@ -1,0 +1,275 @@
+{
+  "source": "Standalone local Storybook lab, vacancy components, 2026-10-28",
+  "preservedFiles": [
+    {
+      "path": "src/scenes/vacancy-studio/TaskSkillCard.tsx",
+      "sha256": "41b335939003f203341802d4a22a04f15f880edf8b588a6c925d6ffae56c9cb1"
+    },
+    {
+      "path": "src/scenes/vacancy-studio/VacancyStudio.tsx",
+      "sha256": "c420ec327db8c2438824a78e01bbc9bcadc118601add7f864969a02a26006548"
+    },
+    {
+      "path": "src/scenes/vacancy-studio/api.ts",
+      "sha256": "10375efdf2c48000ea8195cc05b54e326e0d14917a1b0e3168bc3969e9e64ce4"
+    },
+    {
+      "path": "src/scenes/vacancy-studio/checklist.ts",
+      "sha256": "1fd74f9006a7c0dc4e59e2f5c971f29c72ef1f84c880d438067020ae9e85408c"
+    },
+    {
+      "path": "src/scenes/vacancy-studio/task-options.ts",
+      "sha256": "6195fda8cf63ff500e320de928cf8dc8fa744083f1090e70fe1dc76ca9d9d517"
+    },
+    {
+      "path": "src/scenes/vacancy-studio/task-skill-card.css",
+      "sha256": "52ea7b0911ffacf077d051a944c4dfb9055ee646c46dea2cd1db68b7a42d3638"
+    },
+    {
+      "path": "src/scenes/vacancy-studio/task-templates.json",
+      "sha256": "ff2369b16cf145810c2eb7a636c3f3d737165eadd6b24e2befd61db580e0f346"
+    },
+    {
+      "path": "src/scenes/vacancy-studio/vacancy-studio.css",
+      "sha256": "6a60a4db83bdc5ee1d99b0617adc75a715a460fa79558d26e2003d62b8def8bf"
+    },
+    {
+      "path": "src/scenes/vacancy-studio/voice.ts",
+      "sha256": "808331667ddad2293d7b8c632041353121ece8e3d3f708bb861430311158d5af"
+    },
+    {
+      "path": "src/scenes/vacancy-research/ProfileResearchLab.tsx",
+      "sha256": "e17d51caa0fa0b330c62898bacec46e1d693815769ad60e3f5164db7c32c7c0d"
+    },
+    {
+      "path": "src/scenes/vacancy-research/README.md",
+      "sha256": "342e0b864c9db738f1299a07210d2a74c6c67b46b64dda7ff9673385da484c5f"
+    },
+    {
+      "path": "src/scenes/vacancy-research/VacancyResearchLab.tsx",
+      "sha256": "233e3447996c4d6f4656437507acadea30d29134b4ac0f66d5c251216154c8e3"
+    },
+    {
+      "path": "src/scenes/vacancy-research/model.ts",
+      "sha256": "c52e9aae246f9e88f5f0bf30314f327346690e366773016eb3442d2f19932a31"
+    },
+    {
+      "path": "src/scenes/vacancy-research/portrait-references.ts",
+      "sha256": "aaa82318490d5dcd9c6166438e2bb8ba645af2bdc37971c3c61cd36dbcc2aa4b"
+    },
+    {
+      "path": "src/scenes/vacancy-research/profile-research.css",
+      "sha256": "c69e552b33250ab05d25009eb6654a87a999a5f417cdece8cf3d525ff7aa9cfb"
+    },
+    {
+      "path": "src/scenes/vacancy-research/references.ts",
+      "sha256": "e140d22c1158d7ec957f390f7f32a36504b72d7fca5beded3b69ed449f1c27b5"
+    },
+    {
+      "path": "src/scenes/vacancy-research/sales-rubric.json",
+      "sha256": "828f84ce971978ccfbd6df17e08633c12d9470ca281fed5d6585842a84eaac15"
+    },
+    {
+      "path": "src/scenes/vacancy-research/vacancy-research.css",
+      "sha256": "6aaee810a3ec8bf9c16c7dcf161166db55fc863ac97b737fa22ebf36eba09f5b"
+    },
+    {
+      "path": "src/VacancyStudio.stories.tsx",
+      "sha256": "8d31b6e7ff21809ea762d0b1bcce7292554bd4fca19c2ac4527af61350f3c437"
+    },
+    {
+      "path": "src/VacancyResearch.stories.tsx",
+      "sha256": "4ac265a43b2bbb17b8815fcb4b7c6c908b15401ad1d4fb473205a0ec844c1e04"
+    },
+    {
+      "path": "server/vacancy-studio/CORE-INTEGRATION.md",
+      "sha256": "d87ab6776ffc9952fad6cbeb21f6fe9811682f06dbd1415c8dd7b895afa0bb79"
+    },
+    {
+      "path": "server/vacancy-studio/README.md",
+      "sha256": "a5b3348c7757429b457122820da143e13c6a7bd99f3cdd6b78ef72586a3fd6ec"
+    },
+    {
+      "path": "server/vacancy-studio/TASK-CARD-NOTES.md",
+      "sha256": "92b48ca35146e73615cf30abd22b6db94933123d29a6d1cfbeb2a18e7892349d"
+    },
+    {
+      "path": "server/vacancy-studio/interview.py",
+      "sha256": "624560fbec1a244f6734db6a38e61303ce41969974673bd58e772b15562c6336"
+    },
+    {
+      "path": "server/vacancy-studio/prompts/archive/compose-2026-10-26.3.md",
+      "sha256": "02085d49db0c1367203ca1307c4f78549689e1f1dd13b204679dcb64b75b4a49"
+    },
+    {
+      "path": "server/vacancy-studio/prompts/archive/compose-2026-10-26.4.md",
+      "sha256": "b2162e1d8b2518632b3cabf31e831d1d49d695823f44c1e058b858272b6db08d"
+    },
+    {
+      "path": "server/vacancy-studio/prompts/archive/compose-2026-10-26.5.md",
+      "sha256": "4ee2ccba6c8bbd46ac884630c83c0c1db8c1ce17e7bc0e4648b40a1835f61157"
+    },
+    {
+      "path": "server/vacancy-studio/prompts/compose.md",
+      "sha256": "2f889b5706253f466ce63f4cf8be66544c59004edf10df13286621fad84d08e1"
+    },
+    {
+      "path": "server/vacancy-studio/prompts/extract.md",
+      "sha256": "7078b19c1b4fbbf7b32980fe2fdeaf338d9a3e8bdd8ab48a09333fc602cea73f"
+    },
+    {
+      "path": "server/vacancy-studio/prompts/interview.md",
+      "sha256": "6aa3cb3f5c0fbddd423e353ebe22f7c338c3f527f235f3eefdd638a92ec798f7"
+    },
+    {
+      "path": "server/vacancy-studio/prompts/judge.md",
+      "sha256": "0d7dd901fe398cb05078bd5b17fad65952a4c32ca5df1463d8258ee07eb1767c"
+    },
+    {
+      "path": "server/vacancy-studio/prompts/task-scenarios.md",
+      "sha256": "054e4cf1803e6d52e63946b1169d35e2bf3f64404ed5ab8028a70eea27a9d89b"
+    },
+    {
+      "path": "server/vacancy-studio/requirements.txt",
+      "sha256": "8e953240b947435e77933e62bd5a84797f7185cecd6a5d268f784ae5efa60290"
+    },
+    {
+      "path": "server/vacancy-studio/run.py",
+      "sha256": "05ec853a5b3077ac25a4f78f485d3a840d998a509a89349e0c443fe66d93f990"
+    },
+    {
+      "path": "server/vacancy-studio/server.py",
+      "sha256": "dc697205c2ed288fba52114df1d00ea5980ea2ac436bf154799f7eda9bfa2b35"
+    },
+    {
+      "path": "server/vacancy-studio/storybook/main.ts",
+      "sha256": "3a66cae500444c55ab6698fc565b7e3e217e866294261c8d01a98dfbc9b0d268"
+    },
+    {
+      "path": "server/vacancy-studio/storybook/preview.ts",
+      "sha256": "6f2299b3941766931056fe5dfa227a349a08858f1ee79d1d38c782b6a3fe0c07"
+    },
+    {
+      "path": "server/vacancy-studio/task_scenarios.py",
+      "sha256": "9d54aaba34806f9a52fdef9b39a30444ff435cb9ace38c085bb1e93471448e77"
+    },
+    {
+      "path": "server/vacancy-studio/test_interview.py",
+      "sha256": "f929002ded3905f7aa11674ac277b844cf2ea18e9ece9fa233727f7ebc55af0d"
+    },
+    {
+      "path": "server/vacancy-studio/test_studio.py",
+      "sha256": "eb6e5ea099c0d0484269290c812cf32b8fcd35bd621d822575941392ee492660"
+    },
+    {
+      "path": "server/vacancy-studio/test_task_scenarios.py",
+      "sha256": "e7bbdd4155e710cb88bdacb2d534531284fe25ecf82b7ab9c9e807a8ce015daf"
+    },
+    {
+      "path": "server/vacancy-studio/tsconfig.json",
+      "sha256": "345368914c804bcc60b49a7c5df24a51be0e4cf82514a668dbd33e104658f063"
+    },
+    {
+      "path": "public/media/vacancy-research/ashby-results.webp",
+      "sha256": "ace12ab408ee7889a001f0313ccf14c45e28a7fd0f99565edcfe39ff4e0a9fd5"
+    },
+    {
+      "path": "public/media/vacancy-research/ashby.webp",
+      "sha256": "631b1160a486f7a046012f9644c6e3cfe42b6c656b239ee04669312f7ebcf7ec"
+    },
+    {
+      "path": "public/media/vacancy-research/attribution.json",
+      "sha256": "08109da2b003009d9fac5aa8a0d6d655856ce865feaba3871879dc48f8d619a3"
+    },
+    {
+      "path": "public/media/vacancy-research/greenhouse.png",
+      "sha256": "ad50b12aa605567e3dd832bc98876b9294e8d3ee1052cf4256d11df177b04e2f"
+    },
+    {
+      "path": "public/media/vacancy-research/linear.avif",
+      "sha256": "df10e317c449f29a988f9fc04705eaebed1fd1fbf9e6f2152228a873e0f02ab2"
+    },
+    {
+      "path": "public/media/vacancy-research/metaview.jpg",
+      "sha256": "ea535d7056818961bad6a1b211109bf86a04b93793901dc34124f55f1cf6ff29"
+    },
+    {
+      "path": "public/media/vacancy-research/notebook.png",
+      "sha256": "168addeefb93040f583d346900393455a2349961ce32917d748abe768f36d90f"
+    },
+    {
+      "path": "public/media/vacancy-research/scorecard.png",
+      "sha256": "29f5c5cc8fa4d1449b6557df4187dca7ed5dbc980fcf83712d4ff00bc6738606"
+    },
+    {
+      "path": "public/media/vacancy-research/typebot.png",
+      "sha256": "df7277c354cc66fceb98629c2fb1d08c2ee3e1c5011f88576be3aec8c31bcff3"
+    },
+    {
+      "path": "public/media/vacancy-portraits/ashby-profile-2.webp",
+      "sha256": "58d61a3abde44a1217fbb864596e04908fe8cb6afb1b7afe9130c2b444e3b1df"
+    },
+    {
+      "path": "public/media/vacancy-portraits/attio-12.png",
+      "sha256": "a9ac328737e4ac2d56d2fb1a41b1e786dfcd693b875a3ade4cd894e2b76431c8"
+    },
+    {
+      "path": "public/media/vacancy-portraits/attio-8.png",
+      "sha256": "6b7fc5bfbe7583aa28ac849b56b9d237a3d7c6e4740aa85fb230a08cf07c4064"
+    },
+    {
+      "path": "public/media/vacancy-portraits/attribution.json",
+      "sha256": "91057dd3b8c3de9f4dc395d2fac0181e3b72cf0c401b5c05a8617a8a5aee39a4"
+    },
+    {
+      "path": "public/media/vacancy-portraits/hubspot-4.png",
+      "sha256": "560d1b60a0315360c4ea18fb285395e31d388af71b6f91479f6245f4f061832c"
+    },
+    {
+      "path": "public/media/vacancy-portraits/muchskills-help-0.avif",
+      "sha256": "af7020ed434e8e4fbec4c62c483cdbfe7875d87dd16139f9cb70e4127f52f8ad"
+    },
+    {
+      "path": "public/media/vacancy-portraits/muchskills-help-16.webp",
+      "sha256": "941ad7f5885ed39b7c1b7d30bc8e116813c3a6fdfc36dd5f1afe699581f9b77d"
+    },
+    {
+      "path": "public/media/vacancy-portraits/smaply-5.webp",
+      "sha256": "f1db8d76fb3733ebf4e6267e08a4b6319c2793a9042030bf91019616fcd97bec"
+    },
+    {
+      "path": "public/media/vacancy-portraits/smaply-6.webp",
+      "sha256": "50b8bdfdea036066ea9fe51303ac38994e3394d6dc23638475ede2a086066918"
+    },
+    {
+      "path": "public/media/vacancy-portraits/uxpressia-13.webp",
+      "sha256": "29e19cc97372679c570304ce184d284dd785c807fa5aac6ba138e7a667b6af15"
+    },
+    {
+      "path": "public/media/vacancy-portraits/uxpressia-16.png",
+      "sha256": "dbd112b9ceb525edd50f8a2d49708a7b0d59da4e0a87b2e0ff4cd8e91a8ae78c"
+    },
+    {
+      "path": "public/media/vacancy-portraits/uxpressia-help-2.png",
+      "sha256": "101e7fcffaaacdf2aaace3f0ac0525b09e0e6ebe0f4b0350bc59155ad45b232f"
+    },
+    {
+      "path": "public/media/vacancy-portraits/xtensio-3.webp",
+      "sha256": "3043ce9689a64784eb18de8cb18df7ad50bf5873c00be0883adfda6b7a93b6b9"
+    },
+    {
+      "path": "src/vite-env.d.ts",
+      "sha256": "65996936fbb042915f7b74a200fcdde7e410f32a669b1ab9597cfaa4b0faddb5"
+    },
+    {
+      "path": "tsconfig.json",
+      "sha256": "c55de71008ec6e24457486228ce14598d71a8bc536f42d354a08463e071c2df8"
+    }
+  ],
+  "adaptations": [
+    "Portable environment-only launcher replaces local credential lookup.",
+    "Dedicated npm package and Storybook configuration.",
+    "Original UI, prompts and server domain logic retained.",
+    "Launcher documentation updated for the environment-only entry point."
+  ]
+}

@@ -16,7 +16,7 @@
 
 ## Повторить проверку
 
-После запуска Storybook из `interface-lab`:
+После запуска Storybook из `apps/web`:
 
 ```sh
 npx @playwright/cli --session xpm-check open 'http://127.0.0.1:6007/iframe.html?id=hr-vision-xpm--overview&viewMode=story'

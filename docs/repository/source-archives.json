@@ -1,0 +1,168 @@
+{
+  "captured_at": "2026-10-28",
+  "base_commit": "9afec7af9c46f20494646df40812faf6b0fe4638",
+  "snapshots": [
+    {
+      "label": "primary-workspace",
+      "source_branch": "main",
+      "head": "022b593368e919c0ae1fb4697c50c4b6fbb9f724",
+      "commit": "68754026abb2a81ab21cca2edb74b40f4a64dfdf",
+      "modified_source_files": 37,
+      "new_source_files": 286,
+      "branch": "codex/archive/2026-10-28/primary-workspace"
+    },
+    {
+      "label": "account-avatar-style",
+      "source_branch": "(detached)",
+      "head": "72bcc4b3e644592fa9f5fafff650a36974c60992",
+      "commit": "3d098135e4abd862a8ae6170407adef5162c6b91",
+      "modified_source_files": 4,
+      "new_source_files": 2,
+      "branch": "codex/archive/2026-10-28/account-avatar-style"
+    },
+    {
+      "label": "assessment-orbit-production",
+      "source_branch": "codex/employer-core-speakers",
+      "head": "41f6f89e79b4daac53eb70766fee0d46be6d9c46",
+      "commit": "a6da651d28a9fa6b0e78da47bcd6c31e0abfddfe",
+      "modified_source_files": 0,
+      "new_source_files": 1,
+      "branch": "codex/archive/2026-10-28/assessment-orbit-production"
+    },
+    {
+      "label": "candidate-cabinet",
+      "source_branch": "codex/candidate-cabinet",
+      "head": "560856cd6175a4b8d879bbea6e661074a3374bb8",
+      "commit": "d0e0f2c13160c4eab4c58d13bbd72d6066686e0a",
+      "modified_source_files": 0,
+      "new_source_files": 31,
+      "branch": "codex/archive/2026-10-28/candidate-cabinet"
+    },
+    {
+      "label": "candidate-cv",
+      "source_branch": "codex/hh-browser-outreach",
+      "head": "a633a8837d435a4d33ce5eddb700cf119cf4b338",
+      "commit": "6f1f3bf9ce98adb49fa8eaf0cd8d53174c81b3a7",
+      "modified_source_files": 5,
+      "new_source_files": 1,
+      "branch": "codex/archive/2026-10-28/candidate-cv"
+    },
+    {
+      "label": "company-site-integration",
+      "source_branch": "codex/recruiter-compact-interview",
+      "head": "1c7bbc0f10481abc78825ba3d28b148f8897c955",
+      "commit": "2a4bbf56407ef48fd92111adb2dc25248be54d35",
+      "modified_source_files": 2,
+      "new_source_files": 21,
+      "branch": "codex/archive/2026-10-28/company-site-integration"
+    },
+    {
+      "label": "daily-bundle-origin",
+      "source_branch": "fix/daily-bundle-origin",
+      "head": "6557e3a54d876ba0e1114f58ef649cda273d1b29",
+      "commit": "e8e82de01227888b225ebe9cf8a5497249a2984c",
+      "modified_source_files": 7,
+      "new_source_files": 1,
+      "branch": "codex/archive/2026-10-28/daily-bundle-origin"
+    },
+    {
+      "label": "employer-panel",
+      "source_branch": "codex/employer-panel",
+      "head": "e6b5b5af6b7cf494c7fc1dc1a09ddf8200df2740",
+      "commit": "6dfdf7fdfbc1308a96e6e5a5d6587ec672387b84",
+      "modified_source_files": 4,
+      "new_source_files": 2,
+      "branch": "codex/archive/2026-10-28/employer-panel"
+    },
+    {
+      "label": "hh-outreach-release",
+      "source_branch": "codex/hh-outreach-release",
+      "head": "eca576f0f532dfd66238c26552c6f72e1e9ddcf1",
+      "commit": "ddb0d93f7cad8cddb9b45152d47c5c658deda293",
+      "modified_source_files": 0,
+      "new_source_files": 4,
+      "branch": "codex/archive/2026-10-28/hh-outreach-release"
+    },
+    {
+      "label": "materials-production",
+      "source_branch": "codex/test-interview-import",
+      "head": "dd108fe1bcc1fe32b5245820cf2993fcb73674ac",
+      "commit": "8a2c84cf21eff677166ec787e9a6c71f12d1b3db",
+      "modified_source_files": 2,
+      "new_source_files": 43,
+      "branch": "codex/archive/2026-10-28/materials-production"
+    },
+    {
+      "label": "recruiter-resume-popup",
+      "source_branch": "codex/assessment-interpretation-preview",
+      "head": "4530f998a6efa0cd71cb69dc9b35b4d1752aae55",
+      "commit": "879c8b191e694a713c229fe91b85cea56e5e02fe",
+      "modified_source_files": 7,
+      "new_source_files": 27,
+      "branch": "codex/archive/2026-10-28/recruiter-resume-popup"
+    },
+    {
+      "label": "selection-vacancy-ui",
+      "source_branch": "codex/selection-vacancy-ui",
+      "head": "429610629db24e50806079b8bbb41f478edc07a9",
+      "commit": "f6bb003a798c1b37d067b7855efab3b1e9f2b8e1",
+      "modified_source_files": 0,
+      "new_source_files": 0,
+      "branch": "codex/archive/2026-10-28/selection-vacancy-ui"
+    },
+    {
+      "label": "transcription-service",
+      "source_branch": "codex/transcription-service",
+      "head": "a44ffc5702446a2f7cb311c15f71f5d996eea61f",
+      "commit": "3003fdadc7f81d5d3c6c908166a37d24c38be5e4",
+      "modified_source_files": 0,
+      "new_source_files": 0,
+      "branch": "codex/archive/2026-10-28/transcription-service"
+    },
+    {
+      "label": "candidate-decision-search-lab",
+      "source_branch": "codex/candidate-decision-search-lab",
+      "head": "f491d1d5c54e0238e2433985d5774ec3084c0654",
+      "commit": "3a768e82da43a3cc59588f4fa5677d0646385979",
+      "modified_source_files": 0,
+      "new_source_files": 0,
+      "branch": "codex/archive/2026-10-28/candidate-decision-search-lab"
+    },
+    {
+      "label": "interview-feedback-panel",
+      "source_branch": "codex/interview-feedback-panel",
+      "head": "8f2a39a653b1d6adb2c184e9495cbc65ef985e69",
+      "commit": "aa51195b916257d67c918bf8eb68365e304e4295",
+      "modified_source_files": 0,
+      "new_source_files": 0,
+      "branch": "codex/archive/2026-10-28/interview-feedback-panel"
+    },
+    {
+      "label": "unified-transcript-preview",
+      "source_branch": "codex/unified-transcript-preview",
+      "head": "efd69efc98523c4550866189973029720fa5c6f9",
+      "commit": "c0bba46f70105aeefb5b0a107a64af73ac542a62",
+      "modified_source_files": 0,
+      "new_source_files": 0,
+      "branch": "codex/archive/2026-10-28/unified-transcript-preview"
+    },
+    {
+      "head": "022b593368e919c0ae1fb4697c50c4b6fbb9f724",
+      "source_branch": "main (concurrent working copy)",
+      "modified_source_files": 41,
+      "new_source_files": 290,
+      "label": "primary-workspace-followup",
+      "commit": "579da03ef7bd40caf3137bb8051785963b45b5da",
+      "branch": "codex/archive/2026-10-28/primary-workspace-followup"
+    },
+    {
+      "head": "9afec7af9c46f20494646df40812faf6b0fe4638",
+      "source_branch": "standalone HR Storybook sources",
+      "modified_source_files": 0,
+      "new_source_files": 295,
+      "label": "hr-design-lab",
+      "commit": "f503177604eae4256cdca72ea050ce6565514cda",
+      "branch": "codex/archive/2026-10-28/hr-design-lab"
+    }
+  ]
+}

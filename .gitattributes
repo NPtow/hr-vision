@@ -1,1 +1,3 @@
 vendor/** linguist-vendored
+# License sections use seven equals signs as headings, not conflict markers.
+**/THIRD-PARTY-NOTICES.txt conflict-marker-size=32

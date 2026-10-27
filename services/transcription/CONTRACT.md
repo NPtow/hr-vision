@@ -81,7 +81,7 @@ Canonical transcript: времена — целые миллисекунды, н
 
 Рабочий клиент источника: upload → poll → result → core ingest с собственным idempotency key. Готовый provider transcript: normalize → core ingest. Получение нормализованного результата не означает его доставку в ядро — эту доставку и повтор контролирует сервис источника. Прямых SQL-записей в candidate DB из transcription нет.
 
-В этой ветке есть временный HTTP bridge старого provider collector (`interface-lab/server/materials_transcripts.py`). Для нового независимого source-service использовать этот контракт; импортировать пакет transcription в ядро не требуется.
+В этой ветке есть временный HTTP bridge старого provider collector (`services/recruiting-api/materials_transcripts.py`). Для нового независимого source-service использовать этот контракт; импортировать пакет transcription в ядро не требуется.
 
 ## SpeechKit result/raw
 

@@ -70,7 +70,7 @@ HTTP слушает localhost, все `/v1/*` требуют сервисный 
 `/opt/hr-vision-employer-review/releases/<commit>/`, выполнить её `deploy/install.py`
 от root. Он использует существующий CPA, создаёт собственный systemd-процесс и
 конфигурацию адаптера, но **не перезапускает HR API**. Обновить проверенный
-`interface-lab/deploy/ci/receiver.py`, затем выпустить API штатным guarded deploy.
+`infra/deployment/web/ci/receiver.py`, затем выпустить API штатным guarded deploy.
 Обновление процесса допускается после завершения очереди; приватную SQLite
 сохранять вместе с обычными резервными копиями состояния сервера.
 

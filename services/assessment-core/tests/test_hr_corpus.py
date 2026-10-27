@@ -13,7 +13,7 @@ from unittest.mock import Mock, patch
 from urllib.parse import quote
 
 
-SERVER = Path(__file__).resolve().parents[3] / "interface-lab" / "server"
+SERVER = Path(__file__).resolve().parents[3] / "services" / "recruiting-api"
 sys.path.insert(0, str(SERVER))
 
 from assessment_corpus import CandidateCorpusCollector, CollectionError, SQLiteResumeReader

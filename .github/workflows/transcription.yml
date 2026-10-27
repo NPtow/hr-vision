@@ -6,28 +6,28 @@ on:
       - 'services/transcription/**'
       - 'services/transcription-source/**'
       - 'services/data-core/**'
-      - 'services/tests/**'
-      - 'services/deploy/transcription/**'
-      - 'interface-lab/server/core_source_client.py'
-      - 'interface-lab/server/materials_*.py'
-      - 'interface-lab/server/test_materials_*.py'
-      - 'interface-lab/scripts/package-release.mjs'
-      - 'interface-lab/deploy/ci/receiver.py'
-      - 'interface-lab/deploy/ci/test_receiver.py'
+      - 'tests/integration/**'
+      - 'infra/deployment/services/transcription/**'
+      - 'services/recruiting-api/core_source_client.py'
+      - 'services/recruiting-api/materials_*.py'
+      - 'services/recruiting-api/test_materials_*.py'
+      - 'apps/web/scripts/package-release.mjs'
+      - 'infra/deployment/web/ci/receiver.py'
+      - 'infra/deployment/web/ci/test_receiver.py'
       - '.github/workflows/transcription.yml'
   push:
     paths:
       - 'services/transcription/**'
       - 'services/transcription-source/**'
       - 'services/data-core/**'
-      - 'services/tests/**'
-      - 'services/deploy/transcription/**'
-      - 'interface-lab/server/core_source_client.py'
-      - 'interface-lab/server/materials_*.py'
-      - 'interface-lab/server/test_materials_*.py'
-      - 'interface-lab/scripts/package-release.mjs'
-      - 'interface-lab/deploy/ci/receiver.py'
-      - 'interface-lab/deploy/ci/test_receiver.py'
+      - 'tests/integration/**'
+      - 'infra/deployment/services/transcription/**'
+      - 'services/recruiting-api/core_source_client.py'
+      - 'services/recruiting-api/materials_*.py'
+      - 'services/recruiting-api/test_materials_*.py'
+      - 'apps/web/scripts/package-release.mjs'
+      - 'infra/deployment/web/ci/receiver.py'
+      - 'infra/deployment/web/ci/test_receiver.py'
       - '.github/workflows/transcription.yml'
 
 permissions:
@@ -56,7 +56,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends ffmpeg
           ffmpeg -version > /dev/null
           ffprobe -version > /dev/null
-          python -m pip install --require-hashes --only-binary=:all: -r services/deploy/transcription/requirements-tests.lock
+          python -m pip install --require-hashes --only-binary=:all: -r infra/deployment/services/transcription/requirements-tests.lock
           python -m pip check
       - name: Check ASR normalization, durable jobs and provider fixtures
         run: python -B -m unittest discover -s tests -v
@@ -65,23 +65,23 @@ jobs:
           PYTHONPATH: src
       - name: Check existing transcript import compatibility
         run: python -B -m unittest test_materials_transcripts -v
-        working-directory: interface-lab/server
+        working-directory: services/recruiting-api
       - name: Check coordinator, actual Core HTTP path and provisioning safety
         env:
-          PYTHONPATH: interface-lab/server:services/data-core/src:services/transcription/src:services/transcription-source/src:services/tests
+          PYTHONPATH: services/recruiting-api:services/data-core/src:services/transcription/src:services/transcription-source/src:tests/integration
         run: >-
           python -B -m pytest
           services/transcription-source/tests
           services/data-core/tests
-          services/tests/test_transcription_pipeline_http.py
-          services/deploy/transcription/tests
-          interface-lab/server/test_materials_asr_dispatch.py
-          interface-lab/server/test_materials_transcript_variants.py
-          interface-lab/server/test_materials_worker.py
-          interface-lab/server/test_materials_provider_scope.py
+          tests/integration/test_transcription_pipeline_http.py
+          infra/deployment/services/transcription/tests
+          services/recruiting-api/test_materials_asr_dispatch.py
+          services/recruiting-api/test_materials_transcript_variants.py
+          services/recruiting-api/test_materials_worker.py
+          services/recruiting-api/test_materials_provider_scope.py
           -q
       - name: Check actual release producer and receiver layouts
         run: python -B -m unittest -v test_receiver
-        working-directory: interface-lab/deploy/ci
+        working-directory: infra/deployment/web/ci
       - name: Build standalone ASR image
         run: docker build -t md-transcription:ci services/transcription

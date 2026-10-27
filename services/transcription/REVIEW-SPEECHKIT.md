@@ -64,7 +64,7 @@ No live provider call, private credential read, source upload, deployment or pro
 
 ## Additional provisioning review
 
-Architect added services/deploy/transcription/provision.py after the application review. Reviewed secret stdin handling, credential reuse, protected env files, isolated RabbitMQ definitions, separate source/ASR state, existing Core principal preservation, active-call/material-job guards and online SQLite backup. RabbitMQ primary command source confirms import_definitions with omitted file reads stdin; no command-line secret is required.
+Architect added infra/deployment/services/transcription/provision.py after the application review. Reviewed secret stdin handling, credential reuse, protected env files, isolated RabbitMQ definitions, separate source/ASR state, existing Core principal preservation, active-call/material-job guards and online SQLite backup. RabbitMQ primary command source confirms import_definitions with omitted file reads stdin; no command-line secret is required.
 
 Blocking operational finding corrected: systemctl restart success alone does not prove a Type=simple service stayed up. Activation now checks three consecutive systemd-active/HTTP-ready results, authenticates both new principals against a deliberately absent binding (404), and restores/restarts/verifies previous principals if readiness fails. Guard also covers ml_sessions when present. Candidate-scoped prior principals use the same absent-binding probe, avoiding a misleading candidate-scope 403 during rollback verification.
 

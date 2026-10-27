@@ -1,8 +1,6 @@
 name: Deploy HR Vision
 
 on:
-  push:
-    branches: [main, codex/mockups]
   workflow_dispatch:
 
 permissions:
@@ -45,13 +43,13 @@ jobs:
           echo "target=$target" >> "$GITHUB_OUTPUT"
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "HR_BUILD_TARGET=$target" >> "$GITHUB_ENV"
-          node -e 'if (require("./interface-lab/build-target.json").target !== process.env.EXPECTED) throw Error("Branch build-target mismatch")'
+          node -e 'if (require("./apps/web/build-target.json").target !== process.env.EXPECTED) throw Error("Branch build-target mismatch")'
         env:
           EXPECTED: ${{ github.ref == 'refs/heads/main' && 'service' || 'mockups' }}
       - name: Install dependencies
-        run: npm ci --prefix interface-lab
+        run: npm ci
       - name: Check types and transcript parsing
-        working-directory: interface-lab
+        working-directory: apps/web
         run: |
           npm run typecheck
           node scripts/transcript-check.mjs
@@ -75,17 +73,17 @@ jobs:
           node --test scripts/selection-automation.test.mjs
           node --test scripts/distribution-data.test.mjs
       - name: Check API against isolated temporary state
-        working-directory: interface-lab/server
+        working-directory: services/recruiting-api
         env:
           PYTHONDONTWRITEBYTECODE: '1'
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends poppler-utils tesseract-ocr tesseract-ocr-eng tesseract-ocr-rus antiword
-          python3 -m pip install --require-hashes --only-binary=:all: -r requirements-materials.lock -r requirements-api-extras.lock -r ../../services/deploy/requirements-tests.lock
+          python3 -m pip install --require-hashes --only-binary=:all: -r requirements-materials.lock -r requirements-api-extras.lock -r ../../infra/deployment/services/requirements-tests.lock
           python3 -m pip check
           python3 -m unittest discover -v
       - name: Check deployment safety
-        working-directory: interface-lab/deploy/ci
+        working-directory: infra/deployment/web/ci
         run: python3 -m unittest -v test_receiver
       - name: Check isolated Jev assessment worker
         run: python3 -m unittest discover -s services/assessment/tests -v
@@ -103,16 +101,16 @@ jobs:
           PYTHONPATH=packages/jev-client python3 -m unittest discover -s packages/jev-client/tests -q
           PYTHONPATH=packages/jev-client:services/vacancy-profile python3 -m unittest discover -s services/vacancy-profile/tests -q
           PYTHONPATH=services/recommendations python3 -m unittest discover -s services/recommendations/tests -q
-          python3 -m unittest discover -s services/deploy/assessment-services/tests -q
-          PYTHONPATH=services/assessment-core:packages/jev-client:services/vacancy-profile:services/recommendations:interface-lab/server python3 -m unittest discover -s services/tests/assessment-flow -q
+          python3 -m unittest discover -s infra/deployment/services/assessment-services/tests -q
+          PYTHONPATH=services/assessment-core:packages/jev-client:services/vacancy-profile:services/recommendations:services/recruiting-api python3 -m unittest discover -s tests/integration/assessment-flow -q
       - name: Check core and private Zoom service
         env:
-          PYTHONPATH: interface-lab/server:services/data-core/src:services/transcription/src
+          PYTHONPATH: services/recruiting-api:services/data-core/src:services/transcription/src
           PYTHONDONTWRITEBYTECODE: '1'
         run: |
-          python3 -m pip install --require-hashes --only-binary=:all: -r services/deploy/requirements-tests.lock
+          python3 -m pip install --require-hashes --only-binary=:all: -r infra/deployment/services/requirements-tests.lock
           python3 -m pip check
-          python3 -m pytest services/data-core/tests services/zoom-api/test_zoom_api.py services/deploy/simple/tests services/tests/test_zoom_core_http_integration.py -q
+          python3 -m pytest services/data-core/tests services/zoom-api/test_zoom_api.py infra/deployment/services/simple/tests tests/integration/test_zoom_core_http_integration.py -q
       - name: Check private interview agent without provider access
         run: |
           docker build -f services/interview-agent/Dockerfile -t hr-interview-agent-test .
@@ -120,14 +118,14 @@ jobs:
             -v "$PWD/services/interview-agent:/tests:ro" --entrypoint python hr-interview-agent-test \
             -m unittest discover -s /tests -p test_runtime.py -v
       - name: Build and package only this destination
-        working-directory: interface-lab
+        working-directory: apps/web
         run: |
           npm run build
           node scripts/package-release.mjs
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: hr-vision-${{ steps.target.outputs.target }}-${{ github.sha }}
-          path: interface-lab/release.tgz
+          path: apps/web/release.tgz
           retention-days: 7
           if-no-files-found: error
 

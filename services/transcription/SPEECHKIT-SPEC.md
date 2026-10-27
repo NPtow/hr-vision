@@ -71,7 +71,7 @@
 
 **Воркер 1:** только `services/transcription/**`: Deepgram и SpeechKit REST adapters, безопасный FFmpeg, durable provider state/migration, raw result, tests, env/compose/docs. Существующий HTTP backend и normalize не сломать.
 
-**Воркер 2:** только `services/transcription-source/**`, `interface-lab/server/materials_asr_dispatch.py`, узкий hook `materials_runtime.py` и его новые тесты: source job → media → ASR → S3 → Core receipt/readback. Не менять Core, ASR-пакет и существующий deploy. Зафиксировать точный HTTP контракт для архитектора.
+**Воркер 2:** только `services/transcription-source/**`, `services/recruiting-api/materials_asr_dispatch.py`, узкий hook `materials_runtime.py` и его новые тесты: source job → media → ASR → S3 → Core receipt/readback. Не менять Core, ASR-пакет и существующий deploy. Зафиксировать точный HTTP контракт для архитектора.
 
 **Ревьюер:** независимый анализ specs/code/tests обоих; проверить границы, ложную полноту, роли, дубли платных запросов, восстановление, сохранение результата и принадлежность кандидату. Без собственных feature edits.
 
