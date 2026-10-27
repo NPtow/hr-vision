@@ -1,0 +1,8 @@
+{
+  "name": "tg-signals-telemetr-rpa",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "scripts": { "test": "node --test *.test.mjs" },
+  "dependencies": { "playwright-core": "1.64.0" }
+}

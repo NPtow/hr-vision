@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Dialog } from 'radix-ui';
-import { ArrowDownToLine, ArrowUpRight, FileText, Mail, MessageCircle, X } from 'lucide-react';
-import { RecruiterRequestError, type RecruiterCandidate } from './api';
+import { ArrowDownToLine, ArrowUpRight, Check, Copy, FileText, Mail, MessageCircle, X } from 'lucide-react';
+import { recruiterRequest, RecruiterRequestError, type Invitation, type RecruiterCandidate } from './api';
 import { EmployerResumePreview } from '../employer-workspace/EmployerResumePreview';
 import { contactLinks, type InterviewCoachController } from './interview-coach';
 import '../employer-workspace/employer-candidate-profile.css';
@@ -87,3 +87,94 @@ export function InterviewPreparation({ coach, onOpen }: { coach: InterviewCoachC
     {coach.error && <p className="ric-error" role="alert">{coach.error}<button onClick={() => void coach.refresh()}>Повторить</button></p>}
   </div>;
 }
+
+export function CopyMeetingLinkButton({
+  candidateId,
+  token,
+  variant = 'link',
+  onCopied,
+}: {
+  candidateId: string;
+  token: string;
+  variant?: 'link' | 'prejoin';
+  onCopied?: (url: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [notice, setNotice] = useState('');
+  const [error, setError] = useState('');
+
+  async function handleCopy() {
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      const result = await recruiterRequest<Invitation>('invitations', token, {
+        candidateId,
+        scope: 'call',
+      });
+      const url = result.url;
+      try {
+        await navigator.clipboard.writeText(url);
+      } catch {
+        const textarea = document.createElement('textarea');
+        textarea.value = url;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        textarea.remove();
+      }
+      setCopied(true);
+      setNotice('Ссылка на встречу скопирована. Отправьте её кандидату в Telegram или мессенджер.');
+      onCopied?.(url);
+      window.setTimeout(() => setCopied(false), 3000);
+      window.setTimeout(() => setNotice(''), 5000);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Не удалось скопировать ссылку.');
+      window.setTimeout(() => setError(''), 4000);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (variant === 'prejoin') {
+    return (
+      <div className="ric-copy-prejoin-wrapper">
+        <button
+          type="button"
+          className={`ric-approved-link-button ${copied ? 'is-copied' : ''}`}
+          disabled={busy}
+          onClick={() => void handleCopy()}
+          aria-label="Скопировать ссылку на встречу для кандидата"
+        >
+          {copied ? <Check size={16} /> : <Copy size={16} />}
+          <span>{copied ? 'Ссылка скопирована' : busy ? 'Копируем…' : 'Скопировать ссылку на встречу'}</span>
+        </button>
+        {notice && <p className="ric-prejoin-toast" role="status">{notice}</p>}
+        {error && <p className="ric-prejoin-toast ric-copy-error" role="alert">{error}</p>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="ric-copy-wrapper">
+      <button
+        type="button"
+        className="ric-link"
+        disabled={busy}
+        onClick={() => void handleCopy()}
+        title="Скопировать ссылку на встречу для кандидата"
+        aria-label="Скопировать ссылку на встречу для кандидата"
+      >
+        {copied ? <Check size={15} /> : <Copy size={15} />}
+        <span>{copied ? 'Ссылка скопирована' : busy ? 'Копируем…' : 'Скопировать ссылку на встречу'}</span>
+      </button>
+      {notice && <span className="ric-copy-toast" role="status">{notice}</span>}
+      {error && <span className="ric-copy-toast ric-copy-error" role="alert">{error}</span>}
+    </div>
+  );
+}
+

@@ -5,7 +5,6 @@ from pathlib import Path
 import json
 import sqlite3
 import tempfile
-from types import SimpleNamespace
 import unittest
 
 from materials_capture import Artifact, Discovery, HttpSource, Source
@@ -15,14 +14,6 @@ from materials_runtime import MaterialsRuntime
 from materials_runtime import create_celery_app
 from materials_storage import FileSystemStorage
 from materials_worker import MaterialsWorker
-
-
-# Test-only service parser injection; production uses authenticated HTTP.
-import importlib.util
-_parser_path = Path(__file__).resolve().parents[2] / 'services/transcription/src/md_transcription/normalization.py'
-_parser_spec = importlib.util.spec_from_file_location('transcription_fixture_normalization', _parser_path)
-_parser = importlib.util.module_from_spec(_parser_spec)
-_parser_spec.loader.exec_module(_parser)
 
 
 VTT = b'WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHello research\n'
@@ -84,7 +75,7 @@ class WorkerTests(unittest.TestCase):
 
     def make_worker(self):
         return MaterialsWorker(self.repo, {'fake': self.capture}, self.storage,
-                               downloader=self.downloader, normalizer=_parser.normalize_transcript, temp_root=self.root)
+                               downloader=self.downloader, temp_root=self.root)
 
     def register(self, policy='remote', session='session'):
         return self.repo.ensure_source('interview', 'i1', 'fake', 'account',
@@ -199,14 +190,6 @@ class WorkerTests(unittest.TestCase):
                                  'HR_MATERIALS_ENABLED': '0'})
         self.assertEqual(app.tasks['materials.run_job'].run('untrusted-id'), {'enabled': False})
 
-    def test_celery_worker_excludes_remote_control_pidbox(self):
-        from celery.worker.consumer.control import Control
-        app = create_celery_app({'CELERY_BROKER_URL': 'memory://', 'HR_MATERIALS_TEST_MODE': '1'})
-        consumer = SimpleNamespace(app=app, conninfo=SimpleNamespace(
-            supports_exchange_type=lambda exchange: exchange == 'fanout'))
-        self.assertFalse(Control.include_if(None, consumer))
-        self.assertFalse(app.conf.worker_send_task_events)
-
     def test_reconcile_republishes_committed_job_after_broker_failure(self):
         source = self.register()
         failed = lambda identity: (_ for _ in ()).throw(RuntimeError('broker unavailable'))
@@ -217,28 +200,6 @@ class WorkerTests(unittest.TestCase):
         self.worker.publish = delivered.append
         self.worker.reconcile()
         self.assertEqual(delivered, [job['id']])
-
-    def test_normalizer_outage_preserves_raw_and_retries_without_unsupported(self):
-        from materials_transcripts import TranscriptionUnavailable
-        source = self.register()
-
-        def unavailable(raw, fmt):
-            # Ownership is established before the remote normalizer is contacted.
-            asset = next(a for a in self.repo.list_assets(source['id']) if a['kind'] == 'transcript')
-            self.assertTrue(any(l['state'] == 'verified' for l in self.repo.list_locations(asset['id'])))
-            raise TranscriptionUnavailable('synthetic outage')
-
-        self.worker.normalizer = unavailable
-        self.worker.enqueue_discovery(source['id'])
-        self.drain()
-        asset = next(a for a in self.repo.list_assets(source['id']) if a['kind'] == 'transcript')
-        self.assertNotEqual(asset['state'], 'unsupported')
-        self.assertEqual(self.repo.list_transcripts(source['id']), [])
-        self.assertTrue(any(j['status'] == 'retry' for j in self.repo.list_jobs(source['id'])))
-        self.worker.normalizer = _parser.normalize_transcript
-        self.clock[0] += 60
-        self.drain()
-        self.assertEqual(self.repo.list_transcripts(source['id'])[0]['segments'][0]['text'], 'Hello research')
 
     def test_invalid_transcript_preserves_raw_and_has_no_fake_version(self):
         source = self.register()

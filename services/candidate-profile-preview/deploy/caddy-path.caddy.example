@@ -1,0 +1,7 @@
+# Outreach /etc/hr-vision/Caddyfile, INSIDE existing handle @trusted,
+# before its final fallback handle. Preserve all existing handlers.
+# Keep prefix; do not use handle_path. No dsa config changes required.
+@candidate_preview path /candidate-preview /candidate-preview/*
+handle @candidate_preview {
+    reverse_proxy 127.0.0.1:8397
+}

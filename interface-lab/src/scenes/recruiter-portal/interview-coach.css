@@ -220,3 +220,29 @@ button.ric-primary {
 .ric-call .rp-call-header .ric-link { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
 .ric-call .rp-call-header .ric-link svg { flex-shrink: 0; }
 .ric-candidate-heading h3 { overflow-wrap: anywhere; }
+
+.ric-copy-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+}
+.ric-copy-toast {
+  font-size: 11px;
+  color: #2e7d32;
+  background: #edf7ed;
+  border: 1px solid #c8e6c9;
+  border-radius: 6px;
+  padding: 3px 8px;
+  white-space: nowrap;
+  animation: ricFadeIn 0.2s ease-out;
+}
+.ric-copy-toast.ric-copy-error {
+  color: #b43748;
+  background: #fdf2f2;
+  border-color: #f8b4b4;
+}
+@keyframes ricFadeIn {
+  from { opacity: 0; transform: translateY(-2px); }
+  to { opacity: 1; transform: translateY(0); }
+}

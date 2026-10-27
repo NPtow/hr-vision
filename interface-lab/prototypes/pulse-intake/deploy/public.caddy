@@ -1,0 +1,7 @@
+pulse.158-160-179-53.sslip.io {
+    encode zstd gzip
+    request_body {
+        max_size 5MB
+    }
+    reverse_proxy 10.130.0.18:8393
+}

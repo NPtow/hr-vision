@@ -113,38 +113,6 @@ class CandidateCorpusCollector:
         _require(current["status"] == "ready", "corpus_not_ready")
         return current
 
-    def collect_interviews(self, candidate_id):
-        """Verify HR readiness independently of CV, assessment and meetings.
-
-        Reuse the canonical per-recording validation, including both read
-        passes. This narrower snapshot intentionally has no model corpus.
-        """
-        _id(candidate_id)
-        first = self._read_interviews(candidate_id)
-        second = self._read_interviews(candidate_id)
-        _require(first['revision'] == second['revision'], 'sources_changed_during_collection')
-        _require(self.authorize(candidate_id) is not False, 'candidate_access_denied')
-        return second
-
-    def _read_interviews(self, candidate_id):
-        _require(self.authorize(candidate_id) is not False, 'candidate_access_denied')
-        dossier = self.core.http.call('GET', '/v1/candidates/' + quote(candidate_id, safe='') + '/dossier')
-        _require(isinstance(dossier, dict) and dossier.get('candidate_id') == candidate_id,
-                 'candidate_identity_mismatch')
-        sources, issues = [], []
-        owners = _indexed(dossier.get('interviews'), 'id')
-        manifest = {'contract_version': VERSION, 'candidate_id': candidate_id,
-                    'scope': ['interviews'], 'conversations': [], 'issues': issues}
-        for owner_id, owner in owners.items():
-            manifest['conversations'].append(self._conversation('interview', owner_id, owner, sources, issues))
-        manifest.update(source_count=len(sources), unit_count=sum(len(s['units']) for s in sources),
-                        text_characters=sum(len(u['text']) for s in sources for u in s['units']))
-        # Hash the exact text and provenance, while retaining neither text nor
-        # a dispatchable partial corpus in the readiness adapter's result.
-        revision = _hash({'manifest': manifest, 'corpus': {'candidate_id': candidate_id, 'sources': sources}})
-        return {'candidate_id': candidate_id, 'status': 'blocked' if issues else 'ready',
-                'revision': revision, 'corpus': None, 'manifest': manifest}
-
     def _read(self, candidate_id):
         # An exception or explicit False denies access. Existing portal checks
         # commonly return None on success; never catch authorization failures.
@@ -252,11 +220,6 @@ class CandidateCorpusCollector:
                 block("recording_inventory_unavailable")
             return entry
         if any(b["revoked"] for b in bindings.values()):
-            # The inventory is known, but its selected text is forbidden. Keep
-            # counts/identity without consulting a revoked cached primary.
-            entry['recordings'] = [{'recording_id': rid, 'kind': recording['kind'],
-                                    'source_id': recording['source_id'], 'selection': None}
-                                   for rid, recording in recordings.items()]
             return entry  # Never read revoked text, even from a local cache.
         if owner.get("status") != "completed":
             block("conversation_not_completed")
@@ -286,21 +249,12 @@ class CandidateCorpusCollector:
             detail = {"recording_id": recording_id, "kind": recording["kind"],
                       "source_id": recording["source_id"], "selection": _selection(selection) if selection else None}
             entry["recordings"].append(detail)
-            if recording.get('state') not in ('ready', 'available'):
-                block('recording_not_ready', recording_id=recording_id)
-            # Core's channel also verifies the configured retention/location
-            # policy. An old ready asset cannot override a now-unavailable
-            # recording location (e.g. provider access lost or policy changed).
-            if recording['kind'] == 'video' and channels.get(recording['source_id'], {}).get('video_status') != 'ready':
-                block('recording_channel_not_ready', recording_id=recording_id)
             if not selection:
                 block("primary_missing_recording", recording_id=recording_id)
                 continue
             binding = bindings.get(selection.get("binding_id"))
             _require(binding is not None and selection.get("generation") == binding["generation"],
                      "selection_binding_mismatch")
-            _require(selection.get('binding_id') == recording.get('source_id'),
-                     'selection_recording_source_mismatch')
             _require(type(selection.get("revision")) is int and selection["revision"] > 0,
                      "invalid_selection_revision")
             if selection.get("status") != "ready":
@@ -317,7 +271,6 @@ class CandidateCorpusCollector:
             asset = assets.get(transcript.get("asset_id"))
             _require(asset is not None and asset.get("kind") == "transcript" and
                      asset.get("state") == "ready", "transcript_asset_mismatch")
-            _require(asset.get('source_id') == selection.get('binding_id'), 'transcript_source_mismatch')
             segments, meta = transcript.get("segments"), transcript.get("metadata")
             _require(isinstance(segments, list) and segments and isinstance(meta, dict), "invalid_transcript")
             _require(meta.get("processing_status") == "completed", "transcript_not_completed")
@@ -335,8 +288,6 @@ class CandidateCorpusCollector:
                     if field in segment:
                         unit[field] = segment[field]
                 units.append(unit)
-            if not any(u['text'].strip() for u in units):
-                block('transcript_text_unavailable', recording_id=recording_id)
             normalized = meta.get("normalized")
             _require(isinstance(normalized, dict) and normalized.get("segments") == segments and
                      normalized.get("text") == normalized.get("full_text") == "\n".join(u["text"] for u in units),

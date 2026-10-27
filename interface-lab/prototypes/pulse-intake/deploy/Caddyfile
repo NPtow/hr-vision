@@ -1,0 +1,17 @@
+{
+    admin off
+    auto_https off
+}
+http://:8393 {
+    bind 10.130.0.18
+    request_body {
+        max_size 5MB
+    }
+    @gateway remote_ip 10.130.0.28
+    handle @gateway {
+        reverse_proxy 127.0.0.1:8392
+    }
+    handle {
+        respond 403
+    }
+}

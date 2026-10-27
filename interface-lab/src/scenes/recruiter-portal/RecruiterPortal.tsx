@@ -12,7 +12,6 @@ import { InterviewList } from './InterviewList';
 import { useRecruiterSession } from './session';
 import { RecruiterCandidateDetails } from './RecruiterCandidateDetails';
 import { RecruiterInterviewWorkspace } from './RecruiterInterviewWorkspace';
-import { startZoomSessionReconcile } from '../../components/call/zoom-session-reconcile';
 
 type SessionIdentity = { token: string; generation: number };
 
@@ -42,7 +41,6 @@ function RecruiterWorkspace() {
   const [completedOpen, setCompletedOpen] = useState(false);
   const [completedFocusId, setCompletedFocusId] = useState('');
   const completedSection = useRef<HTMLElement>(null);
-  const cancelZoomReconcile = useRef<(() => void) | null>(null);
   const sequence = useRef(0);
   const mutation = useRef(false);
   const verifyingEmail = useRef(false);
@@ -51,7 +49,7 @@ function RecruiterWorkspace() {
 
   useEffect(() => {
     mounted.current = true;
-    return () => { mounted.current = false; sequence.current++; cancelZoomReconcile.current?.(); };
+    return () => { mounted.current = false; sequence.current++; };
   }, []);
 
   const refresh = useCallback(async () => {
@@ -68,7 +66,6 @@ function RecruiterWorkspace() {
     }
   }, [token]);
   useEffect(() => {
-    cancelZoomReconcile.current?.();
     sequence.current++; mutation.current = false; verifyingEmail.current = false;
     setStateResult(null); setCallResult(null); setBusy(false); setPage('interviews'); setError(''); setNotice('');
     setCompletedOpen(false); setCompletedFocusId('');
@@ -123,32 +120,10 @@ function RecruiterWorkspace() {
   const navigate = (next: 'interviews' | 'profile') => { setPage(next); setNotice(''); };
   const completed = (state?.candidates || []).filter(candidate => candidate.interview?.status === 'completed')
     .sort((a, b) => Date.parse(b.interview!.start) - Date.parse(a.interview!.start));
-  function openCandidate(candidate: RecruiterCandidate, materials = false) {
-    cancelZoomReconcile.current?.();
-    setActiveCall({ kind: 'interview', callProvider: candidate.interview!.callProvider === undefined ? 'daily' : candidate.interview!.callProvider,
-      candidateId: candidate.id, interviewId: candidate.interview!.id, title: candidate.name,
-      candidate, recording: candidate.interview!.recording,
-      preview: materials || candidate.interview!.callProvider !== 'zoom' || candidate.interview!.status === 'completed' });
-  }
-  function markCompleted(candidateId: string) {
-    if (!isCurrent(identity)) return;
-    setActiveCall(null); setPage('interviews'); setCompletedOpen(true); setCompletedFocusId(candidateId);
-    setNotice('Интервью завершено.'); void refresh();
-  }
-  function reconcileZoom() {
-    if (!activeCall) return;
-    const captured = identity, call = activeCall;
-    const body = call.kind === 'interview' ? { candidateId: call.candidateId, interviewId: call.interviewId }
-      : { candidateId: call.candidateId, applicationId: call.applicationId, meetingId: call.meetingId };
-    cancelZoomReconcile.current?.();
-    cancelZoomReconcile.current = startZoomSessionReconcile({
-      request: signal => recruiterRequest(`${call.kind}/reconcile`, token, body, signal),
-      onCompleted: () => { if (isCurrent(captured)) markCompleted(call.candidateId); },
-    });
-  }
-  const renderCandidateDetails = (candidate: RecruiterCandidate) => <RecruiterCandidateDetails key={`${identity.generation}-${candidate.id}`} candidate={candidate} token={token}
-    onOpen={() => openCandidate(candidate)} onMaterials={() => openCandidate(candidate, true)}
-    onProvider={provider => run('interview/provider', { candidateId: candidate.id, provider })}/>;
+  const renderCandidateDetails = (candidate: RecruiterCandidate) => <RecruiterCandidateDetails key={`${identity.generation}-${candidate.id}`} candidate={candidate} token={token} onOpen={() => setActiveCall({
+    kind: 'interview', callProvider: candidate.interview!.callProvider || 'daily', candidateId: candidate.id, interviewId: candidate.interview!.id,
+    title: candidate.name, candidate, recording: candidate.interview!.recording, preview: true,
+  })}/>;
   return <div className="ew-root rp-root">
     <div className="rp-shell" inert={activeCall ? true : undefined} aria-hidden={activeCall ? true : undefined}>
       <header className="ew-topbar rp-topbar">
@@ -172,8 +147,12 @@ function RecruiterWorkspace() {
     </div>
     {activeCall?.preview && activeCall.candidate ? <RecruiterInterviewWorkspace
       key={`${identity.generation}-${activeCall.interviewId}`} candidate={state?.candidates.find(person => person.id === activeCall.candidateId) || activeCall.candidate}
-      token={token} videoConfigured={state?.videoConfigured || false} materialsOnly={activeCall.callProvider === 'zoom' || activeCall.callProvider === null} onClose={() => setActiveCall(null)} onUpdated={refresh}
+      token={token} videoConfigured={state?.videoConfigured || false} onClose={() => setActiveCall(null)} onUpdated={refresh}
       onJoin={(callProvider, recordingConsent) => setActiveCall({ ...activeCall, callProvider, recordingConsent, preview: false })}/>
-      : activeCall && <RecruiterCall key={`${identity.generation}-${activeCall.kind}-${activeCall.interviewId || activeCall.meetingId || activeCall.applicationId || activeCall.candidateId}`} active={{ ...activeCall, accountActive: state?.candidates.find(person => person.id === activeCall.candidateId)?.accountActive ?? activeCall.accountActive }} token={token} onClose={() => { setActiveCall(null); void refresh(); }} onJoined={() => void refresh()} onZoomHostLeft={reconcileZoom} onCompleted={() => markCompleted(activeCall.candidateId)}/ >}
+      : activeCall && <RecruiterCall key={`${identity.generation}-${activeCall.kind}-${activeCall.interviewId || activeCall.meetingId || activeCall.applicationId || activeCall.candidateId}`} active={{ ...activeCall, accountActive: state?.candidates.find(person => person.id === activeCall.candidateId)?.accountActive ?? activeCall.accountActive }} token={token} onClose={() => { setActiveCall(null); void refresh(); }} onJoined={() => void refresh()} onCompleted={() => {
+      if (!isCurrent(identity)) return;
+      setActiveCall(null); setPage('interviews'); setCompletedOpen(true); setCompletedFocusId(activeCall.candidateId);
+      setNotice('Интервью завершено.'); void refresh();
+    }}/ >}
   </div>;
 }

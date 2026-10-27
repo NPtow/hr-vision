@@ -94,7 +94,7 @@ def recording(db, iid):
 def issue(db, cid, scope, origin):
     require(scope in ('call', 'claim'), 'Выберите назначение ссылки.', 400)
     person = db.execute('SELECT email FROM cp_candidates WHERE id=?', (cid,)).fetchone()
-    require(person and intake(db, cid), 'Подготовленный профиль не найден.', 404)
+    require(person and (scope == 'call' or intake(db, cid)), 'Подготовленный профиль не найден.', 404)
     row = db.execute('''SELECT i.id,i.status,s.end FROM cp_interviews i JOIN cp_recruiter_slots s ON s.id=i.slot_id
       WHERE i.candidate_id=?''', (cid,)).fetchone()
     require(row, 'Сначала назначьте встречу.', 409)

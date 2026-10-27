@@ -34,7 +34,7 @@ class FakeTransport:
         self.updates = []
         self.requests = []
 
-    def send_email(self, recipient, subject, content, message_id, *, html=None):
+    def send_email(self, recipient, subject, content, message_id):
         self.email.append({'recipient': recipient, 'subject': subject, 'content': content, 'id': message_id})
         if self.email_failure:
             raise self.email_failure
@@ -173,6 +173,14 @@ class CandidateNotificationsTest(unittest.TestCase):
         self.assertEqual(self.process()['delivered'], 2)
         self.assertIn('встреча ожидает вашего решения', self.transport.email[0]['content'])
         self.assertNotIn('a@example.test', self.transport.email[0]['content'])
+
+    def test_unverified_email_receives_transactional_interview_booked(self):
+        with self.connect() as db:
+            result = notifications.enqueue(db, 'candidate-a', 'event:book1', 'interview.booked', 'email', settings=self.config, now=10)
+        self.assertEqual(result[0]['status'], 'pending')
+        self.assertEqual(self.process(10)['delivered'], 1)
+        self.assertIn('Вы записались на интервью с рекрутером', self.transport.email[0]['content'])
+        self.assertEqual(self.transport.email[0]['subject'], 'Интервью с рекрутером')
 
     def test_verification_token_generated_at_send_and_only_hash_persisted(self):
         with self.connect() as db:

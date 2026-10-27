@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HR Vision · Путь кандидата (Интерактивный прототип)</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    :root {
+      --primary: #105aaf;
+      --primary-hover: #0d488c;
+      --accent-purple: #6d55f6;
+      --accent-purple-light: #f1edff;
+      --border-color: #e5e2ee;
+      --bg-page: #f8f8fb;
+      --text-main: #1e1b24;
+      --text-muted: #686473;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg-page);
+      color: var(--text-main);
+      -webkit-font-smoothing: antialiased;
+      margin: 0;
+      padding: 0;
+    }
+
+    /* Apple-style card elevation & corners */
+    .apple-card {
+      background: #ffffff;
+      border-radius: 28px;
+      box-shadow: 0 4px 20px -2px rgba(35, 25, 60, 0.05), 0 16px 40px -8px rgba(35, 25, 60, 0.08);
+      border: 1px solid rgba(229, 226, 238, 0.6);
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .apple-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 550;
+      transition: all 0.15s ease;
+      cursor: pointer;
+      border: none;
+    }
+
+    /* Spotlight highlight for onboarding tour */
+    .spotlight-active {
+      position: relative;
+      z-index: 30;
+      box-shadow: 0 0 0 3px #8b5cf6, 0 12px 32px rgba(139, 92, 246, 0.25) !important;
+      transition: box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    /* Device frame for 390px mobile mode */
+    .device-frame-mobile {
+      max-width: 412px;
+      margin: 20px auto;
+      border-radius: 44px;
+      border: 10px solid #1e1b24;
+      box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.35);
+      background: #ffffff;
+      overflow: hidden;
+      min-height: 820px;
+      position: relative;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .device-notch {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 140px;
+      height: 24px;
+      background: #1e1b24;
+      border-bottom-left-radius: 16px;
+      border-bottom-right-radius: 16px;
+      z-index: 60;
+    }
+
+    /* Clean transitions */
+    .tab-content {
+      display: none !important;
+      animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .tab-content.active {
+      display: block !important;
+    }
+    .tab-content.active.tab-flex {
+      display: flex !important;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- ================= TOP TEST BENCH CONTROLLER ================= -->
+  <header class="bg-white border-b border-[#e5e2ee] sticky top-0 z-50 px-4 py-2.5 flex items-center justify-between gap-4 flex-wrap shadow-sm">
+    <div class="flex items-center gap-2 flex-wrap">
+      <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider mr-1">Шаги пути:</span>
+      
+      <button onclick="setFlowStep('booking')" id="btn-step-booking" class="apple-pill bg-[#105aaf] text-white">
+        1. Подтверждение записи
+      </button>
+
+      <button onclick="setFlowStep('calendar')" id="btn-step-calendar" class="apple-pill bg-slate-100 text-slate-700 hover:bg-slate-200">
+        2. Календарь + Онбординг
+      </button>
+
+      <button onclick="setFlowStep('debrief')" id="btn-step-debrief" class="apple-pill bg-slate-100 text-slate-700 hover:bg-slate-200">
+        3. Итоги интервью
+      </button>
+
+      <button onclick="restartOnboarding()" id="btn-tour-pill" class="apple-pill bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 ml-1">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3z"/></svg>
+        Онбординг (тур)
+      </button>
+    </div>
+
+    <!-- Controls: Telegram mode & Viewport -->
+    <div class="flex items-center gap-3">
+      <!-- Telegram State Switcher -->
+      <div class="flex items-center gap-1.5 text-xs text-slate-500">
+        <label for="tg-select">Telegram:</label>
+        <select id="tg-select" onchange="setTgMode(this.value)" class="text-xs bg-slate-50 border border-slate-300 rounded-lg px-2 py-1 text-slate-800 font-medium cursor-pointer">
+          <option value="default">По умолчанию</option>
+          <option value="linked">Подключён</option>
+          <option value="declined">Отказ (на почту)</option>
+        </select>
+      </div>
+
+      <!-- Viewport Segmented Toggle -->
+      <div class="inline-flex rounded-lg bg-slate-100 p-0.5 text-xs font-medium">
+        <button onclick="setViewport('desktop')" id="vp-btn-desktop" class="px-2.5 py-1 rounded-md bg-white text-slate-900 shadow-sm flex items-center gap-1.5 transition">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>
+          Десктоп
+        </button>
+        <button onclick="setViewport('mobile')" id="vp-btn-mobile" class="px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900 flex items-center gap-1.5 transition">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="20" x="5" y="2" rx="2"/><line x1="12" x2="12.01" y1="18" y2="18"/></svg>
+          390px
+        </button>
+      </div>
+
+      <!-- Reset -->
+      <button onclick="resetPrototype()" title="Сбросить прототип" class="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ================= MAIN APP WRAPPER ================= -->
+  <div id="app-container" class="w-full flex-1 flex flex-col transition-all duration-300">
+
+    <!-- ================= STAGE 1: BOOKING CONFIRMATION ================= -->
+    <section id="flow-booking" class="tab-content active w-full flex-1 py-10 px-4">
+      <div class="max-w-[560px] mx-auto">
+        <!-- Logo -->
+        <div class="mb-8 flex justify-center">
+          <svg width="140" height="23" viewBox="0 0 150 24" fill="none">
+            <path d="M23.3 5.6C24.7 3.2 25.3 2 26.7 1.6 28.1 1.2 29.1 1.7 31.1 2.7 35.3 4.9 38 8.3 38 12c0 6.6-8.5 12-19 12-.2 0-.3 0-.5 0-1.9 0-2.9-2.2-1.7-3.8 2.8-3.8 7.1-6.2 11.7-6.7l4.8-.5c1.4-.1 1.4-2.3 0-2.4l-8.1-.8c-1.9-.2-3-2.3-2.1-4l.2-.2zm-4.3-5.6c.1 0 .2 0 .3 0 1.8 0 2.7 2.1 1.6 3.5-2.8 3.8-7.1 6.2-11.7 6.7l-4.8.5c-1.4.1-1.4 2.3 0 2.4l8.1.8c1.9.2 3 2.3 2.1 4l-.2.4c-1.4 2.4-2 3.7-3.4 4.1-1.4.4-2.4-.1-4.4-1.2C2.5 18.8 0 15.6 0 12 0 5.4 8.5 0 19 0z" fill="#105aaf"/>
+            <text x="46" y="17" fill="#121212" font-size="15" font-weight="700" letter-spacing="-0.5">HR Vision</text>
+          </svg>
+        </div>
+
+        <!-- Confirmation Card -->
+        <div class="apple-card p-8 md:p-10 text-center">
+          <!-- Success Icon -->
+          <div class="w-14 h-14 mx-auto mb-5 rounded-2xl bg-[#e8f4ed] text-[#24774b] flex items-center justify-center">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+
+          <h1 class="text-2xl md:text-3xl font-bold tracking-tight text-slate-900 mb-6">Вы записаны</h1>
+
+          <!-- Slot Display (Cleaned: NO "Московское время · 30 минут", NO bulky calendar buttons) -->
+          <div class="bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 mb-6">
+            <div class="text-base font-semibold text-slate-800">Четверг, 22 октября</div>
+            <div class="text-3xl font-bold text-slate-900 tracking-tight mt-1">14:00 – 14:30</div>
+          </div>
+
+          <!-- Telegram Notification Card (Apple Minimalist) -->
+          <div id="booking-tg-card" class="rounded-2xl p-5 mb-7 text-left transition-all bg-[#f0f4ff] border border-blue-100">
+            <!-- Mode 1: Default -->
+            <div id="tg-card-default">
+              <h3 class="text-base font-semibold text-blue-900 mb-1">Напоминание за 1 час</h3>
+              <p class="text-sm text-blue-800/80 mb-4 leading-relaxed">Пришлём ссылку прямо в Telegram, чтобы не искать в почте перед встречей.</p>
+              <div class="flex items-center gap-3 flex-wrap">
+                <button onclick="setTgMode('linked')" class="bg-[#105aaf] hover:bg-[#0d488c] text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition shadow-sm">
+                  Подключить Telegram
+                </button>
+                <button onclick="setTgMode('declined')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2.5 rounded-xl font-medium text-sm transition">
+                  На почту
+                </button>
+              </div>
+            </div>
+
+            <!-- Mode 2: Declined / Email -->
+            <div id="tg-card-declined" class="hidden">
+              <h3 class="text-base font-semibold text-slate-900 mb-1">Напоминание придёт на почту</h3>
+              <p class="text-sm text-slate-600 mb-3">Ссылку отправим на <strong class="text-slate-800">alexey.smirnov@example.com</strong> за 1 час до встречи.</p>
+              <div class="flex items-center gap-2 text-xs text-slate-500">
+                <span>Хотите в мессенджер?</span>
+                <button onclick="setTgMode('default')" class="bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold px-2.5 py-1 rounded-md transition">
+                  Подключить Telegram
+                </button>
+              </div>
+            </div>
+
+            <!-- Mode 3: Linked -->
+            <div id="tg-card-linked" class="hidden">
+              <h3 class="text-base font-semibold text-emerald-900 mb-1 flex items-center gap-1.5">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="text-emerald-600"><polyline points="20 6 9 17 4 12"/></svg>
+                Telegram подключён
+              </h3>
+              <p class="text-sm text-emerald-800 mb-3">Бот пришлёт ссылку на вход за 1 час до встречи.</p>
+              <div class="flex items-center gap-2">
+                <span class="inline-flex items-center gap-1 bg-white border border-emerald-200 text-emerald-800 px-3 py-1.5 rounded-lg text-xs font-semibold">
+                  @mashadasha_bot
+                </span>
+                <button onclick="setTgMode('default')" class="text-xs text-slate-500 hover:text-slate-800 px-2 py-1 rounded">
+                  Отвязать
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Progression Button to Cabinet -->
+          <button onclick="setFlowStep('calendar')" class="w-full bg-[#105aaf] hover:bg-[#0d488c] text-white py-3.5 px-6 rounded-2xl font-semibold text-base transition flex items-center justify-center gap-2 shadow-sm">
+            <span>Перейти в календарь к встрече</span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= STAGE 2: CANDIDATE PORTAL (CALENDAR + ONBOARDING) ================= -->
+    <section id="flow-calendar" class="tab-content tab-flex w-full flex-1 flex-col bg-white">
+      <!-- Portal Header -->
+      <header class="h-16 px-6 border-b border-slate-200 flex items-center justify-between bg-white z-20">
+        <div class="flex items-center gap-3">
+          <svg width="130" height="21" viewBox="0 0 150 24" fill="none">
+            <path d="M23.3 5.6C24.7 3.2 25.3 2 26.7 1.6 28.1 1.2 29.1 1.7 31.1 2.7 35.3 4.9 38 8.3 38 12c0 6.6-8.5 12-19 12-.2 0-.3 0-.5 0-1.9 0-2.9-2.2-1.7-3.8 2.8-3.8 7.1-6.2 11.7-6.7l4.8-.5c1.4-.1 1.4-2.3 0-2.4l-8.1-.8c-1.9-.2-3-2.3-2.1-4l.2-.2zm-4.3-5.6c.1 0 .2 0 .3 0 1.8 0 2.7 2.1 1.6 3.5-2.8 3.8-7.1 6.2-11.7 6.7l-4.8.5c-1.4.1-1.4 2.3 0 2.4l8.1.8c1.9.2 3 2.3 2.1 4l-.2.4c-1.4 2.4-2 3.7-3.4 4.1-1.4.4-2.4-.1-4.4-1.2C2.5 18.8 0 15.6 0 12 0 5.4 8.5 0 19 0z" fill="#105aaf"/>
+            <text x="46" y="17" fill="#121212" font-size="15" font-weight="700" letter-spacing="-0.5">HR Vision</text>
+          </svg>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <!-- Spotlight Target 2: Avatar -->
+          <div id="spotlight-avatar" class="relative">
+            <button onclick="alert('Профиль кандидата: Алексей Смирнов (Lead Product Manager)')" class="w-9 h-9 rounded-full bg-slate-100 text-slate-700 font-semibold text-xs flex items-center justify-center hover:bg-slate-200 transition">
+              АС
+            </button>
+          </div>
+          <button onclick="setFlowStep('booking')" title="Выйти в запись" class="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- Portal Body -->
+      <div class="flex flex-1 min-h-[calc(100vh-115px)]">
+        <!-- Sidebar Navigation -->
+        <aside id="portal-sidebar" class="w-16 md:w-20 border-r border-slate-200 p-3 flex flex-col items-center gap-3 bg-[#fafafc] shrink-0">
+          <!-- Spotlight Target 3: Search / Vacancies -->
+          <button id="nav-btn-vacancies" onclick="setCabinetTab('vacancies')" title="Поиск вакансий" class="w-11 h-11 rounded-2xl flex items-center justify-center text-slate-500 hover:bg-slate-200 transition">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          </button>
+
+          <button id="nav-btn-calendar" onclick="setCabinetTab('calendar')" title="Календарь встреч" class="w-11 h-11 rounded-2xl flex items-center justify-center bg-[#eeebf7] text-[#5946d6] transition">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+          </button>
+
+          <a href="mailto:support@hr-vision.tech" title="Поддержка" class="w-11 h-11 rounded-2xl flex items-center justify-center text-slate-400 hover:bg-slate-200 mt-auto transition">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+          </a>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="flex-1 p-3 md:p-8 max-w-4xl mx-auto w-full">
+
+          <!-- ================= ONBOARDING TOUR DOCK ================= -->
+          <div id="onboarding-dock" class="mb-7 rounded-3xl p-6 text-white bg-gradient-to-br from-[#1e1b24] to-[#2c2637] shadow-xl relative overflow-hidden transition-all duration-300">
+            <!-- Badge -->
+            <div class="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-purple-400 mb-2">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3z"/></svg>
+              <span id="onboarding-step-label">Шаг 1 из 3 · Назначенная встреча</span>
+            </div>
+
+            <!-- Title -->
+            <h2 id="onboarding-step-title" class="text-xl md:text-2xl font-bold tracking-tight text-white mb-2">
+              Вот ваша встреча
+            </h2>
+
+            <!-- Description -->
+            <p id="onboarding-step-desc" class="text-sm md:text-base text-slate-300 leading-relaxed mb-6 max-w-2xl">
+              Интервью с рекрутером назначено на четверг, 22 октября, 14:00 – 14:30. Прямо в этой карточке появится кнопка «Войти во встречу» за 10 минут до звонка. За 1 час пришлём напоминание со ссылкой.
+            </p>
+
+            <!-- Footer: Dots & Buttons -->
+            <div class="flex items-center justify-between gap-4 flex-wrap pt-2 border-t border-white/10">
+              <div class="flex items-center gap-2">
+                <span id="tour-dot-1" class="w-6 h-2 rounded-full bg-purple-400 transition-all"></span>
+                <span id="tour-dot-2" class="w-2 h-2 rounded-full bg-white/30 transition-all"></span>
+                <span id="tour-dot-3" class="w-2 h-2 rounded-full bg-white/30 transition-all"></span>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <button id="tour-btn-prev" onclick="prevOnboardingStep()" class="hidden px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition">
+                  ← Назад
+                </button>
+                <button id="tour-btn-next" onclick="nextOnboardingStep()" class="px-4 py-2 rounded-xl bg-white text-slate-900 hover:bg-slate-100 text-xs font-bold transition shadow-sm">
+                  Далее: Профиль (1/3) →
+                </button>
+                <button onclick="dismissOnboarding()" class="px-2.5 py-2 text-white/60 hover:text-white text-xs font-medium transition">
+                  Пропустить
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- In-Cabinet Notification Status Pill -->
+          <div id="cabinet-reminder-pill" class="flex items-center justify-between gap-3 p-3.5 px-5 mb-8 rounded-2xl text-xs md:text-sm font-medium bg-[#f0fdf4] border border-emerald-200/60 text-emerald-800 transition">
+            <div class="flex items-center gap-2">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-emerald-600"><polyline points="20 6 9 17 4 12"/></svg>
+              <span id="cabinet-reminder-text">Напоминание со ссылкой на вход придёт на alexey.smirnov@example.com за 1 час.</span>
+            </div>
+            <button onclick="setFlowStep('booking')" class="text-blue-700 hover:text-blue-900 font-semibold text-xs shrink-0">
+              Настроить канал
+            </button>
+          </div>
+
+          <!-- TAB CONTENT: CALENDAR -->
+          <div id="tab-calendar-content">
+            <div class="flex items-center justify-between mb-6 flex-wrap gap-4">
+              <h1 class="text-2xl md:text-3xl font-bold tracking-tight text-slate-900">Календарь</h1>
+              
+              <!-- Timezone -->
+              <div class="flex items-center gap-2 text-sm text-slate-500">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" x2="22" y1="12" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                <span>Москва · UTC+3</span>
+              </div>
+            </div>
+
+            <!-- Segmented Switcher: Встречи / Моя доступность -->
+            <div class="flex gap-2 mb-6">
+              <button class="px-4 py-2 rounded-xl text-sm font-semibold bg-purple-50 text-purple-700">Встречи</button>
+              <button class="px-4 py-2 rounded-xl text-sm font-medium text-slate-500 hover:text-slate-800">Моя доступность</button>
+            </div>
+
+            <!-- Sub-segment: Предстоящие (1) / История (0) -->
+            <div class="flex gap-2 mb-8 bg-slate-100 p-1 rounded-2xl w-fit">
+              <button class="px-4 py-1.5 rounded-xl text-xs font-semibold bg-white text-slate-900 shadow-sm">
+                Предстоящие <span class="text-slate-500 ml-1">1</span>
+              </button>
+              <button class="px-4 py-1.5 rounded-xl text-xs font-medium text-slate-500 hover:text-slate-900">
+                История <span class="text-slate-400 ml-1">0</span>
+              </button>
+            </div>
+
+            <!-- Spotlight Target 1: Meeting Agenda Card -->
+            <div id="spotlight-meeting" class="transition-all duration-300 rounded-3xl">
+              <div class="text-xs uppercase font-bold tracking-wider text-slate-400 mb-3">Октябрь 2026 г.</div>
+
+              <div class="flex gap-4 md:gap-6 items-start">
+                <!-- Date Pill -->
+                <div class="flex flex-col items-center pt-1 min-w-[48px]">
+                  <span class="text-3xl font-bold text-slate-900">22</span>
+                  <span class="text-xs font-medium text-slate-400 uppercase">ЧТ</span>
+                </div>
+
+                <!-- Event Card -->
+                <article class="flex-1 bg-white border border-slate-200/80 rounded-2xl p-5 md:p-6 shadow-sm hover:shadow-md transition">
+                  <div class="flex items-start justify-between gap-4 flex-wrap">
+                    <div>
+                      <h3 class="text-lg font-bold text-slate-900 mb-1">Интервью с рекрутером</h3>
+                      <p class="text-sm text-slate-500">14:00 – 14:30 · HR Vision</p>
+                    </div>
+
+                    <span class="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 font-semibold text-xs px-2.5 py-1 rounded-lg">
+                      <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                      Подтверждено
+                    </span>
+                  </div>
+
+                  <!-- Details & Video Entry Button -->
+                  <div class="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between flex-wrap gap-4">
+                    <span class="text-xs text-slate-400">Защищённая видеокомната Daily.co · 30 мин</span>
+
+                    <button onclick="openVideoModal()" class="bg-[#105aaf] hover:bg-[#0d488c] text-white px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-2 transition shadow-sm">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m22 8-6 4 6 4V8z"/><rect width="14" height="12" x="2" y="6" rx="2"/></svg>
+                      Войти во встречу
+                    </button>
+                  </div>
+                </article>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB CONTENT: VACANCIES (SEARCH) -->
+          <div id="tab-vacancies-content" class="hidden">
+            <h1 class="text-2xl md:text-3xl font-bold tracking-tight text-slate-900 mb-2">Предложения о работе</h1>
+            <p class="text-sm text-slate-500 mb-6">После прохождения интервью здесь появятся персональные вакансии, подобранные под ваш стек.</p>
+
+            <article class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm mb-4">
+              <div class="flex items-start justify-between gap-4 mb-2">
+                <h3 class="text-lg font-bold text-slate-900">Lead Product Manager</h3>
+                <span class="bg-amber-50 text-amber-800 text-xs font-semibold px-2.5 py-1 rounded-lg">Ожидает интервью</span>
+              </div>
+              <p class="text-sm text-slate-500 mb-4">Fintech Solutions · 350 000 – 420 000 ₽ · Удалённо</p>
+              <p class="text-sm text-slate-600 leading-relaxed mb-4">Развитие платформенного B2B-продукта, формирование продуктовой стратегии и CustDev с ключевыми клиентами.</p>
+              <div class="text-xs text-slate-400">Рекрутер откроет прямой контакт после звонка 22 октября.</div>
+            </article>
+          </div>
+
+        </main>
+      </div>
+    </section>
+
+    <!-- ================= STAGE 3: POST-INTERVIEW DEBRIEF ================= -->
+    <section id="flow-debrief" class="tab-content w-full flex-1 py-10 px-4">
+      <div class="max-w-[560px] mx-auto">
+        <!-- Logo -->
+        <div class="mb-8 flex justify-center">
+          <svg width="140" height="23" viewBox="0 0 150 24" fill="none">
+            <path d="M23.3 5.6C24.7 3.2 25.3 2 26.7 1.6 28.1 1.2 29.1 1.7 31.1 2.7 35.3 4.9 38 8.3 38 12c0 6.6-8.5 12-19 12-.2 0-.3 0-.5 0-1.9 0-2.9-2.2-1.7-3.8 2.8-3.8 7.1-6.2 11.7-6.7l4.8-.5c1.4-.1 1.4-2.3 0-2.4l-8.1-.8c-1.9-.2-3-2.3-2.1-4l.2-.2zm-4.3-5.6c.1 0 .2 0 .3 0 1.8 0 2.7 2.1 1.6 3.5-2.8 3.8-7.1 6.2-11.7 6.7l-4.8.5c-1.4.1-1.4 2.3 0 2.4l8.1.8c1.9.2 3 2.3 2.1 4l-.2.4c-1.4 2.4-2 3.7-3.4 4.1-1.4.4-2.4-.1-4.4-1.2C2.5 18.8 0 15.6 0 12 0 5.4 8.5 0 19 0z" fill="#105aaf"/>
+            <text x="46" y="17" fill="#121212" font-size="15" font-weight="700" letter-spacing="-0.5">HR Vision</text>
+          </svg>
+        </div>
+
+        <div class="apple-card p-8 md:p-10 text-center">
+          <div class="w-14 h-14 mx-auto mb-5 rounded-2xl bg-[#e8f4ed] text-[#24774b] flex items-center justify-center">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+
+          <h1 class="text-2xl md:text-3xl font-bold tracking-tight text-slate-900 mb-6">Интервью завершено</h1>
+
+          <!-- Profile Badge -->
+          <div class="bg-slate-50 border border-slate-100 rounded-2xl p-5 mb-6 text-left">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs uppercase font-bold tracking-wider text-slate-400">Профиль подтверждён</span>
+              <span class="inline-flex items-center gap-1.5 text-xs font-semibold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-lg border border-purple-200">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                Резюме.pdf
+              </span>
+            </div>
+            <div class="font-bold text-slate-900 text-base">Lead Product Manager · от 320 000 ₽ · Удалённо</div>
+            <p class="text-xs text-slate-500 mt-1">Опыт 8+ лет, B2B SaaS, подтверждён рекрутером HR Vision</p>
+          </div>
+
+          <!-- Timeline Steps -->
+          <div class="flex items-center justify-center gap-2 mb-8 flex-wrap text-xs font-semibold">
+            <span class="bg-emerald-50 text-emerald-800 px-3 py-1.5 rounded-xl flex items-center gap-1">✓ Интервью</span>
+            <span class="text-slate-400">→</span>
+            <span class="bg-slate-100 text-slate-700 px-3 py-1.5 rounded-xl">Матчинг (до 24ч)</span>
+            <span class="text-slate-400">→</span>
+            <span class="bg-slate-100 text-slate-400 px-3 py-1.5 rounded-xl">Предложения</span>
+          </div>
+
+          <!-- Telegram Offer Reception Card -->
+          <div class="rounded-2xl p-5 mb-6 text-left bg-[#f0f4ff] border border-blue-100">
+            <h3 class="text-base font-semibold text-blue-900 mb-1">Предложения о работе</h3>
+            <p class="text-sm text-blue-800/80 mb-4 leading-relaxed">Пришлём вакансии с вилкой и условиями прямо в Telegram.</p>
+            <div class="flex items-center gap-3 flex-wrap">
+              <button onclick="alert('Открывается бот t.me/mashadasha_bot')" class="bg-[#105aaf] hover:bg-[#0d488c] text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition shadow-sm">
+                Получать в Telegram
+              </button>
+              <button onclick="alert('Предложения будут приходить на alexey.smirnov@example.com')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2.5 rounded-xl font-medium text-sm transition">
+                На почту
+              </button>
+            </div>
+          </div>
+
+          <!-- Return to Calendar -->
+          <button onclick="setFlowStep('calendar')" class="w-full bg-slate-100 hover:bg-slate-200 text-slate-800 py-3 px-6 rounded-2xl font-semibold text-sm transition">
+            Вернуться в календарь кабинета
+          </button>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- ================= VIDEO ROOM MODAL SIMULATOR ================= -->
+  <div id="video-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="apple-card max-w-lg w-full p-6 text-slate-900 bg-white">
+      <div class="flex items-center justify-between pb-4 border-b border-slate-100 mb-5">
+        <div class="flex items-center gap-2">
+          <div class="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></div>
+          <h3 class="font-bold text-base text-slate-900">Видеокомната · Daily.co</h3>
+        </div>
+        <button onclick="closeVideoModal()" class="text-slate-400 hover:text-slate-700 p-1 rounded-lg">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <!-- Preview Window -->
+      <div class="bg-slate-900 rounded-2xl h-56 flex flex-col items-center justify-center text-white mb-5 relative overflow-hidden">
+        <div class="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center text-xl font-bold mb-2">АС</div>
+        <span class="text-xs text-slate-400">Камера и микрофон готовы к звонку</span>
+
+        <div class="absolute bottom-3 left-3 flex gap-2">
+          <span class="px-2 py-1 rounded bg-black/50 text-[11px] flex items-center gap-1 text-emerald-400">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Микрофон OK
+          </span>
+          <span class="px-2 py-1 rounded bg-black/50 text-[11px] flex items-center gap-1 text-emerald-400">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> HD 1080p
+          </span>
+        </div>
+      </div>
+
+      <p class="text-xs text-slate-500 mb-6 text-center">Защищённое P2P видеоинтервью с записью и расшифровкой для оценки навыков.</p>
+
+      <div class="flex gap-3">
+        <button onclick="alert('Подключение к видеопотоку рекрутера...'); closeVideoModal();" class="flex-1 bg-[#105aaf] hover:bg-[#0d488c] text-white py-3 rounded-xl font-semibold text-sm transition">
+          Присоединиться к звонку
+        </button>
+        <button onclick="closeVideoModal()" class="px-5 bg-slate-100 hover:bg-slate-200 text-slate-700 py-3 rounded-xl font-medium text-sm transition">
+          Отмена
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= INTERACTIVE JAVASCRIPT LOGIC ================= -->
+  <script>
+    let currentStep = 'booking';
+    let currentViewport = 'desktop';
+    let currentTgMode = 'default';
+    let onboardingStep = 1;
+
+    function setFlowStep(step) {
+      currentStep = step;
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+      const activeEl = document.getElementById('flow-' + step);
+      if (activeEl) activeEl.classList.add('active');
+
+      // Update top button styles
+      ['booking', 'calendar', 'debrief'].forEach(s => {
+        const btn = document.getElementById('btn-step-' + s);
+        if (s === step) {
+          btn.className = 'apple-pill bg-[#105aaf] text-white';
+        } else {
+          btn.className = 'apple-pill bg-slate-100 text-slate-700 hover:bg-slate-200';
+        }
+      });
+
+      // Show/hide tour pill
+      const tourPill = document.getElementById('btn-tour-pill');
+      if (step === 'calendar') {
+        tourPill.style.display = 'inline-flex';
+        renderOnboardingTour();
+      } else {
+        tourPill.style.display = 'none';
+        clearSpotlights();
+      }
+    }
+
+    function setViewport(vp) {
+      currentViewport = vp;
+      const appContainer = document.getElementById('app-container');
+      const btnDesktop = document.getElementById('vp-btn-desktop');
+      const btnMobile = document.getElementById('vp-btn-mobile');
+      const sidebar = document.getElementById('portal-sidebar');
+
+      if (vp === 'mobile') {
+        appContainer.className = 'device-frame-mobile';
+        btnMobile.className = 'px-2.5 py-1 rounded-md bg-white text-slate-900 shadow-sm flex items-center gap-1.5 transition';
+        btnDesktop.className = 'px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900 flex items-center gap-1.5 transition';
+        if (sidebar) sidebar.style.display = 'none';
+      } else {
+        appContainer.className = 'w-full flex-1 flex flex-col transition-all duration-300';
+        btnDesktop.className = 'px-2.5 py-1 rounded-md bg-white text-slate-900 shadow-sm flex items-center gap-1.5 transition';
+        btnMobile.className = 'px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900 flex items-center gap-1.5 transition';
+        if (sidebar) sidebar.style.display = 'flex';
+      }
+    }
+
+    function setTgMode(mode) {
+      currentTgMode = mode;
+      document.getElementById('tg-select').value = mode;
+
+      // Update Step 1 card
+      const cDefault = document.getElementById('tg-card-default');
+      const cDeclined = document.getElementById('tg-card-declined');
+      const cLinked = document.getElementById('tg-card-linked');
+      const bookingCard = document.getElementById('booking-tg-card');
+
+      if (cDefault && cDeclined && cLinked) {
+        cDefault.classList.add('hidden');
+        cDeclined.classList.add('hidden');
+        cLinked.classList.add('hidden');
+
+        if (mode === 'default') {
+          cDefault.classList.remove('hidden');
+          bookingCard.className = 'rounded-2xl p-5 mb-7 text-left transition-all bg-[#f0f4ff] border border-blue-100';
+        } else if (mode === 'declined') {
+          cDeclined.classList.remove('hidden');
+          bookingCard.className = 'rounded-2xl p-5 mb-7 text-left transition-all bg-slate-50 border border-slate-200';
+        } else if (mode === 'linked') {
+          cLinked.classList.remove('hidden');
+          bookingCard.className = 'rounded-2xl p-5 mb-7 text-left transition-all bg-emerald-50 border border-emerald-200';
+        }
+      }
+
+      // Update Step 2 in-calendar reminder pill
+      const remText = document.getElementById('cabinet-reminder-text');
+      const remPill = document.getElementById('cabinet-reminder-pill');
+      if (remText && remPill) {
+        if (mode === 'linked') {
+          remText.innerHTML = '<strong>✓ Напоминание в Telegram подключено</strong> · Бот пришлёт ссылку на вход за 1 час.';
+          remPill.className = 'flex items-center justify-between gap-3 p-3.5 px-5 mb-8 rounded-2xl text-xs md:text-sm font-medium bg-[#f0fdf4] border border-emerald-200 text-emerald-800 transition';
+        } else if (mode === 'declined') {
+          remText.innerHTML = '<strong>✉ Напоминание придёт на почту</strong> · alexey.smirnov@example.com за 1 час.';
+          remPill.className = 'flex items-center justify-between gap-3 p-3.5 px-5 mb-8 rounded-2xl text-xs md:text-sm font-medium bg-slate-50 border border-slate-200 text-slate-700 transition';
+        } else {
+          remText.innerHTML = '<strong>✉ Напоминание придёт на почту</strong> · alexey.smirnov@example.com. Хотите в мессенджер?';
+          remPill.className = 'flex items-center justify-between gap-3 p-3.5 px-5 mb-8 rounded-2xl text-xs md:text-sm font-medium bg-blue-50/70 border border-blue-100 text-blue-900 transition';
+        }
+      }
+    }
+
+    /* Onboarding Tour Navigation */
+    function renderOnboardingTour() {
+      const dock = document.getElementById('onboarding-dock');
+      if (!onboardingStep) {
+        if (dock) dock.style.display = 'none';
+        clearSpotlights();
+        return;
+      }
+      if (dock) dock.style.display = 'block';
+
+      const label = document.getElementById('onboarding-step-label');
+      const title = document.getElementById('onboarding-step-title');
+      const desc = document.getElementById('onboarding-step-desc');
+      const btnNext = document.getElementById('tour-btn-next');
+      const btnPrev = document.getElementById('tour-btn-prev');
+
+      const dot1 = document.getElementById('tour-dot-1');
+      const dot2 = document.getElementById('tour-dot-2');
+      const dot3 = document.getElementById('tour-dot-3');
+
+      clearSpotlights();
+
+      if (onboardingStep === 1) {
+        label.innerText = 'Шаг 1 из 3 · Назначенная встреча';
+        title.innerText = 'Вот ваша встреча';
+        desc.innerText = 'Интервью с рекрутером назначено на четверг, 22 октября, 14:00 – 14:30. Прямо в этой карточке появится кнопка «Войти во встречу» за 10 минут до звонка. За 1 час пришлём напоминание со ссылкой.';
+        btnNext.innerText = 'Далее: Профиль (1/3) →';
+        btnPrev.classList.add('hidden');
+
+        dot1.className = 'w-6 h-2 rounded-full bg-purple-400 transition-all';
+        dot2.className = 'w-2 h-2 rounded-full bg-white/30 transition-all';
+        dot3.className = 'w-2 h-2 rounded-full bg-white/30 transition-all';
+
+        const target = document.getElementById('spotlight-meeting');
+        if (target) target.classList.add('spotlight-active');
+      } else if (onboardingStep === 2) {
+        label.innerText = 'Шаг 2 из 3 · Данные кандидата';
+        title.innerText = 'Вот ваш профиль';
+        desc.innerText = 'Мы создали кабинет и автоматически заполнили профиль из вашего резюме: позиция Lead Product Manager, вилка от 320 000 ₽. На встрече рекрутер зафиксирует ваши пожелания по командам.';
+        btnNext.innerText = 'Далее: Вакансии (2/3) →';
+        btnPrev.classList.remove('hidden');
+
+        dot1.className = 'w-2 h-2 rounded-full bg-white/30 transition-all';
+        dot2.className = 'w-6 h-2 rounded-full bg-purple-400 transition-all';
+        dot3.className = 'w-2 h-2 rounded-full bg-white/30 transition-all';
+
+        const target = document.getElementById('spotlight-avatar');
+        if (target) target.classList.add('spotlight-active');
+      } else if (onboardingStep === 3) {
+        label.innerText = 'Шаг 3 из 3 · Персональный подбор';
+        title.innerText = 'Сюда придут предложения';
+        desc.innerText = 'После интервью рекрутер начнёт предлагать вашу кандидатуру работодателям. Все подходящие предложения появятся во вкладке «Поиск» с условиями и прямым откликом.';
+        btnNext.innerText = 'Всё понятно, к встрече! (3/3) ✓';
+        btnPrev.classList.remove('hidden');
+
+        dot1.className = 'w-2 h-2 rounded-full bg-white/30 transition-all';
+        dot2.className = 'w-2 h-2 rounded-full bg-white/30 transition-all';
+        dot3.className = 'w-6 h-2 rounded-full bg-purple-400 transition-all';
+
+        const target = document.getElementById('nav-btn-vacancies');
+        if (target) target.classList.add('spotlight-active');
+      }
+    }
+
+    function nextOnboardingStep() {
+      if (onboardingStep < 3) {
+        onboardingStep++;
+        renderOnboardingTour();
+      } else {
+        dismissOnboarding();
+      }
+    }
+
+    function prevOnboardingStep() {
+      if (onboardingStep > 1) {
+        onboardingStep--;
+        renderOnboardingTour();
+      }
+    }
+
+    function dismissOnboarding() {
+      onboardingStep = null;
+      renderOnboardingTour();
+    }
+
+    function restartOnboarding() {
+      if (currentStep !== 'calendar') setFlowStep('calendar');
+      onboardingStep = 1;
+      renderOnboardingTour();
+    }
+
+    function clearSpotlights() {
+      ['spotlight-meeting', 'spotlight-avatar', 'nav-btn-vacancies'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.remove('spotlight-active');
+      });
+    }
+
+    /* Cabinet Inner Tabs: Calendar vs Vacancies */
+    function setCabinetTab(tab) {
+      const calContent = document.getElementById('tab-calendar-content');
+      const vacContent = document.getElementById('tab-vacancies-content');
+      const btnCal = document.getElementById('nav-btn-calendar');
+      const btnVac = document.getElementById('nav-btn-vacancies');
+
+      if (tab === 'vacancies') {
+        calContent.classList.add('hidden');
+        vacContent.classList.remove('hidden');
+        btnVac.className = 'w-11 h-11 rounded-2xl flex items-center justify-center bg-[#eeebf7] text-[#5946d6] transition';
+        btnCal.className = 'w-11 h-11 rounded-2xl flex items-center justify-center text-slate-500 hover:bg-slate-200 transition';
+      } else {
+        vacContent.classList.add('hidden');
+        calContent.classList.remove('hidden');
+        btnCal.className = 'w-11 h-11 rounded-2xl flex items-center justify-center bg-[#eeebf7] text-[#5946d6] transition';
+        btnVac.className = 'w-11 h-11 rounded-2xl flex items-center justify-center text-slate-500 hover:bg-slate-200 transition';
+      }
+    }
+
+    /* Video Room Modal */
+    function openVideoModal() {
+      document.getElementById('video-modal').classList.remove('hidden');
+    }
+    function closeVideoModal() {
+      document.getElementById('video-modal').classList.add('hidden');
+    }
+
+    /* Reset Prototype */
+    function resetPrototype() {
+      currentStep = 'booking';
+      currentTgMode = 'default';
+      onboardingStep = 1;
+      setViewport('desktop');
+      setFlowStep('booking');
+      setTgMode('default');
+    }
+
+    // Initialize
+    window.addEventListener('DOMContentLoaded', () => {
+      setFlowStep('booking');
+      setTgMode('default');
+    });
+  </script>
+</body>
+</html>

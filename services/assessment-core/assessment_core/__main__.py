@@ -6,7 +6,6 @@ import argparse
 import json
 import os
 from pathlib import Path
-import sqlite3
 import sys
 
 from .engine import prepare
@@ -55,26 +54,13 @@ def main(argv=None):
     replay = commands.add_parser("replay")
     replay.add_argument("run_id")
     replay.add_argument("--output")
-    recover = commands.add_parser("recover-rejection", help="Offline recovery from retained provider bytes; no POST")
-    recover.add_argument("run_id")
-    recover.add_argument("--expected-body-sha256", required=True)
-    recover.add_argument("--output", help="Private summary JSON; never exports candidate material")
     commands.choices["plan"].add_argument("--request-only", action="store_true")
     default_db = str(Path.home() / ".local/share/hr-vision-assessment-core/runs.sqlite3")
-    for name in ("run", "replay", "recover-rejection"):
+    for name in ("run", "replay"):
         commands.choices[name].add_argument("--db", default=default_db)
     args = parser.parse_args(argv)
     try:
-        if args.command == "recover-rejection":
-            if not Path(args.db).is_file():
-                raise ValueError("existing database required")
-            store = RunStore(args.db)
-            store.recover_rejection(args.run_id, args.expected_body_sha256)
-            audit = store.recovery_audit(args.run_id)
-            result = {"run_id": args.run_id, "status": "completed", "provider_posts": 0,
-                      "body_sha256": audit["body_sha256"], "plan_sha256": audit["plan_sha256"],
-                      "response_sha256": audit["response_sha256"], "audit_phase": audit["phase"]}
-        elif args.command == "replay":
+        if args.command == "replay":
             result = RunStore(args.db).replay(args.run_id)
         else:
             plan = prepare(read(args.corpus), read(args.rubric), model=args.model)
@@ -91,7 +77,7 @@ def main(argv=None):
         print(json.dumps({"error": error.code, "http_status": error.status,
                           "outcome_unknown": error.outcome_unknown}), file=sys.stderr)
         return 2
-    except (ValueError, TypeError, KeyError, sqlite3.Error, RunUnavailable):
+    except (ValueError, RunUnavailable):
         # Validation exceptions can originate in Python's JSON reader. Do not
         # echo its source excerpt, which can include candidate material.
         print('{"error":"invalid_input_or_unavailable_run"}', file=sys.stderr)

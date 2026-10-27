@@ -313,7 +313,7 @@ class FeedbackHTTPTest(unittest.TestCase):
         identity['meetingId'] = s['candidates']['dsa-1']['meeting']['id']
         self.assertEqual(self.post('room', {**identity, 'consent': True}, tokens['manager'])[0], 409)
         act('dsa-1', 'meeting.confirm')
-        with patch.object(app.MEDIA, 'room', return_value={'id': 'test-room', 'name': 'test-room', 'url': 'https://example.test/room'}), patch.object(app.MEDIA, 'request', return_value={'token': 'isolated-provider-token'}) as provider:
+        with patch.object(app.MEDIA, 'room', return_value={'id': 'test-room', 'name': 'test-room', 'url': 'https://example.test/room'}), patch.object(app, 'provider', return_value={'token': 'isolated-provider-token'}) as provider:
             for actor in ('manager', 'dsa-1'):
                 self.assertEqual(self.post('room', {**identity, 'consent': True}, tokens[actor])[0], 200)
             self.assertEqual(provider.call_args.args[1]['properties']['user_name'], 'Тестовый кандидат 1')

@@ -69,7 +69,7 @@ def envelope(row, model):
     }
 
 
-def handler(store, model, service_token, runtime=None):
+def handler(store, model, service_token):
     if not isinstance(model, str) or not _PINNED_MODEL.fullmatch(model):
         raise ValueError("an explicit Jev model version is required")
     if not isinstance(service_token, str) or not re.fullmatch(r"[a-fA-F0-9]{64}", service_token):
@@ -106,17 +106,6 @@ def handler(store, model, service_token, runtime=None):
                 auth = self.headers.get_all("Authorization", [])
                 if len(auth) != 1 or not hmac.compare_digest(auth[0].encode("utf-8"), expected_auth):
                     return self.send_json(401, {"error": "unauthorized"})
-                if self.command == 'GET' and self.path == '/readyz':
-                    store.ready()
-                    if runtime and (runtime['stopping'].is_set() or not runtime.get('worker')
-                                    or not runtime['worker'].is_alive()):
-                        return self.send_json(503, {'status': 'not_ready'})
-                    return self.send_json(200, {'status': 'ready', 'version': __version__, 'model': model})
-                if self.command == 'GET' and self.path == '/v1/operator':
-                    return self.send_json(200, {'service': 'assessment-core', 'version': __version__,
-                        'contract_version': 'full-corpus-level-choice-v1', 'model': model,
-                        'storage': store.diagnostics(), 'worker_running':
-                            runtime['worker'].is_alive() if runtime and runtime.get('worker') else None})
                 if self.command == "POST" and self.path == "/v1/assessments":
                     lengths = self.headers.get_all("Content-Length", [])
                     if (len(lengths) != 1 or not re.fullmatch(r"[0-9]{1,10}", lengths[0])
@@ -197,9 +186,7 @@ def main():
         path = os.environ.get("ASSESSMENT_CORE_DB") or str(Path.home() / ".local/share/hr-vision-assessment-core/runs.sqlite3")
         store = RunStore(path)
         resources.enter_context(store.runtime_lock())
-        stop_event = threading.Event()
-        runtime = {'stopping': stop_event, 'worker': None}
-        server = ThreadingHTTPServer(("127.0.0.1", int(port_text)), handler(store, model, token, runtime))
+        server = ThreadingHTTPServer(("127.0.0.1", int(port_text)), handler(store, model, token))
         # A second process on the same port must fail before touching another
         # worker's in-flight ledger rows during startup recovery.
         try:
@@ -211,9 +198,9 @@ def main():
         resources.close()
         print('{"error":"service_configuration_error"}')
         return 2
+    stop_event = threading.Event()
     thread = threading.Thread(target=worker, args=(store, JevClient(config), stop_event),
                               name="assessment-core-worker", daemon=True)
-    runtime['worker'] = thread
     thread.start()
     try:
         server.serve_forever()

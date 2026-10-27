@@ -367,7 +367,7 @@ def _enqueue_one(db, candidate_id, event_key, event_type, channel, config, times
         return _safe(existing)
     rid = secrets.token_hex(16)
     target = recipient['email'] if channel == 'email' else recipient['telegram_chat_id']
-    state = _readiness(recipient, channel, config, verification, db)
+    state = _readiness(recipient, channel, config, verification or event_type == 'interview.booked', db)
     db.execute('''INSERT INTO cn_outbox
         (id,candidate_id,event_key,event_type,channel,recipient,created_at,status,next_attempt_at)
         VALUES (?,?,?,?,?,?,?,?,?)''',
@@ -856,7 +856,7 @@ def retry(db, notification_id, settings=None, now=None, candidate_id=None):
         require(state != 'error', 'Telegram-чат больше не привязан к кандидату.', 409)
     else:
         recipient = _recipient(db, row['candidate_id'])
-        state = _readiness(recipient, row['channel'], config, row['event_type'] == 'email.verification', db)
+        state = _readiness(recipient, row['channel'], config, row['event_type'] in ('email.verification', 'interview.booked'), db)
         target = recipient['email'] if row['channel'] == 'email' else recipient['telegram_chat_id']
     db.execute('''UPDATE cn_outbox SET status=?,recipient=?,attempts=0,next_attempt_at=?,last_error=NULL,
                lease_id=NULL,lease_until=NULL WHERE id=?''', (state, target, timestamp, notification_id))
@@ -875,7 +875,7 @@ class Transport:
     def __init__(self, config, email_role='candidate'):
         self.config = config.for_email_role(email_role)
 
-    def send_email(self, recipient, subject, content, message_id, *, html=None):
+    def send_email(self, recipient, subject, content, message_id):
         config = self.config
         if not config.email_configured:
             raise DeliveryFailure('smtp_not_configured')
@@ -885,8 +885,6 @@ class Transport:
         message['Reply-To'] = config.smtp_from
         message['Message-ID'] = '<' + message_id + '@hr-vision.notifications>'
         message.set_content(content)
-        if html is not None:
-            message.add_alternative(html, subtype='html')
         context = ssl.create_default_context()
         try:
             if config.smtp_security == 'ssl':
@@ -1039,7 +1037,6 @@ def _outbox_email_role(row):
 
 
 def process_pending(connect, settings=None, limit=10, now=None, transport=None, telegram_renderer=None):
-    import selection
     config, timestamp = _config(settings), _now(now)
     sender = transport if transport is not None else Transport(config)
     counts = {'delivered': 0, 'pending': 0, 'error': 0, 'disabled': 0, 'unverified': 0, 'unbound': 0}
@@ -1066,7 +1063,6 @@ def process_pending(connect, settings=None, limit=10, now=None, transport=None, 
             if not row:
                 db.commit()
                 break
-            selection_invite = row['event_type'] == 'selection.invitation'
             reminder = row['event_type'] == meeting_reminders.EVENT
             lifecycle = meeting_notifications.is_lifecycle(row)
             reason = None if reminder or lifecycle else employer_notifications.prepare(db, row, config) or _delivery_block_reason(db, row)
@@ -1075,9 +1071,7 @@ def process_pending(connect, settings=None, limit=10, now=None, transport=None, 
                 db.commit()
                 counts['error'] += 1
                 continue
-            if selection_invite:
-                state, reason = selection.prepare_invitation(db, row, config, timestamp)
-            elif lifecycle:
+            if lifecycle:
                 state, reason = meeting_notifications.prepare(db, row, config, timestamp)
             elif reminder:
                 state, reason = meeting_reminders.prepare(db, row, config, timestamp)
@@ -1088,7 +1082,7 @@ def process_pending(connect, settings=None, limit=10, now=None, transport=None, 
             else:
                 recipient = _recipient(db, row['candidate_id'])
                 current = recipient['email'] if row['channel'] == 'email' else recipient['telegram_chat_id']
-                state = _readiness(recipient, row['channel'], config, row['event_type'] == 'email.verification', db)
+                state = _readiness(recipient, row['channel'], config, row['event_type'] in ('email.verification', 'interview.booked'), db)
                 if current != row['recipient']:
                     state = 'error'
             if state != 'pending':
@@ -1101,9 +1095,7 @@ def process_pending(connect, settings=None, limit=10, now=None, transport=None, 
             db.execute("UPDATE cn_outbox SET status='sending',attempts=attempts+1,lease_id=?,lease_until=? WHERE id=?",
                        (lease, timestamp + LEASE_SECONDS, row['id']))
             reply_markup, bot_payload = None, None
-            if selection_invite:
-                subject, content, reply_markup = selection.invitation_message(row)
-            elif lifecycle:
+            if lifecycle:
                 subject, content, reply_markup = meeting_notifications.message(db, row, config, timestamp)
             elif reminder:
                 subject, content, reply_markup = meeting_reminders.message(db, row, config, timestamp)

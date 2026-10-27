@@ -21,38 +21,6 @@ provider has been selected or enabled.
 This change is prepared locally. It does not provision a broker, bucket, keys,
 webhook subscription, production Python, or enable a production feature.
 
-## Zoom recordings
-
-The parallel Zoom path uses the same catalog, worker and private storage.
-Zoom sources always use `owned` storage, including when the global Daily policy
-is `remote`; an existing Zoom remote source is upgraded with generation fencing.
-Daily's default and existing sources retain their policy. Recording discovery is
-bound to the saved Zoom connection, meeting number and exact pinned session UUID.
-Authenticated download headers are private worker transport data, never playback
-URLs. A ready video requires a verified owned file; transcript readiness is separate.
-
-New Zoom rooms use native automatic cloud recording after each participant's
-explicit consent before credential issuance. The call interface and controls are
-Zoom's; the shared material worker imports provider files independently of call
-transport, notes and coaching. `HR_ZOOM_DEFAULT_HOST_ID` explicitly supplies a licensed
-host for organizers without a more specific actor mapping. Account entitlements
-still govern Zoom capacity. See [ZOOM_PROVIDER.md](ZOOM_PROVIDER.md) for the switch,
-native completion reconciliation, credentials and deployment acceptance.
-
-Optional cleanup requires `HR_ZOOM_RECORDING_RETENTION_ENABLED=1`. It keeps a
-30-day buffer after both recording end and our verified copy, then moves only
-individually verified files to Zoom's trash. Current checksum/size, storage
-namespace, exact session/account, completed owner, source generation and inventory
-must still match. Uncopied or uncertain files remain; no whole-meeting, permanent
-or local-object deletion occurs. The account must allow recovery from trash and
-have provider automatic deletion disabled. Missing permissions/settings block
-cleanup, not meetings or copying; ambiguous mutations are not replayed.
-
-Cleanup needs `account:read:settings:admin` and
-`cloud_recording:delete:recording_file:admin`. Both were absent in the fresh token
-check during 2026-10-25 deployment preparation, when production Zoom credentials
-were still uninstalled. Cleanup is prepared but is not confirmed active.
-
 ## Dependencies and isolated Python
 
 Use the isolated **CPython 3.12** runtime for both the materials worker and the
@@ -138,10 +106,50 @@ Required operator choices:
 | `HR_MATERIALS_SETTLE_SECONDS` | Provider settling window from source creation, default 86400 seconds. Polling stops after it expires; waiting states remain explicit. |
 | `HR_MATERIALS_BEAT_PATH` | Writable scheduler state file, default `/var/lib/hr-vision-api/materials-celerybeat`. |
 
-Daily is the current capture adapter, not the catalog's identity. Adding capture
-requires an adapter and account binding, not rewriting stored material IDs.
+Daily and Zoom are separate capture adapters, not the catalog's identity. Adding
+capture requires an adapter and account binding, not rewriting stored material IDs.
 Do not put signed URLs in source references, jobs, transcript provenance or logs.
 Resolve them only when needed. `remote` does not create an owned video backup.
+
+### Zoom capture alongside Daily
+
+`materials_zoom.ZoomCapture` registers alongside Daily when Zoom server-to-server
+credentials are configured. It uses `HR_ZOOM_CONNECTION_ID` (default `zoom`), separate
+from the existing Daily `HR_MATERIALS_CONNECTION_ID`. Disabling Zoom selection for
+new meetings does not disable access to existing Zoom recording metadata. The worker
+and API must receive the same explicit Zoom connection identity and S2S configuration;
+Meeting SDK frontend keys are not necessary for the materials worker.
+
+Only a server-stored Zoom room with `provider: zoom`, `id`/`meetingNumber`,
+`meetingSessionId` (immutable session UUID), and `connectionId` can be registered or
+backfilled. The source reference keeps the numeric meeting ID and exact UUID, never
+room credentials or temporary URLs. Discovery queries this UUID, validates the
+returned numeric ID/UUID, and rejects cross-session files. It never retries a lookup
+using the reusable numeric meeting ID. Missing bindings remain blocked; a restart
+that creates another Zoom instance needs its separately verified UUID recorded by
+the call integration, not inferred from the latest recording or its title.
+
+The adapter imports MP4 metadata and existing `audio_transcript` VTT files. Zoom's
+processing/failed/deleted/unknown statuses stay distinct. Empty recording lists do
+not prove that recording was never started: bounded reconciliation can discover
+later files, including transcripts that arrive after video. No new transcription or
+summary service is called. The current materials worker supports video and
+transcript only: Zoom M4A audio, chats, captions and AI summaries are not imported.
+Zoom webhook ingestion is not enabled; this variant uses the existing scheduler.
+
+Zoom file download requires a server-side Authorization header. The resolver obtains
+fresh private access only inside the download attempt, and no token or download/play
+URL is stored in the catalog. **Remote Zoom video cannot be played directly in the
+browser**: the existing access method returns HTTP 409 requiring a server copy, rather
+than publishing a provider bearer token. For portal playback select `owned` for that
+meeting and configure private S3 playback; the filesystem backend supports private
+ingest but has no signed playback URLs. No global storage policy is changed for Daily.
+Authenticated policy changes and existing owner/generation checks remain in force.
+
+The Zoom REST contract used here is documented at
+https://developers.zoom.us/docs/api/meetings/ (cloud recordings). Adapter tests use
+synthetic metadata/files; they do not establish real-account retention, transcription
+availability, or S3 playback acceptance.
 
 Prepare a synthetic local database through the application's existing initialization
 path, set `HR_DATA_DIR` and `HR_MATERIALS_DB_PATH` to that same temporary directory,
@@ -313,14 +321,14 @@ For the enabled API, install the separately prepared
 unit's `/etc/hr-vision/api.env`, adds `/etc/hr-vision/materials.env` afterwards,
 and overrides `ExecStart` to use `/opt/hr-vision-materials/venv/bin/python`.
 The later environment file wins for duplicate keys; do not use it to accidentally
-override unrelated API settings. Worker/scheduler units load `api.env` followed by
-`materials.env`, so the existing Daily key need not be duplicated. The private
-materials file must be readable only by the service administrator and service
-account. Removing the drop-in or restarting the API is a deployment
+override unrelated API settings. Worker/scheduler units load only `materials.env`,
+so that private file must contain their complete required configuration, including
+the selected provider's key. It must be readable only by the service administrator
+and service account. Removing the drop-in or restarting the API is a deployment
 operation, not part of this local preparation.
 
 Install the updated `deploy/ci/receiver.py` **before** publishing the first materials
-release. Its complete runtime includes all nine `materials_*.py` modules and agrees
+release. Its complete runtime includes all ten `materials_*.py` modules and agrees
 with `scripts/package-release.mjs`; partial material layouts are rejected.
 Requirements/lock, documentation, tests, environment files and credentials are not
 part of the API runtime archive. Provision the venv and private configuration

@@ -295,6 +295,18 @@ class CandidateInvitationTest(unittest.TestCase):
             self.assertEqual(db.execute('SELECT count(*) FROM cp_candidates').fetchone()[0], 1)
             self.assertIsNone(db.execute('SELECT email FROM cp_candidates').fetchone()[0])
 
+    def test_self_registered_candidate_can_receive_call_invitation(self):
+        registered, cookie = self.register(email='selfreg@example.test')
+        slot = self.slot()
+        self.call('candidate/book', {'slotId': slot['id']}, cookie=cookie)
+        with self.connect() as db:
+            self.assertIsNone(invites.intake(db, registered['id']))
+        token, result = self.invitation(registered, 'call')
+        self.assertTrue(token)
+        self.assertIn('iframe.html', result['url'])
+        state, _ = self.call('candidate/guest/state', {'token': token})
+        self.assertEqual(state['interview']['status'], 'booked')
+
 
 class MigrationTest(unittest.TestCase):
     def test_nullable_credentials_migration_retains_referencing_rows_and_rollback(self):
