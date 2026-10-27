@@ -93,9 +93,10 @@ class Bridge:
                 # source/version still identifies the original immutable VTT.
                 turns = transcript_turns(part['text'])
                 require(bool(turns), 'transcript_format_unsupported', 422)
-                rows = [[t['startMs'], t['endMs'], t['speakerName'], t['text']] for t in turns]
-                table = json.dumps({'columns': ['start_ms', 'end_ms', 'speaker', 'text'],
-                    'rows': rows}, ensure_ascii=False, separators=(',', ':'))
+                speakers = list(dict.fromkeys(t['speakerName'] for t in turns))
+                rows = [[t['startMs'], t['endMs'], speakers.index(t['speakerName']), t['text']] for t in turns]
+                table = json.dumps({'columns': ['start_ms', 'end_ms', 'speaker_index', 'text'],
+                    'speakers': speakers, 'rows': rows}, ensure_ascii=False, separators=(',', ':'))
                 sources.append({'source_id': part['recordingId'], 'version': core_bridge.digest(part),
                     'kind': 'interview', 'units': [{'unit_id': 'transcript', 'text': table, 'role': 'unknown'}]})
                 continue
