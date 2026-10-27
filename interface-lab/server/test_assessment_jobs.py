@@ -41,6 +41,18 @@ class AssessmentJobsTest(unittest.TestCase):
             self.assertEqual(db.execute('SELECT count(*) FROM as_bindings').fetchone()[0], 1)
         self.assertEqual(self.requests, [])
 
+    def test_connected_intake_never_runs_legacy_assessment_or_match(self):
+        with self.flow.connect() as db:
+            db.execute('DELETE FROM as_matches'); db.execute('DELETE FROM as_bindings')
+            jobs.enqueue(db, 'intake', 'existing-card', 'vacancy', 'workspace')
+        with patch.dict('os.environ', {'HR_EMPLOYER_REVIEW_ENABLED': '1'}):
+            with self.flow.connect() as db:
+                jobs.enqueue(db, 'intake', 'new-card', 'vacancy', 'workspace')
+                self.assertEqual(db.execute('SELECT owner_id FROM as_bindings').fetchall(), [('existing-card',)])
+            self.assertFalse(self.bridge.tick())
+            self.assertFalse(self.bridge.tick_match())
+        self.assertEqual(self.requests, [])
+
     def test_queue_materials_are_server_bound_and_poll_reuses_job(self):
         with patch.object(self.flow.portal, 'materials', side_effect=self.materials):
             self.assertTrue(self.bridge.tick())
