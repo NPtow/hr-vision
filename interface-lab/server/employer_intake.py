@@ -172,6 +172,13 @@ def list_candidates(db, workspace_id, vacancy_id):
       WHERE workspace_id=? AND vacancy_id=? ORDER BY rowid''', (workspace_id, vacancy_id)):
         events.setdefault(cid, []).append((kind, json.loads(body)))
     people = [json.loads(row[0]) for row in rows]
+    import employer_intake_review
+    if employer_intake_review.exists(db):
+        for person in people:
+            if not person.get('archived'):
+                value = employer_intake_review.projection(db, workspace_id, vacancy_id, person['id'])
+                if value['assessment']:
+                    person['assessment'] = value['assessment']
     return {'candidates': [_review_projection(person, events.get(person['id'], [])) for person in people]}
 
 

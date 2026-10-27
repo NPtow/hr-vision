@@ -81,9 +81,10 @@ def projection(db, application_id):
 
 
 def tasks(db):
+    import employer_intake_review
+    result = employer_intake_review.tasks(db)
     if not exists(db):
-        return {'tasks': []}
-    result = []
+        return {'tasks': result}
     for aid, state, error, updated in db.execute(
             "SELECT application_id,state,error,updated FROM er_preparations WHERE state='failed' ORDER BY updated DESC"):
         result.append({'applicationId': aid, 'error': error, 'updated': updated,
@@ -279,6 +280,8 @@ def start_worker(portal):
     if not enabled():
         return
     bridge = Bridge(portal)
+    import employer_intake_review
+    intake_bridge = employer_intake_review.Bridge(portal)
     with portal.lock, portal.connect() as db:
         db.execute("UPDATE er_preparations SET state='failed',error='interrupted_dispatch' WHERE state='dispatching'")
     def run():
@@ -287,5 +290,9 @@ def start_worker(portal):
                 bridge.tick()
             except Exception:
                 pass  # No failed job is retried; the next loop only finds queued work.
+            try:
+                intake_bridge.tick()
+            except Exception:
+                pass  # The durable intake state exposes terminal failures to the team.
             time.sleep(1)
     threading.Thread(target=run, daemon=True, name='employer-review-delivery').start()

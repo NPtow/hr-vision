@@ -40,9 +40,9 @@ function Screening({ journey, person, source, appearance = 'panel', header, enab
   const recordings = orderedRecordings(materials?.recordings || []);
   const recording = recordings.find(item => item.id === selectedId) || recordings[0];
   const transcript = selectedTranscript(materials, recording?.id)?.text || '';
-  const assessment = useInterviewAssessment(journey.token, vacancyId && recordings[0] && materials?.transcription.status === 'ready' ? {
+  const assessment = useInterviewAssessment(journey.token, vacancyId ? {
     source: 'screening', candidate: person.id, applicationId: person.applicationId || person.id,
-    vacancyId, generation, recordingId: recordings[0].id,
+    vacancyId, generation, recordingId: recordings[0]?.id || '',
   } : null, JSON.stringify([materials?.transcription.status, materials?.transcripts.map(item =>
     [item.id, item.recordingId, item.selectionRevision, item.text])]));
   const transcriptChapters = parseMeetingTranscript(transcript);
@@ -95,6 +95,7 @@ function Screening({ journey, person, source, appearance = 'panel', header, enab
     name={person.name} header={header} chapters={chapters} fullChapters={fullChapters}
     shortPlaylist={recordings.length === 1 && source.shortChapters.length > 0} media={recording ? { src: recording.url } : undefined}
     assessment={assessment.assessment}
+    assessmentStatus={assessment.error || assessment.status === 'failed' ? 'unavailable' : 'loading'}
     hideFeedbackQuestions transcriptText={transcript} transcriptSeekable={!!transcript} summary={source.shortSummary}
     assistant={recording && transcript ? interviewAssistant(journey.token, {
       source: 'screening', candidate: person.id, applicationId: person.applicationId || person.id,

@@ -519,6 +519,11 @@ class SelectionRoutes:
                 if method == 'GET' and action == 'review-tasks':
                     return employer_review.tasks(db), dict(HEADERS)
             require(method == 'POST' and action != 'review-tasks' and isinstance(body, dict), 'Проверьте запрос.', 400)
+            if action == 'review-retry' and 'intakeId' in body:
+                require(set(body) == {'intakeId', 'requestId'} and isinstance(body['intakeId'], str), 'Проверьте запрос.', 400)
+                require(employer_review.enabled(), 'Подготовка цитат ещё не подключена.', 503)
+                import employer_intake_review
+                return employer_intake_review.Bridge(self.portal).retry(body['intakeId'], body['requestId']), dict(HEADERS)
             keys = {'applicationId', 'preferredParameterIds' if action == 'review-prepare' else 'requestId'}
             require(set(body) == keys and isinstance(body['applicationId'], str), 'Проверьте запрос.', 400)
             if action == 'review-retry':

@@ -306,7 +306,8 @@ class CoreMaterialsCatalog:
             'video': video, 'transcription': transcription,
             'status': 'ready' if 'ready' in states else 'error' if 'error' in states else
                       'processing' if 'processing' in states else 'not_recorded',
-            'catalogVersion': 1, 'checkedAt': dt.datetime.now(dt.timezone.utc).isoformat()}
+            'catalogVersion': 1, 'sourceCount': len(data.get('sources', [])),
+            'checkedAt': dt.datetime.now(dt.timezone.utc).isoformat()}
 
 
 def transcript_selection_identity(data):

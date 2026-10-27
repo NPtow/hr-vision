@@ -13,7 +13,7 @@ import time
 
 from quotes import Invalid, Model, VERSION, digest, dump, identifier, presentation, quote_key, require, validate
 
-SERVICE_VERSION = 'employer-review-2026-10-26.5'
+SERVICE_VERSION = 'employer-review-2026-10-27.1'
 
 class Store:
     def __init__(self, path, model_name):
@@ -185,6 +185,14 @@ def handler(store, token):
                     require({'preparationId', 'preferredParameterIds'} <= set(body) <=
                             {'preparationId', 'preferredParameterIds', 'vacancyProfile'}, 'invalid_presentation')
                     return self.answer(200, store.view(body['preparationId'], body['preferredParameterIds'], body.get('vacancyProfile')))
+                if self.path == '/v1/levels' and self.command == 'POST':
+                    require(set(body) == {'candidateId', 'assessment', 'sourceRevision', 'vacancyProfile'}, 'invalid_presentation')
+                    source = validate({k: v for k, v in {**body, 'chunks': []}.items() if k != 'vacancyProfile'})
+                    # Existing published cards can show unchanged core levels
+                    # while quotes are pending. This endpoint performs no model call.
+                    result = presentation(source, {}, [], body['vacancyProfile'])
+                    result['provenance']['quotesState'] = 'pending'
+                    return self.answer(200, {'assessment': result})
                 if self.path == '/v1/tasks' and self.command == 'GET':
                     return self.answer(200, store.tasks())
                 self.answer(404, {'error': 'not_found'})
