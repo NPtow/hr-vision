@@ -4,54 +4,15 @@ import { ArrowLeft, Camera, CameraOff, LoaderCircle, Mic, MicOff } from 'lucide-
 import type { DailyCall, DailyParticipant } from '@daily-co/daily-js';
 import { Button } from '../../components/ui/button';
 import { CandidateApiError, candidateRequest, dateTimeLabel, type CallMaterials, type RoomCredentials } from './api';
-import { CallConnectionError, dailyCallConfig, directCallUrl, releaseCall, waitForCall } from './call-connection';
+import { CallConnectionError, directCallUrl, releaseCall, waitForCall } from './call-connection';
 import { CallDeviceAccess, useCallDeviceAccess } from '../../components/call-device-access';
 import { MediaPanel } from './MediaPanel';
 import { CandidateCallSurface, type CandidateRecordingState } from './CandidateCallSurface';
 import { callInputTracks } from './call-media';
-import { ZoomMeeting } from '../../components/call/ZoomMeeting';
-import type { CallProvider } from '../../components/call/call-provider';
 
-type InterviewRoomProps = {
-  title: string; start: string; completed: boolean; configured: boolean; callProvider?: CallProvider | null; applicationId?: string; meetingId?: string; guestToken?: string; onRefresh: () => Promise<void>; onBack: () => void; onExit?: () => void;
-};
-
-/** Choose the provider before mounting Daily's device or connection hooks. */
-export function InterviewRoom(props: InterviewRoomProps) {
-  if (props.callProvider === null) return <ImportedInterviewMaterials {...props}/>;
-  return props.callProvider === 'zoom' ? <ZoomInterviewRoom key={`${props.guestToken || props.applicationId || "interview"}:${props.meetingId || props.start}`} {...props}/> : <DailyInterviewRoom {...props}/>;
-}
-
-function ImportedInterviewMaterials({ title, start, completed, applicationId, meetingId, guestToken, onBack }: InterviewRoomProps) {
-  return <section className="cp-content-page">
-    <Button className="cp-back" variant="ghost" onClick={onBack}><ArrowLeft size={16}/>В кабинет</Button>
-    <div className="cp-page-heading"><h1>{completed ? 'Встреча завершена' : 'Видеовстреча недоступна'}</h1><p>{title} · {dateTimeLabel(start)}</p></div>
-    {completed && !guestToken && (applicationId && !meetingId
-      ? <p className="cp-error" role="alert">Не удалось определить встречу. Откройте её заново из вакансии.</p>
-      : <MediaPanel identity={applicationId ? `meeting:${applicationId}:${meetingId}` : `interview:${start}`} load={() => candidateRequest<CallMaterials>(applicationId ? 'meeting/materials' : 'interview/materials', applicationId ? { applicationId, meetingId } : {})}/>)}
-  </section>;
-}
-
-function ZoomInterviewRoom({ title, start, completed, configured, applicationId, meetingId, guestToken, onRefresh, onBack, onExit }: InterviewRoomProps) {
-  const [opened, setOpened] = useState(false);
-  function leave() { void onRefresh().catch(() => undefined); (onExit || onBack)(); }
-  if (completed && !opened) return <section className="cp-content-page">
-    {!guestToken && <Button className="cp-back" variant="ghost" onClick={onBack}><ArrowLeft size={16}/>В кабинет</Button>}
-    <div className="cp-page-heading"><h1>Встреча завершена</h1><p>{title} · {dateTimeLabel(start)}</p></div>
-    {guestToken ? <p>Спасибо за разговор. Рекрутер пришлёт дальнейшие шаги.</p>
-      : applicationId && !meetingId ? <p className="cp-error" role="alert">Не удалось определить встречу. Откройте её заново из вакансии.</p>
-        : <MediaPanel identity={applicationId ? `meeting:${applicationId}:${meetingId}` : `interview:${start}`} load={() => candidateRequest<CallMaterials>(applicationId ? 'meeting/materials' : 'interview/materials', applicationId ? { applicationId, meetingId } : {})}/>}
-  </section>;
-  return <ZoomMeeting title={title} subtitle={dateTimeLabel(start)} completed={completed}
-    unavailable={!configured ? 'Видеовстреча пока недоступна. Свяжитесь с рекрутером.' : undefined}
-    join={signal => guestToken
-      ? candidateRequest<RoomCredentials>('guest/join', { token: guestToken, consent: true }, signal)
-      : candidateRequest<RoomCredentials>(applicationId ? 'meeting/join' : 'interview/join', { ...(applicationId ? { applicationId, meetingId } : {}), consent: true }, signal)}
-    onOpenChange={setOpened}
-    onJoined={onRefresh} onLeft={leave} onBack={onBack}/>;
-}
-
-function DailyInterviewRoom({ title, start, completed, configured, applicationId, meetingId, guestToken, onRefresh, onBack }: InterviewRoomProps) {
+export function InterviewRoom({ title, start, completed, configured, applicationId, meetingId, guestToken, onRefresh, onBack }: {
+  title: string; start: string; completed: boolean; configured: boolean; applicationId?: string; meetingId?: string; guestToken?: string; onRefresh: () => Promise<void>; onBack: () => void;
+}) {
   const host = useRef<HTMLElement>(null);
   const returnFocus = useRef<HTMLElement | null>(null);
   const preview = useRef<HTMLVideoElement>(null);
@@ -138,10 +99,6 @@ function DailyInterviewRoom({ title, start, completed, configured, applicationId
         : candidateRequest<RoomCredentials>(applicationId ? 'meeting/join' : 'interview/join', { ...(applicationId ? { applicationId, meetingId } : {}), consent });
       // Preserve a fallback as soon as credentials arrive, even if the SDK chunk fails.
       const access = credentialsRequest.then(credentials => {
-        if (credentials.provider === 'zoom') {
-          void onRefresh().catch(() => undefined);
-          throw new CallConnectionError('Сервис встречи изменился. Подключитесь ещё раз.');
-        }
         if (alive.current && attempt.current === currentAttempt && !controller.signal.aborted) {
           setDirectUrl(directCallUrl(credentials));
           deadline('Не удалось загрузить видеосервис. Попробуйте открыть комнату отдельно.');
@@ -163,7 +120,6 @@ function DailyInterviewRoom({ title, start, completed, configured, applicationId
       // Native tracks power the same UI as the recruiter call. Candidate tokens
       // and all access checks stay unchanged; no owner/capture commands run here.
       const call = DailyIframe.createCallObject({
-          dailyConfig: dailyCallConfig(),
         ...(inputs.audioSource ? { audioSource: inputs.audioSource } : {}),
         ...(inputs.videoSource ? { videoSource: inputs.videoSource } : {}),
         startVideoOff: !selected.camera, startAudioOff: !selected.microphone,

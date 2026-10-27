@@ -1,13 +1,5 @@
 export class CallConnectionError extends Error {}
 
-// Daily's call engine is served by this app (scripts/daily-bundles.mjs, pinned by sha256) instead of Daily's CDN,
-// which some users' networks cannot reach. Keep in step with the installed @daily-co/daily-js version.
-export const DAILY_JS_VERSION = '0.93.0';
-
-export function dailyCallConfig(origin = globalThis.location?.origin ?? '') {
-  return { bundlePathOverride: `${origin}/daily/${DAILY_JS_VERSION}` };
-}
-
 // Stop waiting immediately on cancel; a late provider response cannot resume the UI.
 export function waitForCall<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
   return new Promise((resolve, reject) => {

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "storybook": "storybook dev -p 6007 --host 127.0.0.1 --no-open --disable-telemetry",
-    "build": "storybook build --disable-telemetry && vite build --config vite.observability.config.ts && node scripts/daily-bundles.mjs storybook-static",
+    "build": "storybook build --disable-telemetry && vite build --config vite.observability.config.ts",
     "typecheck": "tsc --noEmit",
     "deploy:yc": "bash scripts/deploy-yc.sh"
   },
@@ -34,7 +34,6 @@
     "tailwind-merge": "^3.7.0"
   },
   "devDependencies": {
-    "@babel/parser": "7.29.9",
     "@storybook/addon-docs": "10.6.1",
     "@storybook/react-vite": "10.6.1",
     "@tailwindcss/vite": "^4.3.3",

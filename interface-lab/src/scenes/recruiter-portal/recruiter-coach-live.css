@@ -30,13 +30,3 @@
 .ric-approved-connection .cc-video-stage { height: 100%; }
 .ric-meeting-devices { padding: 16px; color: #fff; }
 .ric-meeting-devices button { background: transparent; border: 0; color: inherit; padding: 12px; }
-
-.ric-zoom-prejoin-consent { display: grid; gap: 8px; font-size: 13px; color: #bbb; }
-.ric-zoom-prejoin-consent label { display: flex; gap: 9px; align-items: center; justify-content: center; }
-.ric-zoom-prejoin-consent input { accent-color: #8d79df; }
-.ric-zoom-prejoin-consent span { font-size: 12px; color: #999; }
-.ric-zoom-workspace .rcc-remote { display: flex; align-items: flex-start; justify-content: center; overflow-y: auto; }
-.ric-zoom-workspace .ric-approved-prejoin { margin-block: auto; }
-@media (max-width: 720px) {
-  .ric-zoom-workspace .rcc-root { grid-template-rows: 100dvh 100dvh; overflow-y: auto; overflow-x: hidden; }
-}

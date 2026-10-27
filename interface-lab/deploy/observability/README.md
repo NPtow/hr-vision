@@ -20,23 +20,9 @@ registration is closed at the public proxy after initial owner creation.
   produce service-up gauges and transition logs. No messages are sent.
 
 No request/response bodies, auth headers, console, raw exception messages, CVs,
-chat text or video/audio are exported. Inputs and dynamic text are masked;
-static UI copy extracted from the production source imports remains readable.
-Names, API-provided text and input values cannot expand that vocabulary at runtime.
-Private DOM
+chat text or video/audio are exported. Text and inputs are masked; private DOM
 attributes, URL query/hash and dynamic route IDs are removed before export.
-Private images, iframes, canvases, contenteditable and `[data-private]` are blocked.
-Public branding assets and fonts retain their versioned URLs. External stylesheets
-remain links: the ClickStack 2.19 player uses rrweb 2.0.0-alpha.8 and cannot apply
-rrweb 2.1's late link-to-`_cssText` mutation. Inline style text is identified through
-its parent node across both full snapshots and incremental updates. CSS layout
-properties are preserved; only the exact `content` property and private URLs are
-redacted. The reviewed CI receiver retains missing service CSS/font/branding assets
-for 25 hours across releases using hardlinks; it never carries old JS into a new
-release or replaces a new asset. Retention deadlines do not reset on later deploys.
-Install the updated receiver before deploying this browser fix. Public landing-page
-assets use their separate deployment and must likewise stay available for retention.
-These changes apply to new recordings; masked text in old data is unrecoverable.
+Images, iframes, canvases, contenteditable and `[data-private]` are blocked.
 The browser exporter wrapper is required: the documented attribute callback in
 `@hyperdx/otel-web@0.20.0` is not called by its default exporter. A rrweb plugin
 sanitizes full snapshots and incremental mutations before serialization.
