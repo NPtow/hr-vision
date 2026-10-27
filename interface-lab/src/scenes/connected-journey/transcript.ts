@@ -18,7 +18,7 @@ export function parseMeetingTranscript(text: string): RecordingChapter[] {
       // DSA's second-rounded export includes valid point cues such as [01:01-01:01].
       if (start === null || end === null || end < start) return [];
       const speaker = match[3] === 'Р' ? 'Рекрутер' : 'Кандидат';
-      return [{ kind: 'transcript' as const, title: speaker, detail: match[4], fragment: match[4], seconds: start, endSeconds: end,
+      return [{ title: speaker, detail: match[4], fragment: match[4], seconds: start, endSeconds: end,
         speaker, isQuote: true, source: `${match[1]} — ${match[2]}` }];
     }).sort((a, b) => a.seconds! - b.seconds!);
   }
@@ -41,7 +41,7 @@ export function parseMeetingTranscript(text: string): RecordingChapter[] {
     const spoken = label ? raw.slice(label[0].length) : raw;
     const fragment = spoken.replace(/<[^>]*>/g, '').replace(/&(?:amp|lt|gt|quot|apos|nbsp);/g, s => ({'&amp;':'&','&lt;':'<','&gt;':'>','&quot;':'"','&apos;':"'",'&nbsp;':' '}[s] || s)).trim();
     if (!fragment) return [];
-    return [{ kind: 'transcript' as const, title: voice || (fragment.length > 75 ? fragment.slice(0,72) + '…' : fragment),
+    return [{ title: voice || (fragment.length > 75 ? fragment.slice(0,72) + '…' : fragment),
       detail: fragment, fragment, seconds: start, endSeconds: end, speaker: voice, source: `${match[1]} · расшифровка встречи` }];
   }).sort((a,b) => a.seconds! - b.seconds!);
 }

@@ -1,0 +1,35 @@
+.asr{--asr-violet:#7658c2;position:relative;width:100%;max-width:760px;aspect-ratio:640/430;margin-inline:auto;isolation:isolate;color:#655e70;font-family:inherit;font-size:12px;line-height:1.4;min-width:0}
+.asr-chart{position:absolute;inset:0;display:block;width:100%;height:100%;overflow:visible}
+.asr-grid-ring{fill:none;stroke:#ece9f1;stroke-width:1.1;vector-effect:non-scaling-stroke}
+.asr-grid-ring:last-of-type{stroke:#e2dce9}
+.asr-axis-line{stroke:#e8e2ed;stroke-width:1;vector-effect:non-scaling-stroke;pointer-events:none}
+.asr-axis-unknown .asr-axis-line{stroke:#ded7e6;stroke-dasharray:3.5 5}
+.asr-axis-selected .asr-axis-line{stroke:#ba9cdf;stroke-width:1.2}
+.asr-axis-hit{stroke:transparent;stroke-width:22;vector-effect:non-scaling-stroke;cursor:pointer}
+.asr-data-fill{fill:#a88bca12;stroke:none;pointer-events:none}
+.asr-data-line{stroke:#af9ac7;stroke-width:1.6;stroke-linecap:round;vector-effect:non-scaling-stroke;pointer-events:none}
+.asr-point-hit{fill:transparent;cursor:pointer}
+.asr-point-halo{fill:#f4eef9;opacity:0;pointer-events:none;transition:opacity .15s ease}
+.asr-point-dot{fill:#aa94c4;stroke:#fff;stroke-width:2;vector-effect:non-scaling-stroke;pointer-events:none;transition:fill .15s ease}
+.asr-point-selected .asr-point-halo,.asr-point:hover .asr-point-halo{opacity:1}
+.asr-point-selected .asr-point-dot{fill:var(--asr-violet)}
+.asr-center{fill:#dbd4e3;pointer-events:none}
+
+
+.asr-axis-controls{position:absolute;inset:0;pointer-events:none}
+.asr-axis-label{position:absolute;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;width:max-content;max-width:160px;min-height:44px;transform:translate(-50%,-50%);border:0;padding:7px 10px;background:transparent;border-radius:13px;cursor:pointer;pointer-events:auto;font:inherit;color:#62596b;text-align:center;line-height:1.35;touch-action:manipulation;transition:background .15s ease,color .15s ease}
+.asr-axis-label:hover{background:#f7f4fa;color:#5c4c6b}
+.asr-axis-label:focus-visible{outline:2px solid var(--asr-violet);outline-offset:3px}
+.asr-axis-label:active{background:#f0e9f8}
+.asr-label-name{font-size:14px;font-weight:500;letter-spacing:-.12px;text-wrap:balance}
+.asr-label-level{font-size:12px;line-height:1.2;color:#84718f;font-variant-numeric:tabular-nums;font-weight:400}
+.asr-label-selected{color:#7254a7;background:#f5f0fa}
+.asr-label-selected .asr-label-level{color:#795a98}
+.asr-label-unknown:not(.asr-label-selected){color:#92889d}
+.asr-label-unknown .asr-label-level{font-variant-numeric:normal;color:#b0a4ba}
+
+.asr-empty{padding:30px 15px;color:#8d8098;font-size:13px;text-align:center}
+@media(max-width:620px){.asr{aspect-ratio:640/450;margin-block:6px 2px}.asr-chart,.asr-axis-controls{height:95.5556%}.asr-axis-label{max-width:106px;padding:5px 6px;gap:3px;border-radius:10px}.asr-label-name{font-size:13px;letter-spacing:-.15px}.asr-label-level{font-size:11px}.asr-point-dot{stroke-width:1.5}}
+@media(max-width:380px){.asr-axis-label{max-width:94px}.asr-label-name{font-size:12px}.asr-label-level{font-size:10px}}
+@media(prefers-reduced-motion:reduce){.asr-axis-label,.asr-point-halo,.asr-point-dot{transition:none}}
+@media(prefers-contrast:more){.asr-grid-ring{stroke:#bdb2c8}.asr-label-name,.asr-label-level,.asr-axis-selected .asr-axis-line{stroke:#68408e}.asr-data-line{stroke:#806193}.asr-point-dot{fill:#806193}}

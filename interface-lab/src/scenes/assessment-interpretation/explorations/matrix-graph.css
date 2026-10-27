@@ -1,0 +1,64 @@
+.amx-graph {
+  --amx-ink: #121212;
+  --amx-secondary: #757575;
+  --amx-surface: #f6f6f7;
+  --amx-accent: #5462fd;
+  --amx-border: #e9e7f0;
+  container: assessment-matrix / size;
+  inline-size: 100%;
+  block-size: 100%;
+  min-inline-size: 0;
+  min-block-size: 0;
+  color: var(--amx-ink);
+  font-family: inherit;
+}
+.amx-graph * { box-sizing: border-box; }
+.amx-board { display: flex; flex-direction: column; gap: 4px; inline-size: 100%; block-size: 100%; min-block-size: 0; padding: 2px; }
+.amx-card { position: relative; isolation: isolate; flex: 0 0 auto; min-inline-size: 0; border-radius: 12px; }
+.amx-card-face { position: relative; min-inline-size: 0; border: 1px solid transparent; border-radius: inherit; background-color: var(--amx-surface); background-image: linear-gradient(rgb(84 98 253 / var(--amx-tone, 0)), rgb(84 98 253 / var(--amx-tone, 0))); transition: background-color .18s, border-color .18s; }
+.amx-card:not(.is-open):hover .amx-card-face { background-color: #f0f0f3; border-color: var(--amx-border); }
+.amx-card-trigger { appearance: none; display: flex; align-items: center; gap: 8px; inline-size: 100%; min-block-size: 34px; padding: 6px 11px; border: 0; border-radius: inherit; background: none; color: var(--amx-ink); text-align: left; font: inherit; cursor: pointer; }
+.amx-card-name { flex: 1; min-inline-size: 0; font-size: 16px; line-height: 21px; font-weight: 560; letter-spacing: -.02em; overflow-wrap: anywhere; }
+.amx-score { display: inline-flex; align-items: baseline; flex-shrink: 0; gap: 3px; color: var(--amx-ink); font-size: 18px; font-weight: 500; letter-spacing: -.03em; line-height: 1; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.amx-score small { color: var(--amx-secondary); font-size: 11px; font-weight: 400; letter-spacing: 0; }
+.amx-collapse-mark { flex-shrink: 0; color: var(--amx-secondary); }
+.amx-card.is-open { flex: 1 0 auto; min-block-size: 0; }
+.amx-card.is-open .amx-card-face { display: flex; flex-direction: column; block-size: 100%; min-block-size: 0; background-color: #fff; border-color: var(--amx-border); }
+.amx-card.is-open .amx-card-trigger { padding-block: 5px; }
+.amx-card.is-open .amx-card-name { font-size: 18px; line-height: 24px; }
+.amx-card-body { display: flex; flex: 1; flex-direction: column; gap: 4px; padding: 0 11px 6px; min-inline-size: 0; }
+.amx-graph .amx-explanation { margin: 0; color: #3d3d42; font-size: 16px; line-height: 21px; font-weight: 400; letter-spacing: -.01em; overflow-wrap: anywhere; }
+.amx-card-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-block-size: 26px; margin-block-start: auto; }
+.amx-sources { display: inline-flex; align-items: center; gap: 2px; }
+.amx-sources > button { appearance: none; display: grid; place-items: center; inline-size: 26px; block-size: 26px; padding: 0; border: 0; border-radius: 7px; background: none; color: var(--amx-ink); cursor: pointer; }
+.amx-sources > button:hover:not(:disabled) { background: var(--amx-surface); }
+.amx-sources > button:disabled { opacity: .3; cursor: default; }
+.amx-sources > span { min-inline-size: 35px; color: var(--amx-secondary); font-size: 12px; line-height: 1.4; text-align: center; font-variant-numeric: tabular-nums; }
+.amx-source-link { appearance: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-block-size: 26px; margin-inline-start: auto; padding: 3px 0 3px 9px; border: 0; border-radius: 7px; background: none; color: var(--amx-accent); font: inherit; font-size: 14px; line-height: 20px; font-weight: 500; font-variant-numeric: tabular-nums; cursor: pointer; }
+.amx-source-link:hover { color: #3545e6; }
+.amx-source-unavailable { margin-inline-start: auto; color: var(--amx-secondary); font-size: 12px; line-height: 1.4; }
+.amx-graph :is(.amx-card-trigger, .amx-source-link, .amx-sources > button):focus-visible { outline: 2px solid var(--amx-accent); outline-offset: 1px; }
+.amx-empty { display: grid; place-content: center; block-size: 100%; margin: 0; padding: 20px; color: #757575; font: inherit; font-size: 14px; line-height: 1.5; text-align: center; }
+
+@container assessment-matrix (min-height: 470px) {
+  .amx-board { gap: 7px; padding: 3px; }
+  .amx-card-trigger { min-block-size: 40px; padding: 8px 12px; }
+  .amx-card.is-open .amx-card-trigger { padding-block: 10px; }
+  .amx-card-body { gap: 10px; padding: 0 12px 10px; }
+  .amx-graph .amx-explanation { line-height: 1.45; }
+  .amx-card-actions, .amx-source-link { min-block-size: 30px; }
+  .amx-sources > button { inline-size: 28px; block-size: 30px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .amx-card-face { transition: none; }
+  .amx-graph button:active { transform: none; }
+}
+@media (prefers-contrast: more) {
+  .amx-graph { --amx-secondary: #555; --amx-border: #999; }
+  .amx-card-face { border-color: var(--amx-border); }
+}
+@media (forced-colors: active) {
+  .amx-card-face { border: 1px solid ButtonText; }
+  .amx-card.is-open .amx-card-face { border-color: Highlight; }
+  .amx-source-link { color: LinkText; }
+}

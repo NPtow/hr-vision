@@ -1,0 +1,10 @@
+.interview-analysis-switch{position:relative;display:grid;grid-template-columns:1fr 1fr;gap:0;isolation:isolate;flex:0 0 216px;width:216px;height:40px;padding:4px;border:0;border-radius:12px;background:#f1edf5;box-sizing:border-box;font-family:inherit}
+.interview-analysis-switch>button{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;min-width:0;height:32px;margin:0;padding:0 9px;border:0;border-radius:8px;background:transparent;color:#8d809a;font:inherit;font-size:12px;font-weight:500;line-height:1;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.interview-analysis-switch>button[aria-pressed=true]{color:#5e447a}
+.interview-analysis-switch>button:hover{color:#674482}
+.interview-analysis-switch>button:active .interview-analysis-switch__label{opacity:.7}
+.interview-analysis-switch>button:focus-visible{outline:2px solid #8866af;outline-offset:3px}
+.interview-analysis-switch__selection{position:absolute;z-index:0;left:4px;top:4px;width:104px;height:32px;border-radius:8px;background:#fff;box-shadow:0 1px 3px #49325f12;pointer-events:none}
+.interview-analysis-switch__label{position:relative;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
+.interview-analysis-switch__label svg{display:block;flex:none;width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+@media(prefers-contrast:more){.interview-analysis-switch{background:#e8e0ef}.interview-analysis-switch>button{color:#6e5b80}.interview-analysis-switch>button[aria-pressed=true]{color:#49315f}.interview-analysis-switch__selection{box-shadow:inset 0 0 0 1px #b8a6ca}}
