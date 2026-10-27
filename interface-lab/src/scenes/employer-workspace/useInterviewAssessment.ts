@@ -11,7 +11,7 @@ export function useInterviewAssessment(token: string, identity: RecordingIdentit
   const scope = JSON.stringify(identity);
   const context = JSON.stringify([token, identity, materialIdentity]);
   const [attempt, setAttempt] = useState(0);
-  const [result, setResult] = useState<{ context: string; assessment?: AssessmentPresentation; error?: string }>();
+  const [result, setResult] = useState<{ context: string; assessment?: AssessmentPresentation; error?: string; status?: string }>();
   const currentContext = useRef(context);
   currentContext.current = context;
   useEffect(() => {
@@ -21,15 +21,15 @@ export function useInterviewAssessment(token: string, identity: RecordingIdentit
     const commands = new Map<string, string>();
     let timer: ReturnType<typeof setTimeout> | undefined;
     let refreshInterval: number | undefined;
-    const read = () => request<{ assessment: Snapshot | null; status?: string; matchStatus?: string; refreshAfterMs?: number }>('employer/interview-assessment', token, source, controller.signal);
-    const load = () => void read().then(({ assessment, status, matchStatus, refreshAfterMs }) => {
+    const read = () => request<{ assessment: Snapshot | null; status?: string; matchStatus?: string; refreshAfterMs?: number; readOnly?: boolean }>('employer/interview-assessment', token, source, controller.signal);
+    const load = () => void read().then(({ assessment, status, matchStatus, refreshAfterMs, readOnly }) => {
       if (controller.signal.aborted || currentContext.current !== context) return;
       refreshInterval = typeof refreshAfterMs === 'number' && Number.isFinite(refreshAfterMs)
         ? Math.max(8_000, Math.min(60_000, refreshAfterMs)) : undefined;
       if (refreshInterval) timer = setTimeout(load, refreshInterval);
       else if (['pending','waiting','queued','running'].includes((assessment ? matchStatus : status) ?? '')) timer = setTimeout(load, 8_000);
-      if (!assessment) { setResult({ context }); return; }
-      if (source.source === 'screening') { setResult({ context, assessment: { ...assessment,
+      if (!assessment) { setResult({ context, status }); return; }
+      if (source.source === 'screening' || readOnly) { setResult({ context, status, assessment: { ...assessment,
         saveFeedback: async () => { throw new Error('Оценка доступна только для просмотра.'); },
       } }); return; }
       setResult({ context, assessment: { ...assessment, saveFeedback: async (target, opinion, expectedVersion) => {
@@ -64,5 +64,6 @@ export function useInterviewAssessment(token: string, identity: RecordingIdentit
     return () => { controller.abort(); clearTimeout(timer); };
   }, [token, scope, context, attempt]);
   return { assessment: result?.context === context ? result.assessment : undefined,
+    status: result?.context === context ? result.status : undefined,
     error: result?.context === context ? result.error : undefined, retry: () => setAttempt(value => value + 1) };
 }

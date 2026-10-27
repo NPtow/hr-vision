@@ -66,6 +66,26 @@ class InterviewAssessmentTest(unittest.TestCase):
         self.assertIsNone(result['assessment']['criteria'][1]['level'])
         self.assertFalse(result['assessment']['provenance']['productionCore'])
 
+    def test_connected_intake_reads_same_projection_without_requiring_video_or_starting_model(self):
+        import employer_intake_review
+        with self.app.connect() as db:
+            employer_intake_review.init(db)
+            db.execute("INSERT INTO er_intake_preparations(intake_id,state,assessment,updated) VALUES (?,'ready',?,1)",
+                       (self.person['id'], json.dumps({**projection('core-current'), 'feedback': []})))
+        try:
+            status, result, _ = self.read()
+            self.assertEqual(status, 200)
+            self.assertTrue(result['readOnly'])
+            people = self.ok('employer/intake?vacancyId=' + self.job['id'], token=self.owner['token'])['candidates']
+            self.assertEqual(people[0]['assessment'], result['assessment'])
+            self.assertEqual(result['assessment']['revisionId'], 'core-current')
+            outsider = self.employer('Other')
+            self.assertEqual(self.request('employer/interview-assessment', self.scope, token=outsider['token'])[0], 404)
+            self.assertEqual(self.feedback()[0], 409)
+        finally:
+            with self.app.connect() as db:
+                db.execute('DROP TABLE er_intake_preparations')
+
     def test_idor_wrong_vacancy_index_and_missing_auth_are_rejected(self):
         other = self.employer('Other')
         other_job = self.vacancy(self.owner)

@@ -301,6 +301,14 @@ class EmployerRoutes:
         with self.lock, self.connect() as db:
             if scope['source'] == 'intake':
                 principal = access.authenticate(db, headers)
+                import employer_review, employer_intake_review
+                if employer_review.enabled() or employer_intake_review.exists(db):
+                    require(set(scope) == {'source', 'id', 'index', 'vacancyId'} and
+                            isinstance(scope['id'], str) and type(scope['index']) is int and scope['index'] >= 0,
+                            'Проверьте источник интервью.', 400)
+                    value = employer_intake_review.projection(db, principal['workspaceId'], scope['vacancyId'], scope['id'])
+                    require(not feedback, 'Оценка ядра доступна только для просмотра.', 409)
+                    return value
                 binding, fingerprint, _ = interview_assessment.intake_binding(db, principal['workspaceId'], scope, allow_missing_transcript=True)
                 if fingerprint is None:
                     require(not feedback, 'Материалы интервью изменились. Откройте оценку ещё раз.', 409)

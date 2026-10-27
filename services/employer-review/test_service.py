@@ -191,6 +191,14 @@ class LifecycleTests(unittest.TestCase):
             self.assertEqual(res.status, 202)
             pid = json.load(res)['preparationId']
         self.store.tick(self.model)
+        body = fixture()
+        req = urllib.request.Request(base + '/v1/levels', json.dumps({k: v for k, v in
+            {**body, 'vacancyProfile': vacancy(body)}.items() if k != 'chunks'}).encode(),
+            headers={'Authorization': 'Bearer test-secret', 'Content-Type': 'application/json'})
+        with urllib.request.urlopen(req) as res:
+            levels = json.load(res)['assessment']
+        self.assertEqual(levels['criteria'], presentation(body, {}, [], vacancy(body))['criteria'])
+        self.assertEqual(self.calls, 1)  # A level projection never enqueues another model call.
         req = urllib.request.Request(base + '/v1/presentations',
             json.dumps({'preparationId': pid, 'preferredParameterIds': []}).encode(),
             headers={'Authorization': 'Bearer test-secret', 'Content-Type': 'application/json'})
