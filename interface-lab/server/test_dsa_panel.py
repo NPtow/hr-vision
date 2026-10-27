@@ -1,10 +1,9 @@
 import copy
-import hashlib
 import io
 import json
 import unittest
 from unittest.mock import patch
-from dsa_panel import DsaPanel, normalize, imported_materials, SOURCE
+from dsa_panel import DsaPanel, normalize, SOURCE
 from domain import Problem
 
 FIXTURE = {'вакансия': {'компания': 'Тестовый источник', 'название': 'Менеджер'}, 'кандидаты': [
@@ -13,51 +12,6 @@ FIXTURE = {'вакансия': {'компания': 'Тестовый источ
      'главы': [{'начало': 0, 'конец': 30, 'таймкод': '00:00', 'название': 'Введение', 'о_чём': 'Описание автора'}],
      'профиль': [{'метка': 'Опыт', 'значение': 'Текст источника'}], 'заключение': ['Мнение рекрутера'],
      'статус': 'не подходит', 'внутренний_ключ': 'private', 'оценка': 4.0}]}
-
-
-def imported_fixture(cid='candidate', iid='interview'):
-    transcript = 'WEBVTT\n\n00:00:01.000 --> 00:00:02.000\n<v Кандидат>Проверю сроки.</v>\n'
-    return {'version': 1, 'candidateId': cid, 'interviewId': iid, 'preparedProfile': {
-        'source': {'kind': 'dsa-panel', 'candidateId': '123', 'example': True},
-        'recordings': [{'source': 'dsa-panel', 'sourceCandidateId': '123',
-                        'publicUrl': SOURCE + '/api/video/123', 'mime': 'video/mp4', 'duration': 30}],
-        'transcriptText': transcript, 'transcriptSource': {'candidateId': '123',
-            'sha256': hashlib.sha256(transcript.encode()).hexdigest()}}}
-
-
-class ImportedInterviewTest(unittest.TestCase):
-    def test_keeps_exact_video_and_transcript_without_network_or_provider_room(self):
-        saved = imported_fixture()
-        with patch('dsa_panel.urllib.request.urlopen', side_effect=AssertionError('network')):
-            result = imported_materials(saved, 'candidate', 'interview')
-        self.assertEqual(result['recordings'][0]['url'], SOURCE + '/api/video/123')
-        self.assertEqual(result['transcripts'][0]['text'], saved['preparedProfile']['transcriptText'])
-        self.assertEqual(result['video']['status'], 'ready')
-        self.assertEqual(result['recordings'][0]['id'], imported_materials(saved, 'candidate', 'interview')['recordings'][0]['id'])
-
-    def test_keeps_authored_chapters_separate_from_transcript_cues(self):
-        saved = imported_fixture()
-        chapter = {'title': 'Опыт', 'seconds': 0, 'endSeconds': 20,
-                   'detail': 'Исходное описание', 'fragment': '', 'source': '', 'isQuote': False}
-        saved['preparedProfile']['chapters'] = [chapter,
-            {**chapter, 'seconds': float('nan')}, {**chapter, 'endSeconds': 35},
-            {**chapter, 'kind': 'transcript'}, {**chapter, 'seconds': -1}]
-        result = imported_materials(saved, 'candidate', 'interview')
-        self.assertEqual(result['chapters'], [chapter])
-        self.assertEqual(result['transcripts'][0]['text'], saved['preparedProfile']['transcriptText'])
-
-    def test_rejects_wrong_owner_interview_source_url_or_modified_transcript(self):
-        for field, value in [('candidateId', 'other'), ('interviewId', 'other')]:
-            saved = imported_fixture(); saved[field] = value
-            with self.subTest(field=field), self.assertRaises(Problem):
-                imported_materials(saved, 'candidate', 'interview')
-        for field, value in [('publicUrl', 'https://other.example/video/123'),
-                             ('sourceCandidateId', '456'), ('duration', float('nan'))]:
-            saved = imported_fixture(); saved['preparedProfile']['recordings'][0][field] = value
-            with self.subTest(field=field), self.assertRaises(Problem):
-                imported_materials(saved, 'candidate', 'interview')
-        saved = imported_fixture(); saved['preparedProfile']['transcriptText'] += 'changed'
-        with self.assertRaises(Problem): imported_materials(saved, 'candidate', 'interview')
 
 
 class DsaPanelTest(unittest.TestCase):

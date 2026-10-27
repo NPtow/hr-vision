@@ -1,53 +1,65 @@
 import { useId, useState, type FormEvent } from 'react';
-import { Plus, X } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
-import type { CandidatePreferences, MissingPreference } from './api';
+import { Textarea } from '../../components/ui/textarea';
+import { localDate, localTime, timeZone, type CandidateProfile } from './api';
 
-export function PreferencesForm({ initial, missingFields, busy, onSubmit }: {
-  initial: CandidatePreferences; missingFields?: MissingPreference[]; busy: boolean; onSubmit: (profile: Partial<CandidatePreferences>) => Promise<void>;
+type WindowDraft = { id: string; date: string; start: string; end: string };
+export const emptyProfile: CandidateProfile = { name: '', city: '', desiredRole: '', desiredSalary: '', workMode: 'any', about: '', geographies: [], availability: [], consentReuse: false, autoApprove: false };
+export function editableProfile(source: CandidateProfile): CandidateProfile {
+  return { name: source.name, city: source.city, desiredRole: source.desiredRole, desiredSalary: source.desiredSalary || '', workMode: source.workMode || 'any', about: source.about || '', telegram: source.telegram || '', geographies: [...source.geographies], availability: source.availability.map(window => ({ start: window.start, end: window.end })), consentReuse: source.consentReuse === true, autoApprove: source.autoApprove === true && source.consentReuse === true };
+}
+
+export function PreferencesForm({ initial, registering = false, busy, onSubmit, onBack }: {
+  initial: CandidateProfile; registering?: boolean; busy: boolean; onSubmit: (profile: CandidateProfile) => Promise<void>; onBack?: () => void;
 }) {
   const id = useId();
-  const onboarding = missingFields !== undefined;
-  const [draft, setDraft] = useState(() => ({ desiredRole: initial.desiredRole || '', salaryMin: initial.salaryMin == null ? '' : String(initial.salaryMin), city: initial.city || '', employmentType: initial.employmentType || '', workMode: initial.workMode || 'any', preferredCompanies: initial.preferredCompanies || [], anyCompany: initial.anyCompany === true }));
-  const [consent, setConsent] = useState(initial.consentReuse);
-  const [autoApprove, setAutoApprove] = useState(initial.autoApprove);
-  const [about, setAbout] = useState(initial.about);
-  const [adding, setAdding] = useState(false);
-  const [company, setCompany] = useState('');
+  const [profile, setProfile] = useState<CandidateProfile>(() => editableProfile(initial));
+  const [cities, setCities] = useState(initial.geographies.join(', '));
+  const [windows, setWindows] = useState<WindowDraft[]>(() => initial.availability.map((window, index) => ({ id: String(index), date: localDate(new Date(window.start)), start: localTime(window.start), end: localTime(window.end) })));
   const [validation, setValidation] = useState('');
-  function addCompany(value: string) {
-    const clean = value.trim();
-    if (!clean) return;
-    setDraft(previous => ({ ...previous, anyCompany: false, preferredCompanies: [...new Set([...previous.preferredCompanies, clean])].slice(0, 20) }));
-    setCompany(''); setAdding(false); setValidation('');
-  }
+  const update = <K extends keyof CandidateProfile>(key: K, value: CandidateProfile[K]) => setProfile(previous => ({ ...previous, [key]: value }));
+  const addWindow = () => setWindows(previous => [...previous, { id: crypto.randomUUID(), date: '', start: '10:00', end: '18:00' }]);
+  const editWindow = (windowId: string, key: 'date' | 'start' | 'end', value: string) => setWindows(previous => previous.map(window => window.id === windowId ? { ...window, [key]: value } : window));
   async function submit(event: FormEvent) {
     event.preventDefault();
-    const salaryMin = Number(draft.salaryMin);
-    if (!Number.isSafeInteger(salaryMin) || salaryMin <= 0) { setValidation('Укажите минимальную зарплату в рублях.'); return; }
-    if (!draft.anyCompany && !draft.preferredCompanies.length) { setValidation('Выберите компании или отметьте «Не важно».'); return; }
-    await onSubmit({ ...draft, desiredRole: draft.desiredRole.trim(), city: draft.city.trim(), salaryMin, salaryMax: null, employmentType: draft.employmentType as CandidatePreferences['employmentType'], workMode: draft.workMode as CandidatePreferences['workMode'], ...(onboarding ? { resumeReviewed: true } : { about, consentReuse: consent, autoApprove: consent && autoApprove }) });
+    setValidation('');
+    const geographies = [...new Set((cities || profile.city).split(',').map(city => city.trim()).filter(Boolean))];
+    const availability = windows.map(window => ({ start: new Date(`${window.date}T${window.start}`), end: new Date(`${window.date}T${window.end}`) }));
+    if (!availability.length) { setValidation('Добавьте хотя бы один интервал, когда вам удобно общаться с работодателями.'); return; }
+    if (availability.some(window => !Number.isFinite(window.start.getTime()) || !Number.isFinite(window.end.getTime()) || window.end.getTime() - window.start.getTime() < 30 * 60000 || window.end.getTime() - window.start.getTime() > 12 * 3600000 || (registering && window.start <= new Date()))) {
+      setValidation('Укажите интервал от 30 минут до 12 часов' + (registering ? ' в будущем.' : '.')); return;
+    }
+    if (registering && !profile.consentReuse) { setValidation('Для продолжения нужно ваше согласие на использование интервью.'); return; }
+    await onSubmit({ ...editableProfile(profile), name: profile.name.trim(), city: profile.city.trim(), desiredRole: profile.desiredRole.trim(), geographies, availability: availability.map(window => ({ start: window.start.toISOString(), end: window.end.toISOString() })) });
   }
-  return <form className="cp-preferences cp-preferences-v2" onSubmit={submit}>
-    <fieldset disabled={busy}>
-      <div className="cp-form-grid">
-        <label className="cp-full" htmlFor={`${id}-role`}>Желаемая должность<Input id={`${id}-role`} required maxLength={200} value={draft.desiredRole} onChange={event => setDraft({ ...draft, desiredRole: event.target.value })}/></label>
-        <label htmlFor={`${id}-salary`}>Зарплата от, ₽ в месяц<Input id={`${id}-salary`} required type="number" inputMode="numeric" min="1" step="1" value={draft.salaryMin} onChange={event => setDraft({ ...draft, salaryMin: event.target.value })}/></label>
-        <label htmlFor={`${id}-employment`}>Занятость<select id={`${id}-employment`} required value={draft.employmentType} onChange={event => setDraft({ ...draft, employmentType: event.target.value as CandidatePreferences['employmentType'] })}><option value="">Выберите</option><option value="full-time">Полная занятость</option><option value="part-time">Частичная занятость</option><option value="project">Проектная работа</option><option value="internship">Стажировка</option></select></label>
-        <label htmlFor={`${id}-city`}>Локация<Input id={`${id}-city`} required autoComplete="address-level2" maxLength={120} placeholder="Город" value={draft.city} onChange={event => setDraft({ ...draft, city: event.target.value })}/></label>
-        <label htmlFor={`${id}-mode`}>Формат работы<select id={`${id}-mode`} value={draft.workMode} onChange={event => setDraft({ ...draft, workMode: event.target.value as CandidatePreferences['workMode'] || 'any' })}><option value="any">Не важно</option><option value="office">Офис</option><option value="hybrid">Гибрид</option><option value="remote">Удалённо</option></select></label>
-      </div>
-      <div className="cp-companies"><div className="cp-companies-heading"><span id={`${id}-companies`}>Предпочитаемые компании</span><label className="cp-check"><input type="checkbox" checked={draft.anyCompany} onChange={event => setDraft({ ...draft, anyCompany: event.target.checked, preferredCompanies: [] })}/><span>Не важно</span></label></div>
-        <div className="cp-company-options" role="group" aria-labelledby={`${id}-companies`}>
-          {[...new Set(['Яндекс', 'Сбер', 'Ozon', ...draft.preferredCompanies])].map(name => <button key={name} type="button" className="cp-company-option" aria-pressed={draft.preferredCompanies.includes(name)} disabled={draft.anyCompany} onClick={() => draft.preferredCompanies.includes(name) ? setDraft({ ...draft, preferredCompanies: draft.preferredCompanies.filter(item => item !== name) }) : addCompany(name)}>{name}{draft.preferredCompanies.includes(name) && <X size={13} aria-hidden="true"/>}</button>)}
-          {!adding && <button type="button" className="cp-company-option cp-company-add" disabled={draft.anyCompany || draft.preferredCompanies.length >= 20} aria-label="Добавить компанию" onClick={() => setAdding(true)}><Plus size={18}/></button>}
-        </div>
-        {adding && <div className="cp-company-entry"><Input aria-label="Название компании" autoFocus maxLength={120} value={company} onChange={event => setCompany(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); addCompany(company); } if (event.key === 'Escape') setAdding(false); }}/><Button type="button" variant="ghost" disabled={!company.trim()} onClick={() => addCompany(company)}>Добавить</Button></div>}
-      </div>
-      {!onboarding && <details className="cp-extra-preferences"><summary>О себе и согласия</summary><label>О себе<textarea rows={3} maxLength={1500} value={about} onChange={event => setAbout(event.target.value)}/></label><label className="cp-check"><input type="checkbox" checked={consent} onChange={event => { setConsent(event.target.checked); if (!event.target.checked) setAutoApprove(false); }}/><span>Использовать резюме и интервью для подбора вакансий</span></label><label className="cp-check"><input type="checkbox" checked={autoApprove} disabled={!consent} onChange={event => setAutoApprove(event.target.checked)}/><span>Согласовывать вакансии автоматически</span></label></details>}
-      {validation && <p role="alert" className="cp-error">{validation}</p>}
-      <div className="cp-form-actions"><Button type="submit" disabled={busy}>{busy ? 'Сохраняем…' : onboarding ? 'Продолжить' : 'Сохранить изменения'}</Button></div>
+  return <form className="cp-preferences" onSubmit={submit}>
+    <div className="cp-form-grid">
+      {!registering && <label className="cp-full" htmlFor={`${id}-name`}>Как вас зовут<Input id={`${id}-name`} autoComplete="name" required maxLength={140} value={profile.name} onChange={event => update('name', event.target.value)}/></label>}
+      <label htmlFor={`${id}-city`}>Город<Input id={`${id}-city`} required autoComplete="address-level2" placeholder="Где вы живёте" maxLength={120} value={profile.city} onChange={event => update('city', event.target.value)}/></label>
+      <label htmlFor={`${id}-role`}>Желаемая должность<Input id={`${id}-role`} required placeholder="Кем хотите работать" maxLength={160} value={profile.desiredRole} onChange={event => update('desiredRole', event.target.value)}/></label>
+      <label htmlFor={`${id}-salary`}>Зарплата от, ₽<Input id={`${id}-salary`} inputMode="numeric" placeholder="По желанию" maxLength={80} value={profile.desiredSalary || ''} onChange={event => update('desiredSalary', event.target.value)}/></label>
+      <label htmlFor={`${id}-mode`}>Формат работы<select id={`${id}-mode`} value={profile.workMode || 'any'} onChange={event => update('workMode', event.target.value as CandidateProfile['workMode'])}><option value="any">Любой</option><option value="office">В офисе</option><option value="hybrid">Гибридный</option><option value="remote">Удалённо</option></select></label>
+      <label className="cp-full" htmlFor={`${id}-cities`}>Где готовы работать<Input id={`${id}-cities`} placeholder={profile.city || 'Города через запятую'} maxLength={500} value={cities} onChange={event => setCities(event.target.value)}/></label>
+      <label className="cp-full" htmlFor={`${id}-about`}>Коротко о себе<Textarea id={`${id}-about`} placeholder="Опыт и что важно в следующей работе" maxLength={1500} value={profile.about} onChange={event => update('about', event.target.value)}/></label>
+    </div>
+    <fieldset className="cp-availability">
+      <legend>Когда вам удобно встречаться</legend>
+      <p className="cp-muted">Работодатель предложит время в этих интервалах. Вы подтвердите его отдельно. {timeZone()}.</p>
+      <div className="cp-window-list">{windows.map((window, index) => <div className="cp-window" key={window.id}>
+        <label htmlFor={`${id}-date-${window.id}`}>Дата<Input id={`${id}-date-${window.id}`} type="date" min={registering ? localDate() : undefined} required value={window.date} onChange={event => editWindow(window.id, 'date', event.target.value)}/></label>
+        <label htmlFor={`${id}-start-${window.id}`}>С<Input id={`${id}-start-${window.id}`} type="time" required step="900" value={window.start} onChange={event => editWindow(window.id, 'start', event.target.value)}/></label>
+        <label htmlFor={`${id}-end-${window.id}`}>До<Input id={`${id}-end-${window.id}`} type="time" required step="900" value={window.end} onChange={event => editWindow(window.id, 'end', event.target.value)}/></label>
+        <Button type="button" variant="ghost" size="icon" aria-label={`Удалить интервал ${index + 1}`} onClick={() => setWindows(previous => previous.filter(item => item.id !== window.id))}><Trash2 size={17}/></Button>
+      </div>)}</div>
+      <Button type="button" variant="secondary" disabled={windows.length >= 40} onClick={addWindow}><Plus size={17}/>Добавить время</Button>
     </fieldset>
+    <div className="cp-consent-box">
+      <label className="cp-check"><input type="checkbox" checked={profile.consentReuse} onChange={event => setProfile(previous => ({ ...previous, consentReuse: event.target.checked, autoApprove: event.target.checked ? previous.autoApprove : false }))} required={registering}/><span>Согласен на запись интервью и использование его материалов для участия в подходящих вакансиях.</span></label>
+      <div className="cp-auto-option"><label className="cp-check"><input type="checkbox" role="switch" checked={profile.autoApprove} disabled={!profile.consentReuse} onChange={event => update('autoApprove', event.target.checked)}/><span><strong>Согласовывать вакансии автоматически</strong><small>По желанию. Только в указанных городах и подходящем формате. Время каждой встречи вы подтверждаете сами.</small></span></label></div>
+    </div>
+    {validation && <p role="alert" className="cp-error">{validation}</p>}
+    <div className="cp-form-actions">{onBack && <Button type="button" variant="ghost" disabled={busy} onClick={onBack}>Назад</Button>}<Button type="submit" disabled={busy}>{busy ? 'Сохраняем…' : registering ? 'Создать кабинет' : 'Сохранить изменения'}</Button></div>
   </form>;
 }

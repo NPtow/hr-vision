@@ -8,40 +8,9 @@ http://:8381 {
 	bind 127.0.0.1 10.130.0.18
 	@trusted {
 		remote_ip 127.0.0.1 10.130.0.28
-		host hr-vision.158-160-179-53.sslip.io mashadasha.tech
+		host hr-vision.158-160-179-53.sslip.io
 	}
 	handle @trusted {
-		@recruiterLegacy {
-			host mashadasha.tech
-			path /iframe.html
-			query workspace=recruiter
-		}
-		redir @recruiterLegacy "https://hr-vision.158-160-179-53.sslip.io{uri}" 302
-		redir /employer "/iframe.html?id=hr-vision-product--manager&viewMode=story&auth=login" 302
-		redir /account/candidate "/iframe.html?id=hr-vision-product--candidate&viewMode=story" 302
-		redir /candidate/ /candidate 308
-		@publicPages {
-			host mashadasha.tech
-			path / /candidate
-			not query path=*
-		}
-		handle @publicPages {
-			root * /srv/hr-vision-company-demo/current
-			rewrite * /index.html
-			encode zstd gzip
-			header Cache-Control "no-cache"
-			file_server
-		}
-		@publicAssets {
-			host mashadasha.tech
-			path /site-assets/* /assets/hr-vision.svg /assets/play.svg /assets/roboto-flex.ttf /favicon.ico /favicon.svg /favicon-32.png /favicon-48.png /apple-touch-icon.png /safari-pinned-tab.svg
-		}
-		handle @publicAssets {
-			root * /srv/hr-vision-company-demo/current
-			encode zstd gzip
-			header Cache-Control "no-cache"
-			file_server
-		}
 		@mockupStory {
 			path /iframe.html
 			not query id=hr-vision-product--start id=hr-vision-product--manager id=hr-vision-product--candidate
@@ -53,35 +22,9 @@ http://:8381 {
 			not query path=/story/hr-vision-product--start path=/story/hr-vision-product--manager path=/story/hr-vision-product--candidate
 		}
 		redir @mockupCatalog "https://hr-vision-lab.158-160-179-53.sslip.io{uri}" 302
-		@intake path /api/hr/intake /api/hr/employer/intake
-		handle @intake {
+		handle /api/hr/intake {
 			request_body {
 				max_size 12MB
-			}
-			reverse_proxy 127.0.0.1:8391
-		}
-		handle /api/hr/candidate/resume {
-			request_body {
-				max_size 7MB
-			}
-			reverse_proxy 127.0.0.1:8391
-		}
-		handle /api/hr/recruiter/candidates {
-			request_body {
-				max_size 7MB
-			}
-			reverse_proxy 127.0.0.1:8391
-		}
-		handle /api/hr/employer/vacancies/import {
-			request_body {
-				max_size 7MB
-			}
-			reverse_proxy 127.0.0.1:8391
-		}
-		@vacancyWrite path /api/hr/employer/vacancies /api/hr/employer/vacancies/update
-		handle @vacancyWrite {
-			request_body {
-				max_size 128KB
 			}
 			reverse_proxy 127.0.0.1:8391
 		}
@@ -106,14 +49,6 @@ http://:8381 {
 		host hr-vision-lab.158-160-179-53.sslip.io
 	}
 	handle @mockups {
-		redir /demos/company-v1 /demos/company-v1/ 308
-		handle_path /demos/company-v1/* {
-			root * /srv/hr-vision-company-demo/current
-			encode zstd gzip
-			header Cache-Control "no-cache"
-			header X-Robots-Tag "noindex, nofollow"
-			file_server
-		}
 		handle /api/* {
 			respond "No API on the mockup site" 404
 		}

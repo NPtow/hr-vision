@@ -1,6 +1,5 @@
 """Isolated identity/flow/concurrency checks. No provider calls or real recipients."""
 import concurrent.futures
-import base64
 import datetime as dt
 import hashlib
 import json
@@ -8,34 +7,20 @@ import sqlite3
 import tempfile
 import threading
 import unittest
-from unittest.mock import Mock, patch
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 from candidate_portal import CandidatePortal, COOKIE, ClosingConnection, dump
 from domain import Problem, iso, now
-from daily_media import DailyMedia
-import recruiter_access
-import recruiter_notifications
 
 
-def assign_fixture_slot(db, slot):
-    """Give synthetic public-booking slots an explicit test recruiter owner."""
-    identifier = 'fixture-recruiter-' + hashlib.sha256(slot['recruiterName'].encode()).hexdigest()[:16]
-    db.execute('''INSERT OR IGNORE INTO rc_accounts VALUES (?,?,?,?,1,?,?)''',
-               (identifier, identifier + '@example.test', recruiter_access._DUMMY_HASH,
-                slot['recruiterName'], iso(now()), iso(now())))
-    db.execute('INSERT OR IGNORE INTO cp_recruiter_slot_owners VALUES (?,?)', (slot['id'], identifier))
-
-
-class FakeMedia(DailyMedia):
+class FakeMedia:
     configured = True
 
     def __init__(self):
         self.tokens, self.finished = [], []
         self.rooms = []
 
-    def room(self, mid, *, recordable=True):
+    def room(self, mid):
         self.rooms.append(mid)
         return {'id': mid, 'name': 'hrv-' + mid, 'url': 'https://test.daily.co/hrv-' + mid}
 
@@ -73,10 +58,6 @@ class FakeNotifications:
 
 class CandidatePortalTest(unittest.TestCase):
     def setUp(self):
-        # These tests cover portal workflows; real model contracts have their own suite.
-        generation = patch('candidate_resume_model.ResumeModel.generate', side_effect=lambda resume, *_: resume)
-        generation.start()
-        self.addCleanup(generation.stop)
         self.tmp = tempfile.TemporaryDirectory(prefix='hr-candidate-unit-')
         self.db_path = Path(self.tmp.name) / 'state.sqlite3'
         self.media = FakeMedia()
@@ -112,28 +93,13 @@ class CandidatePortalTest(unittest.TestCase):
 
     def register(self, **changes):
         result, headers = self.call('candidate/register', self.payload(**changes))
-        cookie = headers['Set-Cookie'].split(';')[0]
-        resume = ('Желаемая должность: Менеджер\nГород: Москва\n'
-                  'Опыт работы: пять лет развивал продажи и поддерживал отношения с клиентами. '
-                  'Проводил переговоры, готовил коммерческие предложения, обучал новых коллег и работал в CRM. '
-                  'Образование: высшее экономическое. Навыки: планирование, коммуникация и анализ данных.')
-        result, _ = self.call('candidate/resume', {'filename': 'resume.txt',
-            'contentBase64': base64.b64encode(resume.encode()).decode()}, cookie)
-        result, _ = self.call('candidate/profile', {'salaryMin': 100000, 'salaryMax': 150000,
-            'latestStartDate': (self.tick + dt.timedelta(days=14)).date().isoformat(), 'resumeReviewed': True,
-            'employmentType': 'full-time', 'anyCompany': True, 'desiredRole': result['desiredRole'] or 'Менеджер', 'city': result['city'] or 'Москва'}, cookie)
-        if 'desiredRole' in changes or 'city' in changes:
-            result, _ = self.call('candidate/profile', {key: changes[key] for key in ('desiredRole', 'city') if key in changes}, cookie)
-        return result, cookie
+        return result, headers['Set-Cookie'].split(';')[0]
 
     def slot(self, minutes=0, recruiter='Рекрутер'):
         state, _ = self.call('recruiter/slots', {'start': iso(self.tick + dt.timedelta(minutes=minutes)),
                                                  'recruiterName': recruiter}, manager=True)
-        slot = next(slot for slot in state['slots'] if slot['start'] == iso(self.tick + dt.timedelta(minutes=minutes))
+        return next(slot for slot in state['slots'] if slot['start'] == iso(self.tick + dt.timedelta(minutes=minutes))
                     and slot['recruiterName'] == recruiter)
-        with self.connect() as db:
-            assign_fixture_slot(db, slot)
-        return slot
 
     def completed_person(self, **changes):
         person, cookie = self.register(**changes)
@@ -141,18 +107,6 @@ class CandidatePortalTest(unittest.TestCase):
         self.call('candidate/book', {'slotId': slot['id']}, cookie)
         self.call('recruiter/interview/join', {'candidateId': person['id'], 'consent': True}, manager=True)
         self.call('recruiter/interview/complete', {'candidateId': person['id']}, manager=True)
-        return person, cookie
-
-    def legacy_auto_person(self):
-        person, cookie = self.completed_person(autoApprove=True)
-        # Historical completed accounts did not have structured salary expectations.
-        # Keep testing their opt-in behaviour without weakening the new booking gate.
-        with self.connect() as db:
-            row = db.execute('SELECT profile FROM cp_candidates WHERE id=?', (person['id'],)).fetchone()
-            profile = json.loads(row[0])
-            profile.pop('salaryMin', None)
-            profile.pop('salaryMax', None)
-            db.execute('UPDATE cp_candidates SET profile=? WHERE id=?', (dump(profile), person['id']))
         return person, cookie
 
     def vacancy(self, **changes):
@@ -256,32 +210,6 @@ class CandidatePortalTest(unittest.TestCase):
         with self.connect() as db:
             self.assertEqual(db.execute("SELECT COUNT(*) FROM fake_events WHERE type='interview.booked'").fetchone()[0], 1)
 
-    def test_self_registration_booking_emails_assigned_recruiter_without_setup(self):
-        person, cookie = self.register()
-        selected = self.slot(recruiter='Выбранный рекрутер')
-        self.slot(recruiter='Другой рекрутер')
-        config = recruiter_notifications.settings({'HR_NOTIFICATIONS_ENABLED': '1',
-            'HR_SMTP_HOST': 'smtp.example.test', 'HR_SMTP_FROM': 'hr@example.test'})
-        transport = Mock()
-        transport.send_email.return_value = 'smtp_accepted'
-        with patch.object(recruiter_notifications, 'settings', return_value=config):
-            for _ in range(2):
-                self.call('candidate/book', {'slotId': selected['id']}, cookie)
-        with self.connect() as db:
-            owner_email = db.execute('''SELECT a.email FROM rc_accounts a
-                JOIN cp_recruiter_slot_owners o ON o.recruiter_id=a.id WHERE o.slot_id=?''',
-                (selected['id'],)).fetchone()[0]
-            self.assertEqual(db.execute('SELECT email_verified FROM rn_channels').fetchone()[0], 0)
-            self.assertEqual(db.execute("SELECT count(*) FROM rn_outbox WHERE channel='email'").fetchone()[0], 1)
-        result = recruiter_notifications.process_pending(self.connect, config, transport=transport)
-        self.assertEqual(result['delivered'], 1)
-        transport.send_email.assert_called_once()
-        self.assertEqual(transport.send_email.call_args.args[0], owner_email)
-        self.assertIn('Длительность: 30 минут', transport.send_email.call_args.args[2])
-        self.assertIn('workspace=recruiter', transport.send_email.call_args.args[2])
-        transport.send_telegram.assert_not_called()
-        self.assertEqual(recruiter_notifications.process_pending(self.connect, config, transport=transport)['delivered'], 0)
-
     def test_overlapping_recruiter_slots_rejected(self):
         self.slot()
         self.assert_problem(409, 'recruiter/slots', {'start': iso(self.tick + dt.timedelta(minutes=15)), 'recruiterName': 'РЕКРУТЕР'}, manager=True)
@@ -300,12 +228,10 @@ class CandidatePortalTest(unittest.TestCase):
         self.assert_problem(400, 'candidate/interview/join', {'consent': False}, cookie)
         self.call('candidate/interview/join', {'consent': True}, cookie)
         self.assertFalse(self.media.tokens[-1]['is_owner'])
-        self.assertIs(self.media.tokens[-1]['enable_prejoin_ui'], True)
         self.assertEqual(self.call('candidate/state', cookie=cookie)[0]['interview']['status'], 'booked')
         self.assert_problem(409, 'recruiter/interview/complete', {'candidateId': p['id']}, manager=True)
         self.call('recruiter/interview/join', {'candidateId': p['id'], 'consent': True}, manager=True)
         self.assertTrue(self.media.tokens[-1]['is_owner'])
-        self.assertIs(self.media.tokens[-1]['enable_prejoin_ui'], True)
         self.call('recruiter/interview/complete', {'candidateId': p['id']}, manager=True)
         self.assertEqual(self.call('candidate/state', cookie=cookie)[0]['interview']['status'], 'completed')
         self.assertEqual(len(self.media.finished), 1)
@@ -314,9 +240,7 @@ class CandidatePortalTest(unittest.TestCase):
     def test_materials_pending_never_fabricates_recording(self):
         p, _ = self.completed_person()
         state, _ = self.call('recruiter/interview/materials', {'candidateId': p['id']}, manager=True)
-        self.assertEqual(state['status'], 'processing')
-        self.assertEqual(state['recordings'], [])
-        self.assertEqual(state['transcripts'], [])
+        self.assertEqual(state, {'status': 'processing', 'recordings': [], 'transcripts': []})
 
     def test_concurrent_join_cannot_reopen_room_while_it_is_finishing(self):
         person, cookie = self.register()
@@ -376,7 +300,7 @@ class CandidatePortalTest(unittest.TestCase):
         self.assertEqual(result['applications'][0]['meeting']['status'], 'confirmed')
 
     def test_opt_in_auto_geo_match_does_not_confirm_time(self):
-        p, cookie = self.legacy_auto_person()
+        p, cookie = self.completed_person(autoApprove=True)
         app = self.propose(p, self.vacancy(city='МОСКВА'))
         self.assertEqual(app['status'], 'accepted')
         self.assertTrue(app['approvedAutomatically'])
@@ -384,14 +308,14 @@ class CandidatePortalTest(unittest.TestCase):
         self.assertEqual(state['candidates'][0]['applications'][0]['meeting']['status'], 'pending')
 
     def test_auto_geo_mismatch_and_remote_without_explicit_preference_stay_pending(self):
-        p, cookie = self.legacy_auto_person()
+        p, cookie = self.completed_person(autoApprove=True)
         self.assertEqual(self.propose(p, self.vacancy(city='Казань'))['status'], 'pending')
         self.assertEqual(self.propose(p, self.vacancy(remote=True))['status'], 'pending')
         self.call('candidate/profile', {'workMode': 'remote'}, cookie)
         self.assertEqual(self.propose(p, self.vacancy(remote=True))['status'], 'accepted')
 
     def test_auto_unknown_role_salary_and_workmode_fall_back_to_manual(self):
-        p, cookie = self.legacy_auto_person()
+        p, cookie = self.completed_person(autoApprove=True)
         self.assertEqual(self.propose(p, self.vacancy(title='Бухгалтер'))['status'], 'pending')
         self.call('candidate/profile', {'workMode': 'hybrid'}, cookie)
         self.assertEqual(self.propose(p, self.vacancy())['status'], 'pending')
@@ -407,12 +331,12 @@ class CandidatePortalTest(unittest.TestCase):
         self.assertEqual(self.call('candidate/state', cookie=other_cookie)[0]['applications'], [])
 
     def test_manager_times_must_match_actual_availability_and_are_unique(self):
-        p, cookie = self.legacy_auto_person()
+        p, cookie = self.completed_person(autoApprove=True)
         app = self.propose(p, self.vacancy())
         self.assert_problem(409, 'recruiter/meetings', {'applicationId': app['id'], 'start': iso(self.tick + dt.timedelta(hours=5))}, manager=True)
         target = iso(self.tick + dt.timedelta(hours=1))
         self.call('recruiter/meetings', {'applicationId': app['id'], 'start': target}, manager=True)
-        p2, c2 = self.legacy_auto_person()
+        p2, c2 = self.completed_person(autoApprove=True)
         app2 = self.propose(p2, self.vacancy())
         self.assert_problem(409, 'recruiter/meetings', {'applicationId': app2['id'], 'start': target}, manager=True)
 
@@ -424,48 +348,6 @@ class CandidatePortalTest(unittest.TestCase):
         for _ in range(15):
             self.assert_problem(401, 'candidate/login', body)
         self.assert_problem(429, 'candidate/login', body)
-
-    def test_calendar_preferences_persist_without_materializing_rules_or_moving_meetings(self):
-        p, cookie = self.register()
-        slot = self.slot()
-        booked, _ = self.call('candidate/book', {'slotId': slot['id']}, cookie)
-        schedule = {'weekly': [{'id': 'weekdays', 'startDate': self.tick.date().isoformat(),
-            'weekdays': list(range(7)), 'startTime': '09:00', 'endTime': '18:00', 'timezone': 'Europe/Moscow'}], 'dates': []}
-        state, _ = self.call('candidate/profile', {'availabilitySchedule': schedule, 'timezone': 'Asia/Tokyo'}, cookie)
-        self.assertEqual(state['interview'], booked['interview'])
-        self.assertGreater(len(state['availability']), 20)
-        state, _ = self.call('candidate/profile', {'about': 'Изменено после расписания'}, cookie)
-        self.assertEqual(state['timezone'], 'Asia/Tokyo')
-        self.assertEqual(state['availabilitySchedule'], schedule)
-        self.assertEqual(state['interview'], booked['interview'])
-        with self.connect() as db:
-            saved = json.loads(db.execute('SELECT profile FROM cp_candidates WHERE id=?', (p['id'],)).fetchone()[0])
-        self.assertEqual(saved['availability'], p['availability'])
-        self.assertNotIn('availabilityManual', saved)
-        self.assert_problem(400, 'candidate/profile', {'timezone': 'No/SuchZone'}, cookie)
-        self.assert_problem(400, 'candidate/profile', {'availabilityManual': []}, cookie)
-        reloaded, _ = self.call('candidate/state', cookie=cookie)
-        self.assertEqual(reloaded['timezone'], 'Asia/Tokyo')
-        self.assertEqual(reloaded['availabilitySchedule'], schedule)
-        # Closing availability must not cancel an appointment already agreed on.
-        day = self.tick.astimezone(ZoneInfo('Europe/Moscow')).date().isoformat()
-        changed, _ = self.call('candidate/profile', {'availabilitySchedule': {
-            **schedule, 'dates': [{'date': day, 'timezone': 'Europe/Moscow', 'intervals': []}]}}, cookie)
-        self.assertEqual(changed['interview'], booked['interview'])
-
-    def test_manager_can_propose_using_weekly_candidate_availability(self):
-        p, cookie = self.legacy_auto_person()
-        app = self.propose(p, self.vacancy())
-        day = (self.tick + dt.timedelta(days=1)).date().isoformat()
-        schedule = {'weekly': [{'id': 'daily', 'startDate': day, 'weekdays': list(range(7)),
-            'startTime': '09:00', 'endTime': '18:00', 'timezone': 'Europe/Moscow'}], 'dates': []}
-        self.call('candidate/profile', {'availability': [], 'availabilitySchedule': schedule}, cookie)
-        target = day + 'T07:00:00Z'
-        self.call('recruiter/meetings', {'applicationId': app['id'], 'start': target}, manager=True)
-        self.call('candidate/profile', {'availabilitySchedule': {**schedule,
-            'dates': [{'date': day, 'timezone': 'Europe/Moscow', 'intervals': []}]}}, cookie)
-        # A new proposal in a closed day must be rejected server-side.
-        self.assert_problem(409, 'recruiter/meetings', {'applicationId': app['id'], 'start': day + 'T10:00:00Z'}, manager=True)
 
     def test_restart_preserves_accounts_profiles_and_events(self):
         p, cookie = self.register()

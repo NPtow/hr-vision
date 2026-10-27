@@ -1,70 +1,43 @@
 import { useEffect, useId, useState, type ReactNode } from 'react';
-import { CalendarDays, Check, ChevronDown, ClipboardList, FileText, Menu, Plus, Users, X } from 'lucide-react';
+import { CalendarDays, ChevronDown, ClipboardList, FileText, Menu, Plus, Users, X } from 'lucide-react';
 import { Button } from '../../components/ui/button';
-import { DropdownMenu, Tooltip } from 'radix-ui';
 import logo from './assets/hr-vision-logo.svg';
-import { COMPANY_SITE_URL } from '../../lib/employer-entry';
-import './candidate-surfaces.css';
-import './shell-navigation.css';
-import './candidate-review-viewport.css';
 
-export type EmployerPage = 'dsa' | 'tasks' | 'create-vacancy' | 'shortlist' | 'intake' | 'book' | 'meetings' | 'meeting' | 'review' | 'pool' | 'offer' | 'chat' | 'vacancies' | 'schedule';
+export type EmployerPage = 'dsa' | 'tasks' | 'shortlist' | 'intake' | 'book' | 'meetings' | 'meeting' | 'review' | 'pool' | 'offer' | 'chat' | 'vacancies' | 'schedule';
 export type Scope = 'sfera' | 'dsa';
-export type EmployerVacancyOption = { id: string; role: string };
-export function EmployerShell({ enabled = true, page, scope, vacancy, vacancyId, vacancies = [], onVacancyChange, navigationBusy, name, hasOffers, candidateContext, candidateNavigation, onNavigate, onAccount, onLogout, accountBusy, accountActions, children }: {
+export function EmployerShell({ enabled = true, page, scope, vacancy, name, hasOffers, onNavigate, onAccount, children,
+  vacancyLabel = 'Задачи', activeSection, hideHeader = false, headerAction }: {
   enabled?: boolean; page: EmployerPage; scope: Scope; vacancy: string; name: string; hasOffers: boolean;
-  vacancyId?: string; vacancies?: EmployerVacancyOption[];
-  onVacancyChange?: (id: string) => void; navigationBusy?: boolean;
-  candidateContext?: 'vacancy' | 'queue';
-  candidateNavigation?: ReactNode;
-  onLogout?: () => void; accountBusy?: boolean; accountActions?: ReactNode;
   onNavigate: (page: EmployerPage) => void; onAccount: () => void; children: ReactNode;
+  vacancyLabel?: string; activeSection?: 'tasks' | 'shortlist' | 'meetings' | 'pool'; hideHeader?: boolean; headerAction?: ReactNode;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuId = useId();
-  useEffect(() => { if (enabled) window.scrollTo({ top: 0, left: 0, behavior: 'instant' }); setMenuOpen(false); }, [enabled, page, scope, candidateContext]);
+  useEffect(() => { if (enabled) window.scrollTo({ top: 0, left: 0, behavior: 'instant' }); setMenuOpen(false); }, [enabled, page, scope]);
   if (!enabled) return <>{children}</>;
-  const panel: EmployerPage = scope === 'dsa' ? 'dsa' : 'shortlist';
-  const active = page === 'create-vacancy' || candidateContext === 'vacancy' ? 'tasks' : page === 'intake' ? panel : ['meeting', 'book', 'review'].includes(page) ? 'meetings' : page === 'offer' ? 'pool' : page;
+  const panel = scope === 'dsa' ? 'dsa' : 'shortlist';
+  const active = activeSection || (page === 'intake' ? panel : ['meeting', 'book', 'review'].includes(page) ? 'meetings' : page === 'offer' ? 'pool' : page);
   const navigate = (next: EmployerPage) => { setMenuOpen(false); onNavigate(next); };
-  const canChooseVacancy = page === panel && candidateContext !== 'vacancy' && !!onVacancyChange && vacancies.length > 0;
-  const canAddCandidates = page !== 'intake' && candidateContext !== 'vacancy' && (!onVacancyChange || !!vacancyId);
-  const sections = [
-    { page: 'tasks' as const, label: 'Задачи', Icon: ClipboardList },
-    { page: panel, label: 'Кандидаты', Icon: Users },
-    { page: 'meetings' as const, label: 'Встречи', Icon: CalendarDays },
-    ...(hasOffers ? [{ page: 'pool' as const, label: 'Офферы', Icon: FileText }] : []),
-  ];
-  return <div className={`ew-shell${page === 'shortlist' || page === 'dsa' ? ' ew-candidates-view' : ''}`}>
+  return <div className="ew-shell">
     <header className="ew-topbar">
       <button className="ew-menu-toggle" aria-label={menuOpen ? 'Закрыть меню' : 'Открыть меню'} aria-expanded={menuOpen} aria-controls={menuId} onClick={() => setMenuOpen(open => !open)}>{menuOpen ? <X size={20}/> : <Menu size={20}/>}</button>
-      <button className="ew-logo" onClick={() => onNavigate('tasks')} aria-label="HR Vision · задачи найма"><img src={logo} alt="HR Vision"/></button>
-      {onLogout ? <DropdownMenu.Root><DropdownMenu.Trigger asChild><button className="ew-account" disabled={accountBusy} aria-label={`Аккаунт: ${name}`}>{name}<ChevronDown size={16}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content className="ew-root ew-account-menu" align="end" sideOffset={8}><DropdownMenu.Item asChild><a href={COMPANY_SITE_URL}>На сайт HR Vision</a></DropdownMenu.Item>{accountActions}<DropdownMenu.Item disabled={accountBusy} onSelect={onLogout}>Выйти из кабинета</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root> : <button className="ew-account" onClick={onAccount}>{name}<ChevronDown size={16}/></button>}
+      <button className="ew-logo" onClick={() => onNavigate('tasks')} aria-label={`HR Vision · ${vacancyLabel.toLocaleLowerCase('ru')}`}><img src={logo} alt="HR Vision"/></button>
+      <button className="ew-account" onClick={onAccount}>{name}<ChevronDown size={16}/></button>
     </header>
     <div className="ew-body">
       <aside id={menuId} className="ag-sidebar ew-sidebar" data-open={menuOpen} aria-label="Разделы работодателя">
-        <Tooltip.Provider delayDuration={200} skipDelayDuration={100}>
-          <nav aria-label="Кабинет нанимающего">
-            {sections.map(({ page: destination, label, Icon }) => <Tooltip.Root key={destination}>
-              <Tooltip.Trigger asChild><button className={active === destination ? 'active' : ''} aria-label={label} aria-current={active === destination ? 'page' : undefined} disabled={navigationBusy} onClick={() => navigate(destination)}><Icon size={21} aria-hidden="true"/><span className="ew-navigation-label">{label}</span></button></Tooltip.Trigger>
-              <Tooltip.Portal><Tooltip.Content className="ew-navigation-tooltip" side="right" sideOffset={12} collisionPadding={12}>{label}</Tooltip.Content></Tooltip.Portal>
-            </Tooltip.Root>)}
-          </nav>
-        </Tooltip.Provider>
+        <nav aria-label="Кабинет нанимающего">
+          <button className={active === 'tasks' ? 'active' : ''} aria-current={active === 'tasks' ? 'page' : undefined} onClick={() => navigate('tasks')}><ClipboardList size={18}/>{vacancyLabel}</button>
+          <button className={active === panel ? 'active' : ''} aria-current={active === panel ? 'page' : undefined} onClick={() => navigate(panel)}><Users size={18}/>Кандидаты</button>
+          <>
+            <button className={active === 'meetings' ? 'active' : ''} aria-current={active === 'meetings' ? 'page' : undefined} onClick={() => navigate('meetings')}><CalendarDays size={18}/>Встречи</button>
+            {hasOffers && <button className={active === 'pool' ? 'active' : ''} aria-current={active === 'pool' ? 'page' : undefined} onClick={() => navigate('pool')}><FileText size={18}/>Офферы</button>}
+          </>
+        </nav>
       </aside>
       <div className="ew-workspace">
-        {page !== 'tasks' && page !== 'create-vacancy' && page !== 'meetings' && <section className="ew-vacancy-header" aria-label="Текущая вакансия">
-          <div className="ew-vacancy-title">
-            <h1>{canChooseVacancy ? <DropdownMenu.Root>
-              <DropdownMenu.Trigger asChild><button className="ew-vacancy-switcher" aria-label={`Выбрать вакансию: ${vacancy}`} disabled={navigationBusy}>{vacancy}</button></DropdownMenu.Trigger>
-              <DropdownMenu.Portal><DropdownMenu.Content className="ew-root ew-vacancy-menu" align="start" sideOffset={12} collisionPadding={16}>
-                <DropdownMenu.RadioGroup value={vacancyId} onValueChange={id => { if (id !== vacancyId) onVacancyChange?.(id); }}>
-                  {vacancies.map(option => <DropdownMenu.RadioItem className="ew-vacancy-option" key={option.id} value={option.id}><span>{option.role}</span><DropdownMenu.ItemIndicator><Check size={17} aria-hidden="true"/></DropdownMenu.ItemIndicator></DropdownMenu.RadioItem>)}
-                </DropdownMenu.RadioGroup>
-              </DropdownMenu.Content></DropdownMenu.Portal>
-            </DropdownMenu.Root> : vacancy}</h1>
-            {candidateNavigation || (canAddCandidates && <Button variant="secondary" className="ew-add-candidates" aria-label="Добавить кандидатов" disabled={navigationBusy} onClick={() => navigate('intake')}><Plus size={16}/><span className="ew-add-candidates-label">Добавить кандидатов</span></Button>)}
-          </div>
+        {page !== 'tasks' && !hideHeader && <section className="ew-vacancy-header" aria-label="Текущая вакансия">
+          <div className="ew-vacancy-title"><h1>{vacancy}</h1>{headerAction === undefined ? page !== 'intake' && <Button variant="secondary" className="ew-add-candidates" onClick={() => navigate('intake')}><Plus size={16}/>Добавить кандидатов</Button> : headerAction}</div>
         </section>}
         <div className="ew-content">{children}</div>
       </div>

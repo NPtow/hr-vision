@@ -6,14 +6,12 @@ if (!['service', 'mockups', 'all'].includes(target)) throw new Error(`Unknown bu
 const config: StorybookConfig = {
   stories: target === 'service' ? ['../src/AgencyProduct.stories.tsx']
     : target === 'mockups' ? ['../src/**/!(AgencyProduct).stories.tsx'] : ['../src/**/*.stories.tsx'],
-  staticDirs: ['../browser-assets', ...(target === 'service' ? [] : ['../public'])],
+  staticDirs: target === 'service' ? [] : ['../public'],
   addons: ['@storybook/addon-docs'],
   framework: '@storybook/react-vite',
   core: { disableTelemetry: true },
   viteFinal: async (config) => ({
     ...config,
-    // Static assets are selected above; Vite must not also copy private local prototypes.
-    publicDir: false,
     plugins: [...(config.plugins ?? []), tailwindcss()],
     ...(process.env.HR_DEV_API ? { server: { ...config.server, proxy: {
       ...config.server?.proxy, '/api/hr': { target: process.env.HR_DEV_API, changeOrigin: false },

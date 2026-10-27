@@ -2,14 +2,6 @@
 
 С 06.10.2026 публикация выполняется автоматически из GitHub: `main` обновляет работающий сервис, `codex/mockups` обновляет отдельный сайт макетов. [Актуальные адреса, pipeline и откат](ci/README.md). Скрипты `deploy-yc.sh` и `deploy-api-yc.sh` запускают этот же workflow; прежняя прямая загрузка отключена.
 
-Для загрузки CV API использует `pdftotext` из Ubuntu-пакета `poppler-utils`. До первого выпуска CV нужно установить пакет на outreach без перезапуска соседних служб и добавить `candidate_resume.py` в runtime-список установленного CI receiver. Само приложение публикуется обычным GitHub workflow. CV и извлечённый текст хранятся в закрытой SQLite-базе, а не среди публичных файлов сайта. [Подробности и ограничения](../server/CANDIDATE_PORTAL.md).
-
-Для `/api/hr/candidate/resume` и `/api/hr/recruiter/candidates` в `outreach.Caddyfile` нужен отдельный лимит тела **7 MB**: файл до 5 MiB передаётся в JSON как base64 (до 6 990 508 байт плюс поля JSON). API проверяет сессию владельца или рекрутера до чтения большого тела. Общий `/api/hr/*` сохраняет лимит 32 KB, а `/api/hr/intake` — 12 MB. Изменение Caddy устанавливается отдельно от выпуска приложения: внести только эти маршруты в текущую конфигурацию, сохранить остальные маршруты, проверить `caddy validate` и выполнить graceful reload через admin `127.0.0.1:2139`.
-
-Для подготовленных профилей и общего расписания runtime receiver и пакет релиза включают `candidate_invites.py` и `recruiter_availability.py`. Миграция допускает профиль без аккаунта (`email/password_hash = NULL`), сохраняет прежние связи и проверяет внешние ключи. Перед обновлением API receiver делает SQLite backup и отказывается перезапускать API при живом звонке.
-
-Проверка выпуска CV должна проходить через **публичный HTTPS-адрес**, а не только напрямую через API: загрузить синтетический PDF больше 32 KB и файл на предельные 5 MiB во временный тестовый аккаунт; проверить HTTP 200, извлечённые данные, переход к проверке профиля, сохранность после повторного входа/чтения и совпадение скачанного файла. Затем удалить только созданные этой проверкой аккаунт и файлы. 11.10.2026 проверены PDF 167 936 и 5 242 880 байт, переход `resume → preferences → complete` и повторное чтение профиля; тестовые данные удалены. До исправления прокси обрывал загрузку 164 KB с 502, несмотря на корректный лимит внутри API.
-
 ## Исторический журнал до разделения веток
 
 Ниже сохранено устройство прежней общей сборки и история её установки. Команды первой миграции и описание ручного скрипта больше не являются текущей процедурой публикации.
@@ -91,80 +83,3 @@ bash scripts/deploy-yc.sh
 Для отката первой миграции недостаточно менять указатель outreach: требуется вернуть сохранённый HR Vision site block dsa после проверки, что другие настройки не изменились. Нельзя слепо восстанавливать полный старый Caddyfile поверх более поздних чужих правок.
 
 Ёмкость dsa остаётся ограничением HTTPS-входа: после очистки в 21:13:30 МСК свободно около 224 MiB. Для остановки потока журналов ClickHouse временно применён уровень fatal без перезапуска; системные диагностические таблицы занимают около 8.16 GB и в этой работе не очищались. На outreach после выпуска около 25 GB свободно. [Действия, границы и восстановление](../../output/operations/yc-cleanup-20261004.md).
-# Public domain, 14 October 2026
-
-`mashadasha.tech` is the public company site. `/candidate` serves the candidate
-landing, `/account/candidate` opens the existing candidate cabinet and `/employer`
-opens employer sign-in. Both cabinets still use the same service release and API
-database on outreach. `www.mashadasha.tech` redirects to the apex with its URI.
-
-The corporate site has its own release at `/srv/hr-vision-company-demo/current`;
-its built files use `/site-assets/` so they cannot shadow Storybook `/assets/`.
-The logo, play icon and font also have exact public-file routes under `/assets/`;
-the rest of that prefix continues to serve the product release.
-The lab route `/demos/company-v1/` continues to use that release. The main service
-is still published only through GitHub Actions. The CI verification hostname
-remains the explicit legacy service alias.
-
-Recruiters continue to use
-`https://hr-vision.158-160-179-53.sslip.io/iframe.html?id=hr-vision-product--manager&viewMode=story&workspace=recruiter`.
-Links with `workspace=recruiter` on the new domain redirect to that host. Old
-candidate/employer links also remain functional; no database reseeding occurs.
-
-Runtime configuration in the private `/etc/hr-vision/api.env`:
-
-```dotenv
-HR_ORIGIN=https://mashadasha.tech
-HR_ADDITIONAL_ORIGINS=https://hr-vision.158-160-179-53.sslip.io
-HR_RECRUITER_ORIGIN=https://hr-vision.158-160-179-53.sslip.io
-HR_RECRUITER_PUBLIC_URL=https://hr-vision.158-160-179-53.sslip.io/iframe.html?id=hr-vision-product--manager&viewMode=story&workspace=recruiter
-```
-
-The allowlist is exact, without wildcard CORS. Existing sent HH invitations are
-reused from either approved origin. Candidate notification links use the new
-canonical origin; recruiter invitations use the explicit recruiter origin.
-Browser cookies and storage are host-specific, so moving to the new domain
-requires signing in once with the same account. No login token is sent between
-the domains in a query string.
-
-DNS in REG.RU: only apex and `www` A records change to `158.160.179.53`. Existing
-MX, SPF, DKIM, DMARC and name servers are retained. Caddy configuration updates
-must preserve neighbouring sites, validate first, compare the previous hash and
-take a backup before graceful reload. If rollback is needed, restore the saved
-Caddy/env files, then return the two A records to their saved values. Database
-snapshots are recovery material; never restore them merely to revert routing.
-
-## Employer Telegram Mini App
-
-Employer Telegram uses the existing bot, notification worker and delivery configuration.
-`HR_ORIGIN` must be the canonical HTTPS product origin. No employer URL override,
-new service or new credentials are required. Inline `web_app` buttons point to the
-existing manager story with `miniapp=employer`, `screen=shortlist` and optionally
-an opaque `vacancyId`. These are public navigation links, never login capabilities.
-The official SDK is loaded only for that entry. Check bot/domain and inline Mini App
-availability in the native Telegram clients before declaring the feature accepted.
-
-Authenticated personal accounts use `GET /api/hr/employer/telegram`,
-`POST /api/hr/employer/telegram/link {}` and
-`POST /api/hr/employer/telegram/disconnect {}`. Team grants cannot bind.
-One-use `em_` start links expire after ten minutes. The public same-origin
-`POST /api/hr/employer/telegram/session {"initData":"…"}` exchanges only signed,
-fresh Telegram data for the existing employer session/cookie. Raw initData is
-not stored; never include it, binding links or session tokens in logs or reports.
-Rebinding/disconnecting revokes Mini App-issued sessions and invalidates queued
-notices from the previous binding, without revoking independent password sessions.
-
-`employer_notifications.py` observes the canonical proposed shortlist at batch
-publication, later candidate approval and worker cycles. Newly visible applications
-are recorded once and aggregated per vacancy before dispatch. Binding baselines
-already visible profiles; unbound/disabled observations are consumed without replay.
-Dispatch rechecks the active personal account, binding generation, vacancy ownership
-and current candidate visibility. Telegram receives the vacancy title and count,
-never a CV or contact information. The shared outbox keeps its existing bounded
-retry and terminal uncertainty behavior.
-
-The new `en_bindings`, `en_tokens`, `en_seen` and `en_sessions` tables initialize
-transactionally. Install the updated CI receiver before publishing a service
-archive containing `employer_notifications.py` and `telegram_miniapp.py`; the old
-complete runtime remains an accepted rollback layout. This documentation describes
-implementation requirements, not evidence of a production or native-client rollout.

@@ -1,6 +1,0 @@
-.site-interest{position:relative;height:280svh;background:radial-gradient(ellipse at 50% 70%,#fffaf5 0,transparent 65%),#f6f6f2}
-.site-interest-sticky{position:sticky;top:0;height:100svh;min-height:540px;overflow:clip}
-.site-interest-space{position:absolute;inset:108px 32px 24px}
-.site-interest-frame{position:absolute;left:50%;top:50%;transform-origin:center;display:flex;justify-content:center}
-@media(max-width:600px){.site-interest-space{inset:92px 14px 20px}}
-@media(prefers-reduced-motion:reduce){.site-interest{height:auto}.site-interest-sticky{position:relative}}
