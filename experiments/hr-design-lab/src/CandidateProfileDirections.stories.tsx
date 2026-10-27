@@ -1,0 +1,12 @@
+import type {Meta,StoryObj} from '@storybook/react-vite';
+import {CandidateProfileDirections} from './scenes/candidate-profile-directions/CandidateProfileDirections';
+const meta={title:'HR Vision/Профиль кандидата · 3 направления',id:'hr-candidate-directions',component:CandidateProfileDirections,parameters:{layout:'fullscreen',controls:{disable:true}}} satisfies Meta<typeof CandidateProfileDirections>;
+export default meta;
+type Story=StoryObj<typeof meta>;
+export const Explore:Story={name:'00 Сравнить 3 × 2',args:{initialDirection:'skills',initialView:'candidate'}};
+export const SkillsCandidate:Story={name:'01 MuchSkills · кабинет',args:{initialDirection:'skills',initialView:'candidate'}};
+export const SkillsEmployer:Story={name:'02 MuchSkills · подборка',args:{initialDirection:'skills',initialView:'employer'}};
+export const DossierCandidate:Story={name:'03 Teamtailor · кабинет',args:{initialDirection:'dossier',initialView:'candidate'}};
+export const DossierEmployer:Story={name:'04 Teamtailor · подборка',args:{initialDirection:'dossier',initialView:'employer'}};
+export const EvidenceCandidate:Story={name:'05 BrightHire · кабинет',args:{initialDirection:'evidence',initialView:'candidate'}};
+export const EvidenceEmployer:Story={name:'06 BrightHire · подборка',args:{initialDirection:'evidence',initialView:'employer'}};

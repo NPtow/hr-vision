@@ -1,0 +1,107 @@
+{
+  "purpose": "Read-only snapshot of the current candidate player for a local profile prototype. Backend request functions are intentionally excluded; callers provide a local demo adapter.",
+  "files": [
+    {
+      "file": "interview-review/CandidateInterviewPlayer.tsx",
+      "source": "/Users/NIKITA/.codex/worktrees/employer-task-states/HR Vision/interface-lab/src/scenes/interview-review/CandidateInterviewPlayer.tsx",
+      "source_sha256": "a1c6af5aedb02a4e6b42bc299e43bbfe35d78ecc3ba8565a8f6e9481f172f151",
+      "adaptation": "Local Radix import only"
+    },
+    {
+      "file": "interview-review/candidate-interview-player.css",
+      "source": "/Users/NIKITA/.codex/worktrees/employer-task-states/HR Vision/interface-lab/src/scenes/interview-review/candidate-interview-player.css",
+      "source_sha256": "1cde374b760004735927389350478bac86402742e77b81e72de824af1e985e59",
+      "adaptation": "Unchanged"
+    },
+    {
+      "file": "interview-review/useInterviewAssistant.ts",
+      "source": "/Users/NIKITA/.codex/worktrees/employer-task-states/HR Vision/interface-lab/src/scenes/interview-review/useInterviewAssistant.ts",
+      "source_sha256": "2105afc104ccf60b753831132a919db5362786cc77fb30223f27568ddc0b9947",
+      "adaptation": "Unchanged"
+    },
+    {
+      "file": "interview-review/InterviewChatAnswer.tsx",
+      "source": "/Users/NIKITA/.codex/worktrees/employer-task-states/HR Vision/interface-lab/src/scenes/interview-review/InterviewChatAnswer.tsx",
+      "source_sha256": "604225301d1b1fc95d149ad9da8c72bc69bd111f77722f7c9356436f89b4220d",
+      "adaptation": "Local Radix import only"
+    },
+    {
+      "file": "interview-review/UnifiedInterviewTranscript.tsx",
+      "source": "/Users/NIKITA/.codex/worktrees/employer-task-states/HR Vision/interface-lab/src/scenes/interview-review/UnifiedInterviewTranscript.tsx",
+      "source_sha256": "b26c19680b746498982acf2a28f4316ffe8858996d207f84978ca1f095a1ae11",
+      "adaptation": "Local Radix import only"
+    },
+    {
+      "file": "interview-review/candidate-player-model.ts",
+      "source": "/Users/NIKITA/.codex/worktrees/employer-task-states/HR Vision/interface-lab/src/scenes/interview-review/candidate-player-model.ts",
+      "source_sha256": "8cda6f6ac7db264c344d0867ac5bcfff29d421a8cbdad22f9dc02d212b22a5c8",
+      "adaptation": "Unchanged"
+    },
+    {
+      "file": "interview-review/interview-answer-model.ts",
+      "source": "/Users/NIKITA/.codex/worktrees/employer-task-states/HR Vision/interface-lab/src/scenes/interview-review/interview-answer-model.ts",
+      "source_sha256": "97793125ffa4eae4a2e5e25992e095efaae7804889b4e504a007466c601abf20",
+      "adaptation": "Unchanged"
+    },
+    {
+      "file": "interview-assessment/OrbitGraph.tsx",
+      "source": "/Users/NIKITA/.codex/worktrees/employer-task-states/HR Vision/interface-lab/src/scenes/interview-assessment/OrbitGraph.tsx",
+      "source_sha256": "d69cd1d7a2c36522885058f12c3fe60e8e7a0dc7393b990c95cc1da4564602dc",
+      "adaptation": "Unchanged"
+    },
+    {
+      "file": "interview-assessment/orbit-graph.css",
+      "source": "/Users/NIKITA/.codex/worktrees/employer-task-states/HR Vision/interface-lab/src/scenes/interview-assessment/orbit-graph.css",
+      "source_sha256": "69a04c6f78303309173e655f1a6466d022dd9f3ab526fa87974a79b632a305b1",
+      "adaptation": "Unchanged"
+    },
+    {
+      "file": "interview-assessment/FragmentQuestion.tsx",
+      "source": "/Users/NIKITA/.codex/worktrees/employer-task-states/HR Vision/interface-lab/src/scenes/interview-assessment/FragmentQuestion.tsx",
+      "source_sha256": "7485822c94816effd7150baef8e29719086f4583a8dc4680ae6ca31cdcf6446f",
+      "adaptation": "Unchanged"
+    },
+    {
+      "file": "interview-assessment/interview-assessment.css",
+      "source": "/Users/NIKITA/.codex/worktrees/employer-task-states/HR Vision/interface-lab/src/scenes/interview-assessment/interview-assessment.css",
+      "source_sha256": "d3bebacd0dbe645bb67f8d493e97305945995d65f3301692172510eb2abcc5a8",
+      "adaptation": "Unchanged"
+    },
+    {
+      "file": "interview-assessment/useInterviewAssessment.ts",
+      "source": "/Users/NIKITA/.codex/worktrees/employer-task-states/HR Vision/interface-lab/src/scenes/interview-assessment/useInterviewAssessment.ts",
+      "source_sha256": "a00848036ae0e019c7bb10d34db100955029fbdf3a78ceb8cc862b039aa2b9a7",
+      "adaptation": "Unchanged"
+    },
+    {
+      "file": "interview-assessment/types.ts",
+      "source": "/Users/NIKITA/.codex/worktrees/employer-task-states/HR Vision/interface-lab/src/scenes/interview-assessment/types.ts",
+      "source_sha256": "56819706a1f148852769b33d5c85b6528aa3e86c4398ff7fb1c3647f22e705e6",
+      "adaptation": "Unchanged"
+    },
+    {
+      "file": "interview-assessment/fragment-feedback.ts",
+      "source": "/Users/NIKITA/.codex/worktrees/employer-task-states/HR Vision/interface-lab/src/scenes/interview-assessment/fragment-feedback.ts",
+      "source_sha256": "0308616cd701f09c8fec26d81e6b87e4cd3ce9daa78d5682166e685ffdee9d30",
+      "adaptation": "Unchanged"
+    },
+    {
+      "file": "interview-assessment/graph-contract.ts",
+      "source": "/Users/NIKITA/.codex/worktrees/employer-task-states/HR Vision/interface-lab/src/scenes/interview-assessment/graph-contract.ts",
+      "source_sha256": "9843dd923017f210ab66fb75cdb2fdf7d3653db3899830d5038030154f29cb2d",
+      "adaptation": "Unchanged"
+    },
+    {
+      "file": "interview-assessment/useFragmentFeedback.ts",
+      "source": "/Users/NIKITA/.codex/worktrees/employer-task-states/HR Vision/interface-lab/src/scenes/interview-assessment/useFragmentFeedback.ts",
+      "source_sha256": "af381cab85352f6ff5c39278f4426cb57bf00add870df369bdcb2c9b2dc2424a",
+      "adaptation": "Unchanged"
+    },
+    {
+      "file": "connected-journey/transcript.ts",
+      "source": "/Users/NIKITA/.codex/worktrees/employer-task-states/HR Vision/interface-lab/src/scenes/connected-journey/transcript.ts",
+      "source_sha256": "79189f3f82dc465fec2c5d53f09f9710c0cbddf66c317c4478c08afb8bf6527d",
+      "adaptation": "Unchanged"
+    }
+  ]
+}

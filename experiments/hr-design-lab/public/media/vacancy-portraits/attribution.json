@@ -1,0 +1,110 @@
+[
+  {
+    "id": "attio-8",
+    "file": "/media/vacancy-portraits/attio-8.png",
+    "source": "https://attio.com/help/reference/managing-your-data/records/create-and-view-records",
+    "image_url": "https://a.storyblok.com/f/234930/1829x1067/6aed6cc3ee/full-record-page-overview.png",
+    "alt": "",
+    "mime": "image/png",
+    "bytes": 1579081
+  },
+  {
+    "id": "attio-12",
+    "file": "/media/vacancy-portraits/attio-12.png",
+    "source": "https://attio.com/help/reference/managing-your-data/records/create-and-view-records",
+    "image_url": "https://a.storyblok.com/f/234930/1920x1224/21bc80d98e/record-details-record-page.png",
+    "alt": "Record details left-hand sidebar containing object attributes for companies",
+    "mime": "image/png",
+    "bytes": 1833851
+  },
+  {
+    "id": "ashby-profile-2",
+    "file": "/media/vacancy-portraits/ashby-profile-2.webp",
+    "source": "https://docs.ashbyhq.com/candidate-profile",
+    "image_url": "https://cdn.images.archbee.com/0p8tQ--ZZOxRtkVp6Qr-e/d8lxdCbP8fFd9nD3w8jhm_elliot-treutel-backend-engineer-ashby-2026-07-31-at-12627-pm.png?format=webp",
+    "alt": "A view of the candidate profile.",
+    "mime": "image/webp",
+    "bytes": 142844
+  },
+  {
+    "id": "uxpressia-13",
+    "file": "/media/vacancy-portraits/uxpressia-13.webp",
+    "source": "https://uxpressia.com/personas-online-tool",
+    "image_url": "https://uxpressia.com/page-persona/img-03.webp",
+    "alt": "Customize persona templates to your needs",
+    "mime": "image/webp",
+    "bytes": 44006
+  },
+  {
+    "id": "uxpressia-16",
+    "file": "/media/vacancy-portraits/uxpressia-16.png",
+    "source": "https://uxpressia.com/personas-online-tool",
+    "image_url": "https://uxpressia.com/page-persona/ELIAS-KORHONEN-small.png",
+    "alt": "ELIAS KORHONEN",
+    "mime": "image/png",
+    "bytes": 225299
+  },
+  {
+    "id": "uxpressia-help-2",
+    "file": "/media/vacancy-portraits/uxpressia-help-2.png",
+    "source": "https://help.uxpressia.com/en/articles/864877-persona-overview",
+    "image_url": "https://downloads.intercomcdn.com/i/o/319061491/d4302b06a56e1fc7bfbfd1b3/persona+examples.png?expires=1793029500&signature=7d1a3a01aeb8aa25608185dd6eb71ef70209995089cde4310cb06dcb2af81f52&req=dyEuFs9%2FmYheFb4f3HP0gHV7oJ%2BRfoWLFaMx%2FUo1vaMgsNb%2B2Jv0gByNdxdZ%0AbCpokENDBuuMIoYI5g%3D%3D%0A",
+    "alt": "persona example",
+    "mime": "image/png",
+    "bytes": 361738
+  },
+  {
+    "id": "xtensio-3",
+    "file": "/media/vacancy-portraits/xtensio-3.webp",
+    "source": "https://xtensio.com/user-persona/",
+    "image_url": "https://xtensio.com/wp-content/uploads/2022/08/landing-user-persona-2022.png.webp",
+    "alt": "User Persona Template | Desktop And Mobile Views",
+    "mime": "image/webp",
+    "bytes": 66396
+  },
+  {
+    "id": "smaply-5",
+    "file": "/media/vacancy-portraits/smaply-5.webp",
+    "source": "https://www.smaply.com/tools/personas",
+    "image_url": "https://cdn.prod.website-files.com/5ef0d72dc95490356f7ad90b/668bd1ece85df91df0dc3eb5_CreateEmpathy.webp",
+    "alt": "",
+    "mime": "image/webp",
+    "bytes": 8192
+  },
+  {
+    "id": "smaply-6",
+    "file": "/media/vacancy-portraits/smaply-6.webp",
+    "source": "https://www.smaply.com/tools/personas",
+    "image_url": "https://cdn.prod.website-files.com/5ef0d72dc95490356f7ad90b/66b9be7486e33fa3f4cf6d30_GoBeyondStereotypes-v1.webp",
+    "alt": "",
+    "mime": "image/webp",
+    "bytes": 59484
+  },
+  {
+    "id": "hubspot-4",
+    "file": "/media/vacancy-portraits/hubspot-4.png",
+    "source": "https://www.hubspot.com/make-my-persona",
+    "image_url": "https://www.hubspot.com/hs-fs/hubfs/Screenshot%202026-03-12%20at%2010.43.29%20AM.png?width=1944&height=1434&name=Screenshot%202026-03-12%20at%2010.43.29%20AM.png",
+    "alt": "Screenshot 2026-03-12 at 10.43.29 AM",
+    "mime": "image/png",
+    "bytes": 259883
+  },
+  {
+    "id": "muchskills-help-0",
+    "file": "/media/vacancy-portraits/muchskills-help-0.avif",
+    "source": "https://www.muchskills.com/how-to/how-to-set-up-your-personal-profile",
+    "image_url": "https://lpwgkqz9gpxvmjkz.public.blob.vercel-storage.com/61e81254bf02be691c57a288_How-to-set-up-your-personal-profile.avif",
+    "alt": "",
+    "mime": "image/avif",
+    "bytes": 8590
+  },
+  {
+    "id": "muchskills-help-16",
+    "file": "/media/vacancy-portraits/muchskills-help-16.webp",
+    "source": "https://www.muchskills.com/how-to/how-to-set-up-your-personal-profile",
+    "image_url": "https://lpwgkqz9gpxvmjkz.public.blob.vercel-storage.com/profile-settings.webp",
+    "alt": "Profile Settings with Upload Image and the Overview field highlighted",
+    "mime": "image/webp",
+    "bytes": 20944
+  }
+]

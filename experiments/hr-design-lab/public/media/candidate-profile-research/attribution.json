@@ -1,0 +1,882 @@
+[
+  {
+    "reference": "muchskills-classic",
+    "brand": "MuchSkills · круг навыков",
+    "file": "/media/vacancy-portraits/muchskills-help-0.avif",
+    "caption": "Ранее опубликованный профиль MuchSkills · небольшое превью",
+    "kind": "Ранее опубликованный пример",
+    "source": "https://www.muchskills.com/how-to/how-to-set-up-your-personal-profile",
+    "originalImageUrl": "https://lpwgkqz9gpxvmjkz.public.blob.vercel-storage.com/61e81254bf02be691c57a288_How-to-set-up-your-personal-profile.avif",
+    "dimensions": [
+      500,
+      336
+    ],
+    "sha256": "af7020ed434e8e4fbec4c62c483cdbfe7875d87dd16139f9cb70e4127f52f8ad",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "muchskills-graph",
+    "brand": "MuchSkills · граф навыков",
+    "file": "/media/candidate-profile-research/muchskills-new-12.jpg",
+    "caption": "Иллюстрация обновления MuchSkills 5.1 с сайта сервиса",
+    "kind": "Иллюстрация продукта",
+    "source": "https://www.muchskills.com/features",
+    "originalImageUrl": "https://www.muchskills.com/_next/image?url=https%3A%2F%2Flpwgkqz9gpxvmjkz.public.blob.vercel-storage.com%2F5-1-release-email-51e7b476.jpg&w=3840&q=75",
+    "dimensions": [
+      1200,
+      630
+    ],
+    "sha256": "cff4185538c1dd7f3f78fb5e424f3c7a87b74c25d53a9f847d000f57e17ad1a3",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "contra-person",
+    "brand": "Contra · личная страница",
+    "file": "/media/candidate-profile-research/contra-2.png",
+    "caption": "Шаблон: тёплый фон и крупная типографика",
+    "kind": "Официальные шаблоны",
+    "source": "https://contra.com/portfolios",
+    "originalImageUrl": "https://framerusercontent.com/images/Pq6TVHKs5NPsZ4nEIh8QjLVJh84.png?width=1100&height=652",
+    "dimensions": [
+      1100,
+      652
+    ],
+    "sha256": "ff5cf258c17cd382bc67839077724676de9d26366d87c2656021dd53568f2881",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "contra-person",
+    "brand": "Contra · личная страница",
+    "file": "/media/candidate-profile-research/contra-3.png",
+    "caption": "Шаблон: светлая минимальная версия",
+    "kind": "Официальные шаблоны",
+    "source": "https://contra.com/portfolios",
+    "originalImageUrl": "https://framerusercontent.com/images/5zoNTGP47dt8fL1K4qcsTYuHBp0.png?width=1100&height=652",
+    "dimensions": [
+      1100,
+      652
+    ],
+    "sha256": "00871c96052e4508c0573a022adbff0959e42d64dd5a6c17934559ffdeec22d0",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "contra-person",
+    "brand": "Contra · личная страница",
+    "file": "/media/candidate-profile-research/contra-6.png",
+    "caption": "Шаблон: тёмная версия",
+    "kind": "Официальные шаблоны",
+    "source": "https://contra.com/portfolios",
+    "originalImageUrl": "https://framerusercontent.com/images/cgeXiVeeHlIJiB36KSY1Zgjn40.png?width=1100&height=652",
+    "dimensions": [
+      1100,
+      652
+    ],
+    "sha256": "4d984c1321182aa771b21de073bd23382a8f178a02294a4f9a63786575af5e76",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "contra-work",
+    "brand": "Contra · работы и кейсы",
+    "file": "/media/candidate-profile-research/contra-7.png",
+    "caption": "Портфолио с проектами на первом экране",
+    "kind": "Официальные шаблоны",
+    "source": "https://contra.com/portfolios",
+    "originalImageUrl": "https://framerusercontent.com/images/b70ggq34JUU2hIC7D55hBeBu24.png?width=1100&height=652",
+    "dimensions": [
+      1100,
+      652
+    ],
+    "sha256": "ecfe824cd4eec223b9f572c589e432cb66a87cbc7259666c5748fe7715010c73",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "contra-work",
+    "brand": "Contra · работы и кейсы",
+    "file": "/media/candidate-profile-research/contra-8.png",
+    "caption": "Альтернативная композиция проектов",
+    "kind": "Официальные шаблоны",
+    "source": "https://contra.com/portfolios",
+    "originalImageUrl": "https://framerusercontent.com/images/aUaOZFvAUdvTlpkvADIn2iYkk.png?width=1100&height=652",
+    "dimensions": [
+      1100,
+      652
+    ],
+    "sha256": "ca2be326179cf0ae022f44456d96e1314708df05d5d39ee485f63c9dc9292ef8",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "contra-work",
+    "brand": "Contra · работы и кейсы",
+    "file": "/media/candidate-profile-research/contra-9.png",
+    "caption": "Цветной вариант страницы работ",
+    "kind": "Официальные шаблоны",
+    "source": "https://contra.com/portfolios",
+    "originalImageUrl": "https://framerusercontent.com/images/pV5aJioS2xxZXaTphTfA20XH4aQ.png?width=1100&height=652",
+    "dimensions": [
+      1100,
+      652
+    ],
+    "sha256": "32b3a82180a8b8074312be00b5d1b04656f3fa55e9215fd7e5d3265be629caca",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "teamtailor-profile",
+    "brand": "Teamtailor · карточка",
+    "file": "/media/candidate-profile-research/teamtailor-1.png",
+    "caption": "Общая карточка кандидата",
+    "kind": "Скриншоты из справки",
+    "source": "https://support.teamtailor.com/en/articles/9153972-our-candidate-card",
+    "originalImageUrl": "https://downloads.intercomcdn.com/i/o/c3b2d8b8e567c16a39d8495a5b1b2b3865dd4dc7/2100247731/fc7c3ac4445c2da2c8060ad0f060/our-candidate-card-1.png?expires=1793033100&signature=f661ab9e8330c8a2635bd1382ca1e6f925956d3d1d3352b956dfe67acbdff3ba&req=diEnFst6moZcWPMW1HO4zbYcZEDOufysN70hr9gfdNmguxwjoinG98SLRP2D%0A4jqgzfcRe64BX1UvwQc%3D%0A",
+    "dimensions": [
+      2608,
+      1536
+    ],
+    "sha256": "e95e85d129cb2344bdc1bf3013f16c02345f7684720dc2fa84910b573fd23005",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "teamtailor-profile",
+    "brand": "Teamtailor · карточка",
+    "file": "/media/candidate-profile-research/teamtailor-3.png",
+    "caption": "Раскрывающиеся блоки с ответами",
+    "kind": "Скриншоты из справки",
+    "source": "https://support.teamtailor.com/en/articles/9153972-our-candidate-card",
+    "originalImageUrl": "https://downloads.intercomcdn.com/i/o/c3b2d8b8e567c16a39d8495a5b1b2b3865dd4dc7/1609611564/b40dd7196c89c183c94091375f6e/image.png?expires=1793033100&signature=53dbc16e455a756be9466ba991f2308cefe814afc4566c82564292433694c4a0&req=dSYnH89%2FnIRZXfMW1HO4zXOdp6p3r69GNIclhJYvHHFdtTuQWOgJu5rqj%2BV0%0APqLcQx9f%2FoLZVsVQ630%3D%0A",
+    "dimensions": [
+      1678,
+      877
+    ],
+    "sha256": "51bdb3779175727ac2109aa424618c9d08a52b28afba9506a0891bb9eebd4852",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "teamtailor-profile",
+    "brand": "Teamtailor · карточка",
+    "file": "/media/candidate-profile-research/teamtailor-7.png",
+    "caption": "Широкий вид карточки",
+    "kind": "Скриншоты из справки",
+    "source": "https://support.teamtailor.com/en/articles/9153972-our-candidate-card",
+    "originalImageUrl": "https://downloads.intercomcdn.com/i/o/c3b2d8b8e567c16a39d8495a5b1b2b3865dd4dc7/2100249172/cb4a19fce887d19033bd71c1481c/our-candidate-card-3.png?expires=1793033100&signature=537e84b8577a4096f7087119d3e028ca9288ecad0f73cca13c4d6b65ca7a12a4&req=diEnFst6lIBYW%2FMW1HO4zUnLmHcc2QWqQIjPvlQxE3UTeSNrrjlQ3vaVeFi9%0AEuOn4440Kg6SXKYv6Wg%3D%0A",
+    "dimensions": [
+      2631,
+      1191
+    ],
+    "sha256": "3062c191b6bc7dd55454b0a514bcbf770cd8fa37530ed97015eda06b9c11a2b3",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "vervoe-skills",
+    "brand": "Vervoe · оценка навыков",
+    "file": "/media/candidate-profile-research/vervoe-home-19.webp",
+    "caption": "Пример отчёта на сайте Vervoe",
+    "kind": "Иллюстрация продукта",
+    "source": "https://vervoe.com/",
+    "originalImageUrl": "https://vervoe.com/_next/image/?url=%2Fimages%2Fhome%2Fv9%2Foverlay-report-card.webp&w=3840&q=85&dpl=dpl_AyYCHxjuwUwtfXcpMWmrPtmNB45j",
+    "dimensions": [
+      1960,
+      1340
+    ],
+    "sha256": "fd16741a3df3b3b1bb73fff3b4341f0ee8e766958bd1269d02f5858e22638a7e",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "brighthire-interview",
+    "brand": "BrightHire · интервью",
+    "file": "/media/candidate-profile-research/brighthire-102.png",
+    "caption": "Видео, заметки и расшифровка · иллюстрация BrightHire",
+    "kind": "Иллюстрация продукта",
+    "source": "https://brighthire.com/",
+    "originalImageUrl": "https://brighthire.com/wp-content/uploads/2025/10/Image-3-1.png",
+    "dimensions": [
+      976,
+      580
+    ],
+    "sha256": "caeba0bd6ac8f6ea1a840557e82f6fee933c4fe0e030dd13b42966e5612e2e47",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "brighthire-highlights",
+    "brand": "BrightHire · фрагменты",
+    "file": "/media/candidate-profile-research/brighthire-104.png",
+    "caption": "Тематические видеофрагменты кандидата",
+    "kind": "Иллюстрация продукта",
+    "source": "https://brighthire.com/",
+    "originalImageUrl": "https://brighthire.com/wp-content/uploads/2025/10/Image-1-1.png",
+    "dimensions": [
+      976,
+      580
+    ],
+    "sha256": "24a2a47d7c3798cf8d274d1168788fb0d0cd2da7257feda3e01a1cda324a2513",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "credly",
+    "brand": "Credly",
+    "file": "/media/candidate-profile-research/credly-2.png",
+    "caption": "Публичный профиль с цифровыми достижениями",
+    "kind": "Скриншоты из справки",
+    "source": "https://support.credly.com/hc/en-us/articles/360039852511-How-do-I-share-my-profile",
+    "originalImageUrl": "https://support.credly.com/hc/article_attachments/38408946236443",
+    "dimensions": [
+      1562,
+      1366
+    ],
+    "sha256": "d35932af450689b68ebb4380711a67c920a8a5d41c9872eadde7c9a7445ed99e",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "credly",
+    "brand": "Credly",
+    "file": "/media/candidate-profile-research/credly-1.png",
+    "caption": "Просмотр публичной страницы из кабинета",
+    "kind": "Скриншоты из справки",
+    "source": "https://support.credly.com/hc/en-us/articles/360039852511-How-do-I-share-my-profile",
+    "originalImageUrl": "https://support.credly.com/hc/article_attachments/38377061287323",
+    "dimensions": [
+      805,
+      378
+    ],
+    "sha256": "1f101eb3302ebfa04ed202da4e2bd2d6e9c71e91d3f14ad11c6b4c496e6d0e43",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "canditech",
+    "brand": "Canditech",
+    "file": "/media/candidate-profile-research/canditech-2.png",
+    "caption": "Обзор результата и распределение по навыкам",
+    "kind": "Скриншоты из справки",
+    "source": "https://helpcenter.canditech.io/en/articles/8679897-how-do-you-review-and-analyze-a-candidate-s-session-in-canditech",
+    "originalImageUrl": "https://downloads.intercomcdn.com/i/o/569071419/97eae4cbbf8ccb45e09028a4/candidate+page+full+.png?expires=1793033100&signature=b8f4b9042da946385f36df45bb2d134a568cf3d59702dff585b1149c2823d9ef&req=cSYuFs5%2FmYBWFb4f3HP0gEPPCT1T86P4v%2FJrbodhsFxRm4ymrvBjxxQX7WW4%0Aj2C2K4tIXGTRu%2BSPjQ%3D%3D%0A",
+    "dimensions": [
+      1452,
+      814
+    ],
+    "sha256": "1b86e4253ae530407e04d9464873ee916f1f3a0d30eb43a44b1e7b1b2842af10",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "canditech",
+    "brand": "Canditech",
+    "file": "/media/candidate-profile-research/canditech-14.png",
+    "caption": "Просмотр видеоответа и комментариев",
+    "kind": "Скриншоты из справки",
+    "source": "https://helpcenter.canditech.io/en/articles/8679897-how-do-you-review-and-analyze-a-candidate-s-session-in-canditech",
+    "originalImageUrl": "https://downloads.intercomcdn.com/i/o/569072616/b9565bb4bbc7b3cb926c3c1a/reviewing+questions+-+video.png?expires=1793033100&signature=f96f05a955918fd1feef258f62fadb70e41a7e38712fb27664614e7db3b753d7&req=cSYuFs58m4BZFb4f3HP0gIpPbSRpM%2F88bjIcAFFQnX6y5djrNYm4Hqlf%2BpCK%0A%2F6ceCcpSt9CoJTtMkw%3D%3D%0A",
+    "dimensions": [
+      1448,
+      817
+    ],
+    "sha256": "0f19840772028eb80b47ff5d5bbea03b50d1a77ba0408139d1496b000306ad2b",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "recruitee-profile",
+    "brand": "Recruitee · профиль",
+    "file": "/media/candidate-profile-research/recruitee-1.png",
+    "caption": "Общая карточка кандидата",
+    "kind": "Скриншоты из справки",
+    "source": "https://support.recruitee.com/en/articles/1066329-edit-candidate-profiles",
+    "originalImageUrl": "https://downloads.intercomcdn.com/i/o/q3qyzfii/2635012960/6698ffdb774c3b8c56ddcdc9c2f3/Candidate+profile.png?expires=1793033100&signature=6f6d97c3f203cfed64047ae34d503612bdec994af569c353fac0ced32422714f&req=diYkE8l%2Fn4hZWfMW1HO4zWkWYgwUTNMX51fKZXscF6iOIUfTcl5ad9emUeia%0AyrTjoXzNucvYxX6e6xc%3D%0A",
+    "dimensions": [
+      2510,
+      1430
+    ],
+    "sha256": "aac188f55d612eb976f06dee7b32282a01fcdfa282785a363b72365635e78c7a",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "recruitee-profile",
+    "brand": "Recruitee · профиль",
+    "file": "/media/candidate-profile-research/recruitee-6.png",
+    "caption": "Опыт работы в виде хронологии",
+    "kind": "Скриншоты из справки",
+    "source": "https://support.recruitee.com/en/articles/1066329-edit-candidate-profiles",
+    "originalImageUrl": "https://downloads.intercomcdn.com/i/o/q3qyzfii/2635102392/fceb0526e9962420c9d025bfa931/Experience.png?expires=1793033100&signature=8f27db408b38b7638dd19aa0acdcea635f63a91479ead998ac4d7e3c2f5f059f&req=diYkE8h%2Bn4JWW%2FMW1HO4zSYDeWQmX67E2zlc8w4rR6iuY%2FW14F9UiFgbiuye%0AmWmx%2FSIUEAc9AR7Cm3g%3D%0A",
+    "dimensions": [
+      1668,
+      1024
+    ],
+    "sha256": "501d2ba94afd08773f8451148fbcadb84cc51a5fe773110d73939947523ed26c",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "peerlist",
+    "brand": "Peerlist",
+    "file": "/media/candidate-profile-research/peerlist-domain.webp",
+    "caption": "Шапка персональной страницы",
+    "kind": "Иллюстрации блоков профиля",
+    "source": "https://peerlist.io/individuals",
+    "originalImageUrl": "https://dqy38fnwh4fqs.cloudfront.net/website/custom_domain.webp",
+    "dimensions": [
+      1387,
+      785
+    ],
+    "sha256": "5d97b95671a133cd263825e406ba7a3341cb77d4428d62de305b0c5dcfd30cf4",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "peerlist",
+    "brand": "Peerlist",
+    "file": "/media/candidate-profile-research/peerlist-verify.webp",
+    "caption": "Блок опыта работы",
+    "kind": "Иллюстрации блоков профиля",
+    "source": "https://peerlist.io/individuals",
+    "originalImageUrl": "https://dqy38fnwh4fqs.cloudfront.net/website/verify_experience.webp",
+    "dimensions": [
+      1391,
+      763
+    ],
+    "sha256": "1c124d319c39f20a73769ee1ec23e51471c8185fd3cc15d2b36b590849ceb9b1",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "peerlist",
+    "brand": "Peerlist",
+    "file": "/media/candidate-profile-research/peerlist-integrations.webp",
+    "caption": "Источники работ и проектов",
+    "kind": "Иллюстрации блоков профиля",
+    "source": "https://peerlist.io/individuals",
+    "originalImageUrl": "https://dqy38fnwh4fqs.cloudfront.net/website/integrations.webp",
+    "dimensions": [
+      1387,
+      763
+    ],
+    "sha256": "49c582afc0ccfd9a6944e69e95931cce9717e524fe45f58e35a9dd796f1a6eef",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "testgorilla-own",
+    "brand": "TestGorilla · кабинет",
+    "file": "/media/candidate-profile-research/testgorilla-own-0.png",
+    "caption": "Профиль кандидата в личном кабинете",
+    "kind": "Скриншоты из справки",
+    "source": "https://candidates.testgorilla.com/hc/en-us/articles/19092839464091-Guide-to-your-TestGorilla-Profile-Your-personal-career-co-pilot",
+    "originalImageUrl": "https://candidates.testgorilla.com/hc/article_attachments/55862708263707",
+    "dimensions": [
+      609,
+      336
+    ],
+    "sha256": "49fdb8b49fbbabc6d9014a723a34f395591f854c146776f7cdc9498d9cd66bb2",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "testgorilla-own",
+    "brand": "TestGorilla · кабинет",
+    "file": "/media/candidate-profile-research/testgorilla-own-1.png",
+    "caption": "Раздел вакансий и результатов",
+    "kind": "Скриншоты из справки",
+    "source": "https://candidates.testgorilla.com/hc/en-us/articles/19092839464091-Guide-to-your-TestGorilla-Profile-Your-personal-career-co-pilot",
+    "originalImageUrl": "https://candidates.testgorilla.com/hc/article_attachments/49990811592347",
+    "dimensions": [
+      1362,
+      757
+    ],
+    "sha256": "6eb889130620f7ad25d1740b4ce35f5f3d68ad209f131006f6aa2295a97729fd",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "cake",
+    "brand": "Cake",
+    "file": "/media/candidate-profile-research/cake-2.png",
+    "caption": "Профиль с избранными материалами",
+    "kind": "Скриншоты из справки",
+    "source": "https://help.cake.me/en/articles/11532155-how-to-feature-resumes-or-portfolios-on-your-profile",
+    "originalImageUrl": "https://downloads.intercomcdn.com/i/o/cvyf2o3h/2712616119/88a294c3ec1ba789c780abaa020a/image.png?expires=1793033100&signature=0c3bbb5d2cd3a05bca63d86c0f356a17f20fe69681624a6e566695c882f8d0cc&req=dicmFM9%2Fm4BeUPMW1HO4zfV0U4FiZCX5MLjuHHhG2eoe1VKTlgxOUkZPHbaU%0AGueY%0A",
+    "dimensions": [
+      2880,
+      1624
+    ],
+    "sha256": "9a2a4c759a04a50e75b5a982612fd77c95e29f86e2c7b1cf033c1ddb725316de",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "cake",
+    "brand": "Cake",
+    "file": "/media/candidate-profile-research/cake-9.png",
+    "caption": "Карточка добавленного резюме",
+    "kind": "Скриншоты из справки",
+    "source": "https://help.cake.me/en/articles/11532155-how-to-feature-resumes-or-portfolios-on-your-profile",
+    "originalImageUrl": "https://downloads.intercomcdn.com/i/o/cvyf2o3h/2712622867/cd9e63c6ae706838477757e4818a/image.png?expires=1793033100&signature=781aeb82c09aa2e17d130bfad8e9c39040ffa253e0c2a993987702cbdccc7723&req=dicmFM98n4lZXvMW1HO4zYp30ViEapYTPParHTocZ9hxcGZnbsEvcOCk0Yxq%0AZhx%2F%0A",
+    "dimensions": [
+      2880,
+      1624
+    ],
+    "sha256": "28546a8d77bc296281820d1f667b45bc2990a7f06cd9f19f83f31b0f355b8450",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "testgorilla-report",
+    "brand": "TestGorilla · отчёт",
+    "file": "/media/candidate-profile-research/testgorilla-0.png",
+    "caption": "Общий результат и распределение",
+    "kind": "Скриншоты из справки",
+    "source": "https://support.testgorilla.com/hc/en-us/articles/9028486941979-Guide-to-analyzing-results",
+    "originalImageUrl": "https://support.testgorilla.com/hc/article_attachments/42196344319643",
+    "dimensions": [
+      740,
+      279
+    ],
+    "sha256": "b56ca7ef0aaeca292622dd3da5065ccda6f6b91ecd743063b31488d628f0863d",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "testgorilla-report",
+    "brand": "TestGorilla · отчёт",
+    "file": "/media/candidate-profile-research/testgorilla-1.png",
+    "caption": "Поднавыки: верные, неверные и пропущенные ответы",
+    "kind": "Скриншоты из справки",
+    "source": "https://support.testgorilla.com/hc/en-us/articles/9028486941979-Guide-to-analyzing-results",
+    "originalImageUrl": "https://support.testgorilla.com/hc/article_attachments/42196297407643",
+    "dimensions": [
+      687,
+      249
+    ],
+    "sha256": "da1ecbe94d91adba710cf81e06e7424aa753d2adfc14417e49f9f41b003fa33f",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "codesignal",
+    "brand": "CodeSignal",
+    "file": "/media/candidate-profile-research/codesignal-1.png",
+    "caption": "Общий результат и навыки",
+    "kind": "Скриншоты из справки",
+    "source": "https://support.codesignal.com/hc/en-us/articles/1500000619642-Accessing-and-sharing-a-test-taker-s-assessment-result",
+    "originalImageUrl": "https://support.codesignal.com/hc/article_attachments/39809972276631",
+    "dimensions": [
+      2048,
+      970
+    ],
+    "sha256": "a3add3074d2ebfc48451e5635dee025d001ee8626d20f9739e9f91fe538b07ad",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "codesignal",
+    "brand": "CodeSignal",
+    "file": "/media/candidate-profile-research/codesignal-11.png",
+    "caption": "Раскрытое пояснение результата",
+    "kind": "Скриншоты из справки",
+    "source": "https://support.codesignal.com/hc/en-us/articles/1500000619642-Accessing-and-sharing-a-test-taker-s-assessment-result",
+    "originalImageUrl": "https://support.codesignal.com/hc/article_attachments/39809972285207",
+    "dimensions": [
+      2048,
+      970
+    ],
+    "sha256": "eae3392787e306a85343cde55a6b55eafac5fff5ea1e4a054bf5653c1a03fdf4",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "codesignal",
+    "brand": "CodeSignal",
+    "file": "/media/candidate-profile-research/codesignal-18.png",
+    "caption": "Настройки ссылки на отчёт",
+    "kind": "Скриншоты из справки",
+    "source": "https://support.codesignal.com/hc/en-us/articles/1500000619642-Accessing-and-sharing-a-test-taker-s-assessment-result",
+    "originalImageUrl": "https://support.codesignal.com/hc/article_attachments/39809972298263",
+    "dimensions": [
+      1514,
+      876
+    ],
+    "sha256": "e5d47f48d4bebdfc17921e26eddfe292879d20d30057492a7e04245798fb9361",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "barraiser",
+    "brand": "BarRaiser",
+    "file": "/media/candidate-profile-research/barraiser-55.png",
+    "caption": "Небольшой продуктовый фрагмент отчёта",
+    "kind": "Иллюстрация продукта",
+    "source": "https://www.barraiser.com/",
+    "originalImageUrl": "https://www.barraiser.com/wp-content/uploads/2024/01/img1402.png",
+    "dimensions": [
+      474,
+      357
+    ],
+    "sha256": "634ea6e0d9eaeb6fd730bc91d02b3bed9232dd0c657d2c563bf23b02e06920d5",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "hackerrank",
+    "brand": "HackerRank · Chakra",
+    "file": "/media/candidate-profile-research/hackerrank-11-poster.png",
+    "caption": "Разбор навыка и подтверждающие реплики · кадр анимации",
+    "kind": "Кадры анимаций из справки",
+    "source": "https://support.hackerrank.com/articles/6818900787-view-candidate-reports",
+    "originalImageUrl": "https://assets.usepylon.com/e6a58e21-be80-4777-9eaf-f73beeee94d9%2F1784279419186-Section-basedfeedbackcandidatereportchakra.gif?Expires=253370764800&Signature=tAdrykvs0jZG~CUuetRZi7G5st2ZroIWqFxltVkZIkTnYKdPel2lyCT7Hjk1XMbmIkZNIOH7OCusnmD0BBcYZomhXTojhEjnJpv83k4Fp1R0E9TBY4OeYCn~o36R2AamCSFbrYNpIvUR92DFSy0HD4fyLYAEKuznglCcvD~JUe8RUbknHcjfIxPW6kL1bT6Xfz5I4kvcJPSfCgM5W00UR4QIKzfCmENOpHQ1Hjz7E1r86yxcKOFWBbJonj-TbHr7CotaURVifJggqHo1LvbMQQsvlPhrIh~R6rhvXywR5~lKEXo8kNc1DW2OmZqAn6c32D6wfqcxlGrcgnUO0rRpdg__&Key-Pair-Id=K3NV4LZ47N8M46",
+    "dimensions": [
+      1897,
+      1080
+    ],
+    "sha256": "34633cb283c7d96e1b42000112c5b243435b346e87765758130dba822fe0e5ed",
+    "posterFrame": 122,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "hackerrank",
+    "brand": "HackerRank · Chakra",
+    "file": "/media/candidate-profile-research/hackerrank-8-poster.png",
+    "caption": "Запись и синхронная расшифровка · кадр анимации",
+    "kind": "Кадры анимаций из справки",
+    "source": "https://support.hackerrank.com/articles/6818900787-view-candidate-reports",
+    "originalImageUrl": "https://assets.usepylon.com/e6a58e21-be80-4777-9eaf-f73beeee94d9%2F1784280043124-InterviewVideoRecordingandTranscriptcandidatereportchakra.gif?Expires=253370764800&Signature=cLY8106NZMhZzw3mrL2Dy7Eg~wV8a0uAvY8zFqUxg-ipICWlbt6TkAUqPD6AgWzwBK3ionnC99t40dK1iImRVgMHjN4olbvSVB5PaRziOv0cZVFMXxO0S9CN8nBNQX2IgEx4ptNzscScFQyReSVmyZ6iX4sX6EhREV1ut~yJ5AiG19dJcUHTwScTh6L6KDyOTwqRtw28th1mUCxtz73qCbgsj6igwf1en6SXBY0YS9-wPd0k-opVp~hqoezR9OK~Il6NOji8DO19-kRdIeY5VL-A8ZeWpU1Ckts1fMfXD28xWD~qGUD2LbjmySUzIjhONc0hBlDnSH5zj7HJCXHMMA__&Key-Pair-Id=K3NV4LZ47N8M46",
+    "dimensions": [
+      1896,
+      1080
+    ],
+    "sha256": "6ed44446a2ec20006a7c468fa268775fc88caea307a6d669cc08f46f4a57bed3",
+    "posterFrame": 454,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "recruitee-evaluation",
+    "brand": "Recruitee · оценки",
+    "file": "/media/candidate-profile-research/recruitee-eval-3.png",
+    "caption": "Сводка оценок кандидата",
+    "kind": "Скриншоты из справки",
+    "source": "https://support.recruitee.com/en/articles/6022723-evaluate-candidates",
+    "originalImageUrl": "https://downloads.intercomcdn.com/i/o/q3qyzfii/2573124207/e93fbc2db268c644c6864e8a3d6c/3dda551d-e233-4878-a745-f2379a316143?expires=1793033100&signature=5eb1f80ffe8f7b0952ad8855eceb9aaf0ac0c7452f6f310ad69b50b7103f8988&req=diUgFch8mYNfXvMW1HO4zZsoxFEd3KRIj8klbY9HgWXGCAARdoV%2F9eSCpjcI%0ALsHbk3emn%2BlIKnr7Uco%3D%0A",
+    "dimensions": [
+      2048,
+      1580
+    ],
+    "sha256": "7cf333bd6cd159f7723a0170d322ed5365193c08355f5136acb2efc059e13d0d",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "recruitee-evaluation",
+    "brand": "Recruitee · оценки",
+    "file": "/media/candidate-profile-research/recruitee-eval-2.png",
+    "caption": "Оценочная форма с пояснениями",
+    "kind": "Скриншоты из справки",
+    "source": "https://support.recruitee.com/en/articles/6022723-evaluate-candidates",
+    "originalImageUrl": "https://downloads.intercomcdn.com/i/o/q3qyzfii/2573124200/019b4f39db3bf5d847840d13f74f/35abc034-b5cf-4e86-8ca6-8046dc248774?expires=1793033100&signature=9bfcc333caf157b417e78b19be064c70144f8dae958711d9190d56ce0e8090cf&req=diUgFch8mYNfWfMW1HO4zbkaSRmKPLoTmFIogzFQhbk0w%2BcAFQxQeIotswWk%0A3iuNC3A6PSHRO%2FwauRY%3D%0A",
+    "dimensions": [
+      2048,
+      1922
+    ],
+    "sha256": "66da531ae202326ddf00082ca720552506b83d5adf893616a92d61bf973f426f",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "greenhouse-scores",
+    "brand": "Greenhouse · scorecards",
+    "file": "/media/candidate-profile-research/greenhouse-use-19.png",
+    "caption": "Сводка атрибутов и оценок из руководства Greenhouse",
+    "kind": "Скриншоты из справки",
+    "source": "https://support.greenhouse.io/hc/en-us/articles/11957068130971-Using-the-new-candidate-profile",
+    "originalImageUrl": "https://support.greenhouse.io/hc/article_attachments/18561530520219",
+    "dimensions": [
+      3366,
+      1298
+    ],
+    "sha256": "2bd4cde228968a84ad3adad563dd7668f5b474f413e7cc6bcd209a2e8ca84920",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "metaview",
+    "brand": "Metaview · интервью",
+    "file": "/media/candidate-profile-research/metaview-interview-8.webp",
+    "caption": "Главы и выделенные фрагменты разговора",
+    "kind": "Иллюстрации продукта",
+    "source": "https://www.metaview.ai/interview-notes",
+    "originalImageUrl": "https://www.metaview.ai/_next/image?url=%2F_next%2Fstatic%2Fimmutable%2Fmedia%2Ffeature-01.1brcf6x2_z-0c.webp&w=3840&q=75",
+    "dimensions": [
+      1620,
+      1744
+    ],
+    "sha256": "6efddf8d1d2f4c7829f102415756f78fc36bf050d7b5533d9236121c40fdb386",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "metaview",
+    "brand": "Metaview · интервью",
+    "file": "/media/candidate-profile-research/metaview-interview-9.webp",
+    "caption": "Заметки, видео и материалы встречи",
+    "kind": "Иллюстрации продукта",
+    "source": "https://www.metaview.ai/interview-notes",
+    "originalImageUrl": "https://www.metaview.ai/_next/image?url=%2F_next%2Fstatic%2Fimmutable%2Fmedia%2Ffeature-02.3rn60-nsm2sw5.webp&w=3840&q=75",
+    "dimensions": [
+      1616,
+      1744
+    ],
+    "sha256": "024b9df62e989578c387f2edc0c098e52202f32cebc4bfe78c6bceedc66c4c5d",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "hireflix",
+    "brand": "Hireflix",
+    "file": "/media/candidate-profile-research/hireflix-main-4.png",
+    "caption": "Карточка кандидата и видеоответ",
+    "kind": "Иллюстрации интерфейса",
+    "source": "https://hireflix.com/",
+    "originalImageUrl": "https://hireflix.com/public/webapp-website/8c4913d80f/images/38ed345c5cf9265c0aaf.png",
+    "dimensions": [
+      1592,
+      1088
+    ],
+    "sha256": "7ccbac18fd0f516e3ac1b8d4841888361664e5a83d9d921dd3ba08a6b48b9f79",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "hireflix",
+    "brand": "Hireflix",
+    "file": "/media/candidate-profile-research/hireflix-main-5.png",
+    "caption": "Вариант с приватными заметками",
+    "kind": "Иллюстрации интерфейса",
+    "source": "https://hireflix.com/",
+    "originalImageUrl": "https://hireflix.com/public/webapp-website/8c4913d80f/images/4c0794d170431477274a.png",
+    "dimensions": [
+      828,
+      636
+    ],
+    "sha256": "28adc92698c2a22c67074ddf5add37f6b67a9de2aeb0e3fe70e1b86d7b865a99",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "willo",
+    "brand": "Willo",
+    "file": "/media/candidate-profile-research/willo-public-poster.png",
+    "caption": "Выбор ответов для ссылки · кадр анимации",
+    "kind": "Кадры анимаций из справки",
+    "source": "https://support.willo.video/article/27-share-a-video-response",
+    "originalImageUrl": "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5f59e7154cedfd00173b6822/images/60c1220ca6d12c2cd643e4db/file-PBBnD7O9E1.gif",
+    "dimensions": [
+      600,
+      430
+    ],
+    "sha256": "d0b91c83c380719576ab461e0b2d5183c2fac05e8f91de52df3c498e19ea35ba",
+    "posterFrame": 33,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "willo",
+    "brand": "Willo",
+    "file": "/media/candidate-profile-research/willo-share-poster.png",
+    "caption": "Действие Share в карточке кандидата · кадр анимации",
+    "kind": "Кадры анимаций из справки",
+    "source": "https://support.willo.video/article/27-share-a-video-response",
+    "originalImageUrl": "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5f59e7154cedfd00173b6822/images/69ce2f7c9e55ad1123603c20/file-niLzEQqWR8.gif",
+    "dimensions": [
+      800,
+      472
+    ],
+    "sha256": "02a1fda73ea529d5563eb2aeddd5560ffac37eed675f37dcb04ca27245b2b5ee",
+    "posterFrame": 23,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "ashby-profile",
+    "brand": "Ashby · профиль",
+    "file": "/media/candidate-profile-research/ashby-2.webp",
+    "caption": "Карточка кандидата в Ashby",
+    "kind": "Скриншоты из справки",
+    "source": "https://docs.ashbyhq.com/candidate-profile",
+    "originalImageUrl": "https://cdn.images.archbee.com/0p8tQ--ZZOxRtkVp6Qr-e/d8lxdCbP8fFd9nD3w8jhm_elliot-treutel-backend-engineer-ashby-2026-07-31-at-12627-pm.png?format=webp&width=1280",
+    "dimensions": [
+      1280,
+      646
+    ],
+    "sha256": "ebcf3ebcacbbe25fd64df68fa882737088f6726e59176b1afdbe634d84e588b8",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "ashby-review",
+    "brand": "Ashby · оценивание",
+    "file": "/media/candidate-profile-research/ashby-review-4.webp",
+    "caption": "Профиль и оценочная форма рядом",
+    "kind": "Скриншоты из справки",
+    "source": "https://docs.ashbyhq.com/candidate-reviews",
+    "originalImageUrl": "https://cdn.images.archbee.com/0p8tQ--ZZOxRtkVp6Qr-e/7gtN1l9vX0lWsH7qTWhaq_designer-review-acent-ashby-2026-05-12-at-94737-am.jpg?format=webp&width=1280",
+    "dimensions": [
+      1280,
+      495
+    ],
+    "sha256": "5aba3d422c0e85b5ef3878d6a0bb6e3e727e982699d7cd5e359b1aeee36346b2",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "ashby-review",
+    "brand": "Ashby · оценивание",
+    "file": "/media/candidate-profile-research/ashby-review-5.webp",
+    "caption": "Фрагмент оценочной формы",
+    "kind": "Скриншоты из справки",
+    "source": "https://docs.ashbyhq.com/candidate-reviews",
+    "originalImageUrl": "https://cdn.images.archbee.com/0p8tQ--ZZOxRtkVp6Qr-e/bbqON6JDK-DrPfYYXFNZZ_customer-support-recruiter-screen-review-ashby-2026-09-15-at-100415-am.jpg?format=webp&width=407",
+    "dimensions": [
+      407,
+      603
+    ],
+    "sha256": "640990c7f13fd25ba7ecfa9fccbd315a3cfa60044e1e9e2b2926c65da5ab62d5",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "teamtailor-criteria",
+    "brand": "Teamtailor · соответствие",
+    "file": "/media/candidate-profile-research/teamtailor-ai-8.png",
+    "caption": "Проверка критериев в карточке кандидата",
+    "kind": "Скриншоты из справки",
+    "source": "https://support.teamtailor.com/en/articles/10209597-co-pilot-candidate-screening",
+    "originalImageUrl": "https://downloads.intercomcdn.com/i/o/c3b2d8b8e567c16a39d8495a5b1b2b3865dd4dc7/2549919590/335e2a5319934676fb64bc8ea254/image.png?expires=1793033100&signature=57c086eb4fe23f077ea2c6ed2e68773eda133f28c467ae8426f034f15acfdaa8&req=diUjH8B%2FlIRWWfMW1HO4zZi%2BBSpbiZ%2F6raSfR2jsCO3a4ez%2FaX7Ei3TQ%2FlE4%0AeUyWOxk9unWy2i9BTDQ%3D%0A",
+    "dimensions": [
+      1754,
+      1663
+    ],
+    "sha256": "67b46010e55e972bf6774a77d6de26a07c810b965090affa3c998c7e390ddcfd",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "teamtailor-criteria",
+    "brand": "Teamtailor · соответствие",
+    "file": "/media/candidate-profile-research/teamtailor-ai-10.png",
+    "caption": "Подробный список результатов проверки",
+    "kind": "Скриншоты из справки",
+    "source": "https://support.teamtailor.com/en/articles/10209597-co-pilot-candidate-screening",
+    "originalImageUrl": "https://downloads.intercomcdn.com/i/o/c3b2d8b8e567c16a39d8495a5b1b2b3865dd4dc7/2549940233/67074d9fec90453ae80a5c134770/image.png?expires=1793033100&signature=cf21ff32992dbaa0b6d18f577b7fefad754aeeb93cfb3529aae3c8f381a58d42&req=diUjH8B6nYNcWvMW1HO4zatLZ8AFXk8Bez3RLpDKupUQS2%2Bp%2FBNDOAi7apJz%0A0pofeZiFKgZqn6OMTWw%3D%0A",
+    "dimensions": [
+      694,
+      1041
+    ],
+    "sha256": "e91f9bd22ae3678ee7551b56a34f4953c9c4ff456b6d25912a89d5e3ac6bd06c",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "workable",
+    "brand": "Workable",
+    "file": "/media/candidate-profile-research/workable-4.png",
+    "caption": "Профиль внутри списка кандидатов",
+    "kind": "Скриншоты из справки",
+    "source": "https://help.workable.com/hc/en-us/articles/115012857047-Candidate-profile-in-pipeline-view-overview",
+    "originalImageUrl": "https://help.workable.com/hc/article_attachments/21563992047895",
+    "dimensions": [
+      1213,
+      578
+    ],
+    "sha256": "76b41343b0d67cb8c9b5cf78b2702041511d7d21f0228301af06558ce3ddc4f1",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "workable",
+    "brand": "Workable",
+    "file": "/media/candidate-profile-research/workable-11.png",
+    "caption": "Компактная сводка и действия",
+    "kind": "Скриншоты из справки",
+    "source": "https://help.workable.com/hc/en-us/articles/115012857047-Candidate-profile-in-pipeline-view-overview",
+    "originalImageUrl": "https://help.workable.com/hc/article_attachments/16993500642327",
+    "dimensions": [
+      304,
+      636
+    ],
+    "sha256": "4bc795785335d3f62a4d64716b843da29dac3e6cd1e7fe9013fc745a74b00927",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "greenhouse-profile",
+    "brand": "Greenhouse · профиль",
+    "file": "/media/candidate-profile-research/greenhouse-6.png",
+    "caption": "Основная область профиля",
+    "kind": "Скриншоты из справки",
+    "source": "https://support.greenhouse.io/hc/en-us/articles/30352015432987-Candidate-profile-redesign-overview",
+    "originalImageUrl": "https://support.greenhouse.io/hc/article_attachments/41419852182171",
+    "dimensions": [
+      2726,
+      1002
+    ],
+    "sha256": "d5b979518bd1f7bd394f29b1f3f4c2348ea14456dc4458f8ae8b2ee96eea1fbe",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "greenhouse-profile",
+    "brand": "Greenhouse · профиль",
+    "file": "/media/candidate-profile-research/greenhouse-use-21.jpg",
+    "caption": "Боковая панель личных сведений",
+    "kind": "Скриншоты из справки",
+    "source": "https://support.greenhouse.io/hc/en-us/articles/11957068130971-Using-the-new-candidate-profile",
+    "originalImageUrl": "https://support.greenhouse.io/hc/article_attachments/29358871873819",
+    "dimensions": [
+      1420,
+      1062
+    ],
+    "sha256": "301bd8a3008254cadc431068db91f6098ec5c31e9a76d9d1c4ce5bb4032659ff",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "greenhouse-profile",
+    "brand": "Greenhouse · профиль",
+    "file": "/media/candidate-profile-research/greenhouse-use-22.jpg",
+    "caption": "Материалы кандидата",
+    "kind": "Скриншоты из справки",
+    "source": "https://support.greenhouse.io/hc/en-us/articles/11957068130971-Using-the-new-candidate-profile",
+    "originalImageUrl": "https://support.greenhouse.io/hc/article_attachments/29358900647195",
+    "dimensions": [
+      1432,
+      1064
+    ],
+    "sha256": "9d9aa55ee4c440f7325742111adf510a1e582b8303668d0f607ca1102467a3d0",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  },
+  {
+    "reference": "greenhouse-profile",
+    "brand": "Greenhouse · профиль",
+    "file": "/media/candidate-profile-research/greenhouse-5.png",
+    "caption": "Шапка профиля",
+    "kind": "Скриншоты из справки",
+    "source": "https://support.greenhouse.io/hc/en-us/articles/30352015432987-Candidate-profile-redesign-overview",
+    "originalImageUrl": "https://support.greenhouse.io/hc/article_attachments/41419852179739",
+    "dimensions": [
+      2640,
+      412
+    ],
+    "sha256": "224c1379552c32d010971929279c71d321b4e1a41ed7cefcbd97cd004a35a0a9",
+    "posterFrame": null,
+    "collectedAt": "2026-10-26"
+  }
+]
