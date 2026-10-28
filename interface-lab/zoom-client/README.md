@@ -63,9 +63,12 @@ locale and media file paths and accepts up to 96 MiB compressed / 256 MiB expand
 Its 25-hour retention keeps previous hashed Zoom chunks and versioned media
 available to already open tabs, without replacing current files or renewing TTL.
 
-The Caddy configuration compresses resources and caches successful responses for
-hashed chunks and the pinned SDK version. HTML/bootstrap remain revalidated;
+The Caddy configuration compresses resources and caches existing files on GET/HEAD
+for hashed chunks and the pinned SDK version. HTML/bootstrap remain revalidated;
 missing files are not given immutable caching. Validate the configuration with the
-server's installed Caddy before applying it. An SDK upgrade requires reviewing
+server's installed Caddy before applying it, and check real HTTP response headers.
+Caddy 2.6 treats `match status 2xx` inside `header` as an ordinary header replacement,
+not as a response matcher; use the file-existence matcher and deferred header instead.
+An SDK upgrade requires reviewing
 peer versions, asset layout, browser feature variants, cache paths, package
 allowlists and these tests together.
